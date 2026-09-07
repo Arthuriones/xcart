@@ -894,6 +894,12 @@ export async function createProduct(
     tags: string[];
     categoryId?: string | null;
     productType?: string | null;
+    /**
+     * Marca do produto. Na loja VITRINE ela e informacao de venda: e o que
+     * aparece na pagina, no filtro por marca e na busca. Na loja de checkout
+     * ela costuma ficar de fora, junto com o resto da neutralizacao.
+     */
+    vendor?: string | null;
     metafields?: {
       namespace: string;
       key: string;
@@ -1045,6 +1051,9 @@ export async function createProduct(
   }
   if (input.productType) {
     productInput.productType = input.productType;
+  }
+  if (input.vendor) {
+    productInput.vendor = input.vendor;
   }
   if (input.metafields?.length) {
     productInput.metafields = input.metafields;
