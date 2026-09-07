@@ -37,34 +37,35 @@ export const ESTADO: Record<
 };
 
 /**
- * Estado no roteamento: bolinha + palavra, nunca so a cor.
- *
- * Mora aqui porque a vitrine e a tabela de checkout precisam dizer a MESMA
- * coisa do mesmo jeito. Antes o cartao da vitrine tinha o proprio texto fixo
- * ("Conectada", sempre em verde) e mentia quando a rota estava parada.
+ * Bolinha de estado. Fica separada da palavra porque o design coloca uma de
+ * cada lado do nome no cartao da vitrine (bolinha, nome, palavra) e as duas
+ * juntas num selo na tabela.
  */
-export function EstadoLoja({
+export function PontoEstado({
   estado,
-  compacto,
+  tamanho = 6,
 }: {
   estado: LinhaLoja["routeState"];
-  compacto?: boolean;
+  tamanho?: number;
 }) {
+  return (
+    <span
+      className="shrink-0 rounded-full"
+      style={{ width: tamanho, height: tamanho, background: ESTADO[estado].cor }}
+      aria-hidden
+    />
+  );
+}
+
+/**
+ * Estado no roteamento como selo: bolinha + palavra, nunca so a cor.
+ *
+ * A cor e a palavra saem do mesmo mapa que a vitrine usa, entao as duas telas
+ * dizem a mesma coisa. Antes o cartao da vitrine tinha texto fixo
+ * ("Conectada", sempre em verde) e mentia quando a rota estava parada.
+ */
+export function EstadoLoja({ estado }: { estado: LinhaLoja["routeState"] }) {
   const { texto, cor, fundo } = ESTADO[estado];
-  if (compacto) {
-    return (
-      <span className="flex items-center gap-2">
-        <span
-          className="h-1.5 w-1.5 shrink-0 rounded-full"
-          style={{ background: cor }}
-          aria-hidden
-        />
-        <span className="text-[11.5px]" style={{ color: cor }}>
-          {texto}
-        </span>
-      </span>
-    );
-  }
   return (
     <span
       className="inline-flex items-center gap-1.5 justify-self-start rounded px-[7px] py-0.5 text-[11.5px] font-medium"

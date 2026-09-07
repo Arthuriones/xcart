@@ -8,8 +8,6 @@ import {
   Ellipsis,
   Loader2,
   Plus,
-  SlidersHorizontal,
-  Stethoscope,
   Upload,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -22,8 +20,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { getPublicAppUrl } from "@/lib/public-url";
-import { RouteStrip, targetState, type StripTarget } from "@/components/routed-checkout/route-strip";
-import type { GraphTarget, RouteGraph } from "@/lib/checkout-routes/graph";
+import {
+  COR_ALVO,
+  TEXTO_ALVO,
+  targetState,
+  type StripTarget,
+} from "@/components/routed-checkout/target-state";
+import type { GraphRoute, GraphTarget, RouteGraph } from "@/lib/checkout-routes/graph";
 
 // Os dois so existem depois de um clique -- "Conectar loja" e "Configurar".
 // Somados sao 23 KB que todo mundo baixava para abrir o roteamento.
@@ -39,6 +42,7 @@ const RotationPanel = dynamic(
 );
 
 type Alvo = GraphTarget;
+type Rota = GraphRoute;
 type Grafo = RouteGraph;
 
 interface Diagnostico {
@@ -117,6 +121,7 @@ export function ConsoleView({
   const [consertando, setConsertando] = useState(false);
   const [ocupadoId, setOcupadoId] = useState<string | null>(null);
   const [alvosLocais, setAlvosLocais] = useState<Alvo[] | null>(null);
+  const [filtro, setFiltro] = useState<(typeof FILTROS)[number]>("Todas");
 
   const rota = grafo.routes.find((r) => r.id === rotaId) ?? null;
   const porId = new Map(grafo.stores.map((s) => [s.id, s]));
@@ -167,7 +172,6 @@ export function ConsoleView({
     mappedSkuCount: t.mappedSkuCount,
   }));
 
-  const cobrando = alvos.filter((a) => targetState(a) === "ok").length;
   const vitrine = porId.get(rota.sourceStoreId);
   const quebrada = rota.lastHeal && !rota.lastHeal.ok;
 
@@ -318,50 +322,70 @@ export function ConsoleView({
     onRecarregar();
   }
 
+  // ---------------------------------------------------------------- estado
+
+  /**
+   * Estado de uma rota inteira, na linguagem do design.
+   *
+   * "atencao" ganha de "ativa": uma rota que esta no ar mas com destino sem
+   * produto ligado parece saudavel e nao esta -- e o caso que faz o carrinho
+   * falhar sem ninguem perceber.
+   */
+  function estadoDaRota(r: Rota): "active" | "warn" | "paused" {
+    if (!r.enabled) return "paused";
+    const semMapa = r.targets.some((t) => t.enabled && t.mappedSkuCount === 0);
+    if (semMapa || (r.lastHeal && !r.lastHeal.ok)) return "warn";
+    return "active";
+  }
+
+  const ESTADO_ROTA = {
+    active: { texto: "Ativa", cor: "var(--ok)" },
+    warn: { texto: "Atenção", cor: "var(--warn)" },
+    paused: { texto: "Parada", cor: "var(--t4)" },
+  } as const;
+
+  const FILTROS = ["Todas", "Ativas", "Atenção", "Paradas"] as const;
+
+  const visiveis = grafo.routes.filter((r) => {
+    if (filtro === "Todas") return true;
+    const e = estadoDaRota(r);
+    return (
+      (filtro === "Ativas" && e === "active") ||
+      (filtro === "Atenção" && e === "warn") ||
+      (filtro === "Paradas" && e === "paused")
+    );
+  });
+
+  const parada = !rota.enabled;
+  const recebendo = alvos.filter((a) => !parada && targetState(a) === "ok").length;
+  const metaRota = ESTADO_ROTA[estadoDaRota(rota)];
+  const divisao =
+    rota.rotationStrategy === "each_checkout" ? "Sorteia toda vez" : "Sempre a mesma loja";
+  const ligados = alvos.reduce((maior, a) => Math.max(maior, a.mappedSkuCount), 0);
+
+  const fatos = [
+    {
+      l: "Origem",
+      v: vitrine?.name || "vitrine removida",
+      sub: vitrine?.shopDomain || "—",
+    },
+    {
+      l: "Divisão",
+      v: divisao,
+      sub: ligados > 0 ? `${ligados} produtos ligados` : "nenhum produto ligado",
+    },
+    {
+      l: "Carrinhos · 30d",
+      v: rota.routedCount30d.toLocaleString("pt-BR"),
+      sub: "roteados por esta rota",
+    },
+  ];
+
+  const BOTAO =
+    "h-[27px] shrink-0 rounded-md px-2.5 text-[12px] font-semibold transition-colors";
+
   return (
     <div className="flex flex-col gap-[18px]">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {grafo.routes.length > 1 &&
-            grafo.routes.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => {
-                  setAlvosLocais(null);
-                  setDiagnostico(null);
-                  onSelecionar(r.id);
-                }}
-                className={cn(
-                  "h-[26px] rounded-md border px-2.5 text-[12px] font-medium transition-colors",
-                  r.id === rota.id
-                    ? "border-[var(--border-strong)] bg-[var(--nav-active)] text-ink"
-                    : "border-border text-t2 hover:text-ink"
-                )}
-              >
-                {r.name}
-              </button>
-            ))}
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setConectandoLoja((v) => !v)}
-            className="h-[26px] rounded-md border border-border bg-surface px-[9px] text-[12px] font-semibold text-ink transition-colors hover:border-[var(--border-strong)] hover:bg-surface-2"
-          >
-            Conectar loja
-          </button>
-          <button
-            type="button"
-            onClick={onConnectStores}
-            className="inline-flex h-[26px] items-center gap-1.5 rounded-md bg-[var(--solid)] px-[10px] text-[12px] font-semibold text-[var(--on-solid)] transition-colors hover:bg-[var(--solid-hover)]"
-          >
-            <Plus className="h-3.5 w-3.5" aria-hidden />
-            Nova rota
-          </button>
-        </div>
-      </div>
-
       {conectandoLoja && (
         <div className="rounded-lg border border-border bg-surface">
           <AddStorePanel
@@ -374,128 +398,298 @@ export function ConsoleView({
         </div>
       )}
 
-      <section className="rounded-lg border border-border bg-surface px-5 py-[18px]">
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="text-[13.5px] font-semibold text-ink">
-              {rota.name}
-              <span className="text-t3"> — </span>
-              <span style={{ color: rota.enabled ? "var(--ok)" : "var(--t3)" }}>
-                {rota.enabled ? "ativo" : "pausado"}
-              </span>
+      <div className="flex flex-col gap-3.5">
+        <div className="grid gap-4 lg:grid-cols-[minmax(240px,300px)_minmax(0,1fr)] lg:items-start">
+          {/* -------------------------------------------------- lista */}
+          <div className="flex flex-col gap-[9px]">
+            <div className="flex flex-wrap items-center gap-[7px]">
+              {FILTROS.map((f) => {
+                const on = filtro === f;
+                return (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => setFiltro(f)}
+                    className="h-[25px] rounded-md px-[9px] text-[11.5px] font-semibold transition-colors"
+                    style={{
+                      border: `1px solid ${on ? "var(--solid)" : "var(--border)"}`,
+                      background: on ? "var(--solid)" : "var(--surface)",
+                      color: on ? "var(--on-solid)" : "var(--t2)",
+                    }}
+                  >
+                    {f}
+                  </button>
+                );
+              })}
             </div>
-            <div className="mt-px text-[12px] text-t3">
-              {cobrando} de {alvos.length} lojas de checkout recebendo comprador
+
+            <div className="overflow-hidden rounded-lg border border-border bg-surface">
+              {visiveis.length === 0 ? (
+                <p className="px-3.5 py-[22px] text-center text-[12px] text-t3">
+                  Nenhuma rota com esse status.
+                </p>
+              ) : (
+                visiveis.map((r) => {
+                  const meta = ESTADO_ROTA[estadoDaRota(r)];
+                  const on = r.id === rota.id;
+                  const ativos = r.enabled
+                    ? r.targets.filter((t) => t.enabled && t.weight > 0).length
+                    : 0;
+                  return (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => {
+                        setAlvosLocais(null);
+                        setDiagnostico(null);
+                        onSelecionar(r.id);
+                      }}
+                      className="flex w-full items-center gap-[9px] border-b border-[var(--border-subtle)] px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-surface-2"
+                      style={{
+                        borderLeft: `2px solid ${on ? "var(--solid)" : "transparent"}`,
+                        background: on ? "var(--surface-2)" : "var(--surface)",
+                      }}
+                    >
+                      <span
+                        className="h-1.5 w-1.5 shrink-0 rounded-full"
+                        style={{ background: meta.cor }}
+                        aria-hidden
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className="block truncate text-[12.5px] text-ink"
+                          style={{ fontWeight: on ? 600 : 500 }}
+                        >
+                          {r.name}
+                        </span>
+                        <span className="mt-px block truncate text-[11px] text-t3">
+                          {meta.texto} · {ativos} de {r.targets.length} lojas
+                        </span>
+                      </span>
+                      <span className="shrink-0 font-mono text-[11.5px] tabular-nums text-t2">
+                        {r.routedCount30d}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
             </div>
+
+            <button
+              type="button"
+              onClick={onConnectStores}
+              className="h-[30px] rounded-[7px] border border-dashed border-[var(--border-strong)] text-[12.5px] font-semibold text-t2 transition-colors hover:border-ink hover:text-ink"
+            >
+              Nova rota
+            </button>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={diagnosticar}
-              disabled={checando}
-              className="inline-flex h-7 items-center gap-1.5 rounded-md border border-[var(--border-strong)] bg-surface px-[11px] text-[12.5px] font-semibold text-ink transition-colors hover:bg-surface-2 disabled:opacity-50"
-            >
-              {checando ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Stethoscope className="h-3.5 w-3.5" aria-hidden />
-              )}
-              Testar
-            </button>
-            <button
-              type="button"
-              onClick={() => setEditando((v) => !v)}
-              className={cn(
-                "inline-flex h-7 items-center gap-1.5 rounded-md border px-[11px] text-[12.5px] font-semibold transition-colors",
-                editando
-                  ? "border-[var(--border-strong)] bg-[var(--nav-active)] text-ink"
-                  : "border-[var(--border-strong)] bg-surface text-ink hover:bg-surface-2"
-              )}
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
-              Configurar
-            </button>
-            <button
-              type="button"
-              onClick={instalar}
-              disabled={instalando}
-              className="inline-flex h-7 items-center gap-1.5 rounded-md bg-[var(--solid)] px-[11px] text-[12.5px] font-semibold text-[var(--on-solid)] transition-colors hover:bg-[var(--solid-hover)] disabled:opacity-50"
-            >
-              {instalando ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : instalado ? (
-                <Check className="h-3.5 w-3.5" aria-hidden />
-              ) : (
-                <Upload className="h-3.5 w-3.5" aria-hidden />
-              )}
-              {instalado ? "Instalado" : "Instalar na vitrine"}
-            </button>
+          {/* ------------------------------------------------- detalhe */}
+          <div className="rounded-lg border border-border bg-surface">
+            <div className="flex flex-wrap items-center gap-[11px] border-b border-[var(--border-subtle)] px-[17px] py-3.5">
+              <span
+                className="h-[7px] w-[7px] shrink-0 rounded-full"
+                style={{ background: metaRota.cor }}
+                aria-hidden
+              />
+              <div className="min-w-0 flex-1 basis-[200px]">
+                <div className="truncate text-[14px] font-semibold text-ink">{rota.name}</div>
+                <div className="mt-px text-[11.5px] text-t3">
+                  {metaRota.texto} · {recebendo} de {alvos.length} lojas recebendo comprador
+                </div>
+              </div>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-surface text-t4 transition-colors hover:border-[var(--border-strong)] hover:text-ink focus-visible:outline-none">
-                <Ellipsis className="h-3.5 w-3.5" aria-hidden />
-                <span className="sr-only">Mais ações</span>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
-                <DropdownMenuItem onClick={alternarRota}>
-                  {rota.enabled ? "Pausar rota" : "Ligar rota"}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setManual((v) => !v)}>
-                  <Copy className="mr-2 h-3.5 w-3.5" />
-                  Instalar o script na mão
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onClick={apagar}>
-                  Apagar rota
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              <button
+                type="button"
+                onClick={diagnosticar}
+                disabled={checando}
+                className={cn(BOTAO, "border border-[var(--border-strong)] bg-surface text-ink hover:bg-surface-2 disabled:opacity-50")}
+              >
+                {checando ? "Testando…" : "Testar"}
+              </button>
+              <button
+                type="button"
+                onClick={alternarRota}
+                className={cn(BOTAO, "border border-border bg-surface text-t2 hover:border-[var(--border-strong)]")}
+              >
+                {parada ? "Voltar" : "Parar"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditando((v) => !v)}
+                className={cn(
+                  BOTAO,
+                  editando
+                    ? "border border-[var(--border-strong)] bg-[var(--nav-active)] text-ink"
+                    : "bg-[var(--solid)] text-[var(--on-solid)] hover:bg-[var(--solid-hover)]"
+                )}
+              >
+                Configurar
+              </button>
+
+              {/* O design nao previu instalar o script nem apagar a rota, mas
+                  as duas coisas existem e precisam de casa. */}
+              <DropdownMenu>
+                <DropdownMenuTrigger className="inline-flex h-[27px] w-[27px] shrink-0 items-center justify-center rounded-md border border-border bg-surface text-t4 transition-colors hover:border-[var(--border-strong)] hover:text-ink focus-visible:outline-none">
+                  <Ellipsis className="h-3.5 w-3.5" aria-hidden />
+                  <span className="sr-only">Mais ações</span>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem onClick={instalar} disabled={instalando}>
+                    {instalando ? (
+                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    ) : instalado ? (
+                      <Check className="mr-2 h-3.5 w-3.5" />
+                    ) : (
+                      <Upload className="mr-2 h-3.5 w-3.5" />
+                    )}
+                    {instalado ? "Instalado na vitrine" : "Instalar na vitrine"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setManual((v) => !v)}>
+                    <Copy className="mr-2 h-3.5 w-3.5" />
+                    Instalar o script na mão
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setConectandoLoja((v) => !v)}>
+                    <Plus className="mr-2 h-3.5 w-3.5" />
+                    Conectar loja
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" onClick={apagar}>
+                    Apagar rota
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            {quebrada && (
+              <p className="border-b border-[var(--border-subtle)] bg-[var(--err-bg)] px-[17px] py-2.5 text-[12px] text-ink">
+                {rota.lastHeal?.message || "A última checagem automática achou um problema."}
+              </p>
+            )}
+
+            <div className="grid grid-cols-1 border-b border-[var(--border-subtle)] sm:grid-cols-3">
+              {fatos.map((fato) => (
+                <div
+                  key={fato.l}
+                  className="border-l border-[var(--border-subtle)] px-[17px] py-3 first:border-l-0"
+                >
+                  <div className="text-[11px] uppercase tracking-[0.06em] text-t4">
+                    {fato.l}
+                  </div>
+                  <div className="mt-[3px] truncate text-[12.5px] font-semibold text-ink">
+                    {fato.v}
+                  </div>
+                  <div className="mt-px break-all font-mono text-[10.5px] text-t3">
+                    {fato.sub}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex flex-col gap-[7px] px-[17px] py-[13px]">
+              <div className="mb-px text-[11px] uppercase tracking-[0.06em] text-t4">
+                Lojas de checkout
+              </div>
+              {alvos.map((alvo) => {
+                const estado = targetState(alvo);
+                const viva = !parada && estado === "ok";
+                const fatia = parada ? 0 : alvo.sharePercent;
+                const ocupado = ocupadoId === alvo.id;
+                return (
+                  <div key={alvo.id} className="flex items-center gap-[9px]">
+                    <span
+                      className="h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{ background: parada ? "var(--t4)" : COR_ALVO[estado] }}
+                      aria-hidden
+                    />
+                    <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-ink">
+                      {alvo.name}
+                    </span>
+                    <span
+                      className="shrink-0 whitespace-nowrap text-[11.5px]"
+                      style={{ color: parada ? "var(--t3)" : COR_ALVO[estado] }}
+                    >
+                      {parada ? "Parada" : TEXTO_ALVO[estado]}
+                    </span>
+
+                    <span className="h-1 min-w-[36px] flex-1 basis-[60px] overflow-hidden rounded-[3px] bg-[var(--track)]">
+                      <span
+                        className="block h-1 rounded-[3px] transition-[width] duration-300"
+                        style={{
+                          width: `${fatia}%`,
+                          background: viva ? "var(--solid)" : "var(--border-strong)",
+                        }}
+                      />
+                    </span>
+
+                    {editando ? (
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={alvo.sharePercent}
+                        disabled={!alvo.enabled || ocupado || parada}
+                        onChange={(e) => mudarFatia(alvo, Number(e.target.value))}
+                        className="h-[24px] w-14 shrink-0 rounded-md border border-[var(--control-border)] bg-surface px-2 text-right font-mono text-[11.5px] tabular-nums text-ink"
+                        aria-label={`Porcentagem do tráfego para ${alvo.name}`}
+                      />
+                    ) : (
+                      <span className="w-[34px] shrink-0 text-right font-mono text-[11.5px] tabular-nums text-t1">
+                        {fatia}%
+                      </span>
+                    )}
+
+                    {/* Com a rota parada, mexer numa loja nao muda nada: o
+                        botao diz isso em vez de fingir que funciona. */}
+                    <button
+                      type="button"
+                      disabled={ocupado || parada}
+                      onClick={() => alternar(alvo)}
+                      className="h-6 shrink-0 whitespace-nowrap rounded-[5px] border border-border bg-surface px-2 text-[11.5px] font-semibold transition-colors hover:border-[var(--border-strong)] disabled:opacity-60"
+                      style={{ color: parada ? "var(--t4)" : "var(--t2)" }}
+                    >
+                      {parada ? "Rota parada" : alvo.enabled ? "Parar loja" : "Voltar loja"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {editando && (
+              <div className="border-t border-[var(--border-subtle)] px-[17px] py-3.5">
+                <div className="mb-3 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={dividirIgual}
+                    className="text-[12px] text-t2 underline underline-offset-4 hover:text-ink"
+                  >
+                    Dividir igual
+                  </button>
+                  <span className="text-[11.5px] text-t3">
+                    Mexer numa fatia redistribui as outras para somar 100%.
+                  </span>
+                </div>
+                <RotationPanel
+                  routeId={rota.id}
+                  sourceStoreId={rota.sourceStoreId}
+                  stores={grafo.stores.map((s) => ({
+                    id: s.id,
+                    name: s.name,
+                    shopDomain: s.shopDomain,
+                  }))}
+                  onChanged={onRecarregar}
+                  esconderLista
+                />
+              </div>
+            )}
           </div>
         </div>
 
-        {quebrada && (
-          <p className="mb-3 rounded-md border border-[var(--err-border)] bg-[var(--err-bg)] px-3 py-2 text-[12px] text-ink">
-            {rota.lastHeal?.message || "A última checagem automática achou um problema."}
-          </p>
-        )}
-
-        <RouteStrip
-          vitrineName={vitrine?.name || "vitrine removida"}
-          vitrineDomain={vitrine?.shopDomain || ""}
-          rotationLabel={
-            rota.rotationStrategy === "each_checkout"
-              ? "sorteia toda vez"
-              : "sempre a mesma loja"
-          }
-          enabled={rota.enabled}
-          targets={alvos}
-          busyId={ocupadoId}
-          onToggle={alternar}
-          editando={editando}
-          onChangePercent={mudarFatia}
-        />
-
-        {editando && (
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={dividirIgual}
-              className="text-[12px] text-t2 underline underline-offset-4 hover:text-ink"
-            >
-              Dividir igual
-            </button>
-            <span className="text-[11.5px] text-t3">
-              Mexer numa fatia redistribui as outras para somar 100%.
-            </span>
-          </div>
-        )}
-      </section>
-
-      <p className="max-w-[620px] text-[12px] text-t3">
-        Loja parada não recebe comprador e continua conectada. Os produtos ligados são
-        preservados.
-      </p>
+        <p className="max-w-[620px] text-pretty text-[12px] text-t3">
+          Rota parada não recebe comprador e continua conectada. Os produtos ligados são
+          preservados.
+        </p>
+      </div>
 
       {manual && (
         <div className="rounded-lg border border-border bg-surface px-4 py-3.5">
@@ -571,18 +765,6 @@ export function ConsoleView({
               </button>
             </>
           )}
-        </div>
-      )}
-
-      {editando && (
-        <div className="rounded-lg border border-border bg-surface px-4 py-4">
-          <RotationPanel
-            routeId={rota.id}
-            sourceStoreId={rota.sourceStoreId}
-            stores={grafo.stores}
-            onChanged={onRecarregar}
-            esconderLista
-          />
         </div>
       )}
     </div>

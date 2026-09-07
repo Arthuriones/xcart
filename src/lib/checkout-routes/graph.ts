@@ -46,6 +46,8 @@ export interface GraphRoute {
   sourceStoreId: string;
   rotationStrategy: "sticky" | "each_checkout";
   targets: GraphTarget[];
+  /** Carrinhos que esta rota levou para um checkout nos ultimos 30 dias. */
+  routedCount30d: number;
 }
 
 export interface RouteGraph {
@@ -100,6 +102,26 @@ export const getRouteGraph = cache(async (): Promise<RouteGraph> => {
     targets = (data || []) as TargetRow[];
   }
 
+  // Quantos carrinhos cada rota levou de verdade nos ultimos 30 dias.
+  //
+  // Sai de "routed_ok", que o loader grava na vitrine quando o comprador
+  // clicou em finalizar E foi redirecionado. E o numero que a tela de
+  // roteamento quer: nao "quantos pedidos a loja teve" (isso e Vendas), mas
+  // quantos carrinhos ESTA rota entregou.
+  const desde = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const roteados = new Map<string, number>();
+  if (routeIds.length > 0) {
+    const { data } = await supabase
+      .from("routed_checkout_fallbacks")
+      .select("route_config_id")
+      .in("route_config_id", routeIds)
+      .eq("reason", "routed_ok")
+      .gte("created_at", desde);
+    for (const linha of (data || []) as { route_config_id: string }[]) {
+      roteados.set(linha.route_config_id, (roteados.get(linha.route_config_id) || 0) + 1);
+    }
+  }
+
   const byRoute = new Map<string, TargetRow[]>();
   for (const target of targets) {
     const list = byRoute.get(target.route_id) || [];
@@ -152,6 +174,7 @@ export const getRouteGraph = cache(async (): Promise<RouteGraph> => {
         (route.rotation as { strategy?: string } | null)?.strategy === "each_checkout"
           ? "each_checkout"
           : "sticky",
+      routedCount30d: roteados.get(route.id) || 0,
       targets: effective.map((target) => {
         const weight = target.weight ?? 1;
         const active = target.enabled !== false && weight > 0;

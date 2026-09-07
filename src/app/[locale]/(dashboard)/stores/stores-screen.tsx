@@ -7,7 +7,8 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import type { StoreRow } from "@/lib/stores/queries";
 import dynamic from "next/dynamic";
 import {
-  EstadoLoja,
+  ESTADO,
+  PontoEstado,
   StoreTable,
   contagem,
   sincronizado,
@@ -792,7 +793,7 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
                 <h2 className="text-[13px] font-semibold text-ink">Vitrines</h2>
                 <span className="h-px flex-1 bg-border" />
               </div>
-              <p className="mb-[9px] max-w-[640px] text-[12px] text-t3">
+              <p className="mb-[9px] max-w-[640px] text-pretty text-[12px] text-t3">
                 Recebem o tráfego do anúncio e carregam a marca. O comprador navega e
                 monta o carrinho aqui.
               </p>
@@ -805,11 +806,18 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
                     className="flex w-full items-center gap-4 rounded-lg border border-border bg-surface px-4 py-[13px] text-left transition-colors hover:border-[var(--border-strong)] hover:bg-surface-2"
                   >
                     <span className="min-w-0 flex-1">
+                      {/* Ordem do design: bolinha, nome, palavra. */}
                       <span className="flex items-center gap-2">
+                        <PontoEstado estado={loja.routeState} />
                         <span className="truncate text-[13.5px] font-semibold text-ink">
                           {loja.name}
                         </span>
-                        <EstadoLoja estado={loja.routeState} compacto />
+                        <span
+                          className="shrink-0 text-[11.5px]"
+                          style={{ color: ESTADO[loja.routeState].cor }}
+                        >
+                          {ESTADO[loja.routeState].texto}
+                        </span>
                       </span>
                       <span className="mt-[3px] block truncate font-mono text-[11px] text-t3">
                         {loja.shop_domain}
@@ -845,7 +853,7 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
                 {t("connect_btn")}
               </Button>
             </div>
-            <p className="mb-[9px] max-w-[640px] text-[12px] text-t3">
+            <p className="mb-[9px] max-w-[640px] text-pretty text-[12px] text-t3">
               Catálogo neutralizado, onde o pagamento acontece. Título, descrição e
               imagem podem mudar à vontade; SKU e variante, nunca.
             </p>

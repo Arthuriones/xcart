@@ -669,45 +669,74 @@ table{border-collapse:collapse;width:100%}
       <sc-if value="{{ is.routing }}" hint-placeholder-val="{{ false }}">
       <div data-screen-label="Roteamento" style="display:flex;flex-direction:column;gap:18px">
         <sc-if value="{{ hasRouting }}" hint-placeholder-val="{{ false }}">
-        <div style="border:1px solid var(--border);border-radius:8px;background:var(--surface);padding:18px 20px">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-            <div style="flex:1">
-              <div style="font-size:13.5px;font-weight:600">{{ routingMethodLabel }} — ativo</div>
-              <div style="font-size:12px;color:var(--t3);margin-top:1px">{{ routingHealth }}</div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div style="display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr);gap:16px;align-items:start">
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+                <sc-for list="{{ routeFilters }}" as="c" hint-placeholder-count="4">
+                  <button onClick="{{ c.set }}" style="height:25px;padding:0 9px;border-radius:6px;font-size:11.5px;font-weight:600;border:1px solid {{ c.border }};background:{{ c.bg }};color:{{ c.fg }}">{{ c.l }}</button>
+                </sc-for>
+              </div>
+              <div style="border:1px solid var(--border);border-radius:8px;background:var(--surface);overflow:hidden">
+                <sc-for list="{{ routeList }}" as="r" hint-placeholder-count="4">
+                  <button onClick="{{ r.select }}" style="display:flex;align-items:center;gap:9px;width:100%;text-align:left;border:0;border-left:2px solid {{ r.selBorder }};border-bottom:1px solid var(--border-subtle);padding:10px 12px;background:{{ r.selBg }}" style-hover="background:var(--surface-2)">
+                    <span style="width:6px;height:6px;border-radius:50%;background:{{ r.dot }};flex:0 0 6px"></span>
+                    <span style="flex:1;min-width:0">
+                      <span style="display:block;font-size:12.5px;font-weight:{{ r.weight }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.name }}</span>
+                      <span style="display:block;font-size:11px;color:var(--t3);margin-top:1px">{{ r.listSub }}</span>
+                    </span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--t2);font-variant-numeric:tabular-nums">{{ r.orders }}</span>
+                  </button>
+                </sc-for>
+                <sc-if value="{{ routesEmptyFilter }}" hint-placeholder-val="{{ false }}">
+                  <div style="padding:22px 14px;text-align:center;font-size:12px;color:var(--t3)">Nenhuma rota com esse status.</div>
+                </sc-if>
+              </div>
+              <button onClick="{{ newRoute }}" style="height:30px;border:1px dashed var(--border-strong);border-radius:7px;background:none;font-size:12.5px;font-weight:600;color:var(--t2)" style-hover="color:var(--ink);border-color:var(--ink)">Nova rota</button>
             </div>
-            <button onClick="{{ testRouting }}" style="height:28px;padding:0 11px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);font-size:12.5px;font-weight:600" style-hover="background:var(--surface-2)">Testar</button>
-            <button onClick="{{ goRoutingConfig }}" style="height:28px;padding:0 11px;border:0;border-radius:6px;background:var(--solid);color:var(--on-solid);font-size:12.5px;font-weight:600" style-hover="background:var(--solid-hover)">Configurar</button>
-          </div>
-          <div style="display:flex;align-items:center;gap:0;overflow-x:auto;padding:4px 0">
-            <div style="flex:0 0 176px;border:1px solid var(--border);border-radius:7px;padding:10px 12px;background:var(--surface-2)">
-              <div style="font-size:12.5px;font-weight:600">Vitrine Principal</div>
-              <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--t3);margin-top:2px">minhaloja.myshopify.com</div>
-            </div>
-            <div style="flex:0 0 32px;height:1px;background:var(--border-strong)"></div>
-            <div style="flex:0 0 156px;border:1px solid var(--solid);border-radius:7px;padding:10px 12px;background:var(--solid);color:var(--on-solid)">
-              <div style="font-size:12.5px;font-weight:600">Divisão do tráfego</div>
-              <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--t4);margin-top:2px">{{ routingMethodLabel }}</div>
-            </div>
-            <div style="flex:0 0 20px;height:1px;background:var(--border-strong)"></div>
-            <div style="flex:0 0 1px;align-self:stretch;background:var(--border-strong);margin:14px 0"></div>
-            <div style="flex:1;min-width:260px;display:flex;flex-direction:column;gap:6px">
-              <sc-for list="{{ routingNodes }}" as="n" hint-placeholder-count="5">
-                <div style="display:flex;align-items:center;gap:10px;border:1px solid var(--border-subtle);border-radius:6px;padding:8px 11px;background:var(--surface);position:relative" style-hover="border-color:var(--border-strong)">
-                  <span style="position:absolute;left:-10px;width:10px;height:1px;background:var(--border-strong)"></span>
-                  <span style="width:6px;height:6px;border-radius:50%;background:{{ n.dot }};flex:0 0 6px"></span>
-                  <button onClick="{{ n.open }}" style="border:0;background:none;padding:0;font-size:12.5px;font-weight:500;text-align:left">{{ n.name }}</button>
-                  <span style="font-size:11.5px;color:{{ n.fg }}">{{ n.statusLabel }}</span>
-                  <div style="flex:1;min-width:40px;height:4px;border-radius:3px;background:var(--track);overflow:hidden">
-                    <div style="height:4px;border-radius:3px;transition:width .35s ease;width:{{ n.barW }};background:{{ n.barColor }}"></div>
-                  </div>
-                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--t1);width:38px;text-align:right;font-variant-numeric:tabular-nums">{{ n.share }}</span>
-                  <button onClick="{{ n.pause }}" style="border:1px solid var(--border);background:var(--surface);border-radius:5px;height:24px;padding:0 8px;font-size:11.5px;font-weight:600;color:var(--t2)" style-hover="border-color:var(--border-strong)">{{ n.pauseLabel }}</button>
+
+            <div style="border:1px solid var(--border);border-radius:8px;background:var(--surface)">
+              <div style="display:flex;align-items:center;gap:11px;padding:14px 17px;border-bottom:1px solid var(--border-subtle);flex-wrap:wrap">
+                <span style="width:7px;height:7px;border-radius:50%;background:{{ routeDetail.dot }};flex:0 0 7px"></span>
+                <div style="flex:1 1 200px;min-width:0">
+                  <div style="font-size:14px;font-weight:600">{{ routeDetail.name }}</div>
+                  <div style="font-size:11.5px;color:var(--t3);margin-top:1px">{{ routeDetail.statusLine }}</div>
                 </div>
-              </sc-for>
+                <button onClick="{{ routeDetail.test }}" style="height:27px;padding:0 10px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);font-size:12px;font-weight:600" style-hover="background:var(--surface-2)">Testar</button>
+                <button onClick="{{ routeDetail.toggle }}" style="height:27px;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;font-weight:600;color:var(--t2)" style-hover="border-color:var(--border-strong)">{{ routeDetail.toggleLabel }}</button>
+                <button onClick="{{ routeDetail.open }}" style="height:27px;padding:0 11px;border:0;border-radius:6px;background:var(--solid);color:var(--on-solid);font-size:12px;font-weight:600" style-hover="background:var(--solid-hover)">Configurar</button>
+              </div>
+
+              <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-bottom:1px solid var(--border-subtle)">
+                <sc-for list="{{ routeDetailFacts }}" as="s" hint-placeholder-count="3">
+                  <div style="padding:12px 17px;border-left:1px solid var(--border-subtle)">
+                    <div style="font-size:11px;color:var(--t4);text-transform:uppercase;letter-spacing:0.06em">{{ s.l }}</div>
+                    <div style="font-size:12.5px;font-weight:600;margin-top:3px">{{ s.v }}</div>
+                    <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--t3);margin-top:1px;word-break:break-all">{{ s.sub }}</div>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="padding:13px 17px;display:flex;flex-direction:column;gap:7px">
+                <div style="font-size:11px;color:var(--t4);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:1px">Lojas de checkout</div>
+                <sc-for list="{{ routeDetailNodes }}" as="n" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:9px">
+                    <span style="width:6px;height:6px;border-radius:50%;background:{{ n.dot }};flex:0 0 6px"></span>
+                    <button onClick="{{ n.open }}" style="border:0;background:none;padding:0;font-size:12.5px;font-weight:500;text-align:left;flex:1 1 auto;min-width:0;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ n.name }}</button>
+                    <span style="font-size:11.5px;color:{{ n.fg }};flex:0 0 auto;white-space:nowrap">{{ n.statusLabel }}</span>
+                    <div style="flex:1 1 60px;min-width:36px;height:4px;border-radius:3px;background:var(--track);overflow:hidden">
+                      <div style="height:4px;border-radius:3px;transition:width .35s ease;width:{{ n.barW }};background:{{ n.barColor }}"></div>
+                    </div>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--t1);width:34px;text-align:right;flex:0 0 34px;font-variant-numeric:tabular-nums">{{ n.share }}</span>
+                    <button onClick="{{ n.pause }}" style="border:1px solid var(--border);background:var(--surface);border-radius:5px;height:24px;padding:0 8px;font-size:11.5px;font-weight:600;white-space:nowrap;flex:0 0 auto;color:{{ n.pauseFg }}" style-hover="border-color:var(--border-strong)">{{ n.pauseLabel }}</button>
+                  </div>
+                </sc-for>
+              </div>
             </div>
           </div>
+
+          <div style="font-size:12px;color:var(--t3);max-width:620px;text-wrap:pretty">Rota parada não recebe comprador e continua conectada. Os produtos ligados são preservados.</div>
         </div>
-        <div style="font-size:12px;color:var(--t3);max-width:620px;text-wrap:pretty">Loja parada não recebe comprador e continua conectada. Os produtos ligados são preservados.</div>
         </sc-if>
 
         <sc-if value="{{ noRouting }}" hint-placeholder-val="{{ true }}">
@@ -722,6 +751,14 @@ table{border-collapse:collapse;width:100%}
 
       <sc-if value="{{ is.routingConfig }}" hint-placeholder-val="{{ false }}">
       <div data-screen-label="Configuração de roteamento" style="max-width:700px;display:flex;flex-direction:column;gap:18px">
+        <div style="border:1px solid var(--border);border-radius:8px;background:var(--surface);padding:13px 16px;display:flex;align-items:center;gap:11px">
+          <span style="width:7px;height:7px;border-radius:50%;background:{{ editRoute.dot }};flex:0 0 7px"></span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600">{{ editRoute.name }}</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--t3)">{{ editRoute.originPath }}</div>
+          </div>
+          <span style="font-size:11.5px;color:var(--t3)">{{ editRoute.statusLine }}</span>
+        </div>
         <div>
           <h2 style="font-size:13px;font-weight:600;margin:0 0 9px">Divisão do tráfego</h2>
           <div style="display:flex;flex-direction:column;gap:8px">
@@ -743,7 +780,7 @@ table{border-collapse:collapse;width:100%}
             <div style="flex:1;height:1px;background:var(--border)"></div>
           </div>
           <div style="border:1px solid var(--border);border-radius:8px;background:var(--surface);overflow:hidden">
-            <sc-for list="{{ routingNodes }}" as="n" hint-placeholder-count="5">
+            <sc-for list="{{ editRouteNodes }}" as="n" hint-placeholder-count="5">
               <div style="display:flex;align-items:center;gap:12px;padding:11px 15px;border-bottom:1px solid var(--border-subtle)">
                 <span style="width:6px;height:6px;border-radius:50%;background:{{ n.dot }};flex:0 0 6px"></span>
                 <div style="flex:1;min-width:0">
@@ -769,6 +806,154 @@ table{border-collapse:collapse;width:100%}
         <div style="display:flex;gap:8px">
           <button onClick="{{ saveRouting }}" style="height:30px;padding:0 13px;border:0;border-radius:6px;background:var(--solid);color:var(--on-solid);font-size:12.5px;font-weight:600" style-hover="background:var(--solid-hover)">Salvar e aplicar</button>
           <button onClick="{{ goRouting }}" style="height:30px;padding:0 13px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);font-size:12.5px;font-weight:600" style-hover="background:var(--surface-2)">Cancelar</button>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ is.newRoute }}" hint-placeholder-val="{{ false }}">
+      <div data-screen-label="Nova rota" style="max-width:760px;display:flex;flex-direction:column;gap:18px">
+        <div>
+          <h1 style="font-size:19px;font-weight:600;margin:0 0 3px;letter-spacing:-0.01em">Conectar vitrine à loja checkout</h1>
+          <p style="margin:0;font-size:12.5px;color:var(--t2);text-wrap:pretty">Cria os produtos na loja checkout, conecta por SKU e gera o script de checkout roteado.</p>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <sc-for list="{{ nrSteps }}" as="w" hint-placeholder-count="3">
+            <button onClick="{{ w.go }}" style="display:flex;align-items:center;gap:7px;border:0;background:none;padding:2px 8px 2px 2px;font-size:12.5px;color:{{ w.fg }};font-weight:{{ w.weight }}">
+              <span style="width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:10px;border:1px solid {{ w.chipBorder }};background:{{ w.chipBg }};color:{{ w.chipFg }}">{{ w.badge }}</span>{{ w.l }}
+            </button>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ nrStep.stores }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div>
+              <div style="display:flex;gap:7px;margin-bottom:8px">
+                <sc-for list="{{ nrModes }}" as="k" hint-placeholder-count="3">
+                  <button onClick="{{ k.pick }}" style="height:30px;padding:0 13px;border-radius:6px;font-size:12.5px;font-weight:600;border:1px solid {{ k.border }};background:{{ k.bg }};color:{{ k.fg }}">{{ k.l }}</button>
+                </sc-for>
+              </div>
+              <p style="margin:0;font-size:12.5px;color:var(--t2);text-wrap:pretty">{{ nrModeDesc }}</p>
+            </div>
+
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px">
+              <div>
+                <label style="display:block;font-size:11px;color:var(--t4);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:5px">Vitrine</label>
+                <select value="{{ nrVitrine }}" onChange="{{ nrSetVitrine }}" style="width:100%;height:34px;padding:0 9px;border:1px solid var(--control-border);border-radius:6px;background:var(--surface);color:var(--ink);font-size:12.5px">
+                  <sc-for list="{{ nrVitrines }}" as="o" hint-placeholder-count="2">
+                    <option value="{{ o.id }}">{{ o.label }}</option>
+                  </sc-for>
+                </select>
+                <div style="font-size:12px;color:var(--t3);margin-top:5px">Onde o cliente compra.</div>
+              </div>
+              <div>
+                <label style="display:block;font-size:11px;color:var(--t4);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:5px">Loja checkout</label>
+                <select value="{{ nrCheckout }}" onChange="{{ nrSetCheckout }}" style="width:100%;height:34px;padding:0 9px;border:1px solid var(--control-border);border-radius:6px;background:var(--surface);color:var(--ink);font-size:12.5px">
+                  <sc-for list="{{ nrCheckouts }}" as="o" hint-placeholder-count="5">
+                    <option value="{{ o.id }}">{{ o.label }}</option>
+                  </sc-for>
+                </select>
+                <div style="font-size:12px;color:var(--t3);margin-top:5px">Recebe os produtos e o checkout.</div>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ nrStep.build }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div style="border:1px solid var(--border);border-radius:8px;background:var(--surface);display:flex;gap:14px;align-items:center;padding:13px 16px">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12.5px;font-weight:600">Neutralizar produtos (stock/sem marca)</div>
+                <div style="font-size:12px;color:var(--t3);margin-top:1px">Remove marcas do texto e da imagem. Ideal para réplicas.</div>
+              </div>
+              <button onClick="{{ nrToggleNeutral }}" style="width:34px;height:20px;border-radius:11px;border:1px solid {{ nrNeutral.border }};background:{{ nrNeutral.bg }};position:relative;flex:0 0 34px"><span style="position:absolute;top:2px;{{ nrNeutral.side }}:2px;width:{{ nrNeutral.knob }};height:{{ nrNeutral.knob }};border-radius:50%;background:{{ nrNeutral.knobBg }};display:block"></span></button>
+            </div>
+
+            <div>
+              <h2 style="font-size:13px;font-weight:600;margin:0 0 8px">Imagens</h2>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <sc-for list="{{ nrImageModes }}" as="o" hint-placeholder-count="2">
+                  <button onClick="{{ o.pick }}" style="display:flex;gap:11px;align-items:flex-start;text-align:left;border:1px solid {{ o.border }};background:{{ o.bg }};border-radius:7px;padding:12px 14px;width:100%" style-hover="border-color:var(--border-strong)">
+                    <span style="width:14px;height:14px;border-radius:50%;flex:0 0 14px;margin-top:2px;border:1px solid {{ o.dotBorder }};background:{{ o.dotBg }};box-shadow:inset 0 0 0 2.5px var(--surface-2)"></span>
+                    <span style="min-width:0">
+                      <span style="display:block;font-size:12.5px;font-weight:600">{{ o.l }}</span>
+                      <span style="display:block;font-size:12px;color:var(--t2);margin-top:1px;text-wrap:pretty">{{ o.d }}</span>
+                    </span>
+                  </button>
+                </sc-for>
+              </div>
+              <sc-if value="{{ nrShowCredits }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top:9px;border:1px solid var(--warn-border);background:var(--warn-bg);border-radius:7px;padding:11px 13px;display:flex;align-items:center;gap:11px">
+                  <span style="width:7px;height:7px;border-radius:50%;background:var(--warn);flex:0 0 7px"></span>
+                  <span style="flex:1;min-width:0;font-size:12.5px;color:var(--ink);text-wrap:pretty">{{ nrCreditMsg }}</span>
+                  <button onClick="{{ nrGoBilling }}" style="height:27px;padding:0 11px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);font-size:12px;font-weight:600" style-hover="background:var(--surface-2)">Recarregar</button>
+                </div>
+              </sc-if>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <button onClick="{{ nrToggleGeneric }}" style="display:flex;gap:10px;align-items:flex-start;text-align:left;border:0;background:none;padding:0">
+                <span style="width:15px;height:15px;border-radius:4px;flex:0 0 15px;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--on-solid);border:1px solid {{ nrGeneric.border }};background:{{ nrGeneric.bg }}">{{ nrGeneric.mark }}</span>
+                <span style="font-size:12.5px;color:var(--ink);text-wrap:pretty">Genericizar nome/descrição (ex.: Air Jordan → Tênis esportivo).</span>
+              </button>
+              <textarea value="{{ nrExtra }}" onChange="{{ nrSetExtra }}" placeholder="Instruções extras (opcional). Ex.: manter escudo do time, remover só selo de vendedor." style="width:100%;min-height:64px;padding:9px 11px;border:1px solid var(--control-border);border-radius:6px;background:var(--surface);color:var(--ink);font-size:12.5px;font-family:inherit;resize:vertical"></textarea>
+            </div>
+
+            <div style="border-top:1px solid var(--border);padding-top:14px;display:flex;flex-direction:column;gap:10px">
+              <button onClick="{{ nrToggleTranslate }}" style="display:flex;gap:10px;align-items:flex-start;text-align:left;border:0;background:none;padding:0">
+                <span style="width:15px;height:15px;border-radius:4px;flex:0 0 15px;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--on-solid);border:1px solid {{ nrTranslate.border }};background:{{ nrTranslate.bg }}">{{ nrTranslate.mark }}</span>
+                <span style="font-size:12.5px;color:var(--ink)">Traduzir textos para o idioma da loja checkout</span>
+              </button>
+              <button onClick="{{ nrToggleVariants }}" style="display:flex;gap:10px;align-items:flex-start;text-align:left;border:0;background:none;padding:0">
+                <span style="width:15px;height:15px;border-radius:4px;flex:0 0 15px;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--on-solid);border:1px solid {{ nrVariants.border }};background:{{ nrVariants.bg }}">{{ nrVariants.mark }}</span>
+                <span style="font-size:12.5px;color:var(--ink)">Traduzir cores e tamanhos (variantes) para português</span>
+              </button>
+              <div style="display:flex;align-items:center;gap:11px">
+                <select value="{{ nrLang }}" onChange="{{ nrSetLang }}" style="width:120px;height:32px;padding:0 9px;border:1px solid var(--control-border);border-radius:6px;background:var(--surface);color:var(--ink);font-family:'IBM Plex Mono',monospace;font-size:12px">
+                  <sc-for list="{{ nrLangs }}" as="o" hint-placeholder-count="3">
+                    <option value="{{ o.id }}">{{ o.id }}</option>
+                  </sc-for>
+                </select>
+                <span style="font-size:12px;color:var(--t3);text-wrap:pretty">Título, descrição, tags e SEO saem nesse idioma.</span>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ nrStep.activate }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div>
+              <label style="display:block;font-size:11px;color:var(--t4);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:5px">Nome da rota</label>
+              <input value="{{ nrName }}" onChange="{{ nrSetName }}" placeholder="Ex.: Calçados — campanha Meta" style="width:100%;height:34px;padding:0 11px;border:1px solid var(--control-border);border-radius:6px;background:var(--surface);color:var(--ink);font-size:12.5px" />
+            </div>
+            <div style="border:1px solid var(--border);border-radius:8px;background:var(--surface);overflow:hidden">
+              <sc-for list="{{ nrSummary }}" as="r" hint-placeholder-count="6">
+                <div style="display:flex;justify-content:space-between;gap:16px;padding:10px 15px;border-bottom:1px solid var(--border-subtle)">
+                  <span style="font-size:12.5px;color:var(--t2)">{{ r.l }}</span>
+                  <span style="font-size:12.5px;font-weight:600;text-align:right">{{ r.v }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div>
+              <h2 style="font-size:13px;font-weight:600;margin:0 0 3px">Script de checkout roteado</h2>
+              <p style="margin:0 0 8px;font-size:12.5px;color:var(--t2)">Cole no theme.liquid da vitrine, antes de &lt;/head&gt;.</p>
+              <div style="border:1px solid var(--border);border-radius:7px;background:var(--surface-2);padding:11px 13px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--t1);word-break:break-all">{{ nrScript }}</div>
+              <button onClick="{{ nrCopyScript }}" style="margin-top:8px;height:27px;padding:0 11px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);font-size:12px;font-weight:600" style-hover="background:var(--surface-2)">Copiar script</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <div style="display:flex;gap:8px;align-items:center">
+          <sc-if value="{{ nrCanBack }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ nrBack }}" style="height:30px;padding:0 13px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);font-size:12.5px;font-weight:600" style-hover="background:var(--surface-2)">Voltar</button>
+          </sc-if>
+          <sc-if value="{{ nrShowNext }}" hint-placeholder-val="{{ true }}">
+            <button onClick="{{ nrNext }}" style="height:30px;padding:0 13px;border:0;border-radius:6px;color:var(--on-solid);font-size:12.5px;font-weight:600;background:{{ nrNextBg }}">Continuar</button>
+          </sc-if>
+          <sc-if value="{{ nrShowFinish }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ nrFinish }}" style="height:30px;padding:0 13px;border:0;border-radius:6px;background:var(--solid);color:var(--on-solid);font-size:12.5px;font-weight:600" style-hover="background:var(--solid-hover)">Criar e ativar rota</button>
+          </sc-if>
+          <button onClick="{{ nrCancel }}" style="height:30px;padding:0 13px;border:0;background:none;font-size:12.5px;font-weight:600;color:var(--t3)" style-hover="color:var(--ink)">Cancelar</button>
         </div>
       </div>
       </sc-if>
@@ -1313,6 +1498,13 @@ class Component extends DCLogic {
     { k: 'routing', title: 'Rota alterada', desc: 'Divisão do tráfego alterada de Prioridade para Round Robin.', time: 'ontem, 19:04', dot: 'var(--t3)', tech: 'routing.strategy.update · round_robin' },
     { k: 'store', title: 'Vitrine conectada', desc: 'Minha Loja foi conectada como vitrine.', time: 'ontem, 18:51', dot: 'var(--ok)', tech: 'oauth.grant · role vitrine' }
   ];
+  /* rotas: vitrine (origem) → divisão → lojas de checkout */
+  ROUTES = [
+    { id: 'r1', name: 'Catálogo geral', origin: 'Minha Loja', originPath: 'minhaloja.myshopify.com/*', method: 'round_robin', status: 'active', stores: ['c1','c2','c3','c4','c5'], orders: '1.284', linked: '482 produtos ligados' },
+    { id: 'r2', name: 'Calçados — campanha Meta', origin: 'Minha Loja', originPath: 'minhaloja.myshopify.com/collections/calcados', method: 'weight', status: 'active', stores: ['c1','c2'], orders: '612', linked: '96 produtos ligados' },
+    { id: 'r3', name: 'Acessórios — upsell', origin: 'Minha Loja', originPath: 'minhaloja.myshopify.com/collections/acessorios', method: 'priority', status: 'warn', stores: ['c3','c4'], orders: '188', linked: '54 produtos ligados' },
+    { id: 'r4', name: 'Black Friday (rascunho)', origin: 'Minha Loja', originPath: 'minhaloja.myshopify.com/collections/black-friday', method: 'weight', status: 'paused', stores: ['c2','c5'], orders: '0', linked: '128 produtos ligados' }
+  ];
   SOURCE = [
     { id: 's1', name: 'Tênis Runner Pro', vars: 8, price: 'R$ 329,90', col: 'Calçados' },
     { id: 's2', name: 'Tênis Runner Lite', vars: 8, price: 'R$ 289,90', col: 'Calçados' },
@@ -1366,6 +1558,8 @@ class Component extends DCLogic {
     storeId: null, storeTab: 'overview',
     modal: null, modalArg: null,
     toast: null, routing: {},
+    nr: { step: 1, mode: 'Gerar', vitrine: 'v1', checkout: 'c1', neutral: true, img: 'recreate', generic: true, extra: '', translate: true, variants: true, lang: 'pt-BR', name: '' },
+    routeId: 'r1', routeFilter: 'Todas', routeMethods: {}, routeStatus: {},
     method: (((this.METHODS || []).find(x => x.l === (this.props || {}).defaultMethod) || {}).id) || 'round_robin',
     tech: false, variantsOpen: true,
     wizard: 1, importDest: 'v1', importScope: 'store', importUrl: '', importFetch: 'idle', importCat: 'Todas',
@@ -1569,7 +1763,7 @@ class Component extends DCLogic {
       setMature: () => this.setState({ mode: 'mature', screen: 'overview', routing: {} }),
       demo: { newBg: m ? 'var(--surface)' : 'var(--solid)', newFg: m ? 'var(--t3)' : 'var(--on-solid)', matBg: m ? 'var(--solid)' : 'var(--surface)', matFg: m ? 'var(--on-solid)' : 'var(--t3)' },
 
-      is: { billing: S.screen === 'billing', admin: S.screen === 'admin', onboarding: S.screen === 'onboarding', overview: S.screen === 'overview', stores: S.screen === 'stores', store: S.screen === 'store', sales: S.screen === 'sales', routing: S.screen === 'routing', routingConfig: S.screen === 'routingConfig', import: S.screen === 'import', activity: S.screen === 'activity', settings: S.screen === 'settings', account: S.screen === 'account', error: S.screen === 'error' },
+      is: { newRoute: S.screen === 'newRoute', billing: S.screen === 'billing', admin: S.screen === 'admin', onboarding: S.screen === 'onboarding', overview: S.screen === 'overview', stores: S.screen === 'stores', store: S.screen === 'store', sales: S.screen === 'sales', routing: S.screen === 'routing', routingConfig: S.screen === 'routingConfig', import: S.screen === 'import', activity: S.screen === 'activity', settings: S.screen === 'settings', account: S.screen === 'account', error: S.screen === 'error' },
       page: { title: titles[S.screen] || 'XCART', hasSub: false, sub: '', hasAction: false, actionLabel: '', action: () => {} },
       crumb: { show: false, label: '', back: () => {} },
 
@@ -1592,7 +1786,7 @@ class Component extends DCLogic {
       routing: { methodShort: methodDef.l },
       toast: S.toast,
       ...this.storeVals(), ...this.salesVals(), ...this.routingVals(), ...this.billingVals(), ...this.adminVals(),
-      ...this.importVals(), ...this.modalVals(), ...this.chromeVals()
+      ...this.importVals(), ...this.newRouteVals(), ...this.modalVals(), ...this.chromeVals()
     };
   }
 
@@ -1712,32 +1906,158 @@ class Component extends DCLogic {
 
   routingVals() {
     const S = this.state, m = this.mature(), cks = this.cks();
-    const active = cks.filter(c => c.status === 'active');
-    const totalW = active.reduce((a, c) => a + c.weight, 0) || 1;
-    const methods = this.METHODS.map(x => ({ ...x, selected: S.method === x.id,
-      border: S.method === x.id ? 'var(--solid)' : 'var(--border)', bg: S.method === x.id ? 'var(--surface-2)' : 'var(--surface)',
-      dotBg: S.method === x.id ? 'var(--solid)' : 'var(--surface)', dotBorder: S.method === x.id ? 'var(--solid)' : 'var(--control-border)',
-      pick: () => { this.setState({ method: x.id }); this.notify('Método alterado para ' + x.l); } }));
-    const nodes = cks.map((c, i) => {
-      const st = this.ST[c.status], on = c.status === 'active';
-      const share = on ? (S.method === 'weight' ? Math.round((c.weight / totalW) * 100) : S.method === 'priority' ? (i === 0 ? 100 : 0) : Math.round(100 / active.length)) : 0;
-      return { ...c, statusLabel: st.l, dot: st.c, fg: st.c, bg: st.b, isActive: on,
-        share: share + '%', barW: share + '%', barColor: on ? 'var(--solid)' : 'var(--border-strong)',
-        order: 'Prioridade ' + (i + 1),
-        pauseLabel: on ? 'Parar' : 'Voltar',
-        pause: () => (on ? this.setState({ modal: 'pause', modalArg: c.id }) : this.togglePause(c.id)),
-        open: () => this.openStore(c.id) };
+    const stOf = (r) => S.routeStatus[r.id] || r.status;
+    const mtOf = (r) => S.routeMethods[r.id] || r.method;
+    const label = (id) => (this.METHODS.find(x => x.id === id) || this.METHODS[0]).l;
+
+    const nodesFor = (r) => {
+      const list = r.stores.map(id => cks.find(c => c.id === id)).filter(Boolean);
+      const on = list.filter(c => c.status === 'active');
+      const totalW = on.reduce((a, c) => a + c.weight, 0) || 1;
+      const mt = mtOf(r), paused = stOf(r) === 'paused';
+      return list.map((c, i) => {
+        const live = c.status === 'active' && !paused;
+        const share = !live ? 0 : mt === 'weight' ? Math.round((c.weight / totalW) * 100) : mt === 'priority' ? (i === 0 ? 100 : 0) : Math.round(100 / on.length);
+        const st = this.ST[c.status];
+        return { ...c, statusLabel: paused ? 'Parada' : st.l, dot: paused ? 'var(--t4)' : st.c, fg: paused ? 'var(--t3)' : st.c,
+          share: share + '%', barW: share + '%', barColor: live ? 'var(--solid)' : 'var(--border-strong)',
+          order: 'Prioridade ' + (i + 1), weight: c.weight,
+          pauseLabel: paused ? 'Rota parada' : c.status === 'active' ? 'Parar loja' : 'Voltar loja',
+          pauseDisabled: paused, pauseFg: paused ? 'var(--t4)' : 'var(--t2)',
+          pause: () => (paused ? this.notify('Volte a rota antes de mexer nas lojas') : c.status === 'active' ? this.setState({ modal: 'pause', modalArg: c.id }) : this.togglePause(c.id)),
+          open: () => this.openStore(c.id) };
+      });
+    };
+
+    const statusMeta = { active: { l: 'Ativa', c: 'var(--ok)' }, warn: { l: 'Atenção', c: 'var(--warn)' }, paused: { l: 'Parada', c: 'var(--t4)' } };
+    const filters = ['Todas', 'Ativas', 'Atenção', 'Paradas'].map(l => ({ l, ...this.chip(S.routeFilter === l), set: () => this.setState({ routeFilter: l }) }));
+    const match = (r) => { const s = stOf(r);
+      return S.routeFilter === 'Todas' || (S.routeFilter === 'Ativas' && s === 'active') || (S.routeFilter === 'Atenção' && s === 'warn') || (S.routeFilter === 'Paradas' && s === 'paused'); };
+
+    const cards = this.ROUTES.filter(match).map(r => {
+      const s = stOf(r), meta = statusMeta[s] || statusMeta.active, nodes = nodesFor(r);
+      const live = nodes.filter(n => n.share !== '0%').length;
+      const on = r.id === S.routeId;
+      return { ...r, nodes, dot: meta.c, accent: meta.c,
+        selBg: on ? 'var(--surface-2)' : 'var(--surface)', selBorder: on ? 'var(--solid)' : 'transparent', weight: on ? '600' : '500',
+        listSub: meta.l + ' · ' + label(mtOf(r)),
+        statusLine: meta.l + ' · ' + live + ' de ' + r.stores.length + ' lojas recebendo comprador',
+        methodLabel: label(mtOf(r)), linkedLabel: r.linked,
+        select: () => this.setState({ routeId: r.id }),
+        toggleLabel: s === 'paused' ? 'Voltar' : 'Parar',
+        toggle: () => { const next = s === 'paused' ? 'active' : 'paused';
+          this.setState({ routeStatus: { ...S.routeStatus, [r.id]: next } });
+          this.notify(next === 'paused' ? r.name + ' parada — nenhum comprador é enviado' : r.name + ' voltou a receber comprador'); },
+        test: () => this.notify('Pedido de teste roteado por ' + r.name),
+        open: () => this.setState({ screen: 'routingConfig', routeId: r.id }) };
     });
-    const md = this.METHODS.find(x => x.id === S.method);
+
+    const detailCard = cards.find(c => c.id === S.routeId) || cards[0] || {};
+    const detail = this.ROUTES.find(r => r.id === detailCard.id) || null;
+    const all = this.ROUTES;
+    const activeRoutes = all.filter(r => stOf(r) === 'active').length;
+    const storesLive = cks.filter(c => c.status === 'active' && all.some(r => stOf(r) !== 'paused' && r.stores.includes(c.id))).length;
+    const ordersTotal = all.reduce((acc, r) => acc + Number(String(r.orders).replace('.', '')), 0);
+
+    const edit = all.find(r => r.id === S.routeId) || all[0];
+    const editStatus = statusMeta[stOf(edit)] || statusMeta.active;
+    const editMethod = mtOf(edit);
+    const methods = this.METHODS.map(x => ({ ...x, selected: editMethod === x.id,
+      border: editMethod === x.id ? 'var(--solid)' : 'var(--border)', bg: editMethod === x.id ? 'var(--surface-2)' : 'var(--surface)',
+      dotBg: editMethod === x.id ? 'var(--solid)' : 'var(--surface)', dotBorder: editMethod === x.id ? 'var(--solid)' : 'var(--control-border)',
+      pick: () => this.setState({ routeMethods: { ...S.routeMethods, [edit.id]: x.id }, method: x.id }) }));
+
     return {
-      hasRouting: m && active.length > 0, noRouting: !m,
-      routingMethods: methods, routingNodes: nodes,
-      routingMethodLabel: md.l, routingMethodDesc: md.d,
-      routingHealth: active.length + ' de ' + cks.length + ' lojas de checkout recebendo comprador',
-      isWeight: S.method === 'weight', isPriority: S.method === 'priority',
+      hasRouting: m, noRouting: !m,
+      routeList: cards, routeFilters: filters, routesEmptyFilter: cards.length === 0,
+      routeDetail: detailCard,
+      routeDetailNodes: detail ? nodesFor(detail) : [],
+      routeDetailFacts: detail ? [ { l: 'Origem', v: detail.origin, sub: detail.originPath }, { l: 'Divisão', v: label(mtOf(detail)), sub: detail.linked }, { l: 'Pedidos · 30d', v: detail.orders, sub: 'roteados por esta rota' } ] : [],
+      routeStats: [
+        { l: 'Rotas', v: String(all.length) },
+        { l: 'Ativas', v: String(activeRoutes) },
+        { l: 'Lojas recebendo', v: String(storesLive) },
+        { l: 'Pedidos roteados · 30d', v: this.num(ordersTotal) }
+      ],
+      newRoute: () => { this.setNR({ step: 1 }); this.go('newRoute'); },
+
+      editRoute: { name: edit.name, originPath: edit.originPath, dot: editStatus.c, statusLine: editStatus.l + ' · ' + label(editMethod) },
+      editRouteNodes: nodesFor(edit),
+      routingMethods: methods, routingNodes: nodesFor(edit),
+      routingMethodLabel: label(editMethod), routingMethodDesc: (this.METHODS.find(x => x.id === editMethod) || {}).d || '',
+      routingHealth: storesLive + ' de ' + cks.length + ' lojas de checkout recebendo comprador',
+      isWeight: editMethod === 'weight', isPriority: editMethod === 'priority',
       goRoutingConfig: () => this.setState({ screen: 'routingConfig' }),
-      saveRouting: () => { this.setState({ screen: 'routing' }); this.notify('Roteamento salvo e aplicado'); },
-      testRouting: () => this.notify('Pedido de teste roteado para Checkout 01')
+      saveRouting: () => { this.setState({ screen: 'routing' }); this.notify(edit.name + ' salva e aplicada'); },
+      testRouting: () => this.notify('Pedido de teste roteado por ' + edit.name)
+    };
+  }
+
+  setNR = (patch) => this.setState(s => ({ nr: { ...s.nr, ...patch } }));
+  newRouteVals() {
+    const S = this.state, N = S.nr, cks = this.cks();
+    const steps = ['Lojas', 'Criar destino', 'Ativar rota'].map((l, i) => {
+      const n = i + 1, done = N.step > n, cur = N.step === n;
+      return { l, done, cur,
+        chipBg: done ? 'var(--ok-bg)' : cur ? 'var(--solid)' : 'var(--surface)', chipFg: done ? 'var(--ok)' : cur ? 'var(--on-solid)' : 'var(--t4)',
+        chipBorder: done ? 'var(--ok-border)' : cur ? 'var(--solid)' : 'var(--border)',
+        fg: cur ? 'var(--ink)' : done ? 'var(--t1)' : 'var(--t4)', weight: cur ? '600' : '500',
+        badge: done ? '✓' : String(n), go: () => (n < N.step ? this.setNR({ step: n }) : null) };
+    });
+    const modeDesc = {
+      'Gerar': 'Cria os produtos na loja checkout a partir da vitrine, neutralizando marca e (opcional) imagem.',
+      'Reaproveitar': 'Usa produtos que já existem na loja checkout e liga por SKU, sem criar nada novo.',
+      'Só conectar': 'Não mexe no catálogo: apenas gera o script de checkout roteado entre as duas lojas.'
+    };
+    const modes = ['Gerar', 'Reaproveitar', 'Só conectar'].map(l => ({ l, ...this.chip(N.mode === l), pick: () => this.setNR({ mode: l }) }));
+    const check = (on) => ({ bg: on ? 'var(--solid)' : 'var(--surface)', border: on ? 'var(--solid)' : 'var(--control-border)', mark: on ? '✓' : '' });
+    const imgDefs = [
+      { id: 'recreate', l: 'Recriar imagem sem marca (em background)', d: '1 imagem/produto, troca aos poucos (~US$ 0.04 cada). Pode demorar e às vezes falha em lojas grandes.' },
+      { id: 'keep', l: 'Não gerar imagem (mais rápido)', d: 'Linka tudo com a imagem original e neutraliza só o texto. Recrie as imagens depois num app da Shopify.' }
+    ];
+    const imgs = imgDefs.map(o => { const on = N.img === o.id;
+      return { ...o, border: on ? 'var(--solid)' : 'var(--border)', bg: on ? 'var(--surface-2)' : 'var(--surface)',
+        dotBg: on ? 'var(--solid)' : 'var(--surface)', dotBorder: on ? 'var(--solid)' : 'var(--control-border)',
+        pick: () => this.setNR({ img: o.id }) }; });
+    const need = 117, have = 50;
+    const shortCredits = N.mode === 'Gerar' && N.img === 'recreate' && need > have;
+    const vit = { id: 'v1', label: this.VITRINE.name + ' — ' + this.VITRINE.domain };
+    const ckOpts = cks.map(c => ({ id: c.id, label: c.name + ' — ' + c.domain }));
+    const ckName = (ckOpts.find(o => o.id === N.checkout) || ckOpts[0] || {}).label || '—';
+    const build = N.mode === 'Gerar';
+    return {
+      nrSteps: steps, nrStep: { stores: N.step === 1, build: N.step === 2, activate: N.step === 3 },
+      nrModes: modes, nrModeDesc: modeDesc[N.mode],
+      nrVitrines: [vit], nrCheckouts: ckOpts, nrVitrine: N.vitrine, nrCheckout: N.checkout,
+      nrSetVitrine: (e) => this.setNR({ vitrine: e.target.value }),
+      nrSetCheckout: (e) => this.setNR({ checkout: e.target.value }),
+      nrNeutral: { ...(N.neutral ? { bg: 'var(--solid)', border: 'var(--solid)', side: 'right', knob: '16px', knobBg: 'var(--surface)' } : { bg: 'var(--surface)', border: 'var(--control-border)', side: 'left', knob: '14px', knobBg: 'var(--control-border)' }) },
+      nrToggleNeutral: () => this.setNR({ neutral: !N.neutral }),
+      nrImageModes: imgs, nrShowCredits: shortCredits,
+      nrCreditMsg: 'Saldo insuficiente: precisa de ' + need + ' créditos e você tem ' + have + '. Recarregue antes de continuar.',
+      nrGoBilling: () => this.go('billing'),
+      nrGeneric: check(N.generic), nrToggleGeneric: () => this.setNR({ generic: !N.generic }),
+      nrExtra: N.extra, nrSetExtra: (e) => this.setNR({ extra: e.target.value }),
+      nrTranslate: check(N.translate), nrToggleTranslate: () => this.setNR({ translate: !N.translate }),
+      nrVariants: check(N.variants), nrToggleVariants: () => this.setNR({ variants: !N.variants }),
+      nrLang: N.lang, nrLangs: [{ id: 'pt-BR' }, { id: 'en-US' }, { id: 'es-ES' }], nrSetLang: (e) => this.setNR({ lang: e.target.value }),
+      nrName: N.name, nrSetName: (e) => this.setNR({ name: e.target.value }),
+      nrSummary: [
+        { l: 'Modo', v: N.mode },
+        { l: 'Vitrine', v: this.VITRINE.name },
+        { l: 'Loja checkout', v: ckName },
+        { l: 'Produtos', v: build ? 'Criar a partir da vitrine · conectar por SKU' : N.mode === 'Reaproveitar' ? 'Reaproveitar existentes · conectar por SKU' : 'Não alterar catálogo' },
+        { l: 'Neutralização', v: build && N.neutral ? (N.img === 'recreate' ? 'Texto e imagem' : 'Somente texto') : 'Desligada' },
+        { l: 'Idioma', v: N.translate ? N.lang + (N.variants ? ' · variantes traduzidas' : '') : 'Sem tradução' }
+      ],
+      nrScript: '<script src="https://cdn.xcart.app/r/' + (N.checkout || 'c1') + '.js" defer></' + 'script>',
+      nrCopyScript: () => this.notify('Script copiado'),
+      nrCanBack: N.step > 1, nrShowNext: N.step < 3, nrShowFinish: N.step === 3,
+      nrNextBg: (N.step === 2 && shortCredits) ? 'var(--border-strong)' : 'var(--solid)',
+      nrNext: () => { if (N.step === 2 && shortCredits) return this.notify('Recarregue créditos ou escolha não gerar imagem'); this.setNR({ step: Math.min(3, N.step + 1) }); },
+      nrBack: () => this.setNR({ step: Math.max(1, N.step - 1) }),
+      nrCancel: () => this.go('routing'),
+      nrFinish: () => { this.go('routing'); this.notify((N.name || 'Nova rota') + ' criada — script gerado'); }
     };
   }
 
@@ -1867,8 +2187,9 @@ class Component extends DCLogic {
       billing: { title: 'Assinatura e créditos', crumb: { label: 'Configurações', back: () => this.go('settings') } },
       admin: { title: 'Clientes da plataforma', sub: 'painel interno', action: { l: 'Exportar CSV', f: () => this.notify('Base de clientes exportada em CSV') } },
       sales: { title: 'Vendas', sub: m ? 'últimos ' + S.period + ' dias' : '', action: m ? { l: 'Exportar CSV', f: () => this.notify('Relatório de vendas exportado em CSV') } : null },
-      routing: { title: 'Roteamento', sub: m ? this.METHODS.find(x => x.id === S.method).l : '', action: m ? { l: 'Configurar', f: () => this.setState({ screen: 'routingConfig' }) } : null },
+      routing: { title: 'Roteamento', sub: m ? this.ROUTES.length + ' rotas' : '', action: null },
       routingConfig: { title: 'Configuração de roteamento', crumb: { label: 'Roteamento', back: () => this.go('routing') } },
+      newRoute: { title: 'Nova rota', crumb: { label: 'Roteamento', back: () => this.go('routing') } },
       import: { title: 'Importar' },
       activity: { title: 'Atividade', sub: m ? 'últimos 7 dias' : '' },
       settings: { title: 'Configurações' },
