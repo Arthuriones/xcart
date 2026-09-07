@@ -3,8 +3,58 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { deriveStoreRoles, type StoreRole } from "@/lib/checkout-routes/store-roles";
 
-const CAMPOS =
-  "id, name, shop_domain, theme_id, logo_path, target_language, currency_code, auto_convert_prices, currency_rate, price_markup_percent, product_count, variant_count, catalog_synced_at, created_at";
+/** O que sempre existiu na tabela. */
+const CAMPOS_BASE =
+  "id, name, shop_domain, theme_id, logo_path, target_language, currency_code, auto_convert_prices, currency_rate, price_markup_percent, created_at";
+
+/** Contagem de catalogo -- so existe depois da migration 026. */
+const CAMPOS_CATALOGO = "product_count, variant_count, catalog_synced_at";
+
+export const CAMPOS_LOJA = `${CAMPOS_BASE}, ${CAMPOS_CATALOGO}`;
+
+type ClienteSupabase = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * Le as lojas sem depender da migration 026 ter rodado.
+ *
+ * Isto aqui e a correcao de um bug feio: a consulta pedia product_count numa
+ * base onde a coluna nao existia, o PostgREST devolvia 400, o codigo fazia
+ * `data || []` e a tela dizia "Nenhuma loja conectada" para quem tinha nove.
+ * Erro de banco nao pode ser indistinguivel de lista vazia.
+ *
+ * Agora a contagem e opcional: se as colunas nao estiverem la, as lojas vem
+ * do mesmo jeito e o catalogo aparece como "—". Qualquer outro erro sobe.
+ */
+export async function lerLojas(supabase: ClienteSupabase) {
+  const completa = await supabase
+    .from("stores")
+    .select(CAMPOS_LOJA)
+    .order("created_at", { ascending: false });
+
+  if (!completa.error) return completa.data || [];
+
+  const semColuna = /column .* does not exist/i.test(completa.error.message || "");
+  if (!semColuna) throw new Error(completa.error.message);
+
+  console.warn(
+    "[stores] migration 026 nao aplicada: seguindo sem a contagem de catalogo.",
+    completa.error.message
+  );
+
+  const base = await supabase
+    .from("stores")
+    .select(CAMPOS_BASE)
+    .order("created_at", { ascending: false });
+
+  if (base.error) throw new Error(base.error.message);
+
+  return (base.data || []).map((loja) => ({
+    ...loja,
+    product_count: null,
+    variant_count: null,
+    catalog_synced_at: null,
+  }));
+}
 
 export interface StoreRow {
   id: string;
@@ -41,15 +91,14 @@ export async function getStoresWithRoles(): Promise<StoreRow[]> {
   const [supabase, user] = await Promise.all([createClient(), getCurrentUser()]);
   if (!user) return [];
 
-  const [lojas, rotas] = await Promise.all([
-    supabase.from("stores").select(CAMPOS).order("created_at", { ascending: false }),
+  const [linhas, rotas] = await Promise.all([
+    lerLojas(supabase),
     supabase
       .from("routed_checkout_configs")
       .select("id, source_store_id, target_store_id")
       .eq("user_id", user.id),
   ]);
 
-  const linhas = lojas.data || [];
   const configs = rotas.data || [];
 
   let destinos: {

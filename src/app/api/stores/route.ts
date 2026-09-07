@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { lerLojas } from "@/lib/stores/queries";
 
 export const runtime = "nodejs";
-
-const CAMPOS =
-  "id, name, shop_domain, theme_id, logo_path, target_language, currency_code, auto_convert_prices, currency_rate, price_markup_percent, product_count, variant_count, catalog_synced_at, created_at";
 
 /**
  * Lista as lojas do usuario.
@@ -15,13 +13,10 @@ const CAMPOS =
  */
 export async function GET() {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("stores")
-    .select(CAMPOS)
-    .order("created_at", { ascending: false });
-
-  if (error) {
+  try {
+    return NextResponse.json({ stores: await lerLojas(supabase) });
+  } catch (erro) {
+    console.error("[api/stores]", erro);
     return NextResponse.json({ error: "Falha ao listar lojas." }, { status: 500 });
   }
-  return NextResponse.json({ stores: data || [] });
 }

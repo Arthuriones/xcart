@@ -248,7 +248,10 @@ export async function healRoute(
     (soma, produto) => soma + (produto.variants?.length || 0),
     0
   );
-  await Promise.all([
+  // A gravacao da contagem e enfeite: se a migration 026 nao rodou, as
+  // colunas nao existem e o update falha. Isso NAO pode derrubar o
+  // auto-conserto, que e quem mantem a rota funcionando.
+  const [contagemVitrine, contagemCheckout] = await Promise.all([
     admin
       .from("stores")
       .update({
@@ -266,6 +269,11 @@ export async function healRoute(
       })
       .eq("id", targetStore.id),
   ]);
+  for (const resultado of [contagemVitrine, contagemCheckout]) {
+    if (resultado.error) {
+      console.warn("[heal] nao gravei a contagem de catalogo:", resultado.error.message);
+    }
+  }
 
   // Toda variante da vitrine precisa de SKU unico antes de qualquer comparacao.
   // O loop abaixo ignora quem esta sem SKU, entao produto criado na mao ficava
