@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ImageIcon, Loader2, Sparkles, X } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { textos } from "@/lib/textos";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,8 +45,8 @@ export function SwapImagesDialog({
   const [progress, setProgress] = useState<ImageQueueProgress | null>(null);
   const [canceling, setCanceling] = useState(false);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const t = useTranslations("clone.swapImages");
-  const tCredit = useTranslations("clone.imageNeutralize");
+  const t = textos("clone.swapImages");
+  const tCredit = textos("clone.imageNeutralize");
   const [estimate, setEstimate] = useState<{
     estimatedCredits: number;
     billingEnforced: boolean;

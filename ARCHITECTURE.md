@@ -32,7 +32,7 @@ Beyond routing, xcart also: imports/clones products from many sources, AI-optimi
 - **Shopify** — Admin GraphQL API, version pinned `2024-10`.
 - **Deploy**: Vercel (primary; `vercel.json` sets `maxDuration` per route + an hourly cron) and Docker (`Dockerfile` multi-stage `node:20-alpine`, `docker-compose.yml` for VPS). `AGENTS.md` warns Next.js 16 has breaking changes — read `node_modules/next/dist/docs/` before writing Next code.
 
-`next.config.ts`: `serverExternalPackages: [playwright-core, @sparticuz/chromium, undici]`, remote image hosts (alicdn, aliexpress, cdn.shopify.com), wrapped with `next-intl/plugin`. Root layout forces **dark theme** and `lang="pt-BR"`.
+`next.config.ts`: `serverExternalPackages: [playwright-core, @sparticuz/chromium, undici]`, remote image hosts (alicdn, aliexpress, cdn.shopify.com). Root layout forces **dark theme** and `lang="pt-BR"`.
 
 ---
 
@@ -54,7 +54,7 @@ All host/locale logic is in the edge middleware: `src/proxy.ts` → `src/lib/sup
 
 Supabase Auth, standard cookie sessions (no custom JWT). Clients: `src/lib/supabase/{client (browser), server (RSC), admin (service-role, bypasses RLS)}.ts`.
 
-- **Login/signup/recovery**: `src/app/[locale]/(auth)/login/page.tsx` → password or magic-link; `callback/route.ts` exchanges `?code`; recovery → `set-password`.
+- **Login/signup/recovery**: `src/app/(auth)/login/page.tsx` → password or magic-link; `callback/route.ts` exchanges `?code`; recovery → `set-password`.
 - Middleware refreshes the session every request and enforces: unauthenticated → `/login`; authenticated without `user_metadata.has_password === true` → forced to `/set-password` (mechanism for admin-provisioned accounts).
 - Dashboard layout gate: `userHasAccess()` (billing). Admin layout gate: `profiles.is_admin`.
 - `handle_new_user` trigger auto-creates a `profiles` row per `auth.users` insert.
@@ -232,9 +232,9 @@ Documented in `.env.example`: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_
 
 ## 15. File map (entry points)
 
-- Routing: `public/routed-checkout-loader.js`, `src/app/api/checkout-routes/{resolve,connect-by-sku,create-destination,repair,health,settings,track-fallback,map,[id]/*}/route.ts`, `src/lib/shopify/cart-routing.ts`, `src/lib/checkout-routes/{rotation,targets,embed-config,store-roles,heal}.ts`, `src/components/routed-checkout/*`, `src/app/[locale]/(dashboard)/clone/routed-checkout/map/page.tsx`.
+- Routing: `public/routed-checkout-loader.js`, `src/app/api/checkout-routes/{resolve,connect-by-sku,create-destination,repair,health,settings,track-fallback,map,[id]/*}/route.ts`, `src/lib/shopify/cart-routing.ts`, `src/lib/checkout-routes/{rotation,targets,embed-config,store-roles,heal}.ts`, `src/components/routed-checkout/*`, `src/app/(dashboard)/clone/routed-checkout/map/page.tsx`.
 - Import: `src/lib/import/*`, `src/lib/aliexpress/*`, `src/lib/shopify/public-store.ts`, `src/lib/jobs/*`, `src/app/api/{import,aliexpress,jobs}/*`.
 - Shopify + AI: `src/lib/shopify/client.ts`, `src/lib/gemini/client.ts`, `src/lib/ai/product-neutralizer.ts`, `src/lib/store-context.ts`, `src/lib/products/shopify-taxonomy-enrichment.ts`, `src/app/api/shopify/*`.
-- Shell: `src/proxy.ts`, `src/lib/supabase/middleware.ts`, `src/i18n/*`, `src/lib/billing/*`, `src/app/[locale]/(dashboard)/*`, `src/app/admin/*`.
+- Shell: `src/proxy.ts`, `src/lib/supabase/middleware.ts`, `src/lib/billing/*`, `src/app/(dashboard)/*`, `src/app/admin/*`.
 - Data: `supabase/migrations/001-025_*.sql`.
 - Deploy: `next.config.ts`, `vercel.json`, `Dockerfile`, `docker-compose.yml`, `.env.example`.

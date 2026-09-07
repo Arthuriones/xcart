@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { textos } from "@/lib/textos";
 import {
   AlertTriangle,
   ArrowRight,
@@ -98,7 +98,7 @@ export function ConnectStoresWizard({
   appOrigin,
   onRouteCreated,
 }: ConnectStoresWizardProps) {
-  const t = useTranslations("clone.imageNeutralize");
+  const t = textos("clone.imageNeutralize");
   const [step, setStep] = useState(1);
 
   // "generate" = neutraliza da vitrine. "reuse" = copia uma loja checkout ja

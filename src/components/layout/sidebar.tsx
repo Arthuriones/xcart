@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { textos } from "@/lib/textos";
 import {
   Activity,
   ChevronDown,
@@ -16,7 +16,8 @@ import {
   Waypoints,
   type LucideIcon,
 } from "lucide-react";
-import { Link, useRouter } from "@/i18n/navigation";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -92,7 +93,7 @@ export interface SidebarData {
 export function Sidebar({ dados }: { dados: SidebarData }) {
   const pathname = usePathname();
   const router = useRouter();
-  const t = useTranslations("nav");
+  const t = textos("nav");
 
   const contadores = { stores: dados.stores, credits: dados.credits };
   // O medidor some quando a operacao esta pronta: cravado em 100% vira ruido

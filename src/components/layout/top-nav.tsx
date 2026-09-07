@@ -1,8 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useTranslations } from "next-intl";
-import { LanguageSwitcher } from "./language-switcher";
+import { textos } from "@/lib/textos";
 
 // Onde cada rota aparece na trilha do topo. Chave de traducao do namespace nav.
 const TRILHA: { prefixo: string; chave: string }[] = [
@@ -19,7 +18,7 @@ const TRILHA: { prefixo: string; chave: string }[] = [
 
 export function TopNav() {
   const pathname = usePathname();
-  const t = useTranslations("nav");
+  const t = textos("nav");
 
   // O prefixo mais longo ganha: /clone/routed-checkout antes de /clone.
   const atual = TRILHA.filter((item) => pathname.startsWith(item.prefixo)).sort(
@@ -34,9 +33,6 @@ export function TopNav() {
             {t(atual.chave)}
           </span>
         )}
-        <div className="ml-auto">
-          <LanguageSwitcher />
-        </div>
       </div>
     </header>
   );
