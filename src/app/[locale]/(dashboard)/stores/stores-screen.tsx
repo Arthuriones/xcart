@@ -6,7 +6,12 @@ import { useRouter } from "@/i18n/navigation";
 import { useState, useEffect, useMemo, useRef } from "react";
 import type { StoreRow } from "@/lib/stores/queries";
 import dynamic from "next/dynamic";
-import { StoreTable, sincronizado } from "@/components/stores/store-table";
+import {
+  EstadoLoja,
+  StoreTable,
+  contagem,
+  sincronizado,
+} from "@/components/stores/store-table";
 import type { StoreAsset } from "./store-profile-dialog";
 
 const StoreProfileDialog = dynamic(
@@ -783,11 +788,11 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
               o que interessa nelas e comparar linha a linha. */}
           {vitrines.length > 0 && (
             <section>
-              <div className="mb-2 flex items-center gap-2.5">
+              <div className="mb-[9px] flex items-center gap-2.5">
                 <h2 className="text-[13px] font-semibold text-ink">Vitrines</h2>
                 <span className="h-px flex-1 bg-border" />
               </div>
-              <p className="mb-2.5 max-w-[640px] text-[12px] text-t3">
+              <p className="mb-[9px] max-w-[640px] text-[12px] text-t3">
                 Recebem o tráfego do anúncio e carregam a marca. O comprador navega e
                 monta o carrinho aqui.
               </p>
@@ -801,24 +806,19 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
                   >
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2">
-                        <span
-                          className="h-1.5 w-1.5 rounded-full"
-                          style={{ background: "var(--ok)" }}
-                          aria-hidden
-                        />
                         <span className="truncate text-[13.5px] font-semibold text-ink">
                           {loja.name}
                         </span>
-                        <span className="text-[11.5px] text-[var(--ok)]">Conectada</span>
+                        <EstadoLoja estado={loja.routeState} compacto />
                       </span>
                       <span className="mt-[3px] block truncate font-mono text-[11px] text-t3">
                         {loja.shop_domain}
                       </span>
                     </span>
-                    <span className="shrink-0 text-[12px] text-t1">
-                      {loja.product_count != null
-                        ? `${loja.product_count} produtos`
-                        : "produtos não conferidos"}
+                    {/* Mesma regra da tabela: travessão quando nunca foi
+                        conferido, não uma frase que quebra o ritmo da linha. */}
+                    <span className="shrink-0 text-[12px] tabular-nums text-t1">
+                      {contagem(loja) != null ? `${contagem(loja)} produtos` : "—"}
                     </span>
                     <span className="shrink-0 text-[12px] text-t3">
                       Sync {sincronizado(loja.catalog_synced_at)}
@@ -833,7 +833,7 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
           )}
 
           <section>
-            <div className="mb-2 flex items-center gap-2.5">
+            <div className="mb-[9px] flex items-center gap-2.5">
               <h2 className="text-[13px] font-semibold text-ink">Lojas de checkout</h2>
               <span className="font-mono text-[11px] text-t4">{checkouts.length}</span>
               <span className="h-px flex-1 bg-border" />
@@ -845,7 +845,7 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
                 {t("connect_btn")}
               </Button>
             </div>
-            <p className="mb-2.5 max-w-[640px] text-[12px] text-t3">
+            <p className="mb-[9px] max-w-[640px] text-[12px] text-t3">
               Catálogo neutralizado, onde o pagamento acontece. Título, descrição e
               imagem podem mudar à vontade; SKU e variante, nunca.
             </p>
