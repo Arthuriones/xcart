@@ -14,8 +14,11 @@
  * tenis; um piso alto encareceria justamente os itens baratos, que e onde a
  * diferenca de preco mais aparece para o comprador.
  *
- * SKU sem par na referencia fica como esta -- inventar preco para ele seria
- * repetir o erro que este script veio consertar.
+ * SKU sem par na referencia cai na media da categoria (marca + tipo), tirada
+ * das variantes da vitrine que JA foram precificadas pela referencia. Sao
+ * poucos itens -- cores que a referencia nao carrega -- e a media da categoria
+ * os deixa coerentes com os vizinhos de prateleira em vez de presos no preco
+ * velho.
  *
  * Uso:  npx tsx scripts/reprecificar-por-referencia.ts [--aplicar]
  */
@@ -26,6 +29,7 @@ import { shopifyGraphQL, type ShopifyCredentials } from "../src/lib/shopify/clie
 config({ path: ".env.local" });
 
 const REFERENCIA = "www.blockstore.cl";
+/** A primeira e a vitrine: e dela que sai a tabela de precos das duas. */
 const LOJAS = ["q2mdgs-ag.myshopify.com", "5sx1nu-sx.myshopify.com"];
 const DESCONTO = 0.15;
 const TETO = 79990;
@@ -65,13 +69,15 @@ interface Variante {
   sku: string | null;
   price: string;
   productId: string;
+  vendor: string;
+  productType: string;
 }
 
 async function lerVariantes(creds: ShopifyCredentials): Promise<Variante[]> {
   const query = `query Catalogo($cursor: String) {
     productVariants(first: 250, after: $cursor) {
       pageInfo { hasNextPage endCursor }
-      nodes { id sku price product { id } }
+      nodes { id sku price product { id vendor productType } }
     }
   }`;
 
@@ -81,11 +87,23 @@ async function lerVariantes(creds: ShopifyCredentials): Promise<Variante[]> {
     const dados: {
       productVariants: {
         pageInfo: { hasNextPage: boolean; endCursor: string };
-        nodes: { id: string; sku: string | null; price: string; product: { id: string } }[];
+        nodes: {
+          id: string;
+          sku: string | null;
+          price: string;
+          product: { id: string; vendor: string; productType: string };
+        }[];
       };
     } = await shopifyGraphQL(creds, query, { cursor });
     for (const no of dados.productVariants.nodes) {
-      todas.push({ id: no.id, sku: no.sku, price: no.price, productId: no.product.id });
+      todas.push({
+        id: no.id,
+        sku: no.sku,
+        price: no.price,
+        productId: no.product.id,
+        vendor: no.product.vendor,
+        productType: no.product.productType,
+      });
     }
     if (!dados.productVariants.pageInfo.hasNextPage) break;
     cursor = dados.productVariants.pageInfo.endCursor;
@@ -133,32 +151,72 @@ async function main() {
   const referencia = await precosDaReferencia();
   console.log(`${REFERENCIA}: ${referencia.size} SKUs com preco`);
 
+  const vitrine = await credenciais(LOJAS[0]);
+  const varsVitrine = await lerVariantes(vitrine);
+
+  // ---- tabela de precos, por SKU, montada UMA vez sobre a vitrine ----
+  //
+  // A loja de checkout tem o catalogo neutralizado: marca e tipo la nao sao
+  // confiaveis para agrupar. E de todo jeito as duas precisam do MESMO preco
+  // para o mesmo SKU, senao o comprador ve um valor e paga outro.
+  const preco = new Map<string, number>();
+  const porCategoria = new Map<string, number[]>();
+
+  for (const v of varsVitrine) {
+    const base = v.sku ? referencia.get(v.sku) : undefined;
+    if (!v.sku || !base) continue;
+    const valor = Math.min(TETO, noventa(base * (1 - DESCONTO)));
+    preco.set(v.sku, valor);
+    const chave = `${v.vendor}|${v.productType}`;
+    const lista = porCategoria.get(chave) || [];
+    lista.push(valor);
+    porCategoria.set(chave, lista);
+  }
+  console.log(`${preco.size} SKUs precificados pela referencia`);
+
+  // ---- o que a referencia nao cobre: media da categoria ----
+  const orfaos = varsVitrine.filter((v) => v.sku && !preco.has(v.sku));
+  const mediasUsadas = new Map<string, number>();
+  for (const v of orfaos) {
+    const chave = `${v.vendor}|${v.productType}`;
+    const vizinhos = porCategoria.get(chave);
+    if (!vizinhos?.length) continue;
+    const media = noventa(vizinhos.reduce((a, b) => a + b, 0) / vizinhos.length);
+    preco.set(v.sku!, media);
+    mediasUsadas.set(chave, media);
+  }
+  if (orfaos.length) {
+    console.log(`${orfaos.length} variantes sem par na referencia, pela media da categoria:`);
+    for (const [chave, media] of mediasUsadas) {
+      console.log(`  ${chave.replace("|", " / ")} -> ${media.toLocaleString("pt-BR")}`);
+    }
+  }
+
   for (const dominio of LOJAS) {
-    const loja = await credenciais(dominio);
+    const loja = dominio === LOJAS[0] ? vitrine : await credenciais(dominio);
     console.log(`\n== ${loja.nome} (${dominio}) ==`);
-    const variantes = await lerVariantes(loja);
+    const variantes = dominio === LOJAS[0] ? varsVitrine : await lerVariantes(loja);
 
     const porProduto = new Map<string, { id: string; price: string }[]>();
     let iguais = 0;
-    let semPar = 0;
+    let semPreco = 0;
     let noTeto = 0;
     const novos: number[] = [];
 
     for (const v of variantes) {
-      const base = v.sku ? referencia.get(v.sku) : undefined;
-      if (!base) {
-        semPar += 1;
+      const valor = v.sku ? preco.get(v.sku) : undefined;
+      if (valor === undefined) {
+        semPreco += 1;
         continue;
       }
-      const preco = Math.min(TETO, noventa(base * (1 - DESCONTO)));
-      novos.push(preco);
-      if (preco === TETO) noTeto += 1;
-      if (Number(v.price) === preco) {
+      novos.push(valor);
+      if (valor === TETO) noTeto += 1;
+      if (Number(v.price) === valor) {
         iguais += 1;
         continue;
       }
       const lista = porProduto.get(v.productId) || [];
-      lista.push({ id: v.id, price: String(preco) });
+      lista.push({ id: v.id, price: String(valor) });
       porProduto.set(v.productId, lista);
     }
 
@@ -167,7 +225,7 @@ async function main() {
       ? Math.round(novos.reduce((a, b) => a + b, 0) / novos.length)
       : 0;
     console.log(
-      `  ${variantes.length} variantes | ${total} a mudar | ${iguais} ja corretas | ${semPar} sem par na referencia`
+      `  ${variantes.length} variantes | ${total} a mudar | ${iguais} ja corretas | ${semPreco} sem preco`
     );
     console.log(`  preco medio ${medio.toLocaleString("pt-BR")} | ${noTeto} no teto`);
 
