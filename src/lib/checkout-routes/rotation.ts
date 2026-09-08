@@ -113,6 +113,20 @@ export function computeCoverage(
  *     pulando entre dominios.
  *   - each_checkout: a chave e aleatoria por clique.
  */
+/**
+ * Chave que ordena a fila do sorteio.
+ *
+ * PRECISA ser identica a do loader (public/routed-checkout-loader.js), que usa
+ * `a.target.id || a.target.domain`. O embed-config manda `id: null` de
+ * proposito para rota legada; ordenar so por id fazia o servidor comparar
+ * string vazia enquanto o loader comparava dominio, e com dois destinos nessa
+ * situacao as filas saem diferentes -- o comprador troca de checkout no meio da
+ * compra. Coberto por tests/rotation-parity.test.ts.
+ */
+export function rotationOrderKey(target: { id?: string | null; domain?: string | null }) {
+  return String(target.id || target.domain || "");
+}
+
 export function pickTarget(
   targets: RouteTarget[],
   lines: CheckoutRouteLine[],
@@ -153,7 +167,15 @@ export function pickTarget(
   // Ordem estavel: o sorteio ancorado so e reprodutivel se a fila nao muda de
   // ordem entre uma consulta e outra (o Postgres nao garante ordem sem ORDER BY,
   // e o mesmo comprador tem que cair sempre no mesmo destino).
-  const ordered = [...pool].sort((a, b) => a.target.id.localeCompare(b.target.id));
+  //
+  // A chave e `id || domain`, IGUAL ao loader. Ordenar so por id divergia do
+  // inline: embed-config manda `id: null` de proposito para rota legada, entao
+  // o loader caia no domain e o servidor comparava string vazia. Com dois
+  // destinos nessa situacao as duas filas saem em ordem diferente e o comprador
+  // troca de checkout no meio da compra -- ver tests/rotation-parity.test.ts.
+  const ordered = [...pool].sort((a, b) =>
+    rotationOrderKey(a.target).localeCompare(rotationOrderKey(b.target))
+  );
   let cursor = hashRotationKey(key) % totalWeight;
 
   for (const candidate of ordered) {

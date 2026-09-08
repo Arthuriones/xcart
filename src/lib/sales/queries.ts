@@ -3,35 +3,13 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { getRouteGraph } from "@/lib/checkout-routes/graph";
 import { getOrdersSummary, MAX_ORDER_DAYS } from "@/lib/shopify/orders";
+import { repartirCem } from "@/lib/sales/share";
 import type { Sales, SalesPeriod, SalesRow } from "@/lib/sales/types";
 
 export type { Sales, SalesPeriod, SalesRow } from "@/lib/sales/types";
 export { SALES_PERIODS } from "@/lib/sales/types";
 
 const DIAS: Record<SalesPeriod, number> = { "7": 7, "30": 30, "60": 60 };
-
-/**
- * Reparte 100% entre as lojas sem perder nem sobrar ponto no arredondamento.
- *
- * Arredondar cada fatia sozinha faz a coluna somar 99% ou 101%, e numa tabela
- * com um "Total 100%" no rodape isso salta aos olhos. Aqui cada uma leva o
- * piso e os pontos que sobram vao para os maiores restos.
- */
-function repartirCem(valores: number[]): number[] {
-  const soma = valores.reduce((a, b) => a + b, 0);
-  if (soma <= 0) return valores.map(() => 0);
-  const cru = valores.map((v) => (v / soma) * 100);
-  const piso = cru.map(Math.floor);
-  let sobra = 100 - piso.reduce((a, b) => a + b, 0);
-  const ordem = cru
-    .map((v, i) => [v - piso[i], i] as const)
-    .sort((a, b) => b[0] - a[0]);
-  const fatias = piso.slice();
-  for (let i = 0; i < ordem.length && sobra > 0; i += 1, sobra -= 1) {
-    fatias[ordem[i][1]] += 1;
-  }
-  return fatias;
-}
 
 /**
  * Vendas das lojas de checkout no periodo.

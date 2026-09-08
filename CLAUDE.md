@@ -38,6 +38,8 @@ Eles ficam FORA do type-check do build e fora do deploy:
 
 - `npm run typecheck` -- o app. E o que o build da Vercel roda.
 - `npm run typecheck:scripts` -- os scripts. **Rode antes de commitar script.**
+- `npm test` -- vitest. Cobre a paridade do sorteio do rodizio (loader x
+  servidor) e a repartição de 100% da tela de Vendas.
 - `vercel.json` tem `ignoreCommand`: commit que so toca `scripts/` nao gera
   deploy.
 
@@ -51,7 +53,7 @@ tres deploys seguidos do app, num arquivo que a aplicacao nem le.
 - Routing: `src/app/api/checkout-routes/*`, `public/routed-checkout-loader.js`, `src/lib/shopify/cart-routing.ts`, `src/lib/checkout-routes/*` (rotation, targets, embed config, heal), `src/components/routed-checkout/*`
 - Shopify + AI: `src/lib/shopify/client.ts`, `src/lib/gemini/client.ts`, `src/lib/ai/product-neutralizer.ts`, `src/lib/store-context.ts`
 - Import/jobs: `src/lib/import/*`, `src/lib/aliexpress/*`, `src/lib/jobs/*`, `src/app/api/jobs/*`
-- Data: `supabase/migrations/001-025_*.sql` (see ARCHITECTURE.md §5 for every table)
+- Data: `supabase/migrations/001-028_*.sql` (see ARCHITECTURE.md §5 for every table)
 
 ## StoreContext drives all AI
 Every AI call receives `StoreContext` (name, niche, target_audience, brand_voice, store_description, **target_language**) from `getStoreContext(storeId, userId)`. API routes fetch it server-side by `storeId`; if `niche` is empty the AI route 400s. `target_language` forces the output language.
@@ -63,4 +65,5 @@ Every AI call receives `StoreContext` (name, niche, target_audience, brand_voice
 - `write_themes` needs Shopify CLI + Theme Access password, not this app.
 - Some prompts/strings still hardcode BR (CDC/LGPD, "R$89") — verify against `target_language`.
 - Changing rotation weights only reaches buyers after the theme config is pushed again (`update-theme`); until then the inline path routes on the old split.
-- The rotation draw is mirrored in the loader and on the server — the two hashes must stay identical or a buyer switches checkout store mid-purchase.
+- The rotation draw is mirrored in the loader and on the server — the two hashes must stay identical or a buyer switches checkout store mid-purchase. **Travado por `tests/rotation-parity.test.ts`**, que le o loader do disco e compara com o servidor. A fila ordena por `id || domain` nos dois lados: `embed-config` manda `id: null` de proposito em rota legada, e ordenar so por id divergia.
+- Funcao nova em `public` vira endpoint em `/rest/v1/rpc/`. Se for SECURITY DEFINER, **revogue de PUBLIC** (nao de `anon`/`authenticated` -- eles so herdam) e conceda a `service_role`. Ver migration 027.

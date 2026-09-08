@@ -148,9 +148,33 @@ async function executar(request: NextRequest) {
   }
 
   const consertadas = resultados.filter((r) => !r.noop && !r.error).length;
+
+  // Retencao dos eventos do loader, so na passada do cron.
+  //
+  // routed_checkout_fallbacks e a maior tabela do banco e cresce com o TRAFEGO
+  // -- loader_ready sai uma vez por sessao de comprador e ja e 92% dela. Sem
+  // poda ela cresce para sempre e leva junto a consulta de carrinhos roteados,
+  // que roda em toda carga da tela de roteamento.
+  //
+  // Pendurado aqui porque este job ja roda de hora em hora e ja e o dono da
+  // manutencao das rotas: uma tabela de cron a menos para configurar. Falhar a
+  // poda NAO pode derrubar o conserto, que e o que mantem a venda de pe.
+  let purgados: number | null = null;
+  if (isCron) {
+    const { data, error: erroPurga } = await admin.rpc(
+      "purge_routed_checkout_fallbacks"
+    );
+    if (erroPurga) {
+      console.warn("[heal] purga de eventos falhou:", erroPurga.message);
+    } else {
+      purgados = typeof data === "number" ? data : 0;
+    }
+  }
+
   return NextResponse.json({
     checked: resultados.length,
     repaired: consertadas,
+    ...(purgados !== null ? { purgedEvents: purgados } : {}),
     results: resultados,
   });
 }
