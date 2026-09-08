@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import { LogoXcart } from "@/components/layout/logo";
 
 export default function SetPasswordPage() {
   const [password, setPassword] = useState("");
@@ -50,12 +51,7 @@ export default function SetPasswordPage() {
     <div className="grid min-h-screen bg-surface lg:grid-cols-2">
       <div className="flex flex-col justify-center px-6 py-12 sm:px-[8vw]">
         <div className="mb-10 flex items-center gap-2">
-          <span
-            className="h-5 w-5 rounded-[5px]"
-            style={{ background: "var(--brand)" }}
-            aria-hidden
-          />
-          <span className="text-[14px] font-bold tracking-[0.06em] text-ink">XCART</span>
+          <LogoXcart altura={22} prioridade />
         </div>
 
         <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">

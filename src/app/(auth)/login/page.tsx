@@ -5,6 +5,7 @@ import { textos } from "@/lib/textos";
 import { createClient } from "@/lib/supabase/client";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
+import { LogoXcart } from "@/components/layout/logo";
 
 type Mode = "login" | "signup" | "recovery";
 
@@ -137,12 +138,7 @@ function LoginForm() {
           criar conta. */}
       <div className="flex flex-col justify-center px-6 py-12 sm:px-[8vw]">
         <div className="mb-10 flex items-center gap-2">
-          <span
-            className="h-5 w-5 rounded-[5px]"
-            style={{ background: "var(--brand)" }}
-            aria-hidden
-          />
-          <span className="text-[14px] font-bold tracking-[0.06em] text-ink">XCART</span>
+          <LogoXcart altura={22} prioridade />
         </div>
 
         {sent && (mode === "recovery" || mode === "signup") ? (

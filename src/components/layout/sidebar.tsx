@@ -27,6 +27,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { LogoXcart } from "@/components/layout/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
@@ -116,23 +117,14 @@ export function Sidebar({ dados }: { dados: SidebarData }) {
   return (
     <>
       <aside className="fixed left-0 top-0 z-40 hidden h-screen w-[216px] flex-col border-r border-border bg-surface md:flex">
-        <div className="flex h-14 shrink-0 items-center gap-2.5 px-4">
-          <Link
-            href="/overview"
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[var(--solid)] text-[11px] font-bold tracking-tight text-[var(--on-solid)]"
-            aria-label="xcart"
-          >
-            X
+        <div className="flex h-14 shrink-0 flex-col justify-center gap-1 px-4">
+          <Link href="/overview" aria-label="xcart" className="w-fit">
+            <LogoXcart altura={18} prioridade />
           </Link>
-          <span className="min-w-0">
-            <span className="block text-[12.5px] font-semibold leading-tight text-ink">
-              XCART
-            </span>
-            <span className="block truncate text-[10.5px] leading-tight text-t3">
-              {contadores.stores === 1
-                ? "1 loja conectada"
-                : `${contadores.stores} lojas conectadas`}
-            </span>
+          <span className="block truncate text-[10.5px] leading-tight text-t3">
+            {contadores.stores === 1
+              ? "1 loja conectada"
+              : `${contadores.stores} lojas conectadas`}
           </span>
         </div>
 

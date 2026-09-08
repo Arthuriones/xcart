@@ -4,6 +4,7 @@ import { useState } from "react";
 import { textos } from "@/lib/textos";
 import { AssinarPro } from "@/components/billing/assinar-pro";
 import { APP_HOME } from "@/lib/app-home";
+import { LogoXcart } from "@/components/layout/logo";
 
 /**
  * Paywall. O layout do dashboard manda todo mundo sem acesso para ca, entao
@@ -28,12 +29,7 @@ export default function NoAccessPage() {
     <div className="flex min-h-screen items-center justify-center bg-[var(--bg)] px-6 py-12">
       <div className="w-full max-w-[380px]">
         <div className="mb-8 flex items-center gap-2">
-          <span
-            className="h-5 w-5 rounded-[5px]"
-            style={{ background: "var(--brand)" }}
-            aria-hidden
-          />
-          <span className="text-[14px] font-bold tracking-[0.06em] text-ink">XCART</span>
+          <LogoXcart altura={22} prioridade />
         </div>
 
         <div className="rounded-lg border border-border bg-surface p-6">
