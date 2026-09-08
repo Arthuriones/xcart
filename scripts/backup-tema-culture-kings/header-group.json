@@ -1,0 +1,93 @@
+{
+  "type": "header",
+  "name": "Header group",
+  "sections": {
+    "announcement-bar": {
+      "type": "announcement-bar",
+      "blocks": {
+        "text-1": {
+          "type": "text",
+          "settings": {
+            "icon": "none",
+            "text": "LLEGASTE AL SITIO OFICIAL DE BLOCKSTORE",
+            "link": ""
+          }
+        },
+        "text-2": {
+          "type": "text",
+          "settings": {
+            "icon": "none",
+            "text": "CAMBIOS Y DEVOLUCIONES GRATIS",
+            "link": ""
+          }
+        }
+      },
+      "block_order": [
+        "text-1",
+        "text-2"
+      ],
+      "settings": {
+        "announcement_bar": true,
+        "announcement_bar_homepage_only": false,
+        "announcement_bar_layout": "marquee",
+        "direction": "left",
+        "speed": "20s",
+        "autoplay": true,
+        "autoplay_length": 5
+      }
+    },
+    "header": {
+      "type": "header",
+      "blocks": {
+        "megamenu": {
+          "type": "megamenu",
+          "settings": {
+            "position": "1",
+            "promo_1_heading": "Sparkle Everywhere",
+            "promo_1_link_label": "Shop",
+            "promo_1_link": "",
+            "promo_2_heading": "Promotion heading",
+            "promo_2_link_label": "Shop",
+            "promo_2_link": "",
+            "promo_3_heading": "Promotion heading",
+            "promo_3_link_label": "Shop",
+            "promo_3_link": "",
+            "promo_4_heading": "Promotion heading",
+            "promo_4_link_label": "Shop",
+            "promo_4_link": ""
+          }
+        }
+      },
+      "block_order": [
+        "megamenu"
+      ],
+      "settings": {
+        "sticky_header": true,
+        "logo": "shopify:\/\/shop_images\/ChatGPT_Image_24_de_ago._de_2026_00_51_00.png",
+        "logo_height_range": 30,
+        "logo_height_range_mobile": 30,
+        "style": "style3",
+        "header_shadow": "header--shadow-small",
+        "menu": "main-menu",
+        "cart_icon": "bag",
+        "use_icon_account": false,
+        "transparent_header": false,
+        "transparent_header_border": true,
+        "transparent_header_background": false,
+        "transparent_header_background_gradient": "linear-gradient(180deg, rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.01) 60%)",
+        "show_shopify_account_menu": true,
+        "shopify_account_menu_menu": "",
+        "show_language_switcher": false,
+        "show_currency_switcher": true,
+        "mobile_secondary_menu": "",
+        "mobile_promo_heading": "Promotion heading",
+        "mobile_promo_link_label": "Shop",
+        "mobile_promo_link": ""
+      }
+    }
+  },
+  "order": [
+    "announcement-bar",
+    "header"
+  ]
+}

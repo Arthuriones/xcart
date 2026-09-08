@@ -1,0 +1,60 @@
+{
+  "type": "header",
+  "name": "Footer group",
+  "sections": {
+    "footer": {
+      "type": "footer",
+      "blocks": {
+        "menu-1": {
+          "type": "menu",
+          "settings": {
+            "column_size": "medium",
+            "title": "Tienda",
+            "menu": "tienda"
+          }
+        },
+        "menu-2": {
+          "type": "menu",
+          "settings": {
+            "column_size": "medium",
+            "title": "Ayuda",
+            "menu": "ayuda"
+          }
+        },
+        "menu-3": {
+          "type": "menu",
+          "settings": {
+            "column_size": "medium",
+            "title": "Políticas",
+            "menu": "politicas"
+          }
+        },
+        "signup": {
+          "type": "signup",
+          "settings": {
+            "column_size": "medium",
+            "title": "NEWSLETTER",
+            "text": "<p>Suscríbete y recibe 10% de descuento en tu primera compra.<\/p>"
+          }
+        }
+      },
+      "block_order": [
+        "menu-1",
+        "menu-2",
+        "menu-3",
+        "signup"
+      ],
+      "settings": {
+        "full_width": true,
+        "copyright_text": "Todos los derechos reservados.",
+        "show_language_switcher": true,
+        "show_currency_switcher": true,
+        "show_payment_icons": true,
+        "enable_follow_on_shop": true
+      }
+    }
+  },
+  "order": [
+    "footer"
+  ]
+}
