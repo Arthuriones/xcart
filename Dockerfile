@@ -3,6 +3,8 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
+# next.config.ts so gera .next/standalone com esta flag -- ver o comentario la.
+ENV BUILD_STANDALONE=1
 RUN npm run build
 
 FROM node:20-alpine

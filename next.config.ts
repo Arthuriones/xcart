@@ -28,7 +28,18 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // "standalone" so no Docker, que precisa do bundle com as dependencias
+  // rastreadas (o Dockerfile copia .next/standalone). Na Vercel ele e
+  // redundante -- ela tem o proprio formato de saida -- e a partir do Next 16.3
+  // quebra o build la:
+  //
+  //   Error: ENOENT ... '.next/next-server.js.nft.json'
+  //
+  // Opt-IN por BUILD_STANDALONE em vez de opt-out por VERCEL de proposito: o
+  // .env.local deste projeto tem VERCEL="1" (sobrou de um `vercel env pull`) e
+  // o Next carrega esse arquivo no build, entao "nao estou na Vercel" nao e um
+  // sinal confiavel aqui. Uma flag propria e explicita nao tem esse problema.
+  ...(process.env.BUILD_STANDALONE === "1" ? { output: "standalone" as const } : {}),
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },
