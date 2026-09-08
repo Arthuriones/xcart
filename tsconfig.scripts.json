@@ -1,0 +1,12 @@
+{
+  // Type-check dos scripts de operacao, separado do build do app.
+  //
+  // Rode com: npm run typecheck:scripts
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["scripts/**/*.ts", "src/**/*.ts"],
+  "exclude": ["node_modules"]
+}

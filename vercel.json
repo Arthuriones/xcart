@@ -1,4 +1,5 @@
 {
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ':(exclude)scripts/'",
   "functions": {
     "src/app/api/aliexpress/route.ts": {
       "maxDuration": 60,

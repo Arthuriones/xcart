@@ -30,5 +30,15 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  // scripts/ fica de fora do type-check do BUILD de proposito.
+  //
+  // Sao scripts de operacao -- reprecificar loja, importar catalogo, consertar
+  // rota -- rodados a mao com tsx. Estando aqui, um erro de tipo em qualquer um
+  // deles derrubava o deploy do app, e derrubou: tres deploys seguidos
+  // falharam por um campo inventado em scripts/consertar-rota.ts, um arquivo
+  // que a aplicacao nem importa.
+  //
+  // Eles CONTINUAM sendo checados, por tsconfig.scripts.json / npm run
+  // typecheck:scripts. So nao no caminho critico do deploy.
+  "exclude": ["node_modules", "scripts"]
 }

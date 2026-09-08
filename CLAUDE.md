@@ -28,6 +28,22 @@ Also does: multi-source import/clone (AliExpress, Shopify, WooCommerce, Shoplazz
 - **Scraping** — cheerio + Playwright/`@sparticuz/chromium` + Bright Data proxy. `sharp` for images.
 - Deploy: **Vercel** (primary, hourly cron) + Docker.
 
+## Trabalho de loja x trabalho de projeto
+
+O repo carrega duas coisas: o **app** (`src/`) e os **scripts de operacao**
+(`scripts/`) -- reprecificar catalogo, importar produto, consertar rota. Sao
+rodados a mao com `npx tsx`, nunca importados pela aplicacao.
+
+Eles ficam FORA do type-check do build e fora do deploy:
+
+- `npm run typecheck` -- o app. E o que o build da Vercel roda.
+- `npm run typecheck:scripts` -- os scripts. **Rode antes de commitar script.**
+- `vercel.json` tem `ignoreCommand`: commit que so toca `scripts/` nao gera
+  deploy.
+
+O motivo e concreto: um campo inventado em `scripts/consertar-rota.ts` derrubou
+tres deploys seguidos do app, num arquivo que a aplicacao nem le.
+
 ## Multi-host
 `adm.*` = admin, `user.*` = app/dashboard, other host = marketing landing only. Logic in `src/proxy.ts` → `src/lib/supabase/middleware.ts`.
 
