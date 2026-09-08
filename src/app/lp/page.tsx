@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { PRO_PRICE_BRL, PRO_INCLUDED_CREDITS, CREDIT_PACKS } from "@/lib/billing/plans";
 
@@ -129,13 +130,17 @@ export default function Landing() {
       {/* ------------------------------------------------------- topo */}
       <header className="sticky top-0 z-50 border-b border-border bg-[var(--header-bg)] backdrop-blur">
         <div className="mx-auto flex max-w-[1080px] items-center gap-6 px-5 py-3">
-          <Link href="/lp" className="flex items-center gap-2">
-            <span
-              className="h-5 w-5 rounded-[5px]"
-              style={{ background: "var(--brand)" }}
-              aria-hidden
+          {/* logo-cropped tem o texto escuro, que e o que serve num fundo
+              claro; logo.png e a versao de texto branco, para fundo escuro. */}
+          <Link href="/lp" className="flex items-center">
+            <Image
+              src="/logo-cropped.png"
+              alt="xcart"
+              width={891}
+              height={177}
+              priority
+              className="h-6 w-auto"
             />
-            <span className="text-[14px] font-bold tracking-[0.06em]">XCART</span>
           </Link>
           <nav className="ml-4 hidden items-center gap-6 md:flex">
             {[
@@ -373,14 +378,13 @@ export default function Landing() {
       {/* ------------------------------------------------------ rodapé */}
       <footer className="border-t border-border bg-surface">
         <div className="mx-auto flex max-w-[1080px] flex-col items-center justify-between gap-4 px-5 py-8 text-[12px] text-t3 sm:flex-row">
-          <span className="flex items-center gap-2">
-            <span
-              className="h-4 w-4 rounded-[4px]"
-              style={{ background: "var(--brand)" }}
-              aria-hidden
-            />
-            <span className="font-bold tracking-[0.06em] text-t1">XCART</span>
-          </span>
+          <Image
+            src="/logo-cropped.png"
+            alt="xcart"
+            width={891}
+            height={177}
+            className="h-5 w-auto"
+          />
           <div className="flex items-center gap-5">
             <Link href="/privacy" className="text-t3 transition-colors hover:text-ink">
               Privacidade
