@@ -1,3 +1,5 @@
+import { safeFetch } from "@/lib/net/safe-url";
+
 const IMPORT_PROXY_ENV_KEYS = [
   "IMPORT_FETCH_PROXY_URL",
   "GLOBAL_FETCH_PROXY_URL",
@@ -23,6 +25,19 @@ export function getImportProxyTemplate() {
   return "";
 }
 
+/**
+ * Busca uma URL de importacao, opcionalmente por proxy.
+ *
+ * A URL vem do usuario ("importe de qualquer site"), entao passa pela trava de
+ * SSRF antes de qualquer conexao: assertUrlPublica resolve o DNS e recusa
+ * destino em rede privada, link-local ou loopback. Sem isso o endpoint de
+ * importacao e um proxy aberto de dentro da infra -- metadata.google.internal
+ * e 169.254.169.254.nip.io passavam.
+ *
+ * O caminho do PROXY nao passa pela trava de proposito: ali a URL de destino
+ * vai como parametro para um servico externo configurado por nos, e quem
+ * conecta e ele, nao este servidor.
+ */
 export async function fetchWithImportProxy(
   url: string,
   init?: RequestInit,
@@ -41,7 +56,7 @@ export async function fetchWithImportProxy(
     }
   }
 
-  const directResponse = await fetch(url, init);
+  const directResponse = await safeFetch(url, init);
   if (directResponse.ok || !proxyUrl || proxyFirst) return directResponse;
 
   try {

@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+/**
+ * Os unicos buckets que estas rotas podem tocar.
+ *
+ * O nome do bucket vinha do corpo/querystring sem checagem. Bucket sem policy
+ * de storage nao aceita escrita de ninguem, entao nao havia furo hoje -- mas
+ * um bucket novo criado sem policy amanha abriria um.
+ */
+const BUCKETS_PERMITIDOS = new Set(["store-assets", "store-logos", "product-images"]);
+
 export const runtime = "nodejs";
 
 /**
@@ -39,6 +48,9 @@ export async function POST(request: NextRequest) {
   const form = await request.formData();
   const storeId = String(form.get("storeId") || "");
   const bucket = String(form.get("bucket") || "store-assets");
+  if (!BUCKETS_PERMITIDOS.has(bucket)) {
+    return NextResponse.json({ error: "Bucket invalido." }, { status: 400 });
+  }
   const label = String(form.get("label") || "");
   const arquivo = form.get("file");
 
@@ -90,6 +102,27 @@ export async function DELETE(request: NextRequest) {
   }
 
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Defesa em profundidade.
+  //
+  // filePath vem cru da querystring: nada aqui impedia pedir a remocao do
+  // arquivo de outro usuario. Hoje quem segura e a policy do storage, que casa
+  // foldername[1] com auth.uid() -- conferido bucket a bucket. Mas a rota
+  // estava dependendo INTEIRAMENTE disso: bastaria alguem criar um bucket sem
+  // policy, ou afrouxar uma, para virar IDOR de verdade.
+  //
+  // Aqui o caminho tem que comecar com o id de quem pediu, e o bucket tem que
+  // ser um dos conhecidos -- `bucket` tambem vinha do usuario.
+  if (!BUCKETS_PERMITIDOS.has(bucket)) {
+    return NextResponse.json({ error: "Bucket invalido." }, { status: 400 });
+  }
+  if (!filePath.startsWith(`${user.id}/`) || filePath.includes("..")) {
+    return NextResponse.json({ error: "Arquivo nao encontrado." }, { status: 404 });
+  }
   const [{ error: erroBanco }, { error: erroArquivo }] = await Promise.all([
     supabase.from("store_assets").delete().eq("id", id),
     supabase.storage.from(bucket).remove([filePath]),

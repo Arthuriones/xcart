@@ -1,3 +1,4 @@
+import { safeFetch } from "@/lib/net/safe-url";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import sharp from "sharp";
 
@@ -160,7 +161,10 @@ async function buildBrandedImage(input: {
   marginPercent: number;
   logoOpacityPercent: number;
 }) {
-  const imgRes = await fetch(input.image.src, {
+  // A URL vem do catalogo importado, ou seja, de uma loja de origem que o
+  // usuario escolheu -- nao e endereco nosso. Passa pela trava de SSRF, que
+  // resolve o DNS e recusa destino em rede privada ou link-local.
+  const imgRes = await safeFetch(input.image.src, {
     signal: AbortSignal.timeout(15000),
   });
   if (!imgRes.ok) {

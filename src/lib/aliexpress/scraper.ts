@@ -1,3 +1,4 @@
+import { safeFetch } from "@/lib/net/safe-url";
 import * as cheerio from "cheerio";
 import type {
   AliExpressProduct,
@@ -117,7 +118,8 @@ async function fetchBestAliExpressHtml(url: string): Promise<string> {
 
   for (const candidate of candidates) {
     try {
-      const res = await fetch(candidate, {
+      // URL montada a partir do link colado pelo usuario: trava de SSRF.
+      const res = await safeFetch(candidate, {
         headers: buildAliHeaders(url),
         signal: AbortSignal.timeout(20000),
         redirect: "follow",
@@ -449,7 +451,7 @@ async function fetchWithBrightDataNativeProxy(
       redirect: "follow" as RequestRedirect,
       dispatcher: agent,
     };
-    const response = await fetch(targetUrl, requestInit as RequestInit);
+    const response = await safeFetch(targetUrl, requestInit as RequestInit);
     const html = await response.text();
     return {
       html,
