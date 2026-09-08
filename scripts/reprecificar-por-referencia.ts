@@ -8,16 +8,23 @@
  *
  * Agora a base e o preco publico da referencia, casado por SKU:
  *
- *   preco = clamp(arredonda_990(referencia * (1 - DESCONTO)), PISO, TETO)
+ *   preco = referencia < LIMITE
+ *             ? referencia
+ *             : arredonda_990(referencia * (1 - DESCONTO))
  *
- * O PISO nao e detalhe. Sem ele, tenis que a referencia vende a 14.990 saem a
- * 12.990 CLP -- cerca de R$ 74 -- e ticket nesse nivel nao paga a operacao.
+ * Duas regras, separadas por LIMITE:
  *
- * Eu ja tirei esse piso uma vez, argumentando que o catalogo tinha camiseta e
- * kit de limpeza junto com tenis. Estava errado: aquilo e o catalogo da
- * REFERENCIA. A vitrine daqui e 100% Zapatillas, entao nao existe item barato
- * legitimo para proteger -- so tenis vendidos barato demais. Verifique o
- * product_type da loja que voce esta mexendo, nao o da que voce esta olhando.
+ *   referencia <  30.000  ->  MESMO preco dela
+ *   referencia >= 30.000  ->  12% abaixo dela
+ *
+ * O rabo barato e quase todo calcado infantil ("Ninos", "Junior", "Cadete"),
+ * que a referencia vende a 14.990. Nao da para descontar 12% em cima disso e
+ * sobrar operacao, e o piso de 39.990 que existia antes resolvia isso pelo
+ * lado errado: deixava a mesma sandalia 167% mais cara que a dela. Empatar o
+ * preco mantem o item no catalogo sem mentir para o comprador que compara.
+ *
+ * Sem piso e sem teto. O piso virou esta regra, e o teto so escondia o topo do
+ * catalogo -- New Balance 530 e 740 apareciam todos pelo mesmo valor.
  *
  * SKU sem par na referencia cai na media da categoria (marca + tipo), tirada
  * das variantes da vitrine que JA foram precificadas pela referencia. Sao
@@ -37,7 +44,8 @@ const REFERENCIA = "www.blockstore.cl";
 /** A primeira e a vitrine: e dela que sai a tabela de precos das duas. */
 const LOJAS = ["q2mdgs-ag.myshopify.com", "5sx1nu-sx.myshopify.com"];
 const DESCONTO = 0.12;
-const PISO = 39990;
+/** Abaixo disto, empata com a referencia em vez de descontar. */
+const LIMITE = 30000;
 /**
  * Sem teto de proposito.
  *
@@ -181,7 +189,8 @@ async function main() {
   for (const v of varsVitrine) {
     const base = v.sku ? referencia.get(v.sku) : undefined;
     if (!v.sku || !base) continue;
-    const valor = Math.min(TETO, Math.max(PISO, noventa(base * (1 - DESCONTO))));
+    const valor =
+      base < LIMITE ? base : Math.min(TETO, noventa(base * (1 - DESCONTO)));
     preco.set(v.sku, valor);
     const chave = `${v.vendor}|${v.productType}`;
     const lista = porCategoria.get(chave) || [];
