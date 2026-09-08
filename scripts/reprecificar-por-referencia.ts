@@ -38,7 +38,17 @@ const REFERENCIA = "www.blockstore.cl";
 const LOJAS = ["q2mdgs-ag.myshopify.com", "5sx1nu-sx.myshopify.com"];
 const DESCONTO = 0.12;
 const PISO = 39990;
-const TETO = 79990;
+/**
+ * Sem teto de proposito.
+ *
+ * Existiu um de 79.990. Ele foi escolhido antes de a referencia entrar na
+ * conta, quando nao havia base nenhuma para dizer quanto um tenis vale -- e
+ * prendia justamente o topo: New Balance 530 e 740, que a referencia vende a
+ * 99.990 e 104.990, apareciam aqui os dois por 79.990. A loja ficava sem
+ * nenhum tenis caro para mostrar, que e metade do que faz uma vitrine parecer
+ * uma loja de verdade.
+ */
+const TETO = Number.POSITIVE_INFINITY;
 
 const APLICAR = process.argv.includes("--aplicar");
 
