@@ -21,6 +21,7 @@ import { useRouter } from "next/navigation";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -214,9 +215,15 @@ export function Sidebar({ dados }: { dados: SidebarData }) {
               <ChevronDown className="h-3.5 w-3.5 shrink-0 text-t4" aria-hidden />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" side="top" className="w-[206px]">
-              <DropdownMenuLabel className="truncate text-[11px] font-normal text-t3">
-                {dados.email}
-              </DropdownMenuLabel>
+              {/* O Group NAO e decoracao: DropdownMenuLabel renderiza
+                  Menu.GroupLabel do Base UI, que LANCA se nao achar um
+                  Menu.Group acima. Sem ele, abrir este menu derrubava a
+                  pagina inteira. */}
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="truncate text-[11px] font-normal text-t3">
+                  {dados.email}
+                </DropdownMenuLabel>
+              </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={sair}>
                 <LogOut className="mr-2 h-3.5 w-3.5" />
