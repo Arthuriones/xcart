@@ -26,6 +26,8 @@ export interface SalesRow {
   /** Fatia do trafego configurada no rodizio, para comparar com a receita. */
   trafficPercent: number;
   problem: "denied" | "failed" | null;
+  /** Vitrines que mandam comprador para esta loja. */
+  vitrines: string[];
 }
 
 export interface Sales {
@@ -39,6 +41,7 @@ export interface Sales {
   /** Lojas conectadas antes do app pedir read_orders. */
   deniedNames: string[];
   hasRoute: boolean;
-  vitrineName: string | null;
+  /** Quantas rotas alimentam esta tela. */
+  routeCount: number;
   maxDays: number;
 }

@@ -170,8 +170,8 @@ export function SalesScreen({ dados }: { dados: Sales }) {
         </div>
         <div className="flex-1" />
         <div className="text-[12px] text-t3">
-          Pedidos pagos nos checkouts
-          {dados.vitrineName ? `, atribuídos à ${dados.vitrineName}` : ""}.
+          Pedidos pagos nas lojas de checkout de{" "}
+          {dados.routeCount === 1 ? "1 rota" : `${dados.routeCount} rotas`}.
         </div>
       </div>
 
@@ -272,6 +272,13 @@ export function SalesScreen({ dados }: { dados: Sales }) {
                     <div className="truncate font-mono text-[10.5px] text-t3">
                       {linha.domain}
                     </div>
+                    {/* Com mais de uma rota, saber QUEM manda comprador para
+                        esta loja e a metade que falta do numero. */}
+                    {dados.routeCount > 1 && linha.vitrines.length > 0 && (
+                      <div className="truncate text-[10.5px] text-t4">
+                        ← {linha.vitrines.join(", ")}
+                      </div>
+                    )}
                   </button>
 
                   <span
