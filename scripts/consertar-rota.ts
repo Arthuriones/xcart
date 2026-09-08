@@ -22,10 +22,15 @@ if (!routeId) {
 
 healRoute({ routeId, neutralizeImages: process.argv.includes("--com-imagens") })
   .then((r) => {
-    console.log(`ok=${r.ok}`);
+    console.log(`ok=${r.ok}${r.noop ? " (nada a fazer)" : ""}`);
     console.log(`produtos criados no checkout: ${r.createdProductCount}`);
-    console.log(`SKUs mapeados: ${r.mappedCount ?? "?"}`);
-    if (r.messages?.length) r.messages.slice(0, 10).forEach((m) => console.log(`  ${m}`));
+    console.log(`variantes criadas: ${r.createdVariantCount}`);
+    console.log(`SKUs mapeados no fim: ${r.finalMappedCount}`);
+    console.log(`imagens na fila de neutralizacao: ${r.imageQueueCount}`);
+    if (r.warnings.length) {
+      console.log(`avisos (${r.warnings.length}):`);
+      r.warnings.slice(0, 10).forEach((w) => console.log(`  ${w}`));
+    }
   })
   .catch((e) => {
     console.error(e);
