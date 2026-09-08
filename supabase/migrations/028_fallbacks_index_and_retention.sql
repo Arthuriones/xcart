@@ -57,5 +57,6 @@ $$;
 comment on function public.purge_routed_checkout_fallbacks() is
   'Retencao dos eventos do loader: 30d para loader_ready, 180d para o resto. Chamada pelo cron /api/jobs/routes/heal.';
 
-revoke execute on function public.purge_routed_checkout_fallbacks() from public;
+-- public E os papeis explicitos: ver a nota na 027.
+revoke execute on function public.purge_routed_checkout_fallbacks() from public, anon, authenticated;
 grant execute on function public.purge_routed_checkout_fallbacks() to service_role;
