@@ -1,0 +1,400 @@
+{
+  "sections": {
+    "16479477632637c9a7": {
+      "type": "slideshow",
+      "blocks": {
+        "164794776393e76b8e-0": {
+          "type": "slide",
+          "settings": {
+            "image": "shopify:\/\/shop_images\/imgi_214_slider_desk_4.jpg",
+            "mobile_image": "shopify:\/\/shop_images\/imgi_97_Mobile_copia.jpg",
+            "slide_link": "",
+            "video_background": false,
+            "video": "",
+            "subheading": "",
+            "heading": "",
+            "heading_size": "h1-xlarge",
+            "content": "",
+            "description_size": "medium",
+            "content_position": "middle-center",
+            "text_alignment": "center",
+            "content_size": "medium",
+            "color_text": "#ffffff",
+            "color_button_text": "#151515",
+            "overlay_color": "#000000",
+            "overlay_opacity": 0,
+            "overlay_gradient": "",
+            "button_1_text": "",
+            "button_1_link": "",
+            "button_1_outline": false,
+            "button_2_text": "",
+            "button_2_link": "",
+            "button_2_outline": false
+          }
+        }
+      },
+      "block_order": [
+        "164794776393e76b8e-0"
+      ],
+      "settings": {
+        "desktop_height": "desktop-height-image",
+        "mobile_height": "mobile-height-image",
+        "full_width": true,
+        "autoplay": true,
+        "autoplay_length": 10,
+        "transition": "swipe",
+        "disable_top_spacing": true,
+        "disable_bottom_spacing": true
+      }
+    },
+    "1662389920b1295ea2": {
+      "type": "spacer",
+      "settings": {
+        "spacer_mobile": 25,
+        "spacer_desktop": 80,
+        "border_separator": false,
+        "border_separator_full": false
+      }
+    },
+    "16614195534fb74bc3": {
+      "type": "collection-tabs",
+      "blocks": {
+        "9dc5629d-3c1a-4dcc-b25a-0aa3972a2cb7": {
+          "type": "collection",
+          "settings": {
+            "collection": "adidas-originals",
+            "enable_promotion": false,
+            "title": "Promotion heading",
+            "text": "Advertise a promotion or a sale",
+            "link_label": "Explore",
+            "content_position": "bottom-left",
+            "text_alignment": "left",
+            "link": "",
+            "use_text_button": false,
+            "block_link": "",
+            "overlay_color": "#000000",
+            "overlay_opacity": 70
+          }
+        },
+        "8695b758-8543-4e57-bb17-1249221a1269": {
+          "type": "collection",
+          "settings": {
+            "collection": "puma",
+            "enable_promotion": false,
+            "title": "Promotion heading",
+            "text": "Advertise a promotion or a sale",
+            "link_label": "Explore",
+            "content_position": "bottom-left",
+            "text_alignment": "left",
+            "link": "",
+            "use_text_button": false,
+            "block_link": "",
+            "overlay_color": "#000000",
+            "overlay_opacity": 70
+          }
+        },
+        "collection_A7pe3R": {
+          "type": "collection",
+          "settings": {
+            "collection": "vans",
+            "enable_promotion": false,
+            "title": "Promotion heading",
+            "text": "Advertise a promotion or a sale",
+            "link_label": "Explore",
+            "content_position": "bottom-left",
+            "text_alignment": "left",
+            "link": "",
+            "use_text_button": false,
+            "block_link": "",
+            "overlay_color": "#000000",
+            "overlay_opacity": 70
+          }
+        }
+      },
+      "block_order": [
+        "9dc5629d-3c1a-4dcc-b25a-0aa3972a2cb7",
+        "8695b758-8543-4e57-bb17-1249221a1269",
+        "collection_A7pe3R"
+      ],
+      "settings": {
+        "heading": "Lo último en Block",
+        "heading_left": true,
+        "description": "",
+        "full_width": true,
+        "product_limit": 8,
+        "columns_desktop": 4,
+        "show_view_all": true,
+        "show_progress_bar": true,
+        "disable_top_spacing": true,
+        "disable_bottom_spacing": true
+      }
+    },
+    "collection_list_TCnWNy": {
+      "type": "collection-list",
+      "name": "Collection list",
+      "settings": {
+        "heading": "COMPRA POR CATEGORÍA",
+        "heading_left": true,
+        "description": "",
+        "full_width": true,
+        "collection_list": [
+          "mujer",
+          "hombre",
+          "ninos"
+        ],
+        "image_ratio": "square",
+        "layout": "grid",
+        "style": "style2",
+        "columns_desktop": 4,
+        "columns_mobile": "1",
+        "show_progress_bar": true,
+        "mobile_swipe": true,
+        "overlay_color": "#000000",
+        "overlay_opacity": 0,
+        "disable_top_spacing": false,
+        "disable_bottom_spacing": true
+      }
+    },
+    "featured_collection_fdefBT": {
+      "type": "featured-collection",
+      "name": "Featured collection",
+      "settings": {
+        "heading": "Colección New Balance",
+        "heading_left": true,
+        "description": "<p>Modelos icónicos para caminar con estilo.<\/p>",
+        "full_width": true,
+        "collection": "new-balance",
+        "display_type": "grid",
+        "product_limit": 8,
+        "columns_desktop": 4,
+        "show_view_all": true,
+        "mobile_swipe": false,
+        "show_progress_bar": true,
+        "disable_top_spacing": false,
+        "disable_bottom_spacing": true
+      }
+    },
+    "featured_collection_JCmzUV": {
+      "type": "featured-collection",
+      "name": "Featured collection",
+      "settings": {
+        "heading": "Favoritos Converse",
+        "heading_left": true,
+        "description": "<p>Zapatillas clásicas para tu estilo diario<\/p>",
+        "full_width": true,
+        "collection": "converse",
+        "display_type": "grid",
+        "product_limit": 8,
+        "columns_desktop": 4,
+        "show_view_all": true,
+        "mobile_swipe": false,
+        "show_progress_bar": true,
+        "disable_top_spacing": false,
+        "disable_bottom_spacing": true
+      }
+    },
+    "166366584621bc44f2": {
+      "type": "spacer",
+      "settings": {
+        "spacer_mobile": 20,
+        "spacer_desktop": 55,
+        "border_separator": true,
+        "border_separator_full": true
+      }
+    },
+    "scrolling_text_bqBQwY": {
+      "type": "scrolling-text",
+      "blocks": {
+        "text_b6MUwg": {
+          "type": "text",
+          "settings": {
+            "text": "ELIGE TU ESTILO",
+            "link": "",
+            "outline_text": false
+          }
+        }
+      },
+      "block_order": [
+        "text_b6MUwg"
+      ],
+      "name": "Scrolling text",
+      "settings": {
+        "height": "height-auto",
+        "full_width": true,
+        "direction": "left",
+        "speed": "20s",
+        "font_family": "body",
+        "text_size": 24,
+        "text_uppercase": false,
+        "image_size": "large",
+        "color_bg": "#000000",
+        "color_text": "#ffffff",
+        "overlay_color": "#ffffff",
+        "overlay_opacity": 0,
+        "disable_top_spacing": false,
+        "disable_bottom_spacing": true
+      }
+    },
+    "slideshow_z6nELi": {
+      "type": "slideshow",
+      "blocks": {
+        "slide_PFbD9f": {
+          "type": "slide",
+          "settings": {
+            "image": "shopify:\/\/shop_images\/imgi_217_2_38bacfea-36e6-40ef-8905-c0de77856af9.png",
+            "mobile_image": "shopify:\/\/shop_images\/imgi_100_076b2bb7-0006-495c-82e3-6ce22a1de2d7.png",
+            "slide_link": "",
+            "video_background": false,
+            "video": "",
+            "subheading": "",
+            "heading": "",
+            "heading_size": "h1-xlarge",
+            "content": "",
+            "description_size": "medium",
+            "content_position": "middle-center",
+            "text_alignment": "center",
+            "content_size": "medium",
+            "color_text": "#ffffff",
+            "color_button_text": "#151515",
+            "overlay_color": "#000000",
+            "overlay_opacity": 0,
+            "overlay_gradient": "",
+            "button_1_text": "",
+            "button_1_link": "",
+            "button_1_outline": false,
+            "button_2_text": "",
+            "button_2_link": "",
+            "button_2_outline": false
+          }
+        }
+      },
+      "block_order": [
+        "slide_PFbD9f"
+      ],
+      "settings": {
+        "desktop_height": "desktop-height-image",
+        "mobile_height": "mobile-height-image",
+        "full_width": true,
+        "autoplay": true,
+        "autoplay_length": 10,
+        "transition": "swipe",
+        "disable_top_spacing": true,
+        "disable_bottom_spacing": true
+      }
+    },
+    "custom_liquid_w4nf7K": {
+      "type": "custom-liquid",
+      "name": "Custom liquid",
+      "settings": {
+        "custom_liquid": "<div id=\"shopify-section-template--16075041308752__rich_text_wLHfxg\" class=\"shopify-section section-rich-text\"><link href=\"\/\/www.blockstore.cl\/cdn\/shop\/t\/207\/assets\/rich-text.css?v=2282571948540234681771522004\" rel=\"stylesheet\" type=\"text\/css\" media=\"all\"><div class=\"row full-width-row-full\">\n\t<div class=\"small-12 columns\">\n\t\t<div class=\"rich-text text-center text-position-center text-width-large section-spacing-padding section-spacing--disable-top section-spacing--disable-bottom\" style=\"--color-bg: #151515; --color-text: #ffffff; --solid-button-background: #ffffff; --outline-button-label: #ffffff; --solid-button-label: #151515; --bg-body: #151515; --color-accent: #151515; --color-accent-rgb:  21,21,21;\">\n\t\t\t<div class=\"rich-text__inner\">\n\t\t\t\t\n<h3 class=\"h3\">EL ESTILO A UN SOLO CLICK<\/h3>\n\t\t\t<\/div>\n\t\t<\/div>\n\t<\/div>\n<\/div>\n\n\n<\/div>\n\n<div id=\"shopify-section-template--16075041308752__rich_text_ckLQEq\" class=\"shopify-section section-rich-text\"><link href=\"\/\/www.blockstore.cl\/cdn\/shop\/t\/207\/assets\/rich-text.css?v=2282571948540234681771522004\" rel=\"stylesheet\" type=\"text\/css\" media=\"all\"><div class=\"row grid\">\n\t<div class=\"small-12 columns\">\n\t\t<div class=\"rich-text text-center text-position-center text-width-medium section-spacing-padding section-spacing--disable-top section-spacing--disable-bottom\" style=\"--color-bg: rgba(0,0,0,0); --color-text: #151515; --solid-button-background: #151515; --outline-button-label: #151515; --solid-button-label: #ffffff; --bg-body: rgba(0,0,0,0); --color-accent: #151515; --color-accent-rgb:  21,21,21;\">\n\t\t\t<div class=\"rich-text__inner\">\n\t\t\t\t\n<h3 class=\"h3\">MARCAS<\/h3>\n<div class=\"rte text-size-regular\">\n\t\t\t\t\t\t\t\t<p>Las mejores marcas las encuentras en tiendas Block y blockstore.cl<\/p>\n\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t<\/div>\n\t\t\t<\/div>\n\t\t<\/div>\n\t<\/div>\n<\/div>\n\n\n<\/div>\n<div id=\"shopify-section-template--16075041308752__scrolling_images_efTkLD\" class=\"shopify-section section-scrolling-images\"><link href=\"\/\/www.blockstore.cl\/cdn\/shop\/t\/207\/assets\/scrolling-images.css?v=71421171522885325351771522007\" rel=\"stylesheet\" type=\"text\/css\" media=\"all\"><div class=\"scrolling-images section-spacing section-spacing--disable-top section-spacing--disable-bottom\" id=\"scrolling-images-template--16075041308752__scrolling_images_efTkLD\">\n\t<div class=\"scrolling-images--inner scrolling-images--center direction-left scrolling-images--spacing-medium\" style=\"--marquee-speed: 50s\">\n\t\t\n\t\t\n\t\t\t<div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/vans\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 55px;\">\n<img class=\"retina_size lazyautosizes lazyloaded\" width=\"55\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1-8.png?crop=center&amp;height=18&amp;v=1767713272&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1-8.png?v=1767713272&amp;width=111 111w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"55px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1-8.png?v=1767713272&amp;width=111 111w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/adidas\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 55px;\">\n<img class=\"retina_size lazyautosizes lazyloaded\" width=\"55\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_10-8.png?crop=center&amp;height=18&amp;v=1767713290&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_10-8.png?v=1767713290&amp;width=111 111w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"55px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_10-8.png?v=1767713290&amp;width=111 111w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/puma\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 55px;\">\n<img class=\"retina_size lazyautosizes lazyloaded\" width=\"55\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_7-8.png?crop=center&amp;height=18&amp;v=1767713304&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_7-8.png?v=1767713304&amp;width=111 111w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"55px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_7-8.png?v=1767713304&amp;width=111 111w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/fila\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 55px;\">\n<img class=\"retina_size lazyautosizes lazyloaded\" width=\"55\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_8-8.png?crop=center&amp;height=18&amp;v=1767713318&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_8-8.png?v=1767713318&amp;width=111 111w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"55px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_8-8.png?v=1767713318&amp;width=111 111w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/dc\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 56px;\">\n<img class=\"retina_size lazyautosizes lazyloaded\" width=\"56\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_4-8.png?crop=center&amp;height=18&amp;v=1767713138&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_4-8.png?v=1767713138&amp;width=112 112w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"56px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_4-8.png?v=1767713138&amp;width=112 112w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/reebok\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 55px;\">\n<img class=\"retina_size lazyautosizes lazyloaded\" width=\"55\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_5-8.png?crop=center&amp;height=18&amp;v=1767713230&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_5-8.png?v=1767713230&amp;width=111 111w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"55px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_5-8.png?v=1767713230&amp;width=111 111w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/converse\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 55px;\">\n<img class=\"retina_size lazyautosizes lazyloaded\" width=\"55\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_1-8.png?crop=center&amp;height=18&amp;v=1767713110&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_1-8.png?v=1767713110&amp;width=111 111w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"55px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_1-8.png?v=1767713110&amp;width=111 111w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/new-balance\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 56px;\">\n<img class=\"retina_size lazyautosizes lazyloaded\" width=\"56\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_2-8.png?crop=center&amp;height=18&amp;v=1767713244&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_2-8.png?v=1767713244&amp;width=112 112w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"56px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_2-8.png?v=1767713244&amp;width=112 112w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/gangsta\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 56px;\">\n<img class=\"retina_size lazyautosizes lazyloaded\" width=\"56\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_11-8.png?crop=center&amp;height=18&amp;v=1767713332&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_11-8.png?v=1767713332&amp;width=112 112w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"56px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_11-8.png?v=1767713332&amp;width=112 112w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/palladium\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 56px;\">\n<img class=\"retina_size lazyautosizes lazyloaded\" width=\"56\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_6-8.png?crop=center&amp;height=18&amp;v=1767713213&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_6-8.png?v=1767713213&amp;width=112 112w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"56px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_6-8.png?v=1767713213&amp;width=112 112w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/dvs\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 56px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"56\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_9-8.png?crop=center&amp;height=18&amp;v=1767713152&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_9-8.png?v=1767713152&amp;width=112 112w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"56px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_9-8.png?v=1767713152&amp;width=112 112w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/adidas-originals\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 55px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"55\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_3-8.png?crop=center&amp;height=18&amp;v=1767713124&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_3-8.png?v=1767713124&amp;width=111 111w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"55px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_3-8.png?v=1767713124&amp;width=111 111w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/new-era\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 55px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"55\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_12-8.png?crop=center&amp;height=18&amp;v=1767713185&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_12-8.png?v=1767713185&amp;width=111 111w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"55px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_12-8.png?v=1767713185&amp;width=111 111w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/goorin-bros\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 56px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"56\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_13-8.png?crop=center&amp;height=18&amp;v=1767713259&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_13-8.png?v=1767713259&amp;width=112 112w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"56px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_13-8.png?v=1767713259&amp;width=112 112w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/crep\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 55px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"55\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_14-8.png?crop=center&amp;height=18&amp;v=1767713350&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_14-8.png?v=1767713350&amp;width=111 111w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"55px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_14-8.png?v=1767713350&amp;width=111 111w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/jason-markk\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 55px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"55\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_15-8.png?crop=center&amp;height=18&amp;v=1767713171&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_15-8.png?v=1767713171&amp;width=111 111w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"55px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_15-8.png?v=1767713171&amp;width=111 111w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/capslab\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 56px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"56\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_16-8.png?crop=center&amp;height=18&amp;v=1767713198&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_16-8.png?v=1767713198&amp;width=112 112w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"56px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_16-8.png?v=1767713198&amp;width=112 112w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/47\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 55px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"55\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_17-8.png?crop=center&amp;height=18&amp;v=1767713364&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_17-8.png?v=1767713364&amp;width=111 111w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"55px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_17-8.png?v=1767713364&amp;width=111 111w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div><\/div>\n\t\t\n\t\t\t<div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/vans\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 55px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"55\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1-8.png?crop=center&amp;height=18&amp;v=1767713272&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1-8.png?v=1767713272&amp;width=111 111w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"55px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1-8.png?v=1767713272&amp;width=111 111w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/adidas\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 55px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"55\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_10-8.png?crop=center&amp;height=18&amp;v=1767713290&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_10-8.png?v=1767713290&amp;width=111 111w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"55px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_10-8.png?v=1767713290&amp;width=111 111w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/puma\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 55px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"55\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_7-8.png?crop=center&amp;height=18&amp;v=1767713304&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_7-8.png?v=1767713304&amp;width=111 111w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"55px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_7-8.png?v=1767713304&amp;width=111 111w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/fila\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 55px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"55\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_8-8.png?crop=center&amp;height=18&amp;v=1767713318&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_8-8.png?v=1767713318&amp;width=111 111w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"55px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_8-8.png?v=1767713318&amp;width=111 111w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/dc\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 56px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"56\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_4-8.png?crop=center&amp;height=18&amp;v=1767713138&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_4-8.png?v=1767713138&amp;width=112 112w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"56px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_4-8.png?v=1767713138&amp;width=112 112w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/reebok\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 55px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"55\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_5-8.png?crop=center&amp;height=18&amp;v=1767713230&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_5-8.png?v=1767713230&amp;width=111 111w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"55px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_5-8.png?v=1767713230&amp;width=111 111w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/converse\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 55px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"55\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_1-8.png?crop=center&amp;height=18&amp;v=1767713110&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_1-8.png?v=1767713110&amp;width=111 111w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"55px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_1-8.png?v=1767713110&amp;width=111 111w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/new-balance\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 56px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"56\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_2-8.png?crop=center&amp;height=18&amp;v=1767713244&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_2-8.png?v=1767713244&amp;width=112 112w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"56px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_2-8.png?v=1767713244&amp;width=112 112w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/gangsta\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 56px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"56\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_11-8.png?crop=center&amp;height=18&amp;v=1767713332&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_11-8.png?v=1767713332&amp;width=112 112w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"56px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_11-8.png?v=1767713332&amp;width=112 112w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/palladium\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 56px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"56\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_6-8.png?crop=center&amp;height=18&amp;v=1767713213&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_6-8.png?v=1767713213&amp;width=112 112w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"56px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_6-8.png?v=1767713213&amp;width=112 112w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/dvs\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 56px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"56\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_9-8.png?crop=center&amp;height=18&amp;v=1767713152&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_9-8.png?v=1767713152&amp;width=112 112w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"56px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_9-8.png?v=1767713152&amp;width=112 112w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/adidas-originals\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 55px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"55\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_3-8.png?crop=center&amp;height=18&amp;v=1767713124&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_3-8.png?v=1767713124&amp;width=111 111w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"55px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_3-8.png?v=1767713124&amp;width=111 111w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/new-era\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 55px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"55\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_12-8.png?crop=center&amp;height=18&amp;v=1767713185&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_12-8.png?v=1767713185&amp;width=111 111w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"55px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_12-8.png?v=1767713185&amp;width=111 111w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/goorin-bros\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 56px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"56\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_13-8.png?crop=center&amp;height=18&amp;v=1767713259&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_13-8.png?v=1767713259&amp;width=112 112w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"56px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_13-8.png?v=1767713259&amp;width=112 112w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/crep\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 55px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"55\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_14-8.png?crop=center&amp;height=18&amp;v=1767713350&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_14-8.png?v=1767713350&amp;width=111 111w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"55px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_14-8.png?v=1767713350&amp;width=111 111w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/jason-markk\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 55px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"55\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_15-8.png?crop=center&amp;height=18&amp;v=1767713171&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_15-8.png?v=1767713171&amp;width=111 111w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"55px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_15-8.png?v=1767713171&amp;width=111 111w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/capslab\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 56px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"56\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_16-8.png?crop=center&amp;height=18&amp;v=1767713198&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_16-8.png?v=1767713198&amp;width=112 112w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"56px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_16-8.png?v=1767713198&amp;width=112 112w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div>\n\t\t\t\t\t<div class=\"scrolling-images--item\"><a href=\"\/collections\/47\" target=\"_blank\" class=\"scrolling-images--link\"><div class=\"scrolling-images--image aspect-ratio aspect-ratio--square\" style=\"--ratio-percent:100.0%; width: 55px;\">\n<img class=\"retina_size lazyautosizes ls-is-cached lazyloaded\" width=\"55\" height=\"51\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_17-8.png?crop=center&amp;height=18&amp;v=1767713364&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_17-8.png?v=1767713364&amp;width=111 111w\" fetchpriority=\"auto\" alt=\"\" style=\"object-position: 50.0% 50.0%;\" sizes=\"55px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/files\/Mesa_de_trabajo_1_17-8.png?v=1767713364&amp;width=111 111w\">\n<\/div><\/a><div class=\"scrolling-images--content\"><h6><\/h6>\n<\/div><\/div><\/div>\n\t\t\n\t<\/div>\n<\/div>\n\n<\/div>",
+        "section_width": "full-width-row-full"
+      }
+    },
+    "shoppable_view_reels_PdBtbY": {
+      "type": "shoppable-view-reels",
+      "blocks": {
+        "video_4UQdpQ": {
+          "type": "video",
+          "settings": {
+            "product_handle": "zapatilla-dc-court-graffik-hombre-negro-1"
+          }
+        },
+        "video_eEjbXU": {
+          "type": "video",
+          "settings": {
+            "product_handle": "zapatillas-palladium-ace-city-shell-chuk-2-unisex-negro-pa74451008m"
+          }
+        },
+        "video_6weCBH": {
+          "type": "video",
+          "settings": {
+            "product_handle": "zapatilla-vans-knu-skool-hombre-negro-vn0009qc6bt"
+          }
+        },
+        "video_hRKDwD": {
+          "type": "video",
+          "settings": {
+            "product_handle": "zapatillas-adidas-technochaos-2000-hombre-negro-jr7229"
+          }
+        }
+      },
+      "block_order": [
+        "video_4UQdpQ",
+        "video_eEjbXU",
+        "video_6weCBH",
+        "video_hRKDwD"
+      ],
+      "name": "Shoppable video reels",
+      "settings": {
+        "full_width": false,
+        "aspect_ratio": "custom",
+        "custom_aspect_ratio": 0.5,
+        "show_dots": true,
+        "controls_play_pause": true,
+        "controls_sound": true,
+        "show_quick_add_button": true,
+        "color_text": "#ffffff",
+        "overlay_gradient": "linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, 1) 85%)",
+        "disable_top_spacing": false,
+        "disable_bottom_spacing": false
+      },
+      "disabled": true
+    },
+    "scrolling_text_bw4nth": {
+      "type": "scrolling-text",
+      "blocks": {
+        "text_KAyBgm": {
+          "type": "text",
+          "settings": {
+            "text": "Esto no lo decimos nosotros 😏",
+            "link": "",
+            "outline_text": false
+          }
+        }
+      },
+      "block_order": [
+        "text_KAyBgm"
+      ],
+      "name": "Scrolling text",
+      "settings": {
+        "height": "height-auto",
+        "full_width": true,
+        "direction": "right",
+        "speed": "10s",
+        "font_family": "body",
+        "text_size": 24,
+        "text_uppercase": false,
+        "image_size": "large",
+        "color_bg": "#000000",
+        "color_text": "#ffffff",
+        "overlay_color": "#ffffff",
+        "overlay_opacity": 0,
+        "disable_top_spacing": true,
+        "disable_bottom_spacing": true
+      }
+    },
+    "custom_liquid_NYLaFN": {
+      "type": "custom-liquid",
+      "name": "Custom liquid",
+      "settings": {
+        "custom_liquid": "<div id=\"shopify-section-template--16075041308752__featured_blog_GDN9km\" class=\"shopify-section section-blog-posts\"><div class=\"row full-width-row\">\n\t<div class=\"small-12 columns\">\n\t\t<div class=\"blog-posts swipe-on-mobile section-spacing section-spacing--disable-top\">\n\t\t\t<div class=\"section-header section-header-left--true\">\n\t\t<div class=\"section-header--content\"><h2 class=\"h3\">Novedades BLOCK<\/h2><\/div><div class=\"section-header--button\">\n\t\t\t<span class=\"text-button\">Ver todo<\/span>\n\t\t<\/div><\/div>\n\t\t\t<div class=\"row full-width-row no-padding\">\n\t\t\t\t\n\t\t      \n\t\t      <div class=\"small-12 medium-6 large-3 columns\">\n\t\t\t\t\t\t<div class=\"blog-post\">\n\t<figure class=\"featured-image aspect-ratio\" style=\"--ratio-percent: 41.860465116279066%;\">\n\t\t<div title=\"Palladium: De los campos de batalla a las calles de Chile\">\n<img class=\"lazyautosizes ls-is-cached lazyloaded\" width=\"3225\" height=\"1350\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/articles\/14-03-carrusel_palladium_09c60ccc-8ede-4d2b-afed-143ad98c2cb6.png?v=1779293157&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/articles\/14-03-carrusel_palladium_09c60ccc-8ede-4d2b-afed-143ad98c2cb6.png?v=1779293157&amp;width=320 320w,\/\/www.blockstore.cl\/cdn\/shop\/articles\/14-03-carrusel_palladium_09c60ccc-8ede-4d2b-afed-143ad98c2cb6.png?v=1779293157&amp;width=640 640w\" fetchpriority=\"auto\" alt=\"Palladium: De los campos de batalla a las calles de Chile Blockstore.cl\" sizes=\"357px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/articles\/14-03-carrusel_palladium_09c60ccc-8ede-4d2b-afed-143ad98c2cb6.png?v=1779293157&amp;width=320 320w,\/\/www.blockstore.cl\/cdn\/shop\/articles\/14-03-carrusel_palladium_09c60ccc-8ede-4d2b-afed-143ad98c2cb6.png?v=1779293157&amp;width=640 640w\">\n<\/div>\n\t<\/figure>\n\t\n\t<aside class=\"post-meta\">\n\t\tApril 30 2026\n\t<\/aside>\n\t\n\t<h5><span title=\"Palladium: De los campos de batalla a las calles de Chile\">Palladium: De los campos de batalla a las calles de Chile<\/span><\/h5>\n\t\n\t<div class=\"post-excerpt\">\n\t\t<p>Nacida en Francia en 1947, Palladium fusiona la resistencia de sus raíces militares con la innovación del diseño contemporáneo. Descubre la historia detrás de sus icónicas suelas y por qué...<\/p>\n\t<\/div>\n\t\n\t<span class=\"text-button read-more\">Lee mas<\/span>\n<\/div>\n\t\t      <\/div>\n\t\t      \n\t\t      <div class=\"small-12 medium-6 large-3 columns\">\n\t\t\t\t\t\t<div class=\"blog-post\">\n\t<figure class=\"featured-image aspect-ratio\" style=\"--ratio-percent: 35.714285714285715%;\">\n\t\t<div title=\"DVS: El Renacimiento de un Ícono y la Ciencia detrás del Skateboarding\">\n<img class=\"lazyautosizes ls-is-cached lazyloaded\" width=\"2800\" height=\"1000\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/articles\/Desktop_bb795a49-ddde-47b2-a0c7-e0526ac5fd2e.png?v=1775584555&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/articles\/Desktop_bb795a49-ddde-47b2-a0c7-e0526ac5fd2e.png?v=1775584555&amp;width=320 320w,\/\/www.blockstore.cl\/cdn\/shop\/articles\/Desktop_bb795a49-ddde-47b2-a0c7-e0526ac5fd2e.png?v=1775584555&amp;width=640 640w\" fetchpriority=\"auto\" alt=\"DVS: El Renacimiento de un Ícono y la Ciencia detrás del Skateboarding\" sizes=\"357px\" srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/articles\/Desktop_bb795a49-ddde-47b2-a0c7-e0526ac5fd2e.png?v=1775584555&amp;width=320 320w,\/\/www.blockstore.cl\/cdn\/shop\/articles\/Desktop_bb795a49-ddde-47b2-a0c7-e0526ac5fd2e.png?v=1775584555&amp;width=640 640w\">\n<\/div>\n\t<\/figure>\n\t\n\t<aside class=\"post-meta\">\n\t\tApril 07 2026\n\t<\/aside>\n\t\n\t<h5><span title=\"DVS: El Renacimiento de un Ícono y la Ciencia detrás del Skateboarding\">DVS: El Renacimiento de un Ícono y la Ciencia detrás del Skateboarding<\/span><\/h5>\n\t\n\t<div class=\"post-excerpt\">\n\t\t<p>DVS, ícono del skate desde los 90, vuelve con una nueva generación de calzado que combina su herencia auténtica con tecnología de alto rendimiento. Diseñadas para máxima comodidad, durabilidad y...<\/p>\n\t<\/div>\n\t\n\t<span class=\"text-button read-more\">Lee mas<\/span>\n<\/div>\n\t\t      <\/div>\n\t\t      \n\t\t      <div class=\"small-12 medium-6 large-3 columns\">\n\t\t\t\t\t\t<div class=\"blog-post\">\n\t<figure class=\"featured-image aspect-ratio\" style=\"--ratio-percent: 35.714285714285715%;\">\n\t\t<div title=\"Guía festivalera: elige tus zapatillas para la temporada 2026\">\n<img class=\"lazyload \" width=\"2800\" height=\"1000\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/articles\/Desktop_aefa8295-8171-4244-afa4-4c3cabdd3f41.jpg?v=1776701025&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/articles\/Desktop_aefa8295-8171-4244-afa4-4c3cabdd3f41.jpg?v=1776701025&amp;width=320 320w,\/\/www.blockstore.cl\/cdn\/shop\/articles\/Desktop_aefa8295-8171-4244-afa4-4c3cabdd3f41.jpg?v=1776701025&amp;width=640 640w\" fetchpriority=\"auto\" alt=\"Guía festivalera: elige tus zapatillas para la temporada 2026 - Blockstore.cl\">\n<\/div>\n\t<\/figure>\n\t\n\t<aside class=\"post-meta\">\n\t\tMarch 11 2026\n\t<\/aside>\n\t\n\t<h5><span title=\"Guía festivalera: elige tus zapatillas para la temporada 2026\">Guía festivalera: elige tus zapatillas para la temporada 2026<\/span><\/h5>\n\t\n\t<div class=\"post-excerpt\">\n\t\t<p>La temporada de festivales ya empezó y tu outfit necesita un protagonista: las zapatillas. Si vas a caminar, bailar y saltar todo el día, mejor hacerlo con estilo. Aquí te...<\/p>\n\t<\/div>\n\t\n\t<span class=\"text-button read-more\">Lee mas<\/span>\n<\/div>\n\t\t      <\/div>\n\t\t      \n\t\t      <div class=\"small-12 medium-6 large-3 columns\">\n\t\t\t\t\t\t<div class=\"blog-post\">\n\t<figure class=\"featured-image aspect-ratio\" style=\"--ratio-percent: 35.714285714285715%;\">\n\t\t<div title=\"Tendencias streetwear 2026 en Chile: qué zapatillas usar este Año Nuevo Lunar\">\n<img class=\"lazyload \" width=\"2800\" height=\"1000\" data-sizes=\"auto\" src=\"\/\/www.blockstore.cl\/cdn\/shop\/articles\/lunar_304ffbef-59a2-41ee-be68-a6952f19cca6.jpg?v=1776701013&amp;width=20\" data-srcset=\"\/\/www.blockstore.cl\/cdn\/shop\/articles\/lunar_304ffbef-59a2-41ee-be68-a6952f19cca6.jpg?v=1776701013&amp;width=320 320w,\/\/www.blockstore.cl\/cdn\/shop\/articles\/lunar_304ffbef-59a2-41ee-be68-a6952f19cca6.jpg?v=1776701013&amp;width=640 640w\" fetchpriority=\"auto\" alt=\"Tendencias streetwear 2026 en Chile: qué zapatillas usar este Año Nuevo Lunar - Blockstore.cl\">\n<\/div>\n\t<\/figure>\n\t\n\t<aside class=\"post-meta\">\n\t\tFebruary 17 2026\n\t<\/aside>\n\t\n\t<h5><span title=\"Tendencias streetwear 2026 en Chile: qué zapatillas usar este Año Nuevo Lunar\">Tendencias streetwear 2026 en Chile: qué zapatillas usar este Año Nuevo Lunar<\/span><\/h5>\n\t\n\t<div class=\"post-excerpt\">\n\t\t<p>¿Quieres estar a la vanguardia del estilo urbano este 2026? Con las tendencias de moda 2026 en streetwear, empezar el año con estilo es más fácil que nunca. Descubre las...<\/p>\n\t<\/div>\n\t\n\t<span class=\"text-button read-more\">Lee mas<\/span>\n<\/div>\n\t\t      <\/div>\n\t\t      \n\t\t\t\t\n\t\t  <\/div>\n\t\t<\/div>\n\t<\/div>\n<\/div>\n<link href=\"\/\/www.blockstore.cl\/cdn\/shop\/t\/207\/assets\/blog.s.min.css?v=24543074042772710891771521917\" rel=\"stylesheet\" type=\"text\/css\" media=\"all\">\n\n<\/div>",
+        "section_width": "full-width-row"
+      }
+    }
+  },
+  "order": [
+    "16479477632637c9a7",
+    "1662389920b1295ea2",
+    "16614195534fb74bc3",
+    "collection_list_TCnWNy",
+    "featured_collection_fdefBT",
+    "featured_collection_JCmzUV",
+    "166366584621bc44f2",
+    "scrolling_text_bqBQwY",
+    "slideshow_z6nELi",
+    "custom_liquid_w4nf7K",
+    "shoppable_view_reels_PdBtbY",
+    "scrolling_text_bw4nth",
+    "custom_liquid_NYLaFN"
+  ]
+}
