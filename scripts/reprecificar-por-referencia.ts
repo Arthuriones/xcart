@@ -1,19 +1,23 @@
 /**
- * Reprecifica a operacao Block a partir do preco riscado.
+ * Reprecifica a operacao Block olhando a loja de referencia.
  *
- * A importacao achatou o preco de venda em 29.990 CLP para TODAS as variantes
- * das duas lojas. O preco riscado, esse, sobreviveu intacto e varia de 39.990
- * a 109.990 -- e o valor real de cada tenis. Entao nao ha nada para inventar:
- * o preco de venda sai dele.
+ * A primeira versao deste script derivava o preco do compare_at do catalogo
+ * importado. Isso estava errado: aquele riscado nao era o preco praticado, era
+ * um "de" inflado. O resultado ficou 20,8% MAIS CARO que a loja de referencia
+ * -- o oposto do que a operacao precisa.
  *
- *   preco = clamp(arredonda_990(riscado * 0.70), 39.990, 79.990)
+ * Agora a base e o preco publico da referencia, casado por SKU:
  *
- * O calculo roda UMA vez, sobre o catalogo da vitrine, indexado por SKU. As
- * duas lojas recebem o mesmo valor para o mesmo SKU -- se divergissem, o
- * comprador veria um preco na vitrine e pagaria outro no checkout.
+ *   preco = min(TETO, arredonda_990(referencia * (1 - DESCONTO)))
  *
- * Uso:  npx tsx scripts/reprecificar-block.ts [--aplicar]
- * Sem --aplicar, so mostra o que faria.
+ * Sem piso de proposito. O catalogo tem camiseta e kit de limpeza junto com
+ * tenis; um piso alto encareceria justamente os itens baratos, que e onde a
+ * diferenca de preco mais aparece para o comprador.
+ *
+ * SKU sem par na referencia fica como esta -- inventar preco para ele seria
+ * repetir o erro que este script veio consertar.
+ *
+ * Uso:  npx tsx scripts/reprecificar-por-referencia.ts [--aplicar]
  */
 import { config } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
@@ -21,10 +25,9 @@ import { shopifyGraphQL, type ShopifyCredentials } from "../src/lib/shopify/clie
 
 config({ path: ".env.local" });
 
-const VITRINE = "q2mdgs-ag.myshopify.com";
-const CHECKOUT = "5sx1nu-sx.myshopify.com";
-const DESCONTO = 0.3;
-const PISO = 39990;
+const REFERENCIA = "www.blockstore.cl";
+const LOJAS = ["q2mdgs-ag.myshopify.com", "5sx1nu-sx.myshopify.com"];
+const DESCONTO = 0.15;
 const TETO = 79990;
 
 const APLICAR = process.argv.includes("--aplicar");
@@ -34,15 +37,33 @@ function noventa(valor: number) {
   return Math.round((valor - 990) / 1000) * 1000 + 990;
 }
 
-function precoDe(riscado: number) {
-  return Math.min(TETO, Math.max(PISO, noventa(riscado * (1 - DESCONTO))));
+/** Preco publico da referencia, por SKU. */
+async function precosDaReferencia(): Promise<Map<string, number>> {
+  const mapa = new Map<string, number>();
+  for (let pagina = 1; pagina <= 30; pagina += 1) {
+    const r = await fetch(
+      `https://${REFERENCIA}/products.json?limit=250&page=${pagina}`,
+      { headers: { "User-Agent": "Mozilla/5.0" } }
+    );
+    if (!r.ok) break;
+    const { products } = (await r.json()) as {
+      products: { variants: { sku: string | null; price: string }[] }[];
+    };
+    if (!products.length) break;
+    for (const p of products) {
+      for (const v of p.variants) {
+        const preco = Number(v.price);
+        if (v.sku && preco > 0) mapa.set(v.sku, preco);
+      }
+    }
+  }
+  return mapa;
 }
 
 interface Variante {
   id: string;
   sku: string | null;
   price: string;
-  compareAtPrice: string | null;
   productId: string;
 }
 
@@ -50,13 +71,7 @@ async function lerVariantes(creds: ShopifyCredentials): Promise<Variante[]> {
   const query = `query Catalogo($cursor: String) {
     productVariants(first: 250, after: $cursor) {
       pageInfo { hasNextPage endCursor }
-      nodes {
-        id
-        sku
-        price
-        compareAtPrice
-        product { id }
-      }
+      nodes { id sku price product { id } }
     }
   }`;
 
@@ -66,23 +81,11 @@ async function lerVariantes(creds: ShopifyCredentials): Promise<Variante[]> {
     const dados: {
       productVariants: {
         pageInfo: { hasNextPage: boolean; endCursor: string };
-        nodes: {
-          id: string;
-          sku: string | null;
-          price: string;
-          compareAtPrice: string | null;
-          product: { id: string };
-        }[];
+        nodes: { id: string; sku: string | null; price: string; product: { id: string } }[];
       };
     } = await shopifyGraphQL(creds, query, { cursor });
     for (const no of dados.productVariants.nodes) {
-      todas.push({
-        id: no.id,
-        sku: no.sku,
-        price: no.price,
-        compareAtPrice: no.compareAtPrice,
-        productId: no.product.id,
-      });
+      todas.push({ id: no.id, sku: no.sku, price: no.price, productId: no.product.id });
     }
     if (!dados.productVariants.pageInfo.hasNextPage) break;
     cursor = dados.productVariants.pageInfo.endCursor;
@@ -127,64 +130,54 @@ async function credenciais(dominio: string): Promise<ShopifyCredentials & { nome
 }
 
 async function main() {
-  const vitrine = await credenciais(VITRINE);
-  const checkout = await credenciais(CHECKOUT);
+  const referencia = await precosDaReferencia();
+  console.log(`${REFERENCIA}: ${referencia.size} SKUs com preco`);
 
-  console.log(`Lendo ${vitrine.nome}…`);
-  const varsVitrine = await lerVariantes(vitrine);
-  console.log(`  ${varsVitrine.length} variantes`);
-
-  // A tabela de precos sai do riscado da VITRINE, indexada por SKU. E a mesma
-  // chave que o roteamento usa, entao as duas lojas casam por construcao.
-  const precoPorSku = new Map<string, number>();
-  let semRiscado = 0;
-  for (const v of varsVitrine) {
-    if (!v.sku) continue;
-    const riscado = Number(v.compareAtPrice || 0);
-    if (!riscado) {
-      semRiscado += 1;
-      continue;
-    }
-    precoPorSku.set(v.sku, precoDe(riscado));
-  }
-  console.log(`  ${precoPorSku.size} SKUs com preco calculado` + (semRiscado ? `, ${semRiscado} sem riscado (ficam como estao)` : ""));
-
-  for (const loja of [vitrine, checkout]) {
-    console.log(`\n== ${loja.nome} (${loja.shopDomain}) ==`);
-    const variantes = loja.shopDomain === VITRINE ? varsVitrine : await lerVariantes(loja);
+  for (const dominio of LOJAS) {
+    const loja = await credenciais(dominio);
+    console.log(`\n== ${loja.nome} (${dominio}) ==`);
+    const variantes = await lerVariantes(loja);
 
     const porProduto = new Map<string, { id: string; price: string }[]>();
     let iguais = 0;
     let semPar = 0;
+    let noTeto = 0;
+    const novos: number[] = [];
+
     for (const v of variantes) {
-      const novo = v.sku ? precoPorSku.get(v.sku) : undefined;
-      if (novo === undefined) {
+      const base = v.sku ? referencia.get(v.sku) : undefined;
+      if (!base) {
         semPar += 1;
         continue;
       }
-      if (Number(v.price) === novo) {
+      const preco = Math.min(TETO, noventa(base * (1 - DESCONTO)));
+      novos.push(preco);
+      if (preco === TETO) noTeto += 1;
+      if (Number(v.price) === preco) {
         iguais += 1;
         continue;
       }
       const lista = porProduto.get(v.productId) || [];
-      lista.push({ id: v.id, price: String(novo) });
+      lista.push({ id: v.id, price: String(preco) });
       porProduto.set(v.productId, lista);
     }
 
     const total = [...porProduto.values()].reduce((s, l) => s + l.length, 0);
-    console.log(`  ${variantes.length} variantes | ${total} a mudar | ${iguais} ja corretas | ${semPar} sem par por SKU`);
+    const medio = novos.length
+      ? Math.round(novos.reduce((a, b) => a + b, 0) / novos.length)
+      : 0;
+    console.log(
+      `  ${variantes.length} variantes | ${total} a mudar | ${iguais} ja corretas | ${semPar} sem par na referencia`
+    );
+    console.log(`  preco medio ${medio.toLocaleString("pt-BR")} | ${noTeto} no teto`);
 
-    if (!APLICAR) {
-      const amostra = [...porProduto.values()].flat().slice(0, 5);
-      amostra.forEach((v) => console.log(`    ex.: ${v.id.split("/").pop()} -> ${Number(v.price).toLocaleString("pt-BR")}`));
-      continue;
-    }
+    if (!APLICAR) continue;
 
     let feitos = 0;
     for (const [productId, variants] of porProduto) {
       await gravar(loja, productId, variants);
       feitos += variants.length;
-      if (feitos % 250 < variants.length) console.log(`    ${feitos}/${total}…`);
+      if (feitos % 500 < variants.length) console.log(`    ${feitos}/${total}…`);
     }
     console.log(`  gravadas ${feitos} variantes`);
   }
