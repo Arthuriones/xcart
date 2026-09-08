@@ -2446,35 +2446,39 @@ function resolveMenuItemType(url: string): string {
   return "HTTP";
 }
 
-function mapMenuItems(
-  items: { title: string; url: string; type?: string; items?: { title: string; url: string; type?: string }[] }[]
-) {
-  return items.map((item) => ({
-    title: item.title,
-    url: item.url,
-    type: item.type || resolveMenuItemType(item.url),
-    ...(item.items?.length
-      ? { items: item.items.map((sub) => ({
-          title: sub.title,
-          url: sub.url,
-          type: sub.type || resolveMenuItemType(sub.url),
-        })) }
-      : {}),
-  }));
+export interface MenuItemInput {
+  title: string;
+  /** Caminho relativo. Ignorado quando ha resourceId -- a Shopify monta o link. */
+  url?: string;
+  type?: string;
+  /**
+   * gid do recurso apontado (colecao, pagina, politica).
+   *
+   * Sem ele, um item que aponta para /collections/nike volta como
+   * "collection not found": os tipos COLLECTION, PAGE e SHOP_POLICY sao
+   * resolvidos por ID, nao por caminho. O tipo CATALOG, que o mapeamento por
+   * URL escolhia sozinho, e a pagina de TODOS os produtos -- nao uma colecao.
+   */
+  resourceId?: string;
+  items?: MenuItemInput[];
+}
+
+function mapMenuItems(items: MenuItemInput[]): Record<string, unknown>[] {
+  return items.map((item) => {
+    const mapeado: Record<string, unknown> = {
+      title: item.title,
+      type: item.type || resolveMenuItemType(item.url || ""),
+    };
+    if (item.resourceId) mapeado.resourceId = item.resourceId;
+    else if (item.url) mapeado.url = item.url;
+    if (item.items?.length) mapeado.items = mapMenuItems(item.items);
+    return mapeado;
+  });
 }
 
 export async function createMenu(
   creds: ShopifyCredentials,
-  input: {
-    title: string;
-    handle: string;
-    items: {
-      title: string;
-      url: string;
-      type?: string;
-      items?: { title: string; url: string; type?: string }[];
-    }[];
-  }
+  input: { title: string; handle: string; items: MenuItemInput[] }
 ) {
   const query = `
     mutation menuCreate($title: String!, $handle: String!, $items: [MenuItemCreateInput!]!) {
@@ -2496,6 +2500,38 @@ export async function createMenu(
     handle: input.handle,
     items: mapMenuItems(input.items),
   });
+}
+
+/**
+ * Reescreve um menu que ja existe.
+ *
+ * Toda loja Shopify nasce com "main-menu" e "footer" prontos, entao montar a
+ * navegacao de uma loja nova e quase sempre atualizar, nao criar -- menuCreate
+ * falharia no handle repetido.
+ */
+export async function updateMenu(
+  creds: ShopifyCredentials,
+  input: { id: string; title: string; handle: string; items: MenuItemInput[] }
+) {
+  const query = `
+    mutation menuUpdate($id: ID!, $title: String!, $handle: String!, $items: [MenuItemUpdateInput!]!) {
+      menuUpdate(id: $id, title: $title, handle: $handle, items: $items) {
+        menu { id handle }
+        userErrors { field message }
+      }
+    }
+  `;
+  const result = await shopifyGraphQL(creds, query, {
+    id: input.id,
+    title: input.title,
+    handle: input.handle,
+    items: mapMenuItems(input.items),
+  });
+  const erros = result?.menuUpdate?.userErrors as { message: string }[] | undefined;
+  if (erros?.length) {
+    throw new Error(`Falha ao atualizar o menu: ${erros.map((e) => e.message).join(" | ")}`);
+  }
+  return result;
 }
 
 export async function createPages(

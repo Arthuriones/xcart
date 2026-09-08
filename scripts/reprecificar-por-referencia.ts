@@ -36,7 +36,7 @@ config({ path: ".env.local" });
 const REFERENCIA = "www.blockstore.cl";
 /** A primeira e a vitrine: e dela que sai a tabela de precos das duas. */
 const LOJAS = ["q2mdgs-ag.myshopify.com", "5sx1nu-sx.myshopify.com"];
-const DESCONTO = 0.15;
+const DESCONTO = 0.12;
 const PISO = 39990;
 const TETO = 79990;
 
