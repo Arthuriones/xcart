@@ -87,6 +87,38 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Uma vitrine so pode ter UMA rota ligada.
+  //
+  // O modelo e "uma vitrine, varias lojas de checkout" -- as lojas extras
+  // entram como destino em routed_checkout_targets, nao como rota nova. Duas
+  // rotas ligadas na mesma vitrine geram dois public_token, e o tema carrega um
+  // so: as outras viram configuracao fantasma. O lojista mexe no peso da rota
+  // errada e nao ve efeito nenhum, sem nada na tela explicando por que.
+  //
+  // Encontrado em producao: duas contas com TRES rotas ligadas na mesma
+  // vitrine, uma delas criada em dias seguidos.
+  const { data: jaExiste } = await supabase
+    .from("routed_checkout_configs")
+    .select("id, name")
+    .eq("user_id", user.id)
+    .eq("source_store_id", sourceStoreId)
+    .eq("enabled", true)
+    .limit(1)
+    .maybeSingle();
+
+  if (jaExiste) {
+    return NextResponse.json(
+      {
+        error:
+          `Esta vitrine ja roteia pela rota "${jaExiste.name}". Para mandar ` +
+          `trafego para outra loja de checkout, adicione ela como destino ` +
+          `dessa rota em vez de criar uma segunda.`,
+        existingRouteId: jaExiste.id,
+      },
+      { status: 409 }
+    );
+  }
+
   const { data, error } = await supabase
     .from("routed_checkout_configs")
     .insert({
