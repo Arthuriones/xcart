@@ -1,232 +1,396 @@
 import type { Metadata } from "next";
-import { textosLanding } from "./textos-landing";
 import Link from "next/link";
-import {
-  ArrowRight,
-  Check,
-  Globe2,
-  ImageOff,
-  Languages,
-  Route,
-  ShoppingBag,
-  Sparkles,
-  Store,
-  Zap,
-} from "lucide-react";
 import { PRO_PRICE_BRL, PRO_INCLUDED_CREDITS, CREDIT_PACKS } from "@/lib/billing/plans";
 
-const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://user.xcart.app";
+/**
+ * A landing comercial.
+ *
+ * Refeita sobre o design system do app -- mesmos tokens, mesma escala, mesma
+ * linguagem de cartao e borda. Antes ela vivia no sistema visual anterior
+ * (bg-background, primary/, border-border/40) e destoava de tudo o que o
+ * visitante encontra depois de entrar.
+ *
+ * O texto tambem mudou, e essa e a parte que importa mais: a versao antiga
+ * vendia "clone qualquer loja para a Shopify em minutos", que e a ferramenta
+ * de importacao. O produto hoje e o checkout roteado -- vitrine anuncia, loja
+ * de checkout cobra, o xcart casa os SKUs e decide quem cobra cada carrinho.
+ * A importacao virou um meio para isso, nao o fim.
+ */
 
-export function generateMetadata(): Metadata {
-  const t = textosLanding();
-  return { title: t("metaTitle"), description: t("metaDesc") };
+const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://user.xcart.app";
+const loginUrl = `${appUrl}/login`;
+const signupUrl = `${loginUrl}?mode=signup`;
+
+export const metadata: Metadata = {
+  title: "xcart — uma vitrine, várias lojas de checkout",
+  description:
+    "O xcart leva o carrinho da sua vitrine para a loja que cobra, casando os SKUs. Divida o tráfego entre vários checkouts e continue vendendo quando um cair.",
+};
+
+const ETAPAS = [
+  {
+    n: "01",
+    titulo: "Conecte as duas lojas",
+    texto:
+      "A vitrine, que recebe o tráfego do anúncio, e uma ou mais lojas de checkout, onde o pagamento acontece.",
+  },
+  {
+    n: "02",
+    titulo: "Leve o catálogo",
+    texto:
+      "Importe de Shopify, WooCommerce, Shoplazza, AliExpress ou de um site qualquer. O xcart replica na loja de checkout já neutralizado.",
+  },
+  {
+    n: "03",
+    titulo: "Ligue por SKU",
+    texto:
+      "Cada variante ganha par nas duas lojas. É o SKU que sustenta a rota — título e foto podem ser totalmente diferentes.",
+  },
+  {
+    n: "04",
+    titulo: "Divida o tráfego",
+    texto:
+      "Escolha quanto de cada comprador vai para cada checkout. Um processador cai, você move a fatia e continua vendendo.",
+  },
+];
+
+const RECURSOS = [
+  {
+    titulo: "Rodízio entre checkouts",
+    texto:
+      "Uma vitrine aponta para várias lojas de checkout ao mesmo tempo. O sorteio nunca custa uma linha do carrinho: só entram no rodízio as lojas que cobrem o carrinho inteiro.",
+  },
+  {
+    titulo: "Casamento por SKU",
+    texto:
+      "A ligação entre as lojas é o SKU, não o nome. Isso deixa a loja de checkout mudar título, descrição, tags e foto sem quebrar nada.",
+  },
+  {
+    titulo: "Neutralização com IA",
+    texto:
+      "A loja de checkout recebe o catálogo com o texto reescrito sem marca e as fotos regeradas sem logo. As duas lojas nunca parecem ligadas.",
+  },
+  {
+    titulo: "Importação de qualquer fonte",
+    texto:
+      "Shopify, WooCommerce, Shoplazza, AliExpress e sites genéricos. Traduz para o idioma da loja de destino e publica direto.",
+  },
+  {
+    titulo: "Conserto automático",
+    texto:
+      "De hora em hora o xcart confere a rota: SKU sem par, variante trocada, produto que sumiu. Acha e corrige antes do carrinho falhar.",
+  },
+  {
+    titulo: "Conectado ao Claude",
+    texto:
+      "Um servidor MCP dá ao Claude acesso de leitura e edição às suas lojas. Pergunte, audite e corrija conversando.",
+  },
+];
+
+/** Cartão do diagrama da operação, igual ao do design. */
+function Caixa({
+  titulo,
+  texto,
+  destaque,
+}: {
+  titulo: string;
+  texto: string;
+  destaque?: boolean;
+}) {
+  return (
+    <div
+      className="rounded-[7px] px-3 py-2.5"
+      style={{
+        border: `1px solid ${destaque ? "var(--solid)" : "var(--border)"}`,
+        background: destaque ? "var(--solid)" : "var(--surface)",
+        color: destaque ? "var(--on-solid)" : "var(--ink)",
+      }}
+    >
+      <div className="text-[12.5px] font-semibold">{titulo}</div>
+      <div
+        className="text-[11px]"
+        style={{ color: destaque ? "var(--t4)" : "var(--t3)" }}
+      >
+        {texto}
+      </div>
+    </div>
+  );
 }
 
-const FEATURE_ICONS = [ShoppingBag, Languages, ImageOff, Route, Store, Zap];
-
-export default function LandingPage() {
-  const t = textosLanding();
-  const loginUrl = `${appUrl}/login`;
-  // Os CTAs de conversao abrem direto o formulario de CADASTRO. Antes todos
-  // apontavam para /login, entao quem clicava em "Comecar agora" caia numa tela
-  // de entrar e precisava achar a aba "Criar Conta".
-  const signupUrl = `${loginUrl}?mode=signup`;
-  const features = t.raw("features") as { title: string; desc: string }[];
-  const steps = t.raw("steps") as { title: string; desc: string }[];
-  const proFeatures = (t.raw("proFeatures") as string[]).map((s) =>
-    s.replace("{credits}", String(PRO_INCLUDED_CREDITS))
-  );
-
+function Fio() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
-          <Link href="/lp" className="flex items-center">
-            <img src="/logo.png" alt="xcart" className="h-8 w-auto" />
+    <div className="ml-4 h-4 w-px" style={{ background: "var(--border-strong)" }} aria-hidden />
+  );
+}
+
+export default function Landing() {
+  return (
+    <div className="min-h-screen bg-[var(--bg)] text-ink">
+      {/* ------------------------------------------------------- topo */}
+      <header className="sticky top-0 z-50 border-b border-border bg-[var(--header-bg)] backdrop-blur">
+        <div className="mx-auto flex max-w-[1080px] items-center gap-6 px-5 py-3">
+          <Link href="/lp" className="flex items-center gap-2">
+            <span
+              className="h-5 w-5 rounded-[5px]"
+              style={{ background: "var(--brand)" }}
+              aria-hidden
+            />
+            <span className="text-[14px] font-bold tracking-[0.06em]">XCART</span>
           </Link>
-          <nav className="hidden items-center gap-7 text-sm text-muted-foreground md:flex">
-            <a href="#recursos" className="hover:text-foreground">{t("navFeatures")}</a>
-            <a href="#como-funciona" className="hover:text-foreground">{t("navHow")}</a>
-            <a href="#precos" className="hover:text-foreground">{t("navPricing")}</a>
+          <nav className="ml-4 hidden items-center gap-6 md:flex">
+            {[
+              ["#como-funciona", "Como funciona"],
+              ["#recursos", "Recursos"],
+              ["#precos", "Preços"],
+            ].map(([href, rotulo]) => (
+              <a
+                key={href}
+                href={href}
+                className="text-[12.5px] text-t2 transition-colors hover:text-ink"
+              >
+                {rotulo}
+              </a>
+            ))}
           </nav>
-          <div className="flex items-center gap-3">
-            <a href={loginUrl} className="text-sm text-muted-foreground hover:text-foreground">
-              {t("signIn")}
+          <div className="ml-auto flex items-center gap-3">
+            <a href={loginUrl} className="text-[12.5px] text-t2 hover:text-ink">
+              Entrar
             </a>
             <a
               href={signupUrl}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+              className="inline-flex h-[30px] items-center rounded-md bg-[var(--solid)] px-[13px] text-[12.5px] font-semibold text-[var(--on-solid)] transition-colors hover:bg-[var(--solid-hover)]"
             >
-              {t("start")} <ArrowRight className="h-4 w-4" />
+              Começar
             </a>
           </div>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="relative overflow-hidden">
-        <div className="pointer-events-none absolute -top-32 left-1/2 -z-0 h-72 w-[42rem] -translate-x-1/2 rounded-full bg-primary/15 blur-[120px]" />
-        <div className="relative z-10 mx-auto max-w-6xl px-5 py-20 text-center md:py-28">
-          <div className="mx-auto mb-5 inline-flex items-center gap-2 rounded-full border border-border/60 bg-card px-3 py-1 text-xs text-muted-foreground">
-            <Sparkles className="h-3.5 w-3.5 text-primary" />
-            {t("heroBadge")}
-          </div>
-          <h1 className="mx-auto max-w-3xl font-heading text-4xl font-bold leading-tight tracking-tight md:text-6xl">
-            {t("heroTitlePre")}
-            <span className="text-primary">{t("heroTitleHighlight")}</span>
-            {t("heroTitlePost")}
+      {/* ------------------------------------------------------- hero */}
+      <section className="mx-auto grid max-w-[1080px] items-center gap-12 px-5 py-20 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+        <div>
+          <span className="inline-flex items-center gap-2 rounded-md border border-border bg-surface px-2.5 py-1 text-[11.5px] text-t2">
+            <span
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ background: "var(--ok)" }}
+              aria-hidden
+            />
+            Checkout roteado para Shopify
+          </span>
+          <h1 className="mt-4 max-w-[15ch] text-[40px] font-semibold leading-[1.08] tracking-[-0.02em] text-ink">
+            Uma vitrine, várias lojas de checkout
           </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-lg text-muted-foreground">
-            {t("heroSubtitle")}
+          <p className="mt-4 max-w-[46ch] text-pretty text-[14px] leading-relaxed text-t2">
+            A vitrine recebe o tráfego do anúncio. A loja de checkout cobra. O xcart leva
+            o carrinho de uma para a outra casando os SKUs — e divide o tráfego entre
+            quantos checkouts você quiser.
           </p>
-          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <div className="mt-7 flex flex-wrap items-center gap-2.5">
             <a
               href={signupUrl}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-base font-medium text-primary-foreground transition hover:opacity-90"
+              className="inline-flex h-9 items-center rounded-md bg-[var(--solid)] px-4 text-[13px] font-semibold text-[var(--on-solid)] transition-colors hover:bg-[var(--solid-hover)]"
             >
-              {t("ctaStartNow")} <ArrowRight className="h-4 w-4" />
+              Começar agora
             </a>
             <a
               href="#precos"
-              className="inline-flex items-center gap-2 rounded-lg border border-border px-6 py-3 text-base font-medium transition hover:bg-muted"
+              className="inline-flex h-9 items-center rounded-md border border-[var(--border-strong)] bg-surface px-4 text-[13px] font-semibold !text-ink transition-colors hover:bg-surface-2"
             >
-              {t("ctaSeePricing")}
+              Ver preços
             </a>
           </div>
-          <p className="mt-4 text-xs text-muted-foreground">
-            {t("heroNote", { credits: PRO_INCLUDED_CREDITS })}
+          <p className="mt-4 text-[12px] text-t3">
+            R$ {PRO_PRICE_BRL.toFixed(0).replace(".", ",")}/mês · rotas e produtos
+            ilimitados · {PRO_INCLUDED_CREDITS} imagens neutralizadas inclusas
+          </p>
+        </div>
+
+        {/* O diagrama é o produto. Vem do design, onde ele explica a operação
+            melhor do que qualquer parágrafo. */}
+        <div className="rounded-lg border border-border bg-surface-2 p-7">
+          <div className="font-mono text-[10px] tracking-[0.12em] text-t3">
+            MODELO DA OPERAÇÃO
+          </div>
+          <div className="mt-5 flex flex-col gap-2.5">
+            <Caixa titulo="Vitrine" texto="Recebe o tráfego do anúncio" />
+            <Fio />
+            <Caixa titulo="XCART" texto="Mapeia, sincroniza e roteia" destaque />
+            <Fio />
+            <Caixa titulo="Lojas de checkout" texto="Onde o pagamento acontece" />
+          </div>
+          <p className="mt-6 text-pretty text-[12.5px] text-t1">
+            As duas lojas nunca aparecem ligadas. O comprador navega numa e paga na
+            outra, sem perceber a troca.
           </p>
         </div>
       </section>
 
-      {/* Features */}
-      <section id="recursos" className="mx-auto max-w-6xl px-5 py-16">
-        <div className="mx-auto max-w-2xl text-center">
-          <h2 className="font-heading text-3xl font-bold tracking-tight">{t("featuresTitle")}</h2>
-          <p className="mt-3 text-muted-foreground">{t("featuresSubtitle")}</p>
-        </div>
-        <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map((f, i) => {
-            const Icon = FEATURE_ICONS[i] ?? ShoppingBag;
-            return (
+      {/* ----------------------------------------------- como funciona */}
+      <section id="como-funciona" className="border-y border-border bg-surface">
+        <div className="mx-auto max-w-[1080px] px-5 py-16">
+          <h2 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">
+            Como funciona
+          </h2>
+          <p className="mt-1.5 text-[13px] text-t2">Quatro passos até a rota no ar.</p>
+          <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {ETAPAS.map((etapa) => (
               <div
-                key={f.title}
-                className="rounded-2xl border border-border/60 bg-card p-6 transition hover:border-primary/40"
+                key={etapa.n}
+                className="rounded-lg border border-border bg-surface-2 p-5"
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <Icon className="h-5 w-5" />
+                <div className="font-mono text-[11px] text-t4">{etapa.n}</div>
+                <div className="mt-2 text-[13.5px] font-semibold text-ink">
+                  {etapa.titulo}
                 </div>
-                <h3 className="mt-4 font-semibold">{f.title}</h3>
-                <p className="mt-2 text-sm text-muted-foreground">{f.desc}</p>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* Como funciona */}
-      <section id="como-funciona" className="border-y border-border/40 bg-muted/30">
-        <div className="mx-auto max-w-6xl px-5 py-16">
-          <div className="mx-auto max-w-2xl text-center">
-            <h2 className="font-heading text-3xl font-bold tracking-tight">{t("howTitle")}</h2>
-            <p className="mt-3 text-muted-foreground">{t("howSubtitle")}</p>
-          </div>
-          <div className="mt-12 grid gap-6 md:grid-cols-4">
-            {steps.map((s, i) => (
-              <div key={s.title} className="relative">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
-                  {i + 1}
-                </div>
-                <h3 className="mt-4 font-semibold">{s.title}</h3>
-                <p className="mt-2 text-sm text-muted-foreground">{s.desc}</p>
+                <p className="mt-1.5 text-pretty text-[12.5px] leading-relaxed text-t2">
+                  {etapa.texto}
+                </p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Preços */}
-      <section id="precos" className="mx-auto max-w-6xl px-5 py-20">
-        <div className="mx-auto max-w-2xl text-center">
-          <h2 className="font-heading text-3xl font-bold tracking-tight">{t("pricingTitle")}</h2>
-          <p className="mt-3 text-muted-foreground">{t("pricingSubtitle")}</p>
+      {/* --------------------------------------------------- recursos */}
+      <section id="recursos" className="mx-auto max-w-[1080px] px-5 py-16">
+        <h2 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">
+          O que o xcart resolve
+        </h2>
+        <p className="mt-1.5 text-[13px] text-t2">
+          O trabalho que separa duas lojas Shopify de uma operação que cobra.
+        </p>
+        <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {RECURSOS.map((r) => (
+            <div key={r.titulo} className="rounded-lg border border-border bg-surface p-5">
+              <div className="text-[13.5px] font-semibold text-ink">{r.titulo}</div>
+              <p className="mt-1.5 text-pretty text-[12.5px] leading-relaxed text-t2">
+                {r.texto}
+              </p>
+            </div>
+          ))}
         </div>
+      </section>
 
-        <div className="mx-auto mt-12 grid max-w-4xl gap-6 md:grid-cols-[1.2fr_1fr]">
-          {/* Plano Pro */}
-          <div className="relative rounded-3xl border-2 border-primary bg-card p-8">
-            <div className="absolute -top-3 left-8 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
-              {t("popular")}
-            </div>
-            <h3 className="text-lg font-semibold">Pro</h3>
-            <div className="mt-3 flex items-end gap-1">
-              <span className="text-5xl font-bold">R$ {PRO_PRICE_BRL}</span>
-              <span className="mb-1.5 text-muted-foreground">{t("perMonth")}</span>
-            </div>
-            <ul className="mt-6 space-y-3 text-sm">
-              {proFeatures.map((item) => (
-                <li key={item} className="flex items-start gap-2.5">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-            <a
-              href={signupUrl}
-              className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 font-medium text-primary-foreground transition hover:opacity-90"
-            >
-              {t("subscribePro")} <ArrowRight className="h-4 w-4" />
-            </a>
-          </div>
+      {/* ----------------------------------------------------- preços */}
+      <section id="precos" className="border-y border-border bg-surface">
+        <div className="mx-auto max-w-[1080px] px-5 py-16">
+          <h2 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">
+            Preço simples
+          </h2>
+          <p className="mt-1.5 text-[13px] text-t2">
+            Um plano com tudo liberado. Pague a mais só por imagem neutralizada.
+          </p>
 
-          {/* Recargas de crédito */}
-          <div className="rounded-3xl border border-border/60 bg-card p-8">
-            <div className="flex items-center gap-2">
-              <Globe2 className="h-5 w-5 text-primary" />
-              <h3 className="text-lg font-semibold">{t("creditsExtra")}</h3>
-            </div>
-            <p className="mt-3 text-sm text-muted-foreground">{t("creditsExtraDesc")}</p>
-            <ul className="mt-6 space-y-3">
-              {CREDIT_PACKS.map((pack) => (
-                <li
-                  key={pack.id}
-                  className="flex items-center justify-between rounded-xl border border-border/50 px-4 py-3 text-sm"
+          <div className="mt-8 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="rounded-lg border border-[var(--border-strong)] bg-surface-2 p-6">
+              <div className="flex items-baseline gap-2">
+                <span className="text-[13px] font-semibold text-ink">Pro</span>
+                <span
+                  className="rounded px-[7px] py-0.5 text-[11px] font-medium"
+                  style={{ background: "var(--ok-bg)", color: "var(--ok)" }}
                 >
-                  <span className="font-medium">{pack.label}</span>
-                  <span className="text-muted-foreground">
-                    R$ {(pack.amountCents / 100).toFixed(0)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-4 text-xs text-muted-foreground">{t("buyInApp")}</p>
+                  tudo liberado
+                </span>
+              </div>
+              <div className="mt-3 flex items-baseline gap-1.5">
+                <span className="text-[34px] font-semibold tracking-[-0.02em] tabular-nums text-ink">
+                  R$ {PRO_PRICE_BRL.toFixed(0)}
+                </span>
+                <span className="text-[13px] text-t3">/mês</span>
+              </div>
+              <ul className="mt-5 flex flex-col gap-2">
+                {[
+                  "Vitrines e lojas de checkout ilimitadas",
+                  "Rodízio de tráfego entre checkouts",
+                  "Importação de Shopify, WooCommerce, Shoplazza e AliExpress",
+                  "Neutralização de texto ilimitada",
+                  `${PRO_INCLUDED_CREDITS} imagens neutralizadas por mês`,
+                  "Conserto automático da rota de hora em hora",
+                  "Servidor MCP para usar com o Claude",
+                ].map((item) => (
+                  <li key={item} className="flex gap-2.5 text-[12.5px] text-t1">
+                    <span
+                      className="mt-[7px] h-1 w-1 shrink-0 rounded-full"
+                      style={{ background: "var(--ok)" }}
+                      aria-hidden
+                    />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+              <a
+                href={signupUrl}
+                className="mt-6 inline-flex h-9 w-full items-center justify-center rounded-md bg-[var(--solid)] px-4 text-[13px] font-semibold text-[var(--on-solid)] transition-colors hover:bg-[var(--solid-hover)]"
+              >
+                Assinar Pro
+              </a>
+            </div>
+
+            <div className="rounded-lg border border-border bg-surface p-6">
+              <div className="text-[13px] font-semibold text-ink">Créditos extras</div>
+              <p className="mt-1.5 max-w-[42ch] text-pretty text-[12.5px] leading-relaxed text-t2">
+                1 crédito = 1 imagem neutralizada com IA. Recarregue quando precisar, sem
+                mudar de plano. Texto sem marca não consome crédito.
+              </p>
+              <div className="mt-5 overflow-hidden rounded-lg border border-border">
+                {CREDIT_PACKS.map((pack) => (
+                  <div
+                    key={pack.id}
+                    className="flex items-center justify-between border-b border-[var(--border-subtle)] bg-surface-2 px-4 py-3 last:border-b-0"
+                  >
+                    <span className="text-[12.5px] text-t1">{pack.label}</span>
+                    <span className="font-mono text-[12.5px] font-medium tabular-nums text-ink">
+                      R$ {(pack.amountCents / 100).toFixed(0)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-4 text-[11.5px] text-t3">
+                Compre dentro do app, na aba de assinatura.
+              </p>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* CTA final */}
-      <section className="border-t border-border/40">
-        <div className="mx-auto max-w-3xl px-5 py-20 text-center">
-          <h2 className="font-heading text-3xl font-bold tracking-tight">{t("finalTitle")}</h2>
-          <p className="mt-3 text-muted-foreground">{t("finalSubtitle")}</p>
-          <a
-            href={signupUrl}
-            className="mt-8 inline-flex items-center gap-2 rounded-lg bg-primary px-7 py-3 text-base font-medium text-primary-foreground transition hover:opacity-90"
-          >
-            {t("ctaStartNow")} <ArrowRight className="h-4 w-4" />
-          </a>
-        </div>
+      {/* -------------------------------------------------- cta final */}
+      <section className="mx-auto max-w-[1080px] px-5 py-20 text-center">
+        <h2 className="text-[26px] font-semibold tracking-[-0.02em] text-ink">
+          Sua vitrine já tem tráfego. Falta quem cobra.
+        </h2>
+        <p className="mx-auto mt-3 max-w-[52ch] text-pretty text-[13px] text-t2">
+          Conecte as duas lojas, ligue por SKU e coloque a rota no ar. Se um checkout
+          cair, o tráfego vai para o próximo sem você tocar no anúncio.
+        </p>
+        <a
+          href={signupUrl}
+          className="mt-7 inline-flex h-9 items-center rounded-md bg-[var(--solid)] px-5 text-[13px] font-semibold text-[var(--on-solid)] transition-colors hover:bg-[var(--solid-hover)]"
+        >
+          Criar conta
+        </a>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-border/40">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-5 py-8 text-sm text-muted-foreground sm:flex-row">
-          <img src="/logo.png" alt="xcart" className="h-6 w-auto" />
+      {/* ------------------------------------------------------ rodapé */}
+      <footer className="border-t border-border bg-surface">
+        <div className="mx-auto flex max-w-[1080px] flex-col items-center justify-between gap-4 px-5 py-8 text-[12px] text-t3 sm:flex-row">
+          <span className="flex items-center gap-2">
+            <span
+              className="h-4 w-4 rounded-[4px]"
+              style={{ background: "var(--brand)" }}
+              aria-hidden
+            />
+            <span className="font-bold tracking-[0.06em] text-t1">XCART</span>
+          </span>
           <div className="flex items-center gap-5">
-            <Link href="/privacy" className="hover:text-foreground">{t("privacy")}</Link>
-            <Link href="/terms" className="hover:text-foreground">{t("terms")}</Link>
-            <a href={loginUrl} className="hover:text-foreground">{t("signIn")}</a>
+            <Link href="/privacy" className="text-t3 transition-colors hover:text-ink">
+              Privacidade
+            </Link>
+            <Link href="/terms" className="text-t3 transition-colors hover:text-ink">
+              Termos
+            </Link>
+            <a href={loginUrl} className="text-t3 transition-colors hover:text-ink">
+              Entrar
+            </a>
           </div>
           <p>© {new Date().getFullYear()} xcart</p>
         </div>
