@@ -8,11 +8,16 @@
  *
  * Agora a base e o preco publico da referencia, casado por SKU:
  *
- *   preco = min(TETO, arredonda_990(referencia * (1 - DESCONTO)))
+ *   preco = clamp(arredonda_990(referencia * (1 - DESCONTO)), PISO, TETO)
  *
- * Sem piso de proposito. O catalogo tem camiseta e kit de limpeza junto com
- * tenis; um piso alto encareceria justamente os itens baratos, que e onde a
- * diferenca de preco mais aparece para o comprador.
+ * O PISO nao e detalhe. Sem ele, tenis que a referencia vende a 14.990 saem a
+ * 12.990 CLP -- cerca de R$ 74 -- e ticket nesse nivel nao paga a operacao.
+ *
+ * Eu ja tirei esse piso uma vez, argumentando que o catalogo tinha camiseta e
+ * kit de limpeza junto com tenis. Estava errado: aquilo e o catalogo da
+ * REFERENCIA. A vitrine daqui e 100% Zapatillas, entao nao existe item barato
+ * legitimo para proteger -- so tenis vendidos barato demais. Verifique o
+ * product_type da loja que voce esta mexendo, nao o da que voce esta olhando.
  *
  * SKU sem par na referencia cai na media da categoria (marca + tipo), tirada
  * das variantes da vitrine que JA foram precificadas pela referencia. Sao
@@ -32,6 +37,7 @@ const REFERENCIA = "www.blockstore.cl";
 /** A primeira e a vitrine: e dela que sai a tabela de precos das duas. */
 const LOJAS = ["q2mdgs-ag.myshopify.com", "5sx1nu-sx.myshopify.com"];
 const DESCONTO = 0.15;
+const PISO = 39990;
 const TETO = 79990;
 
 const APLICAR = process.argv.includes("--aplicar");
@@ -165,7 +171,7 @@ async function main() {
   for (const v of varsVitrine) {
     const base = v.sku ? referencia.get(v.sku) : undefined;
     if (!v.sku || !base) continue;
-    const valor = Math.min(TETO, noventa(base * (1 - DESCONTO)));
+    const valor = Math.min(TETO, Math.max(PISO, noventa(base * (1 - DESCONTO))));
     preco.set(v.sku, valor);
     const chave = `${v.vendor}|${v.productType}`;
     const lista = porCategoria.get(chave) || [];
