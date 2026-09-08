@@ -14,7 +14,17 @@
  * International -- a Shopify recusa o mesmo pais em duas zonas do mesmo
  * perfil, entao as duas coisas tem que ir na mesma chamada.
  *
- * Uso:  npx tsx scripts/consertar-frete-culture-kings.ts [--aplicar]
+ * A loja de CHECKOUT tinha o problema irmao: so uma zona "Domestic" com os
+ * EUA, taxas em numero de dolar (8 / 0 / 15) e a Australia FORA de qualquer
+ * zona. Um comprador australiano roteado para la nao conseguiria fechar de
+ * jeito nenhum -- e roteamento para um checkout que trava e pior do que nao
+ * rotear.
+ *
+ * As duas lojas recebem a MESMA regra de propósito: o comprador ve a promessa
+ * na vitrine e paga no checkout. Frete diferente entre as duas e uma surpresa
+ * na hora errada.
+ *
+ * Uso:  npx tsx scripts/consertar-frete-culture-kings.ts <dominio> [--aplicar]
  */
 import { config } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
@@ -22,8 +32,12 @@ import { shopifyGraphQL } from "../src/lib/shopify/client";
 
 config({ path: ".env.local" });
 
-const VITRINE = "vvq0qq-ih.myshopify.com";
 const APLICAR = process.argv.includes("--aplicar");
+const DOMINIO = process.argv.slice(2).find((a) => !a.startsWith("--"));
+if (!DOMINIO) {
+  console.error("informe o dominio da loja. ex: npx tsx scripts/consertar-frete-culture-kings.ts vvq0qq-ih.myshopify.com --aplicar");
+  process.exit(1);
+}
 
 /** Frete gratis a partir daqui. A mediana do catalogo e A$180. */
 const GRATIS_ACIMA = 150;
@@ -33,7 +47,7 @@ const TAXA_PADRAO = "9.95";
   const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
   const { data: loja } = await admin
     .from("stores").select("shop_domain, client_id, client_secret, access_token")
-    .eq("shop_domain", VITRINE).single();
+    .eq("shop_domain", DOMINIO).single();
   const creds = {
     shopDomain: loja!.shop_domain, clientId: loja!.client_id,
     clientSecret: loja!.client_secret, accessToken: loja!.access_token,
@@ -48,12 +62,12 @@ const TAXA_PADRAO = "9.95";
         } } } } }
   }`);
 
+  console.log("loja:", DOMINIO);
   const perfil = d.deliveryProfiles.nodes.find((p: { default: boolean }) => p.default);
   if (!perfil) throw new Error("sem perfil padrao");
   const grupo = perfil.profileLocationGroups[0];
   const zonas = grupo.locationGroupZones.nodes;
 
-  const intl = zonas.find((z: { zone: { name: string } }) => z.zone.name === "International");
   const jaTemAU = zonas.find((z: { zone: { countries: { code: { countryCode: string } }[] } }) =>
     z.zone.countries.some((c) => c.code.countryCode === "AU")
   );
@@ -67,7 +81,10 @@ const TAXA_PADRAO = "9.95";
   });
 
   if (!jaTemAU) {
-    console.log("\nAU nao esta em zona nenhuma.");
+    console.log("\nAU nao esta em zona nenhuma -- ninguem na Australia consegue fechar.");
+  } else if (jaTemAU.zone.name === "Australia") {
+    console.log("\nAU ja tem zona propria. Nada a fazer.");
+    return;
   } else {
     console.log(`\nAU esta hoje na zona "${jaTemAU.zone.name}".`);
   }
@@ -83,8 +100,9 @@ const TAXA_PADRAO = "9.95";
 
   // A AU sai da International na MESMA chamada em que entra na zona nova:
   // a Shopify recusa o mesmo pais em duas zonas do mesmo perfil.
-  const paisesIntlSemAU = intl
-    ? intl.zone.countries
+  const origem = jaTemAU && jaTemAU.zone.name !== "Australia" ? jaTemAU : null;
+  const paisesSemAU = origem
+    ? origem.zone.countries
         .filter((c: { code: { countryCode: string } }) => c.code.countryCode !== "AU")
         // includeAllProvinces e obrigatorio: sem ele a Shopify recusa paises
         // com estado/emirado ("United Arab Emirates must have at least one
@@ -101,13 +119,13 @@ const TAXA_PADRAO = "9.95";
       locationGroupsToUpdate: [
         {
           id: grupo.locationGroup.id,
-          ...(intl
+          ...(origem
             ? {
                 zonesToUpdate: [
                   {
-                    id: intl.zone.id,
-                    name: "Rest of world",
-                    countries: paisesIntlSemAU,
+                    id: origem.zone.id,
+                    name: origem.zone.name === "International" ? "Rest of world" : origem.zone.name,
+                    countries: paisesSemAU,
                   },
                 ],
               }
@@ -159,5 +177,5 @@ const TAXA_PADRAO = "9.95";
     erros.forEach((e: { field: string[]; message: string }) => console.log("   ", e.field?.join("."), e.message));
     return;
   }
-  console.log("\nzona Australia criada e AU removida da International.");
+  console.log(origem ? `\nzona Australia criada e AU removida de "${origem.zone.name}".` : "\nzona Australia criada.");
 })();
