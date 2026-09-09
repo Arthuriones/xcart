@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { safeFetch, UnsafeUrlError } from "@/lib/net/safe-url";
+import { comTempoLimite, TIMEOUT_IMAGEM_MS } from "@/lib/ai/limites";
 import { GoogleGenAI } from "@google/genai";
 import sharp from "sharp";
 import { createClient } from "@/lib/supabase/server";
@@ -12,7 +13,8 @@ let aiCache: GoogleGenAI | null = null;
 function clienteIA() {
   if (!aiCache) {
     const chave = process.env.GEMINI_API_KEY;
-    if (!chave) throw new Error("GEMINI_API_KEY ausente: nao da para gerar imagem.");
+    if (!chave)
+      throw new Error("GEMINI_API_KEY ausente: nao da para gerar imagem.");
     aiCache = new GoogleGenAI({ apiKey: chave });
   }
   return aiCache;
@@ -20,7 +22,12 @@ function clienteIA() {
 
 async function toJpegBase64(buffer: Buffer, maxSize: number = 1200) {
   const optimized = await sharp(buffer)
-    .resize({ width: maxSize, height: maxSize, fit: "inside", withoutEnlargement: true })
+    .resize({
+      width: maxSize,
+      height: maxSize,
+      fit: "inside",
+      withoutEnlargement: true,
+    })
     .jpeg({ quality: 85 })
     .toBuffer();
   return optimized.toString("base64");
@@ -29,7 +36,7 @@ async function toJpegBase64(buffer: Buffer, maxSize: number = 1200) {
 async function loadStoreReferenceImages(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
-  storeId: string
+  storeId: string,
 ): Promise<string[]> {
   try {
     const { data: assets } = await supabase
@@ -91,7 +98,7 @@ export async function POST(request: NextRequest) {
     if (!imageUrl || !productTitle) {
       return NextResponse.json(
         { error: "imageUrl e productTitle obrigatórios" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -136,7 +143,10 @@ export async function POST(request: NextRequest) {
       throw e;
     }
     if (!imgRes.ok) {
-      return NextResponse.json({ error: "Erro ao baixar imagem original" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Erro ao baixar imagem original" },
+        { status: 400 },
+      );
     }
     const originalBuffer = Buffer.from(await imgRes.arrayBuffer());
     const originalBase64 = await toJpegBase64(originalBuffer);
@@ -165,8 +175,7 @@ REQUIREMENTS:
 Generate the clean product image.`;
 
     const parts: Array<
-      | { text: string }
-      | { inlineData: { mimeType: string; data: string } }
+      { text: string } | { inlineData: { mimeType: string; data: string } }
     > = [
       { text: "Original product image to recreate:" },
       {
@@ -191,39 +200,50 @@ Generate the clean product image.`;
 
     parts.push({ text: prompt });
 
-    const response = await clienteIA().models.generateContent({
-      model: "gemini-2.5-flash-image",
-      contents: [
-        {
-          role: "user",
-          parts,
+    // Prazo: sem ele uma geracao pendurada segura a funcao serverless ate o
+    // maxDuration e o usuario nao recebe nem erro.
+    const response = await comTempoLimite(
+      clienteIA().models.generateContent({
+        model: "gemini-2.5-flash-image",
+        contents: [
+          {
+            role: "user",
+            parts,
+          },
+        ],
+        config: {
+          responseModalities: ["IMAGE", "TEXT"],
         },
-      ],
-      config: {
-        responseModalities: ["IMAGE", "TEXT"],
-      },
-    });
+      }),
+      TIMEOUT_IMAGEM_MS,
+      "geracao de imagem",
+    );
 
     // Extrair imagem gerada da resposta
     const candidate = response.candidates?.[0];
     if (!candidate?.content?.parts) {
       return NextResponse.json(
         { error: "IA não retornou imagem. Tente novamente." },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
-    const imagePart = (candidate.content.parts as Array<{
-      inlineData?: { data?: string };
-    }>).find((part) => part.inlineData);
+    const imagePart = (
+      candidate.content.parts as Array<{
+        inlineData?: { data?: string };
+      }>
+    ).find((part) => part.inlineData);
     if (!imagePart?.inlineData?.data) {
       return NextResponse.json(
         { error: "IA não gerou imagem. Tente novamente." },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
-    const generatedBuffer = Buffer.from(imagePart.inlineData.data as string, "base64");
+    const generatedBuffer = Buffer.from(
+      imagePart.inlineData.data as string,
+      "base64",
+    );
 
     // Aplicar logo da loja se disponível
     let finalBuffer: Buffer;
@@ -233,7 +253,10 @@ Generate the clean product image.`;
       const height = metadata.height || 800;
 
       const logoWidth = Math.round(width * 0.18);
-      const resizedLogo = await sharp(logoBuffer).resize(logoWidth).png().toBuffer();
+      const resizedLogo = await sharp(logoBuffer)
+        .resize(logoWidth)
+        .png()
+        .toBuffer();
       const logoMeta = await sharp(resizedLogo).metadata();
       const logoH = logoMeta.height || 40;
       const padding = Math.round(width * 0.03);
@@ -265,7 +288,7 @@ Generate the clean product image.`;
       console.error("[image/generate] Upload error:", uploadError);
       return NextResponse.json(
         { error: "Erro ao salvar imagem gerada" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -276,7 +299,8 @@ Generate the clean product image.`;
     return NextResponse.json({ url: urlData.publicUrl });
   } catch (error) {
     console.error("[image/generate] Error:", error);
-    const message = error instanceof Error ? error.message : "Erro ao gerar imagem";
+    const message =
+      error instanceof Error ? error.message : "Erro ao gerar imagem";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

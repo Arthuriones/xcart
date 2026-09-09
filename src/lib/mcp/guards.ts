@@ -60,3 +60,46 @@ export function assertReadOnlyQuery(query: string) {
     );
   }
 }
+
+// ============================================================================
+// Tetos da ferramenta de GraphQL cru
+// ============================================================================
+
+/** Tamanho maximo da query. Query legitima de leitura nao chega perto. */
+export const MAX_QUERY_GRAPHQL = 8_000;
+
+/** Profundidade maxima de aninhamento. */
+const MAX_PROFUNDIDADE = 12;
+
+/**
+ * Recusa query com aninhamento absurdo.
+ *
+ * `assertReadOnlyQuery` cuida de escrita, mas leitura tambem custa: a Shopify
+ * cobra pontos de rate limit por complexidade, e o resultado volta como token
+ * para o modelo. Uma query de 30 niveis de `variants { product { variants ... } }`
+ * esgota o limite da loja INTEIRA -- inclusive para o app, que fica sem
+ * conseguir rotear checkout.
+ *
+ * Conta chave por chave em vez de parsear GraphQL de verdade: dependencia nova
+ * so para medir profundidade nao se paga, e a contagem de `{`/`}` erra apenas
+ * quando ha chave dentro de string, caso em que erra para o lado seguro.
+ */
+export function assertProfundidadeOk(query: string) {
+  let nivel = 0;
+  let maximo = 0;
+  for (const c of query) {
+    if (c === "{") {
+      nivel += 1;
+      if (nivel > maximo) maximo = nivel;
+    } else if (c === "}") {
+      nivel -= 1;
+    }
+  }
+  if (maximo > MAX_PROFUNDIDADE) {
+    throw new Error(
+      `Query aninhada demais (${maximo} niveis, teto ${MAX_PROFUNDIDADE}). ` +
+        `Aninhamento fundo esgota o limite de API da loja e trava o roteamento de checkout. ` +
+        `Quebre em consultas menores.`
+    );
+  }
+}

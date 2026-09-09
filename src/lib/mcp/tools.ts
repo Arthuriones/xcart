@@ -8,7 +8,14 @@ import {
   getProductById,
 } from "@/lib/shopify/client";
 import { getStore, listStores, credsOf, type McpIdentity } from "@/lib/mcp/auth";
-import { checkContent, guardError, assertReadOnlyQuery } from "@/lib/mcp/guards";
+import {
+  checkContent,
+  guardError,
+  assertReadOnlyQuery,
+  assertProfundidadeOk,
+  MAX_QUERY_GRAPHQL,
+} from "@/lib/mcp/guards";
+import { MAX_HTML, sanitizarHtmlDaIa } from "@/lib/ai/sanitize-html";
 
 
 // Shape minimo do produto devolvido pela Admin GraphQL — so os campos lidos
@@ -153,13 +160,17 @@ export const TOOLS: Tool[] = [
     schema: z.object({
       storeId,
       productId: z.string(),
-      title: z.string().optional(),
-      descriptionHtml: z.string().optional(),
-      seoTitle: z.string().optional(),
-      seoDescription: z.string().optional(),
-      vendor: z.string().optional(),
-      productType: z.string().optional(),
-      tags: z.array(z.string()).optional(),
+      // Todo campo tem teto. Sem isso o modelo (ou o conteudo que ele leu)
+      // podia mandar megabytes num titulo -- custo de token na volta, payload
+      // gigante para a Shopify, e descricao que nenhuma pagina renderiza.
+      // Os numeros seguem os limites reais da Shopify.
+      title: z.string().max(255).optional(),
+      descriptionHtml: z.string().max(MAX_HTML).optional(),
+      seoTitle: z.string().max(70).optional(),
+      seoDescription: z.string().max(320).optional(),
+      vendor: z.string().max(255).optional(),
+      productType: z.string().max(255).optional(),
+      tags: z.array(z.string().max(255)).max(250).optional(),
       status: z.enum(["ACTIVE", "DRAFT", "ARCHIVED"]).optional(),
     }),
     handler: async (a, id) => {
@@ -175,6 +186,16 @@ export const TOOLS: Tool[] = [
       if (hits.length) throw new Error(guardError(hits));
 
       const store = await resolve(id, a.storeId as string);
+
+      // O HTML vem do MODELO e vai para uma pagina publica da loja. Passa por
+      // allowlist como qualquer HTML de IA: <script>, on*, javascript: e
+      // iframe nao chegam na vitrine. Ver src/lib/ai/sanitize-html.ts.
+      let avisoHtml: string[] = [];
+      if (a.descriptionHtml !== undefined) {
+        const limpeza = sanitizarHtmlDaIa(a.descriptionHtml);
+        avisoHtml = limpeza.removidos;
+        a.descriptionHtml = limpeza.html;
+      }
 
       // Monta o input so com o que foi informado. updateShopifyProduct() do
       // client exige title/descriptionHtml/tags sempre — usar ele aqui
@@ -217,6 +238,14 @@ export const TOOLS: Tool[] = [
       return {
         ok: true,
         produto: res,
+        ...(avisoHtml.length > 0
+          ? {
+              html_sanitizado:
+                `Removi do HTML: ${avisoHtml.slice(0, 8).join(", ")}. ` +
+                `Descricao de produto aceita so formatacao -- script, estilo, iframe, ` +
+                `formulario e atributo de evento nao vao para a loja.`,
+            }
+          : {}),
         proximo_passo:
           "A Shopify serve a pagina por CDN. A alteracao leva ate ~1 minuto para aparecer. " +
           "Use verify_page para confirmar no HTML servido antes de dizer que terminou.",
@@ -287,11 +316,15 @@ export const TOOLS: Tool[] = [
       "e a principal causa de tema e produto quebrados.",
     schema: z.object({
       storeId,
-      query: z.string(),
+      query: z.string().max(MAX_QUERY_GRAPHQL),
       variables: z.record(z.string(), z.unknown()).optional(),
     }),
     handler: async (a, id) => {
       assertReadOnlyQuery(a.query as string);
+      // Query de leitura ainda custa: aninhamento fundo faz a Shopify cobrar
+      // muito ponto de rate limit e devolve payload enorme, que volta como
+      // token para o modelo. Os dois sao custo do usuario.
+      assertProfundidadeOk(a.query as string);
       const store = await resolve(id, a.storeId as string);
       return shopifyGraphQL(
         credsOf(store),

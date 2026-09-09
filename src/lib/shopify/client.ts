@@ -1,5 +1,6 @@
 import { normalizeShopDomain } from "@/lib/shopify/domain";
 import { ShopDomainError, assertShopDomainPublico } from "@/lib/shopify/safe-shop";
+import { htmlSeguroDaIa } from "@/lib/ai/sanitize-html";
 
 const SHOPIFY_API_VERSION = "2024-10";
 
@@ -717,7 +718,10 @@ export async function syncProductCollections(
         // Antes so title+handle eram enviados: descricao, imagem e ordenacao da
         // colecao de origem eram perdidas. Sem sortOrder a Shopify assume
         // BEST_SELLING, que numa loja nova (zero vendas) fica arbitraria.
-        ...(collection.bodyHtml ? { descriptionHtml: collection.bodyHtml } : {}),
+        // bodyHtml vem da colecao do site de origem: HTML de terceiro.
+        ...(collection.bodyHtml
+          ? { descriptionHtml: htmlSeguroDaIa(collection.bodyHtml) }
+          : {}),
         ...(collection.image ? { image: { src: collection.image } } : {}),
         ...(toCollectionSortOrder(collection.sortOrder)
           ? { sortOrder: toCollectionSortOrder(collection.sortOrder) }
@@ -1047,7 +1051,19 @@ export async function createProduct(
 
   const productInput: Record<string, unknown> = {
     title: input.title,
-    descriptionHtml: input.descriptionHtml,
+    // ==================================================================
+    // Ponto unico onde HTML entra num produto da Shopify.
+    //
+    // Duas origens chegam aqui e NENHUMA era limpa:
+    //   1. saida da IA (optimizeProduct / neutralizador);
+    //   2. o proprio descriptionHtml RASPADO do site de origem, que e o
+    //      fallback quando a IA nao roda -- ou seja, HTML de terceiro
+    //      publicado direto, sem modelo nenhum no meio.
+    //
+    // Sanitizar aqui, e nao em cada chamador, e o que garante que nenhum
+    // caminho novo escape. Ver src/lib/ai/sanitize-html.ts.
+    // ==================================================================
+    descriptionHtml: htmlSeguroDaIa(input.descriptionHtml),
     tags: input.tags,
     seo: input.seo,
     status: shouldPublishToStorefront ? "ACTIVE" : "DRAFT",
@@ -2235,7 +2251,8 @@ export async function updateShopifyProduct(
     product: {
       id: input.productId,
       title: input.title,
-      descriptionHtml: input.descriptionHtml,
+      // Mesma trava do create: ver o comentario longo la.
+      descriptionHtml: htmlSeguroDaIa(input.descriptionHtml),
       tags: input.tags,
       seo: input.seo,
       status: nextStatus,

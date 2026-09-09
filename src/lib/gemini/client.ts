@@ -1,5 +1,10 @@
 import { GoogleGenerativeAI, type Part } from "@google/generative-ai";
 import { safeFetch } from "@/lib/net/safe-url";
+import {
+  comTempoLimite,
+  MAX_TOKENS_TEXTO_LONGO,
+  TIMEOUT_TEXTO_MS,
+} from "@/lib/ai/limites";
 import { marketContextBlock } from "@/lib/gemini/market-profile";
 import type {
   AliExpressProduct,
@@ -35,13 +40,29 @@ function genAIClient() {
   return genAICache;
 }
 
+/**
+ * Ponto unico das 6 chamadas deste arquivo -- e por isso o lugar certo para os
+ * tetos.
+ *
+ * Nenhuma delas tinha `maxOutputTokens` nem prazo. Numa importacao de 250
+ * produtos isso multiplica por 250, e o gatilho de uma resposta longa pode vir
+ * do proprio conteudo de origem, que o lojista nao controla. Sem prazo, uma
+ * chamada pendurada segura o slot da funcao serverless e trava a fila atras.
+ */
 const model = {
   generateContent: (
     ...args: Parameters<ReturnType<GoogleGenerativeAI["getGenerativeModel"]>["generateContent"]>
   ) =>
-    genAIClient()
-      .getGenerativeModel({ model: "gemini-2.5-flash" })
-      .generateContent(...args),
+    comTempoLimite(
+      genAIClient()
+        .getGenerativeModel({
+          model: "gemini-2.5-flash",
+          generationConfig: { maxOutputTokens: MAX_TOKENS_TEXTO_LONGO },
+        })
+        .generateContent(...args),
+      TIMEOUT_TEXTO_MS,
+      "geracao de texto"
+    ),
 };
 
 function targetLanguage(context?: StoreContext) {

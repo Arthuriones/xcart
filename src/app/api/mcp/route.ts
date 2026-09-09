@@ -20,6 +20,29 @@ const ok = (id: unknown, result: unknown) =>
 const fail = (id: unknown, code: number, message: string) =>
   Response.json({ jsonrpc: "2.0", id, error: { code, message } });
 
+/**
+ * Teto do que volta para o modelo.
+ *
+ * O resultado da ferramenta vira TOKEN DE ENTRADA na proxima mensagem, e a
+ * conta e do usuario. `shopify_query` sem teto podia devolver 250 produtos com
+ * todos os campos -- centenas de milhares de tokens numa unica chamada, e o
+ * modelo nem usa tudo. Recortar aqui, num ponto so, cobre toda ferramenta
+ * presente e futura.
+ */
+const MAX_RESPOSTA = 120_000;
+
+/** Prazo de qualquer ferramenta. */
+const TIMEOUT_MS = 60_000;
+
+function recortar(texto: string): string {
+  if (texto.length <= MAX_RESPOSTA) return texto;
+  return (
+    texto.slice(0, MAX_RESPOSTA) +
+    `\n\n[...recortado em ${MAX_RESPOSTA} caracteres. Peca menos campos ou pagine ` +
+    `a consulta -- resultado gigante custa token e o restante nao ajuda.]`
+  );
+}
+
 function inputSchemaOf(schema: z.ZodType) {
   try {
     const js = z.toJSONSchema(schema, { io: "input" }) as Json;
@@ -123,16 +146,29 @@ export async function POST(req: Request) {
     }
 
     try {
-      const out = await tool.handler(parsed.data as Json, identity);
+      // Prazo por ferramenta. Sem ele, uma loja lenta (ou uma query pesada)
+      // segura a funcao serverless ate o maxDuration e o cliente MCP fica
+      // pendurado sem saber o que houve.
+      const out = await Promise.race([
+        tool.handler(parsed.data as Json, identity),
+        new Promise<never>((_, rejeita) =>
+          setTimeout(
+            () => rejeita(new Error(`A ferramenta ${nome} passou de ${TIMEOUT_MS / 1000}s.`)),
+            TIMEOUT_MS
+          )
+        ),
+      ]);
       return ok(id, {
-        content: [{ type: "text", text: JSON.stringify(out, null, 2) }],
+        content: [{ type: "text", text: recortar(JSON.stringify(out, null, 2)) }],
       });
     } catch (e) {
       // Erro de ferramenta volta como isError (nao como erro JSON-RPC): assim o
       // modelo le a mensagem e corrige, em vez de a conversa inteira falhar.
       return ok(id, {
         isError: true,
-        content: [{ type: "text", text: e instanceof Error ? e.message : String(e) }],
+        content: [
+          { type: "text", text: recortar(e instanceof Error ? e.message : String(e)) },
+        ],
       });
     }
   }

@@ -79,6 +79,17 @@ describe("nenhum fetch cru fora da lista", () => {
       const linhas = fonte.split("\n");
       linhas.forEach((linha, i) => {
         if (!FETCH_CRU.test(linha)) return;
+        // Comentario nao executa. sanitize-html.ts documenta o payload de XSS
+        // que ele bloqueia, e o payload contem `fetch(` -- o scanner acusava
+        // a propria correcao.
+        const semEspaco = linha.trimStart();
+        if (
+          semEspaco.startsWith("//") ||
+          semEspaco.startsWith("*") ||
+          semEspaco.startsWith("/*")
+        ) {
+          return;
+        }
         // Chamada para a propria API (caminho relativo ou origem do app) nao e
         // destino escolhido pelo usuario.
         if (/["'`]\/api\//.test(linha) || /appUrl|origin\b|NEXT_PUBLIC_APP_URL/.test(linha)) {
