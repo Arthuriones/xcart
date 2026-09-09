@@ -49,7 +49,27 @@ export interface ProductTranslateResult {
   seo: { title: string; description: string };
 }
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+/**
+ * Nasce na primeira chamada, nao no import -- e a chave e lida AGORA.
+ *
+ * Construir com `process.env.GEMINI_API_KEY || ""` no topo do modulo criava um
+ * cliente permanentemente quebrado quando o env ainda nao tinha carregado (num
+ * script, `import` hoista acima do `config({ path: ".env.local" })`). O pior:
+ * ensureGeminiKey() depois passava, porque le o env na hora da chamada, quando
+ * ele ja existe -- a trava dizia "tem chave" e o cliente estava com "".
+ *
+ * Foi por essa fresta que 64 produtos entraram na dark store com o nome da
+ * marca no titulo e no vendor.
+ */
+let aiCache: GoogleGenAI | null = null;
+
+function clienteIA() {
+  if (!aiCache) {
+    ensureGeminiKey();
+    aiCache = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
+  }
+  return aiCache;
+}
 
 const EXTERNAL_MARKETPLACE_TERMS = [
   "aliexpress",
@@ -190,7 +210,7 @@ Responda apenas JSON valido:
 async function neutralizeText(input: ProductNeutralizeInput) {
   const prompt = buildTextCleanupPrompt(input, input.mode || "stock-neutralize");
 
-  const response = await ai.models.generateContent({
+  const response = await clienteIA().models.generateContent({
     model: "gemini-2.5-flash",
     contents: prompt,
   });
@@ -251,7 +271,7 @@ Responda apenas JSON valido:
   "seo": { "title": "...", "description": "..." }
 }`;
 
-  const response = await ai.models.generateContent({
+  const response = await clienteIA().models.generateContent({
     model: "gemini-2.5-flash",
     contents: prompt,
   });
@@ -336,7 +356,7 @@ async function neutralizeImage(
   const originalBuffer = Buffer.from(await imageResponse.arrayBuffer());
   const originalBase64 = await toJpegBase64(originalBuffer);
 
-  const response = await ai.models.generateContent({
+  const response = await clienteIA().models.generateContent({
     model: "gemini-2.5-flash-image",
     contents: [
       {

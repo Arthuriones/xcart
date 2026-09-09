@@ -4,7 +4,18 @@ import sharp from "sharp";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+// Mesma razao de product-neutralizer: a chave e lida na chamada, nao no
+// import, para o cliente nunca nascer com a chave vazia.
+let aiCache: GoogleGenAI | null = null;
+
+function clienteIA() {
+  if (!aiCache) {
+    const chave = process.env.GEMINI_API_KEY;
+    if (!chave) throw new Error("GEMINI_API_KEY ausente: nao da para gerar imagem.");
+    aiCache = new GoogleGenAI({ apiKey: chave });
+  }
+  return aiCache;
+}
 
 async function toJpegBase64(buffer: Buffer, maxSize: number = 1200) {
   const optimized = await sharp(buffer)
@@ -164,7 +175,7 @@ Generate the clean product image.`;
 
     parts.push({ text: prompt });
 
-    const response = await ai.models.generateContent({
+    const response = await clienteIA().models.generateContent({
       model: "gemini-2.5-flash-image",
       contents: [
         {

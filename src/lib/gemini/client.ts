@@ -9,11 +9,39 @@ import type {
   StoreSetup,
 } from "@/types";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+/**
+ * O cliente nasce na PRIMEIRA chamada, nao no import.
+ *
+ * Ler process.env no topo do modulo parece inofensivo porque no Next o env ja
+ * esta carregado antes de qualquer import. Fora dele nao esta: num script de
+ * operacao, `import { healRoute }` hoista acima do `config({ path: ".env.local" })`
+ * e o cliente nascia com a chave vazia -- sem erro, so respondendo mal.
+ *
+ * Foi assim que 64 produtos entraram na dark store com o nome da marca no
+ * titulo E no vendor, que e exatamente o que a neutralizacao existe para
+ * evitar. Adiar a leitura fecha a porta para a familia inteira desse bug.
+ */
+let genAICache: GoogleGenerativeAI | null = null;
 
-const model = genAI.getGenerativeModel({
-  model: "gemini-2.5-flash",
-});
+function genAIClient() {
+  if (!genAICache) {
+    const chave = process.env.GEMINI_API_KEY;
+    // Falhar alto: sem chave, a alternativa e devolver texto nao neutralizado
+    // e mandar produto de marca para a loja que cobra.
+    if (!chave) throw new Error("GEMINI_API_KEY ausente: nao da para chamar a IA.");
+    genAICache = new GoogleGenerativeAI(chave);
+  }
+  return genAICache;
+}
+
+const model = {
+  generateContent: (
+    ...args: Parameters<ReturnType<GoogleGenerativeAI["getGenerativeModel"]>["generateContent"]>
+  ) =>
+    genAIClient()
+      .getGenerativeModel({ model: "gemini-2.5-flash" })
+      .generateContent(...args),
+};
 
 function targetLanguage(context?: StoreContext) {
   return context?.targetLanguage || "pt-BR";
