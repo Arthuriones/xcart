@@ -7,6 +7,7 @@ import {
 } from "@/lib/shopify/client";
 import { normalizarSkus } from "@/lib/shopify/sku-stamp";
 import { createClient } from "@/lib/supabase/server";
+import { lojaDoUsuario } from "@/lib/stores/authorize";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -73,17 +74,6 @@ async function getAllProducts(
   return all;
 }
 
-async function getStoreCredentials(storeId: string, userId: string) {
-  const supabase = await createClient();
-  const { data: store } = await supabase
-    .from("stores")
-    .select("*")
-    .eq("id", storeId)
-    .eq("user_id", userId)
-    .single();
-  return store;
-}
-
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const {
@@ -122,8 +112,8 @@ export async function POST(request: NextRequest) {
   }
 
   const [sourceStore, targetStore] = await Promise.all([
-    getStoreCredentials(sourceStoreId, user.id),
-    getStoreCredentials(targetStoreId, user.id),
+    lojaDoUsuario(sourceStoreId),
+    lojaDoUsuario(targetStoreId),
   ]);
   if (!sourceStore || !targetStore) {
     return NextResponse.json(

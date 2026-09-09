@@ -19,6 +19,7 @@ import {
 import { translateProductVariantOptionsToPortuguese } from "@/lib/products/variant-translation";
 import { AI_COST, logAiUsage } from "@/lib/billing/usage";
 import { createClient } from "@/lib/supabase/server";
+import { lojaDoUsuario } from "@/lib/stores/authorize";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -76,31 +77,6 @@ async function getAuthenticatedUserId() {
   } = await supabase.auth.getUser();
 
   return user?.id || null;
-}
-
-async function getStoreCredentials(storeId: string, userId: string) {
-  const supabase = await createClient();
-  const { data: store, error } = await supabase
-    .from("stores")
-    .select("*")
-    .eq("id", storeId)
-    .eq("user_id", userId)
-    .single();
-
-  if (error) {
-    const { data: fallbackStore } = await supabase
-      .from("stores")
-      .select("*")
-      .eq("id", storeId)
-      .eq("user_id", userId)
-      .single();
-
-    return fallbackStore
-      ? { ...fallbackStore, target_language: "pt-BR" }
-      : null;
-  }
-
-  return store;
 }
 
 function variantSignature(variant: ConnectedVariant) {
@@ -490,8 +466,8 @@ export async function POST(request: NextRequest) {
   }
 
   const [sourceStore, targetStore] = await Promise.all([
-    getStoreCredentials(sourceStoreId, userId),
-    getStoreCredentials(targetStoreId, userId),
+    lojaDoUsuario(sourceStoreId),
+    lojaDoUsuario(targetStoreId),
   ]);
 
   if (!sourceStore || !targetStore) {

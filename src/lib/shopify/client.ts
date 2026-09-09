@@ -1,4 +1,5 @@
 import { normalizeShopDomain } from "@/lib/shopify/domain";
+import { ShopDomainError, assertShopDomainPublico } from "@/lib/shopify/safe-shop";
 
 const SHOPIFY_API_VERSION = "2024-10";
 
@@ -98,15 +99,26 @@ function looksLikeHtml(contentType: string, body: string): boolean {
   );
 }
 
-async function getAccessToken(creds: ShopifyCredentials): Promise<string> {
-  const normalizedShopDomain = normalizeShopDomain(creds.shopDomain);
-  if (!normalizedShopDomain) {
-    throw new ShopifyClientError(
-      "Use o dominio da loja no formato sualoja.myshopify.com.",
-      "INVALID_DOMAIN",
-      400
-    );
+/**
+ * Hostname aprovado para falar com a Admin API desta loja.
+ *
+ * Todas as chamadas passam por aqui: o dominio vem de `stores.shop_domain`,
+ * que o usuario digita, e sem esta trava ele escolhia para qual host o
+ * servidor mandaria o client_secret e o access token. Ver safe-shop.ts.
+ */
+async function hostDaLoja(shopDomain: string): Promise<string> {
+  try {
+    return await assertShopDomainPublico(shopDomain);
+  } catch (e) {
+    if (e instanceof ShopDomainError) {
+      throw new ShopifyClientError(e.message, "INVALID_DOMAIN", 400);
+    }
+    throw e;
   }
+}
+
+async function getAccessToken(creds: ShopifyCredentials): Promise<string> {
+  const normalizedShopDomain = await hostDaLoja(creds.shopDomain);
 
   const cacheKey = `${normalizedShopDomain}:${creds.clientId}`;
   if (creds.accessToken) {
@@ -143,10 +155,9 @@ async function getAccessToken(creds: ShopifyCredentials): Promise<string> {
     const lowerBody = body.toLowerCase();
     const isMyShopifyDomain = /\.myshopify\.com$/i.test(normalizedShopDomain);
 
-    console.log("[shopify/getAccessToken] failed", {
+    console.warn("[shopify/getAccessToken] falhou", {
       status: res.status,
       contentType,
-      bodySnippet: body.slice(0, 300),
       shopDomain: normalizedShopDomain,
       isMyShopifyDomain,
     });
@@ -199,11 +210,20 @@ async function getAccessToken(creds: ShopifyCredentials): Promise<string> {
       );
     }
 
-    const details = sanitizeErrorText(body);
+    // O corpo da resposta NAO volta para o usuario.
+    //
+    // Ele voltava, dentro da mensagem de erro, e /api/shopify/connect repassa
+    // essa mensagem no JSON. Com um shop_domain apontando para dentro da
+    // infra, isso entregava 220 caracteres de qualquer endpoint interno na
+    // tela -- o lado "leitura" de um SSRF. A trava de dominio fecha a ida; nao
+    // devolver o corpo fecha a volta, e uma nao depende da outra.
+    console.error("[shopify/getAccessToken] resposta inesperada", {
+      status: res.status,
+      shopDomain: normalizedShopDomain,
+      bodySnippet: sanitizeErrorText(body),
+    });
     throw new ShopifyClientError(
-      details
-        ? `Falha ao autenticar na Shopify (${res.status}): ${details}`
-        : `Falha ao autenticar na Shopify (status ${res.status}).`,
+      `Falha ao autenticar na Shopify (status ${res.status}).`,
       "REQUEST_FAILED",
       502
     );
@@ -227,15 +247,8 @@ export async function shopifyRestGet<T>(
   creds: ShopifyCredentials,
   path: string
 ): Promise<T> {
+  const normalizedShopDomain = await hostDaLoja(creds.shopDomain);
   const accessToken = await getAccessToken(creds);
-  const normalizedShopDomain = normalizeShopDomain(creds.shopDomain);
-  if (!normalizedShopDomain) {
-    throw new ShopifyClientError(
-      "Use o dominio da loja no formato sualoja.myshopify.com.",
-      "INVALID_DOMAIN",
-      400
-    );
-  }
 
   const res = await fetch(
     `https://${normalizedShopDomain}/admin/api/${SHOPIFY_API_VERSION}/${path}`,
@@ -256,15 +269,8 @@ export async function shopifyGraphQL(
   query: string,
   variables?: Record<string, unknown>
 ) {
+  const normalizedShopDomain = await hostDaLoja(creds.shopDomain);
   const accessToken = await getAccessToken(creds);
-  const normalizedShopDomain = normalizeShopDomain(creds.shopDomain);
-  if (!normalizedShopDomain) {
-    throw new ShopifyClientError(
-      "Use o dominio da loja no formato sualoja.myshopify.com.",
-      "INVALID_DOMAIN",
-      400
-    );
-  }
 
   const url = `https://${normalizedShopDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
 
@@ -2588,4 +2594,46 @@ export async function createPages(
   }
 
   return createdPages;
+}
+
+/**
+ * Garante a inscricao no webhook app/uninstalled.
+ *
+ * Chamado logo depois da troca do code por token, que e o unico momento em que
+ * temos certeza de que o app acabou de ser instalado nesta loja.
+ *
+ * `webhookSubscriptionCreate` e idempotente do lado da Shopify para o par
+ * (topico, endereco): reinstalar nao gera assinatura duplicada, devolve
+ * userError de "ja existe". Por isso o erro nao sobe -- desinscricao pendente
+ * nao pode derrubar uma instalacao que deu certo.
+ */
+export async function ensureUninstallWebhook(
+  creds: ShopifyCredentials,
+  callbackUrl: string
+): Promise<{ ok: boolean; message?: string }> {
+  const mutation = `
+    mutation inscreverUninstall($topic: WebhookSubscriptionTopic!, $sub: WebhookSubscriptionInput!) {
+      webhookSubscriptionCreate(topic: $topic, webhookSubscription: $sub) {
+        webhookSubscription { id }
+        userErrors { field message }
+      }
+    }
+  `;
+
+  try {
+    const data = await shopifyGraphQL(creds, mutation, {
+      topic: "APP_UNINSTALLED",
+      sub: { callbackUrl, format: "JSON" },
+    });
+    const erros = data?.webhookSubscriptionCreate?.userErrors || [];
+    if (erros.length > 0) {
+      const texto = erros.map((e: { message?: string }) => e.message).join("; ");
+      // "already exists" e o caso normal de reinstalacao.
+      const jaExiste = /already|taken|exists/i.test(texto);
+      return { ok: jaExiste, message: texto };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "falha" };
+  }
 }

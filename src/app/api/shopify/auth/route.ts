@@ -1,9 +1,17 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getShopInfo, getThemes } from "@/lib/shopify/client";
+import { ensureUninstallWebhook, getShopInfo, getThemes } from "@/lib/shopify/client";
 import { normalizeShopDomain } from "@/lib/shopify/domain";
 import { SHOPIFY_SCOPES_STRING } from "@/lib/shopify/scopes";
+import {
+  COOKIE_STATE,
+  lerEstado,
+  nonceConfere,
+  novoNonce,
+  opcoesCookie,
+  serializarEstado,
+} from "@/lib/shopify/oauth-state";
 
 // Mesma lista mostrada no tutorial de conexao — ver src/lib/shopify/scopes.ts.
 const SCOPES = SHOPIFY_SCOPES_STRING;
@@ -54,21 +62,36 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get("state");
   const storeIdParam = searchParams.get("store_id");
 
+  // `rawSearch` saia daqui inteiro -- ou seja, `code` e `hmac` do callback
+  // iam para o log da funcao. O `code` e trocavel por access token enquanto
+  // nao for usado, e o `hmac` e material de assinatura. Nenhum dos dois pode
+  // sair do processo. Os booleanos abaixo bastam para depurar o fluxo.
   console.log("[shopify/auth] incoming", {
     hasUser: !!user,
     hasCode: !!code,
     hasShop: !!shop,
     hasState: !!state,
     hasStoreId: !!storeIdParam,
-    rawSearch: request.nextUrl.search,
   });
 
   if (!user) {
-    // Preserva os params para retomar depois do login
+    // Retomar depois do login SEM carregar o code na URL.
+    //
+    // Antes o `next` levava a query inteira: o authorization code ia parar na
+    // barra de endereco, no historico e no Referer da pagina de login. E um
+    // code so vale para quem tambem tem o client_secret, mas ele nao tem por
+    // que passear por ali -- e de qualquer forma o code ja tera expirado
+    // quando o login terminar. Reinicia a instalacao pela loja, que e o
+    // caminho seguro e leva ao mesmo lugar.
     const loginUrl = new URL("/login", request.nextUrl.origin);
+    const normalizado = shop ? normalizeShopDomain(shop) : null;
     loginUrl.searchParams.set(
       "next",
-      `/api/shopify/auth${request.nextUrl.search}`
+      normalizado
+        ? `/api/shopify/auth?shop=${encodeURIComponent(normalizado)}`
+        : storeIdParam
+          ? `/api/shopify/auth?store_id=${encodeURIComponent(storeIdParam)}`
+          : "/stores"
     );
     return NextResponse.redirect(loginUrl);
   }
@@ -114,14 +137,25 @@ export async function GET(request: NextRequest) {
     }
 
     const redirectUri = `${request.nextUrl.origin}/api/shopify/auth`;
+
+    // O state e um nonce aleatorio, nao o id da loja. O par nonce+storeId vai
+    // num cookie HttpOnly; o callback so aceita o que casar com ele. Ver
+    // src/lib/shopify/oauth-state.ts.
+    const nonce = novoNonce();
     const authUrl =
       `https://${store.shop_domain}/admin/oauth/authorize?` +
       `client_id=${encodeURIComponent(store.client_id)}` +
       `&scope=${encodeURIComponent(SCOPES)}` +
       `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-      `&state=${encodeURIComponent(store.id)}`;
+      `&state=${encodeURIComponent(nonce)}`;
 
-    return NextResponse.redirect(authUrl);
+    const resposta = NextResponse.redirect(authUrl);
+    resposta.cookies.set(
+      COOKIE_STATE,
+      serializarEstado({ nonce, storeId: store.id }),
+      opcoesCookie(request.nextUrl.protocol === "https:")
+    );
+    return resposta;
   }
 
   // Step 2: Callback do Shopify — vem com ?code=X&shop=Y&state=Z
@@ -133,10 +167,25 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // O storeId sai do COOKIE, nunca da query.
+    //
+    // Aceitar `state` como identificador de loja era o que tornava o
+    // parametro inutil: qualquer valor conhecido servia. Agora o cookie e a
+    // unica fonte do id, e o `state` da query so serve para provar que quem
+    // voltou e o mesmo navegador que comecou.
+    const estado = lerEstado(request.cookies.get(COOKIE_STATE)?.value);
+    if (!estado || !nonceConfere(state, estado.nonce)) {
+      const recusa = NextResponse.redirect(
+        storesUrl(request, "error=Sessao+de+instalacao+invalida+ou+expirada")
+      );
+      recusa.cookies.delete(COOKIE_STATE);
+      return recusa;
+    }
+
     const { data: store, error } = await supabase
       .from("stores")
       .select("id, shop_domain, client_id, client_secret")
-      .eq("id", state)
+      .eq("id", estado.storeId)
       .eq("user_id", user.id)
       .single();
 
@@ -233,6 +282,22 @@ export async function GET(request: NextRequest) {
     };
 
     try {
+      // O webhook de desinstalacao e inscrito AQUI, que e o unico ponto em que
+      // sabemos que o app acabou de entrar nesta loja. Sem ele, remover o app
+      // nao avisa ninguem e o auto-conserto fica batendo em token morto.
+      const webhook = await ensureUninstallWebhook(
+        creds,
+        `${request.nextUrl.origin}/api/shopify/webhooks`
+      );
+      if (!webhook.ok) {
+        // Nao derruba a instalacao: a loja funciona sem o webhook, so perde o
+        // aviso de saida. Fica no log para dar para investigar depois.
+        console.warn("[shopify/auth] webhook app/uninstalled nao inscrito", {
+          shopDomain: store.shop_domain,
+          motivo: webhook.message,
+        });
+      }
+
       const [shopData, themesData] = await Promise.all([
         getShopInfo(creds),
         getThemes(creds),
@@ -250,14 +315,18 @@ export async function GET(request: NextRequest) {
         })
         .eq("id", store.id);
 
-      return NextResponse.redirect(
-        storesUrl(request, "installed=1")
-      );
+      // Uso unico: o cookie morre aqui, entao repetir o callback com o mesmo
+      // state nao passa de novo.
+      const pronto = NextResponse.redirect(storesUrl(request, "installed=1"));
+      pronto.cookies.delete(COOKIE_STATE);
+      return pronto;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro pos-instalacao";
-      return NextResponse.redirect(
+      const falhou = NextResponse.redirect(
         storesUrl(request, `error=${encodeURIComponent(message.slice(0, 200))}`)
       );
+      falhou.cookies.delete(COOKIE_STATE);
+      return falhou;
     }
   }
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createClient } from "@/lib/supabase/server";
+import { usuarioPossuiLojas } from "@/lib/stores/authorize";
 
 async function getUserAndClient() {
   const supabase = await createClient();
@@ -11,19 +12,6 @@ async function getUserAndClient() {
   return { supabase, user };
 }
 
-async function userOwnsStores(
-  storeIds: string[],
-  userId: string
-): Promise<boolean> {
-  const supabase = await createClient();
-  const { count, error } = await supabase
-    .from("stores")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .in("id", storeIds);
-
-  return !error && count === storeIds.length;
-}
 
 export async function GET() {
   const { supabase, user } = await getUserAndClient();
@@ -79,7 +67,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const ownsStores = await userOwnsStores([sourceStoreId, targetStoreId], user.id);
+  const ownsStores = await usuarioPossuiLojas([sourceStoreId, targetStoreId], user.id);
   if (!ownsStores) {
     return NextResponse.json(
       { error: "Uma das lojas selecionadas nao pertence ao usuario." },
@@ -182,7 +170,7 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
-  const ownsStores = await userOwnsStores([sourceStoreId, targetStoreId], user.id);
+  const ownsStores = await usuarioPossuiLojas([sourceStoreId, targetStoreId], user.id);
   if (!ownsStores) {
     return NextResponse.json(
       { error: "Uma das lojas selecionadas nao pertence ao usuario." },

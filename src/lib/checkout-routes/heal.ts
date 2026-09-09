@@ -194,17 +194,45 @@ export async function healRoute(
     variantMap: (targetRow ? targetRow.variant_map : config.variant_map) || {},
   };
 
+  // O filtro por user_id NAO e redundante.
+  //
+  // Este e um cliente admin: a RLS nao vale aqui. Os dois ids saem de colunas
+  // de `routed_checkout_configs`, e a garantia de que eles apontam para lojas
+  // do mesmo dono e a policy WITH CHECK da migration 030 -- que o service_role
+  // burla. Basta uma rota gravada por um caminho admin (ou anterior aquela
+  // migration) apontando para a loja de outra pessoa para este SELECT devolver
+  // o client_secret e o access_token dela, e o conserto seguir escrevendo
+  // produtos na loja da vitima.
+  //
+  // Com o filtro, uma rota assim simplesmente nao acha loja e para em 404.
   const { data: stores } = await admin
     .from("stores")
     .select(
-      "id, shop_domain, client_id, client_secret, access_token, niche, target_language"
+      "id, shop_domain, client_id, client_secret, access_token, niche, target_language, uninstalled_at"
     )
+    .eq("user_id", userId)
     .in("id", [config.source_store_id, targetStoreId]);
 
   const sourceStore = stores?.find((s) => s.id === config.source_store_id);
   const targetStore = stores?.find((s) => s.id === targetStoreId);
   if (!sourceStore || !targetStore) {
-    throw new HealRouteError("Vitrine ou loja checkout nao encontrada.", 404);
+    throw new HealRouteError(
+      "Vitrine ou loja checkout nao encontrada, ou nao pertence ao dono da rota.",
+      404
+    );
+  }
+
+  // Loja com o app removido nao tem token valido. Sem esta parada, o cron
+  // horario ficaria tentando para sempre e enchendo o log de 401 -- que era o
+  // comportamento antes de existir o webhook app/uninstalled.
+  const desinstalada = [sourceStore, targetStore].find(
+    (l) => (l as { uninstalled_at?: string | null }).uninstalled_at
+  );
+  if (desinstalada) {
+    throw new HealRouteError(
+      `O app foi removido de ${desinstalada.shop_domain}. Reinstale para voltar a rotear.`,
+      409
+    );
   }
 
   const sourceCreds: ShopifyCredentials = {

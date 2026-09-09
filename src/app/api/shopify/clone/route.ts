@@ -37,6 +37,7 @@ import {
   isShoplazzaStore,
 } from "@/lib/import/shoplazza";
 import { createClient } from "@/lib/supabase/server";
+import { lojaDoUsuario } from "@/lib/stores/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { translateProductVariantOptionsToPortuguese } from "@/lib/products/variant-translation";
 import { AI_COST, logAiUsage } from "@/lib/billing/usage";
@@ -68,29 +69,6 @@ async function getAuthenticatedUserId() {
   } = await supabase.auth.getUser();
 
   return user?.id || null;
-}
-
-async function getStoreCredentials(storeId: string, userId: string) {
-  const supabase = await createClient();
-  const { data: store, error } = await supabase
-    .from("stores")
-    .select("*")
-    .eq("id", storeId)
-    .eq("user_id", userId)
-    .single();
-
-  if (error) {
-    const { data: fallbackStore } = await supabase
-      .from("stores")
-      .select("*")
-      .eq("id", storeId)
-      .eq("user_id", userId)
-      .single();
-
-    return fallbackStore ? { ...fallbackStore, target_language: "pt-BR" } : null;
-  }
-
-  return store;
 }
 
 function toStoreContext(store: {
@@ -662,7 +640,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const targetStore = await getStoreCredentials(targetStoreId, userId);
+      const targetStore = await lojaDoUsuario(targetStoreId);
       if (!targetStore) {
         return NextResponse.json(
           { error: "Loja de destino nao encontrada." },
@@ -754,7 +732,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const targetStore = await getStoreCredentials(targetStoreId, userId);
+    const targetStore = await lojaDoUsuario(targetStoreId);
     if (!targetStore) {
       return NextResponse.json(
         { error: "Loja de destino nao encontrada." },
