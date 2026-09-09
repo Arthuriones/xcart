@@ -1,3 +1,4 @@
+import { safeFetch } from "@/lib/net/safe-url";
 import { GoogleGenAI } from "@google/genai";
 import sharp from "sharp";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -346,7 +347,10 @@ async function neutralizeImage(
   index: number
 ) {
   const mode = input.mode || "stock-neutralize";
-  const imageResponse = await fetch(image.url, {
+  // image.url chega do produto importado (site externo) ou do proprio corpo
+  // da requisicao. Nos dois casos e endereco que o usuario influencia, entao
+  // vai por safeFetch.
+  const imageResponse = await safeFetch(image.url, {
     signal: AbortSignal.timeout(20000),
   });
   if (!imageResponse.ok) {

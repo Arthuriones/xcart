@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI, type Part } from "@google/generative-ai";
+import { safeFetch } from "@/lib/net/safe-url";
 import { marketContextBlock } from "@/lib/gemini/market-profile";
 import type {
   AliExpressProduct,
@@ -343,7 +344,9 @@ async function imagePartFromUrl(url?: string | null): Promise<Part | null> {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
-    const response = await fetch(imageUrl, { signal: controller.signal });
+    // URL de imagem vinda de produto importado -- ou seja, de fora. safeFetch
+    // resolve o DNS e recusa rede interna antes de conectar.
+    const response = await safeFetch(imageUrl, { signal: controller.signal });
     clearTimeout(timeout);
 
     if (!response.ok) return null;

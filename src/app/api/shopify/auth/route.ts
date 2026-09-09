@@ -2,6 +2,8 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { ensureUninstallWebhook, getShopInfo, getThemes } from "@/lib/shopify/client";
+import { safeFetch } from "@/lib/net/safe-url";
+import { assertShopDomainPublico } from "@/lib/shopify/safe-shop";
 import { normalizeShopDomain } from "@/lib/shopify/domain";
 import { SHOPIFY_SCOPES_STRING } from "@/lib/shopify/scopes";
 import {
@@ -215,8 +217,11 @@ export async function GET(request: NextRequest) {
     // (obrigatório para completar a instalação do app na loja)
     let accessToken = "";
     try {
-      const tokenRes = await fetch(
-        `https://${store.shop_domain}/admin/oauth/access_token`,
+      // O client_secret vai no CORPO desta requisicao. Sem a trava, o host de
+      // destino era o que estivesse gravado em shop_domain.
+      const hostDaTroca = await assertShopDomainPublico(store.shop_domain);
+      const tokenRes = await safeFetch(
+        `https://${hostDaTroca}/admin/oauth/access_token`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

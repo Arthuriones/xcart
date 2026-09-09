@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { atualizarDoUsuario } from "@/lib/stores/authorize";
 import { createClient } from "@/lib/supabase/server";
 import { generateMcpToken } from "@/lib/mcp/auth";
 
@@ -57,11 +58,18 @@ export async function DELETE(req: Request) {
   if (!id) return NextResponse.json({ error: "id obrigatorio" }, { status: 400 });
 
   // Revoga em vez de apagar: mantem o rastro de quando foi usado pela ultima vez.
-  const { error } = await supabase
-    .from("mcp_tokens")
-    .update({ revoked_at: new Date().toISOString() })
-    .eq("id", id);
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  //
+  // Pelo helper, e nao com .eq("id", id) solto: o dono entra no proprio
+  // comando. Com RLS ligada isso e redundante -- e e exatamente por isso que
+  // some no dia em que alguem trocar o cliente por um admin.
+  const r = await atualizarDoUsuario("mcp_tokens", id, {
+    revoked_at: new Date().toISOString(),
+  });
+  if (!r.ok) {
+    return NextResponse.json(
+      { error: r.erro === "nao encontrado" ? "Token nao encontrado." : "Falha ao revogar." },
+      { status: r.erro === "nao encontrado" ? 404 : 500 }
+    );
+  }
   return NextResponse.json({ ok: true });
 }

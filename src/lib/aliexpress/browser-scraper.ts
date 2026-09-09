@@ -1,4 +1,5 @@
 import { chromium } from "playwright-core";
+import { safeFetch } from "@/lib/net/safe-url";
 import type {
   AliExpressProduct,
   AliExpressVariant,
@@ -481,7 +482,9 @@ async function extractDescriptionHtml(
   }
 
   try {
-    const res = await fetch(descriptionUrl, {
+    // descriptionUrl e RASPADA da pagina: quem controla e o site remoto, nao
+    // nem o usuario. E o caso em que confiar no endereco menos faz sentido.
+    const res = await safeFetch(descriptionUrl, {
       headers: {
         "User-Agent": BROWSER_USER_AGENT,
         "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",

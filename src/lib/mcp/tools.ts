@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { safeFetch } from "@/lib/net/safe-url";
+import { dominioDeDestino } from "@/lib/net/url-guard";
 import {
   shopifyGraphQL,
   getShopInfo,
@@ -246,10 +248,17 @@ export const TOOLS: Tool[] = [
       }
       const caminho = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
 
-      const dominio = store.shop_domain.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+      // Regex propria aqui era o mesmo erro do resto do app: ela nao enxerga
+      // userinfo nem porta, entao "loja@evil.com" viraria destino. O guard
+      // central usa o parser; linhas antigas de shop_domain podem ter valor
+      // que nunca passou por validacao nenhuma.
+      const dominio = dominioDeDestino(store.shop_domain);
+      if (!dominio) {
+        throw new Error("O dominio da loja e invalido. Reconecte a loja.");
+      }
       const url = `https://${dominio}${caminho}`;
       // cache-buster: sem isso a CDN devolve a versao antiga e a verificacao mente
-      const res = await fetch(`${url}${url.includes("?") ? "&" : "?"}_mcp=${Date.now()}`, {
+      const res = await safeFetch(`${url}${url.includes("?") ? "&" : "?"}_mcp=${Date.now()}`, {
         headers: { "User-Agent": "xcart-mcp/1.0" },
         cache: "no-store",
       });

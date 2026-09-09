@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { safeFetch, UnsafeUrlError } from "@/lib/net/safe-url";
 import sharp from "sharp";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -178,7 +179,17 @@ export async function POST(request: NextRequest) {
 
     const logoBuffer = Buffer.from(await logoData.arrayBuffer());
 
-    const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(15000) });
+    // imageUrl vem crua do corpo do POST -- mesmo buraco de /api/image/generate.
+    // safeFetch resolve o DNS e revalida cada redirect.
+    let imgRes: Response;
+    try {
+      imgRes = await safeFetch(String(imageUrl), { signal: AbortSignal.timeout(15000) });
+    } catch (e) {
+      if (e instanceof UnsafeUrlError) {
+        return NextResponse.json({ error: e.message }, { status: 400 });
+      }
+      throw e;
+    }
     if (!imgRes.ok) {
       return NextResponse.json(
         { error: "Erro ao baixar a imagem do produto." },

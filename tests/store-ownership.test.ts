@@ -36,27 +36,49 @@ const BANCO: Record<string, { id: string; user_id: string; shop_domain: string }
   },
 };
 
+/**
+ * Recursos ligados a loja (store_assets): o dono nao esta na linha, esta na
+ * loja. E o segundo formato de ownership do sistema.
+ */
+const ASSETS: Record<string, { id: string; store_id: string }> = {
+  "asset-do-alice": { id: "asset-do-alice", store_id: "loja-do-alice" },
+  "asset-do-bob": { id: "asset-do-bob", store_id: "loja-do-bob" },
+};
+
 /** Quem esta na sessao no teste corrente. */
 let sessao: string | null = "alice";
 
 /** Registra as consultas montadas, para inspecionar os filtros aplicados. */
-let consultas: { filtros: Record<string, unknown>; ins: string[][] }[] = [];
+let consultas: {
+  tabela: string;
+  op: "select" | "update" | "delete";
+  filtros: Record<string, unknown>;
+  ins: string[][];
+}[] = [];
 
-function queryFalsa() {
+function queryFalsa(tabela: string) {
   const filtros: Record<string, unknown> = {};
   const ins: string[][] = [];
-  consultas.push({ filtros, ins });
+  const registro = { tabela, op: "select" as "select" | "update" | "delete", filtros, ins };
+  consultas.push(registro);
 
   const resolver = () => {
     // Aplica EXATAMENTE os filtros que o codigo pediu. Se ele esqueceu
-    // user_id, o filtro nao existe aqui e a loja alheia volta -- que e o
+    // user_id, o filtro nao existe aqui e a linha alheia volta -- que e o
     // vazamento que o teste precisa conseguir enxergar.
-    let linhas = Object.values(BANCO);
+    let linhas: { id: string; [k: string]: unknown }[] =
+      tabela === "store_assets" ? Object.values(ASSETS) : Object.values(BANCO);
     if (typeof filtros.id === "string") linhas = linhas.filter((l) => l.id === filtros.id);
     if (typeof filtros.user_id === "string") {
       linhas = linhas.filter((l) => l.user_id === filtros.user_id);
     }
-    for (const lista of ins) linhas = linhas.filter((l) => lista.includes(l.id));
+    for (const lista of ins) {
+      linhas = linhas.filter((l) =>
+        tabela === "store_assets"
+          ? lista.includes(String(l.store_id))
+          : lista.includes(l.id)
+      );
+    }
     return linhas;
   };
 
@@ -67,6 +89,14 @@ function queryFalsa() {
       // head:true nao resolve aqui: os .eq()/.in() ainda vao ser encadeados
       // depois deste select. Resolver agora contaria o banco inteiro.
       if (opts?.head) contando = true;
+      return api;
+    },
+    update: (_patch: unknown) => {
+      registro.op = "update";
+      return api;
+    },
+    delete: () => {
+      registro.op = "delete";
       return api;
     },
     eq: (coluna: string, valor: unknown) => {
@@ -90,7 +120,7 @@ function queryFalsa() {
   return api;
 }
 
-const clienteFalso = { from: () => queryFalsa() };
+const clienteFalso = { from: (tabela: string) => queryFalsa(tabela) };
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/supabase/server", () => ({
@@ -114,6 +144,9 @@ const {
   lojaDoDonoViaAdmin,
   credenciaisDe,
   NaoAutorizado,
+  atualizarDoUsuario,
+  apagarDoUsuario,
+  apagarViaLoja,
 } = await import("@/lib/stores/authorize");
 
 beforeEach(() => {
@@ -263,5 +296,106 @@ describe("credenciaisDe", () => {
     // O tipo e o portao: credenciaisDe recebe LojaAutorizada, e o unico jeito
     // de obter uma e passando pelas funcoes que filtram por dono.
     expect(credenciaisDe(loja).shopDomain).toBe("alice.myshopify.com");
+  });
+});
+
+// ============================================================================
+// Matriz A/B: recurso do A, B tenta ler / atualizar / apagar
+// ============================================================================
+
+/**
+ * O dublê registra os filtros que o codigo montou, entao estes testes provam
+ * a coisa certa: que o FILTRO DE DONO foi para o comando. Um teste que so
+ * olhasse o retorno passaria mesmo se a unica defesa fosse a RLS -- e o ponto
+ * dos helpers e justamente nao depender de uma camada so.
+ */
+describe("A/B: B nao alcanca recurso do A", () => {
+  // "alice" = usuario A (dono). "bob" = usuario B (atacante).
+  const RECURSO_DO_A = "loja-do-alice";
+  const RECURSO_DO_B = "loja-do-bob";
+
+  it("B LER recurso do A -> negado", async () => {
+    sessao = "bob";
+    expect(await lojaDoUsuario(RECURSO_DO_A)).toBeNull();
+  });
+
+  it("B LER varios, um deles do A -> negado por inteiro", async () => {
+    sessao = "bob";
+    expect(await lojasDoUsuario([RECURSO_DO_B, RECURSO_DO_A])).toBeNull();
+  });
+
+  it("B ATUALIZAR recurso do A -> negado, e o filtro de dono foi no comando", async () => {
+    sessao = "bob";
+    const r = await atualizarDoUsuario("mcp_tokens", RECURSO_DO_A, { revoked_at: "x" });
+    expect(r.ok).toBe(false);
+    expect(r.erro).toBe("nao encontrado");
+    expect(consultas.at(-1)?.filtros).toMatchObject({
+      id: RECURSO_DO_A,
+      user_id: "bob",
+    });
+  });
+
+  it("B APAGAR recurso do A -> negado, e o filtro de dono foi no comando", async () => {
+    sessao = "bob";
+    const r = await apagarDoUsuario("mcp_tokens", RECURSO_DO_A);
+    expect(r.ok).toBe(false);
+    expect(consultas.at(-1)?.filtros).toMatchObject({
+      id: RECURSO_DO_A,
+      user_id: "bob",
+    });
+  });
+
+  it("A continua alcancando o proprio recurso (sem falso positivo)", async () => {
+    sessao = "alice";
+    expect((await atualizarDoUsuario("stores", RECURSO_DO_A, { name: "x" })).ok).toBe(true);
+    expect((await apagarDoUsuario("stores", RECURSO_DO_A)).ok).toBe(true);
+  });
+
+  it("a resposta nao distingue 'nao existe' de 'nao e seu'", async () => {
+    sessao = "bob";
+    const alheio = await atualizarDoUsuario("stores", RECURSO_DO_A, { name: "x" });
+    const inexistente = await atualizarDoUsuario("stores", "id-que-nao-existe", {
+      name: "x",
+    });
+    // Distinguir os dois transforma o endpoint num verificador de ids alheios.
+    expect(alheio.erro).toBe(inexistente.erro);
+  });
+
+  it("sem sessao, nenhuma das operacoes chega ao banco", async () => {
+    sessao = null;
+    expect((await atualizarDoUsuario("stores", RECURSO_DO_A, { n: 1 })).erro).toBe(
+      "Unauthorized"
+    );
+    expect((await apagarDoUsuario("stores", RECURSO_DO_A)).erro).toBe("Unauthorized");
+    expect((await apagarViaLoja("store_assets", "qualquer")).erro).toBe("Unauthorized");
+    expect(consultas).toHaveLength(0);
+  });
+
+  it("id vazio nao vira comando sem filtro", async () => {
+    sessao = "bob";
+    expect((await atualizarDoUsuario("stores", "", { n: 1 })).ok).toBe(false);
+    expect((await apagarDoUsuario("stores", "")).ok).toBe(false);
+    expect(consultas).toHaveLength(0);
+  });
+});
+
+describe("A/B: recurso ligado pela loja (store_assets)", () => {
+  it("B APAGAR asset de loja do A -> negado; o delete e limitado as lojas de B", async () => {
+    sessao = "bob";
+    const r = await apagarViaLoja("store_assets", "asset-do-alice");
+    expect(r.ok).toBe(false);
+    // O comando de delete recebeu .in("store_id", [<lojas do bob>]) -- e a
+    // loja do alice nao esta la.
+    const ins = consultas.at(-1)?.ins.flat() ?? [];
+    expect(ins).toContain("loja-do-bob");
+    expect(ins).not.toContain("loja-do-alice");
+  });
+
+  it("usuario sem nenhuma loja nao apaga nada e nao emite delete solto", async () => {
+    sessao = "ninguem";
+    const r = await apagarViaLoja("store_assets", "asset-do-alice");
+    expect(r.ok).toBe(false);
+    // So a consulta das lojas; nenhum delete foi montado.
+    expect(consultas).toHaveLength(1);
   });
 });

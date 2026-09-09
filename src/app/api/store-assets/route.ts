@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apagarViaLoja } from "@/lib/stores/authorize";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -123,13 +124,21 @@ export async function DELETE(request: NextRequest) {
   if (!filePath.startsWith(`${user.id}/`) || filePath.includes("..")) {
     return NextResponse.json({ error: "Arquivo nao encontrado." }, { status: 404 });
   }
-  const [{ error: erroBanco }, { error: erroArquivo }] = await Promise.all([
-    supabase.from("store_assets").delete().eq("id", id),
-    supabase.storage.from(bucket).remove([filePath]),
-  ]);
+  // A linha do banco sai pelo helper, que faz o salto ate o dono da loja de
+  // forma explicita. Antes era .eq("id", id) solto, com a recusa vindo so da
+  // policy -- e o comentario acima ja dizia que depender de uma camada so era
+  // o problema.
+  const remocao = await apagarViaLoja("store_assets", id);
+  if (!remocao.ok) {
+    return NextResponse.json(
+      { error: "Material nao encontrado." },
+      { status: remocao.erro === "Unauthorized" ? 401 : 404 }
+    );
+  }
 
-  if (erroBanco || erroArquivo) {
-    return NextResponse.json({ error: "Falha ao remover o material." }, { status: 500 });
+  const { error: erroArquivo } = await supabase.storage.from(bucket).remove([filePath]);
+  if (erroArquivo) {
+    return NextResponse.json({ error: "Falha ao remover o arquivo." }, { status: 500 });
   }
   return NextResponse.json({ ok: true });
 }

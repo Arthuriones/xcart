@@ -187,3 +187,112 @@ export async function lojaDoDonoViaAdmin(
     .maybeSingle();
   return (data as LojaAutorizada) || null;
 }
+
+// ============================================================================
+// Recursos que nao sao loja
+// ============================================================================
+
+/**
+ * Apaga/atualiza uma linha do proprio usuario, com o dono NO COMANDO.
+ *
+ * ============================ POR QUE ISTO EXISTE ============================
+ *
+ * A varredura de IDOR achou ~10 rotas com esta forma:
+ *
+ *   supabase.from("mcp_tokens").update({...}).eq("id", id)
+ *   supabase.from("store_assets").delete().eq("id", id)
+ *
+ * Nenhuma e explorada hoje: sao clientes do usuario, com RLS ligada, e as
+ * policies conferidas uma a uma sao todas de dono. Ou seja, o banco recusa.
+ *
+ * O problema e que a recusa mora INTEIRAMENTE numa camada que o codigo nao
+ * menciona. Basta alguem trocar `createClient()` por `createAdminClient()`
+ * para resolver um erro de permissao -- que e a correcao que todo mundo tenta
+ * primeiro -- e a rota vira IDOR sem nenhum diff suspeito: a linha do update
+ * continua identica.
+ *
+ * Aqui o filtro de dono e explicito e vai junto no comando. Com RLS, e
+ * redundante; sem RLS, e a unica coisa que segura. Custa um `.eq`.
+ */
+export async function atualizarDoUsuario(
+  tabela: string,
+  id: string,
+  patch: Record<string, unknown>
+): Promise<{ ok: boolean; erro?: string }> {
+  const usuario = await usuarioDaSessao();
+  if (!usuario) return { ok: false, erro: "Unauthorized" };
+  if (!id) return { ok: false, erro: "id obrigatorio" };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from(tabela)
+    .update(patch)
+    .eq("id", id)
+    .eq("user_id", usuario.id)
+    .select("id");
+
+  if (error) return { ok: false, erro: error.message };
+  // Zero linhas = o id nao existe OU nao e dele. Nao da para distinguir os
+  // dois de fora, e isso e proposital: distinguir vira sonda de ids alheios.
+  if (!data || data.length === 0) return { ok: false, erro: "nao encontrado" };
+  return { ok: true };
+}
+
+/** Mesma ideia para remocao. */
+export async function apagarDoUsuario(
+  tabela: string,
+  id: string
+): Promise<{ ok: boolean; erro?: string }> {
+  const usuario = await usuarioDaSessao();
+  if (!usuario) return { ok: false, erro: "Unauthorized" };
+  if (!id) return { ok: false, erro: "id obrigatorio" };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from(tabela)
+    .delete()
+    .eq("id", id)
+    .eq("user_id", usuario.id)
+    .select("id");
+
+  if (error) return { ok: false, erro: error.message };
+  if (!data || data.length === 0) return { ok: false, erro: "nao encontrado" };
+  return { ok: true };
+}
+
+/**
+ * Remocao de recurso que pertence ao usuario ATRAVES da loja.
+ *
+ * store_assets (e qualquer tabela ligada por store_id) nao tem coluna user_id:
+ * o dono e o dono da loja. A policy faz esse salto com subquery; aqui o salto
+ * e explicito, pelo mesmo motivo do helper acima -- a regra tem que estar
+ * escrita onde alguem que edita a rota consiga ver.
+ */
+export async function apagarViaLoja(
+  tabela: string,
+  id: string
+): Promise<{ ok: boolean; erro?: string }> {
+  const usuario = await usuarioDaSessao();
+  if (!usuario) return { ok: false, erro: "Unauthorized" };
+  if (!id) return { ok: false, erro: "id obrigatorio" };
+
+  const supabase = await createClient();
+  const { data: lojas } = await supabase
+    .from("stores")
+    .select("id")
+    .eq("user_id", usuario.id);
+
+  const idsDasLojas = (lojas || []).map((l) => (l as { id: string }).id);
+  if (idsDasLojas.length === 0) return { ok: false, erro: "nao encontrado" };
+
+  const { data, error } = await supabase
+    .from(tabela)
+    .delete()
+    .eq("id", id)
+    .in("store_id", idsDasLojas)
+    .select("id");
+
+  if (error) return { ok: false, erro: error.message };
+  if (!data || data.length === 0) return { ok: false, erro: "nao encontrado" };
+  return { ok: true };
+}

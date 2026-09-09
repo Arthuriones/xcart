@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { safeFetch } from "@/lib/net/safe-url";
+import { assertShopDomainPublico } from "@/lib/shopify/safe-shop";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getPublicAppUrl } from "@/lib/public-url";
@@ -13,7 +15,11 @@ async function shopifyRest(
   path: string,
   options: RequestInit = {}
 ) {
-  const res = await fetch(`https://${domain}/admin/api/2024-10${path}`, {
+  // Esta rota carrega uma COPIA do cliente Shopify, e a copia nao tinha a
+  // trava de dominio que src/lib/shopify/client.ts ganhou. O access token ia
+  // no header para o host que estivesse em shop_domain.
+  const host = await assertShopDomainPublico(domain);
+  const res = await safeFetch(`https://${host}/admin/api/2024-10${path}`, {
     ...options,
     headers: {
       "X-Shopify-Access-Token": accessToken,
@@ -35,8 +41,9 @@ async function getAccessToken(store: {
   access_token?: string | null;
 }): Promise<string> {
   // Always use client_credentials to get a fresh token with current scopes
-  const res = await fetch(
-    `https://${store.shop_domain}/admin/oauth/access_token`,
+  const hostToken = await assertShopDomainPublico(store.shop_domain);
+  const res = await safeFetch(
+    `https://${hostToken}/admin/oauth/access_token`,
     {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
