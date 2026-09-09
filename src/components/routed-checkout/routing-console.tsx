@@ -23,6 +23,7 @@ import { getPublicAppUrl } from "@/lib/public-url";
 import {
   COR_ALVO,
   TEXTO_ALVO,
+  mapaVelho,
   targetState,
   type StripTarget,
 } from "@/components/routed-checkout/target-state";
@@ -52,6 +53,13 @@ interface Diagnostico {
   missingCount: number;
   wrongCount: number;
   checkedTargetName?: string;
+}
+
+/** "há 3 dias" / "há 30 horas" -- so para o texto do aviso de mapa velho. */
+function idade(horas: number) {
+  const dias = Math.floor(horas / 24);
+  if (dias >= 1) return `há ${dias} ${dias === 1 ? "dia" : "dias"}`;
+  return `há ${Math.max(1, Math.round(horas))} h`;
 }
 
 function snippet(token: string) {
@@ -174,6 +182,8 @@ export function ConsoleView({
 
   const vitrine = porId.get(rota.sourceStoreId);
   const quebrada = rota.lastHeal && !rota.lastHeal.ok;
+  // So avisa em rota no ar: em rota pausada ninguem esta comprando mesmo.
+  const velho = rota.enabled ? mapaVelho(alvosLocais ?? rota.targets) : null;
 
   async function salvarAlvos(mudancas: { id: string; weight?: number; enabled?: boolean }[]) {
     const resposta = await fetch(`/api/checkout-routes/${rota!.id}/targets`, {
@@ -334,7 +344,9 @@ export function ConsoleView({
   function estadoDaRota(r: Rota): "active" | "warn" | "paused" {
     if (!r.enabled) return "paused";
     const semMapa = r.targets.some((t) => t.enabled && t.mappedSkuCount === 0);
-    if (semMapa || (r.lastHeal && !r.lastHeal.ok)) return "warn";
+    // Mapa velho tambem e "atencao": a rota parece viva e esta deixando os
+    // produtos novos da vitrine de fora, sem nenhum sinal ate alguem conferir.
+    if (semMapa || mapaVelho(r.targets) || (r.lastHeal && !r.lastHeal.ok)) return "warn";
     return "active";
   }
 
@@ -565,6 +577,30 @@ export function ConsoleView({
               <p className="border-b border-[var(--border-subtle)] bg-[var(--err-bg)] px-[17px] py-2.5 text-[12px] text-ink">
                 {rota.lastHeal?.message || "A última checagem automática achou um problema."}
               </p>
+            )}
+
+            {/* O mapa de SKU nao cresce sozinho quando o lojista cadastra
+                produto novo na vitrine -- ele so cresce quando o conserto roda.
+                Sem este aviso o produto novo simplesmente nao roteia, em
+                silencio, e a rota continua com cara de saudavel. */}
+            {velho && !quebrada && (
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-[var(--border-subtle)] bg-[var(--warn-bg)] px-[17px] py-2.5 text-[12px] text-ink">
+                <span>
+                  {velho.nunca
+                    ? "Esta rota ainda não foi conferida: nenhum produto da vitrine entrou no mapa."
+                    : `Mapa conferido ${idade(velho.horas)}. Produto que você cadastrou na vitrine depois disso ainda não está sendo roteado.`}{" "}
+                  O comprador sai pelo checkout da própria vitrine, que não cobra.
+                </span>
+                <button
+                  type="button"
+                  onClick={diagnosticar}
+                  disabled={checando}
+                  className="inline-flex items-center gap-1.5 font-medium text-[var(--warn)] underline underline-offset-2 disabled:opacity-50"
+                >
+                  {checando && <Loader2 className="h-3 w-3 animate-spin" />}
+                  Conferir agora
+                </button>
+              </div>
             )}
 
             <div className="grid grid-cols-1 border-b border-[var(--border-subtle)] sm:grid-cols-3">
