@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { dominioDeDestino } from "@/lib/net/url-guard";
 
 export const runtime = "edge";
 
@@ -29,7 +30,13 @@ export async function GET(
     checkout_locale?: string;
   };
 
-  const domain = settings.checkout_domain?.trim() || target?.shop_domain || "";
+  // Valida na LEITURA tambem, nao so na gravacao: linhas gravadas antes desta
+  // trava continuam no banco, e este endpoint e publico (CORS *) -- o que sai
+  // daqui vira `window.location` no navegador do comprador.
+  const domain =
+    dominioDeDestino(settings.checkout_domain) ||
+    dominioDeDestino(target?.shop_domain) ||
+    "";
   let country = settings.checkout_country || "";
   let locale = settings.checkout_locale || "";
   if (!country && target?.target_language) {

@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import { caminhoInternoSeguro } from "@/lib/net/url-guard";
 import { textos } from "@/lib/textos";
 import { createClient } from "@/lib/supabase/client";
 import { useSearchParams } from "next/navigation";
@@ -10,11 +11,6 @@ import { LogoXcart } from "@/components/layout/logo";
 type Mode = "login" | "signup" | "recovery";
 
 // So aceita destino interno ("/algo"), nunca URL absoluta — evita open redirect.
-function safeNextPath(value: string | null) {
-  if (!value) return null;
-  if (!value.startsWith("/") || value.startsWith("//")) return null;
-  return value;
-}
 
 // useSearchParams exige um limite de Suspense (o default export abaixo faz isso).
 function LoginForm() {
@@ -28,7 +24,7 @@ function LoginForm() {
   // O middleware e o /api/shopify/auth mandam ?next=... para retomar o fluxo
   // interrompido (ex.: instalacao do app na Shopify com a sessao expirada).
   // Antes esse parametro era ignorado e o usuario perdia o contexto.
-  const redirectTarget = safeNextPath(searchParams.get("next")) || "/stores";
+  const redirectTarget = caminhoInternoSeguro(searchParams.get("next")) || "/stores";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);

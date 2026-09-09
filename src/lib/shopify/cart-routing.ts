@@ -1,4 +1,4 @@
-import { normalizeShopDomain } from "@/lib/shopify/domain";
+import { dominioDeDestino } from "@/lib/net/url-guard";
 
 export interface CheckoutRouteLine {
   sku?: string;
@@ -102,7 +102,9 @@ export function buildCartPermalink(
   attributes?: Record<string, string>,
   market?: { country?: string; locale?: string }
 ) {
-  const domain = normalizeShopDomain(targetDomain);
+  // Parser, nao regex: normalizeShopDomain aprovava "//evil.com", "ftp://evil.com/x"
+  // e "evil.com." -- e o retorno desta funcao e a URL para onde o comprador vai.
+  const domain = dominioDeDestino(targetDomain);
   if (!domain) {
     throw new Error("Dominio de checkout invalido.");
   }

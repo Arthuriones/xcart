@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { normalizarDominioDeDestino } from "@/lib/net/url-guard";
 
 export const runtime = "nodejs";
 
@@ -21,8 +22,27 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "id obrigatorio." }, { status: 400 });
   }
 
-  const checkoutDomain =
+  // checkout_domain decide para onde o COMPRADOR vai depois de finalizar. Ate
+  // aqui a unica coisa aplicada era .trim(): "javascript:...", "//evil.com" e
+  // "google.com@evil.com" entravam no banco e saiam pelo /api/c/[token], que e
+  // publico e tem CORS *. Agora passa pelo parser antes de ser gravado.
+  const checkoutDomainBruto =
     typeof body.checkoutDomain === "string" ? body.checkoutDomain.trim() : "";
+  let checkoutDomain = "";
+  if (checkoutDomainBruto) {
+    const dominio = normalizarDominioDeDestino(checkoutDomainBruto);
+    if (!dominio.ok) {
+      return NextResponse.json(
+        {
+          error:
+            "Dominio de checkout invalido. Use so o endereco da loja, sem http://, sem caminho e sem porta.",
+          motivo: dominio.motivo,
+        },
+        { status: 400 }
+      );
+    }
+    checkoutDomain = dominio.host;
+  }
   const checkoutCountry =
     typeof body.checkoutCountry === "string"
       ? body.checkoutCountry.trim().toUpperCase().slice(0, 2)

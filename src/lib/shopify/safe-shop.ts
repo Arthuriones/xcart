@@ -1,5 +1,5 @@
 import { assertUrlPublica, UnsafeUrlError } from "@/lib/net/safe-url";
-import { normalizeShopDomain } from "@/lib/shopify/domain";
+import { normalizarDominioColado } from "@/lib/net/url-guard";
 
 /**
  * Trava de destino para TODA chamada a Admin API de uma loja.
@@ -47,12 +47,20 @@ export class ShopDomainError extends Error {
  * 10.0.0.5" ja seria meio scanner.
  */
 export async function assertShopDomainPublico(entrada: string): Promise<string> {
-  const host = normalizeShopDomain(entrada);
-  if (!host) {
+  // Formato pelo parser (url-guard), destino pelo DNS (safe-url). As duas
+  // camadas pegam coisas diferentes: o parser mata "google.com@evil.com" e
+  // "//evil.com"; o DNS mata o nome publico cujo A record aponta para dentro.
+  // Tolerante ao caminho: este e o dominio da loja CONECTADA, e o lojista
+  // cola "https://loja.myshopify.com/admin" o tempo todo. O parser devolve o
+  // hostname real, entao o caminho nao mascara nada. O destino de CHECKOUT usa
+  // a versao estrita, onde caminho e sinal de mascara.
+  const dominio = normalizarDominioColado(entrada);
+  if (!dominio.ok) {
     throw new ShopDomainError(
       "Use o dominio da loja no formato sualoja.myshopify.com."
     );
   }
+  const host = dominio.host;
 
   // Atalho para o caso comum: myshopify.com e da Shopify, sempre publico, e
   // pular o DNS aqui evita um lookup por chamada no caminho quente.

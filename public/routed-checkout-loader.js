@@ -32,15 +32,94 @@
   // normalizeConfig converte para o formato novo com um destino.
   var inlineConfig = null;
 
+  // ==========================================================================
+  // Trava de destino, aqui no navegador do comprador.
+  //
+  // Este arquivo montava `new URL("https://" + target.domain + "/cart/...")`
+  // direto, sem validar nada -- enquanto o servidor validava. Os dois lados
+  // discordavam, e quem manda quando isso acontece e o lado fraco. Passavam
+  // por aqui e nao pelo servidor:
+  //
+  //   "google.com@evil.com"      -> host vira evil.com (userinfo)
+  //   "loja.myshopify.com:8080"  -> porta aceita
+  //   "аррӏе.com"                -> vira xn--80ak6aa92e.com (homografo)
+  //   "evil.com#@loja.myshopify" -> host evil.com, resto vira fragmento
+  //
+  // Mesma regra de src/lib/net/url-guard.ts. Se um lado mudar, o outro tem
+  // que mudar junto -- tests/url-guard.test.ts cobre a versao do servidor e
+  // tests/loader-domain-parity.test.ts compara as duas.
+  // ==========================================================================
+  function dominioSeguro(entrada) {
+    if (typeof entrada !== "string") return null;
+    var bruto = entrada.trim();
+    if (!bruto) return null;
+    if (bruto.indexOf("\\") !== -1) return null;
+    if (/[\s\u0000-\u001f\u007f]/.test(bruto)) return null;
+    if (bruto.slice(0, 2) === "//") return null;
+
+    var comEsquema = /^([a-z][a-z0-9+.-]*):\/\//i.exec(bruto);
+    if (/^([a-z][a-z0-9+.-]*):(?!\/\/)/i.test(bruto)) return null;
+
+    var url;
+    try {
+      url = new URL(comEsquema ? bruto : "https://" + bruto);
+    } catch (e) {
+      return null;
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    if (url.username || url.password) return null;
+    if (url.port) return null;
+    if ((url.pathname && url.pathname !== "/") || url.search || url.hash) return null;
+
+    var host = url.hostname.toLowerCase();
+    if (!host) return null;
+    if (host.charAt(0) === "[") return null;
+    if (/^\d+(\.\d+)*$/.test(host)) return null;
+    if (host.charAt(host.length - 1) === ".") return null;
+    if (/[^\x00-\x7f]/.test(bruto)) return null;
+
+    var rotulos = host.split(".");
+    if (rotulos.length < 2) return null;
+    for (var i = 0; i < rotulos.length; i += 1) {
+      if (rotulos[i].indexOf("xn--") === 0) return null;
+      if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(rotulos[i])) return null;
+    }
+    if (!/^[a-z]{2,63}$/.test(rotulos[rotulos.length - 1])) return null;
+    var internos = [".internal", ".local", ".localhost", ".localdomain", ".home.arpa"];
+    for (var j = 0; j < internos.length; j += 1) {
+      if (host.length >= internos[j].length &&
+          host.slice(-internos[j].length) === internos[j]) return null;
+    }
+    for (var k = 0; k + 3 < rotulos.length; k += 1) {
+      if (/^\d{1,3}$/.test(rotulos[k]) && /^\d{1,3}$/.test(rotulos[k + 1]) &&
+          /^\d{1,3}$/.test(rotulos[k + 2]) && /^\d{1,3}$/.test(rotulos[k + 3])) return null;
+    }
+    return host;
+  }
+
   function normalizeConfig(cfg) {
     if (!cfg) return null;
     var targets = [];
     if (Array.isArray(cfg.targets) && cfg.targets.length > 0) {
-      targets = cfg.targets.filter(function (t) { return t && t.domain; });
-    } else if (cfg.domain) {
+      targets = cfg.targets
+        .map(function (t) {
+          if (!t || !t.domain) return null;
+          var host = dominioSeguro(t.domain);
+          if (!host) {
+            console.error("[RoutedCheckout] destino recusado:", t.domain);
+            return null;
+          }
+          // Guarda o host JA normalizado: ninguem mais concatena o valor cru.
+          var copia = {};
+          for (var chave in t) if (Object.prototype.hasOwnProperty.call(t, chave)) copia[chave] = t[chave];
+          copia.domain = host;
+          return copia;
+        })
+        .filter(function (t) { return t; });
+    } else if (cfg.domain && dominioSeguro(cfg.domain)) {
       targets = [{
         id: cfg.id || null,
-        domain: cfg.domain,
+        domain: dominioSeguro(cfg.domain),
         weight: 1,
         skuMap: cfg.skuMap || {},
         variantMap: cfg.variantMap || {},
@@ -320,7 +399,12 @@
     if (pick.resolved.length < lines.length) return null;
 
     var cartPath = pick.resolved.map(function (l) { return l.variantId + ":" + l.quantity; }).join(",");
-    var url = new URL("https://" + pick.target.domain + "/cart/" + cartPath);
+    // pick.target.domain ja veio de dominioSeguro na normalizacao do config,
+    // mas revalidar aqui custa nada e fecha o caso de o config ter sido
+    // montado por outro caminho.
+    var hostOk = dominioSeguro(pick.target.domain);
+    if (!hostOk) return null;
+    var url = new URL("https://" + hostOk + "/cart/" + cartPath);
     if (pick.target.country) url.searchParams.set("country", pick.target.country);
     if (pick.target.locale) url.searchParams.set("locale", pick.target.locale);
     lastRoutedTarget = pick.target;
