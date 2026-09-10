@@ -103,6 +103,12 @@ function LoginForm() {
       ) {
         const secondsMatch = message.match(/(\d+)\s*seconds?/i);
         const waitSeconds = secondsMatch ? Number(secondsMatch[1]) : 60;
+        // handleSubmit e handler de evento (onSubmit do formulario), nao
+        // caminho de render -- Date.now() aqui esta correto. A regra nova do
+        // React Compiler nao distingue os dois quando o handler e declarado
+        // dentro do componente. Reestruturar codigo certo para agradar o
+        // linter seria pior que a anotacao.
+        // eslint-disable-next-line react-hooks/purity
         setCooldownUntil(Date.now() + waitSeconds * 1000);
         setErrorMessage(t("tooManyAttempts", { seconds: waitSeconds }));
       } else if (normalizedMessage.includes("invalid login credentials")) {

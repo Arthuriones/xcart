@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI, type Part } from "@google/generative-ai";
+import { GoogleGenAI, type Part } from "@google/genai";
 import { safeFetch } from "@/lib/net/safe-url";
 import {
   comTempoLimite,
@@ -27,7 +27,7 @@ import type {
  * titulo E no vendor, que e exatamente o que a neutralizacao existe para
  * evitar. Adiar a leitura fecha a porta para a familia inteira desse bug.
  */
-let genAICache: GoogleGenerativeAI | null = null;
+let genAICache: GoogleGenAI | null = null;
 
 function genAIClient() {
   if (!genAICache) {
@@ -35,31 +35,46 @@ function genAIClient() {
     // Falhar alto: sem chave, a alternativa e devolver texto nao neutralizado
     // e mandar produto de marca para a loja que cobra.
     if (!chave) throw new Error("GEMINI_API_KEY ausente: nao da para chamar a IA.");
-    genAICache = new GoogleGenerativeAI(chave);
+    genAICache = new GoogleGenAI({ apiKey: chave });
   }
   return genAICache;
 }
 
 /**
- * Ponto unico das 6 chamadas deste arquivo -- e por isso o lugar certo para os
- * tetos.
+ * Adaptador do SDK novo com a forma do antigo.
  *
- * Nenhuma delas tinha `maxOutputTokens` nem prazo. Numa importacao de 250
- * produtos isso multiplica por 250, e o gatilho de uma resposta longa pode vir
- * do proprio conteudo de origem, que o lojista nao controla. Sem prazo, uma
- * chamada pendurada segura o slot da funcao serverless e trava a fila atras.
+ * Este arquivo usava @google/generative-ai, que o proprio Google marcou como
+ * legado: o README diz "End-of-Life ... August 31st, 2025" -- ou seja, nem
+ * correcao critica recebe mais. O SDK vivo e @google/genai, que o resto do
+ * projeto (product-neutralizer, image/generate) ja usa. Manter os dois era
+ * carregar duas dependencias para o mesmo provedor, uma delas morta.
+ *
+ * A migracao vira um adaptador de 20 linhas porque os 6 pontos de chamada
+ * daqui ja passavam por este objeto -- consequencia de ter centralizado o
+ * cliente quando arrumei o bug da chave lida no import. Reescrever os 6
+ * prompts para a forma nova nao traria nada e arriscaria mexer em texto que
+ * funciona.
+ *
+ * Diferencas cobertas:
+ *   antigo  getGenerativeModel({...}).generateContent(x)  ->  r.response.text()
+ *   novo    models.generateContent({model, contents, config})  ->  r.text
  */
+type ConteudoAceito = string | Array<string | Part>;
+
 const model = {
-  generateContent: (
-    ...args: Parameters<ReturnType<GoogleGenerativeAI["getGenerativeModel"]>["generateContent"]>
-  ) =>
+  generateContent: async (entrada: ConteudoAceito) =>
     comTempoLimite(
       genAIClient()
-        .getGenerativeModel({
+        .models.generateContent({
           model: "gemini-2.5-flash",
-          generationConfig: { maxOutputTokens: MAX_TOKENS_TEXTO_LONGO },
+          contents: entrada as never,
+          config: { maxOutputTokens: MAX_TOKENS_TEXTO_LONGO },
         })
-        .generateContent(...args),
+        .then((r) => ({
+          // A forma antiga era `result.response.text()`. Devolver o mesmo
+          // envelope mantem os 6 chamadores intactos.
+          response: { text: () => r.text ?? "" },
+        })),
       TIMEOUT_TEXTO_MS,
       "geracao de texto"
     ),

@@ -15,9 +15,6 @@
   "dependencies": {
     "@base-ui/react": "^1.4.0",
     "@google/genai": "^1.50.1",
-    "@google/generative-ai": "^0.24.1",
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "@shopify/shopify-api": "^13.0.0",
     "@sparticuz/chromium": "^147.0.1",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.3",
@@ -32,7 +29,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "server-only": "^0.0.1",
-    "shadcn": "^4.3.0",
+    "shadcn": "^4.21.0",
     "sharp": "^0.35.4",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
@@ -41,15 +38,16 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^22.20.2",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "fast-check": "^4.9.0",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^3.2.7"
+    "vitest": "^5.0.0"
   }
 }

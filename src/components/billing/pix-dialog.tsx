@@ -37,7 +37,14 @@ export function PixDialog({
 }) {
   const [copiado, setCopiado] = useState(false);
   const [status, setStatus] = useState<"aguardando" | "pago" | "expirado">("aguardando");
-  const inicio = useRef(Date.now());
+  // Marcado no efeito, nao no argumento do useRef.
+  //
+  // `useRef(Date.now())` avalia Date.now() a CADA render (o ref so guarda o
+  // primeiro valor, mas a chamada acontece sempre). O React Compiler passou a
+  // recusar isso: funcao impura durante o render pode produzir resultado
+  // instavel quando o componente re-renderiza. Aqui o valor certo e "quando o
+  // modal abriu", que e exatamente o que um efeito de montagem da.
+  const inicio = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const ehPro = cobranca.kind === "pro_month";
@@ -81,6 +88,10 @@ export function PixDialog({
       vivo = false;
     };
   }, [cobranca.pix.qrCode, status]);
+
+  useEffect(() => {
+    inicio.current = Date.now();
+  }, []);
 
   useEffect(() => {
     if (status !== "aguardando") return;
