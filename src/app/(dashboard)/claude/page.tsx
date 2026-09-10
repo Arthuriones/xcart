@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { Check, Copy, Loader2, Plus, Terminal, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -61,12 +61,26 @@ export default function ClaudePage() {
   // Fica em memoria so ate a pessoa sair da tela: o valor em claro nunca
   // volta do servidor depois da criacao.
   const [novoToken, setNovoToken] = useState<string | null>(null);
-  const [origem, setOrigem] = useState("");
+  // A origem vem do navegador, mas o componente tambem renderiza no servidor.
+  //
+  // Era `useState("")` + `useEffect(() => setOrigem(...))`, o que forcava um
+  // render a mais so para preencher o valor. useSyncExternalStore existe para
+  // exatamente isto: le a fonte externa com um snapshot proprio para o
+  // servidor, sem passar por estado.
+  //
+  // O subscribe e vazio de proposito -- a origem nao muda enquanto a pagina
+  // esta aberta, entao nao ha o que assinar.
+  const origem = useSyncExternalStore(
+    () => () => {},
+    () => window.location.origin,
+    () => ""
+  );
 
-  useEffect(() => setOrigem(window.location.origin), []);
-
+  // `setCarregando(true)` saiu daqui: no primeiro carregamento o estado ja
+  // nasce true (useState acima), e chamado de dentro do efeito esse set era
+  // sincrono -- um render a mais antes mesmo de o fetch comecar. Quem recarrega
+  // por acao do usuario liga o spinner no proprio handler, onde e permitido.
   const carregar = useCallback(async () => {
-    setCarregando(true);
     try {
       const r = await fetch("/api/mcp-tokens");
       const j = await r.json();

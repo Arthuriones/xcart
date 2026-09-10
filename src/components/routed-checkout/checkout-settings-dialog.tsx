@@ -63,12 +63,22 @@ export function CheckoutSettingsDialog({
   const [country, setCountry] = useState(AUTO);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  // Preenche o formulario quando o dialog abre, ajustando no RENDER.
+  //
+  // Era um efeito com [open, settings]. Alem do render extra a cada abertura,
+  // ele tinha um efeito colateral pior: `settings` e um objeto vindo do pai,
+  // entao qualquer re-render do pai que criasse um objeto novo reexecutava o
+  // efeito e APAGAVA o que a pessoa tinha acabado de digitar, com o dialog
+  // aberto. Comparar `open` com o valor do render anterior resolve os dois:
+  // so repovoa na transicao fechado -> aberto.
+  const [abertoAntes, setAbertoAntes] = useState(open);
+  if (open !== abertoAntes) {
+    setAbertoAntes(open);
     if (open) {
       setDomain(settings?.checkout_domain || "");
       setCountry(settings?.checkout_country || AUTO);
     }
-  }, [open, settings]);
+  }
 
   async function handleSave() {
     setSaving(true);

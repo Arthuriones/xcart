@@ -70,6 +70,15 @@ export default function AdminUsersPage() {
   }
 
   useEffect(() => {
+    // A funcao abaixo e async e TODO setState dela acontece depois do primeiro
+    // await: nao ha atualizacao sincrona no corpo deste efeito, entao nao ha o
+    // render em cascata que a regra combate. O compilador nao consegue provar
+    // isso ao atravessar a funcao, e assume o pior.
+    //
+    // O conserto que a regra realmente quer aqui e nao buscar dados em efeito:
+    // esta pagina e client component e busca da propria API. Mover para o
+    // servidor e mudanca de arquitetura por pagina, nao ajuste de lint.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, []);
 
@@ -292,12 +301,20 @@ function ManageUserDialog({
   const [credits, setCredits] = useState("0");
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  // Popula o formulario quando muda o usuario em edicao, no RENDER.
+  //
+  // Como efeito, isto rodava depois do commit: o painel pintava uma vez com o
+  // plano do usuario ANTERIOR e so entao corrigia. Comparando o id com o do
+  // render passado, o valor certo ja sai na primeira pintura -- e a edicao em
+  // andamento nao e sobrescrita quando o pai re-renderiza por outro motivo.
+  const [idAnterior, setIdAnterior] = useState<string | null>(user?.id ?? null);
+  if ((user?.id ?? null) !== idAnterior) {
+    setIdAnterior(user?.id ?? null);
     if (user) {
       setPlan(user.plan);
       setCredits(String(user.aiCredits));
     }
-  }, [user]);
+  }
 
   async function patch(payload: object, label: string) {
     if (!user) return;

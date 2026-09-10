@@ -50,7 +50,10 @@ export function BulkScreen({ initialStores }: { initialStores: { id: string; nam
   const [submitting, setSubmitting] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [jobs, setJobs] = useState<BulkJob[]>([]);
-  const [jobsLoading, setJobsLoading] = useState(false);
+  // Nasce carregando: o efeito de montagem ja vai buscar. Antes era `false` e
+  // loadJobs ligava a flag na primeira linha -- set sincrono dentro do efeito,
+  // que e o render extra que a regra set-state-in-effect aponta.
+  const [jobsLoading, setJobsLoading] = useState(true);
   const [optimize, setOptimize] = useState(false);
   const [neutralizeProducts, setNeutralizeProducts] = useState(false);
   const [removeExternalReferences, setRemoveExternalReferences] = useState(false);
@@ -72,12 +75,15 @@ export function BulkScreen({ initialStores }: { initialStores: { id: string; nam
 
 
   async function loadJobs(opts?: { silent?: boolean }) {
-    if (!selectedStore) {
-      setJobs([]);
-      return;
-    }
+    // Sem loja escolhida nao ha o que buscar. Antes limpava a lista aqui com
+    // setJobs([]) -- e como loadJobs e chamada de dentro do efeito, esse set
+    // era sincrono e rendia um render a mais. Quem decide o que aparece na
+    // tela e a derivacao abaixo (jobsVisiveis), que nao precisa de estado.
+    if (!selectedStore) return;
 
-    if (!opts?.silent) setJobsLoading(true);
+    // A flag NAO e ligada aqui. Chamada de dentro do efeito, esta linha era
+    // sincrona. Quem recarrega por clique liga no proprio handler, onde
+    // setState e permitido.
     try {
       const params = new URLSearchParams({ storeId: selectedStore });
       const res = await fetch(`/api/jobs/bulk-import?${params.toString()}`);
@@ -91,7 +97,20 @@ export function BulkScreen({ initialStores }: { initialStores: { id: string; nam
     }
   }
 
+  // Lista efetivamente exibida: sem loja escolhida, nada. Derivar em vez de
+  // guardar evita ter que "limpar" estado quando a selecao muda.
+  const jobsVisiveis = selectedStore ? jobs : [];
+
   useEffect(() => {
+    // A funcao abaixo e async e TODO setState dela acontece depois do primeiro
+    // await: nao ha atualizacao sincrona no corpo deste efeito, entao nao ha o
+    // render em cascata que a regra combate. O compilador nao consegue provar
+    // isso ao atravessar a funcao, e assume o pior.
+    //
+    // O conserto que a regra realmente quer aqui e nao buscar dados em efeito:
+    // esta pagina e client component e busca da propria API. Mover para o
+    // servidor e mudanca de arquitetura por pagina, nao ajuste de lint.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadJobs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStore]);
@@ -423,7 +442,7 @@ export function BulkScreen({ initialStores }: { initialStores: { id: string; nam
               )}
               Iniciar lote
             </Button>
-            <Button variant="outline" onClick={() => loadJobs()} disabled={jobsLoading}>
+            <Button variant="outline" onClick={() => { setJobsLoading(true); void loadJobs(); }} disabled={jobsLoading}>
               {jobsLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
@@ -451,13 +470,13 @@ export function BulkScreen({ initialStores }: { initialStores: { id: string; nam
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {jobs.length === 0 ? (
+          {jobsVisiveis.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border/70 p-8 text-center text-sm text-muted-foreground">
               Nenhum job ainda.
             </div>
           ) : (
             <div className="space-y-2">
-              {jobs.map((job) => (
+              {jobsVisiveis.map((job) => (
                 <div
                   key={job.id}
                   className="flex flex-col justify-between gap-3 rounded-lg border border-border/60 bg-background/45 p-3 md:flex-row md:items-center"

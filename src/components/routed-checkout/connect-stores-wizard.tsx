@@ -136,7 +136,6 @@ export function ConnectStoresWizard({
   const [sourceProductCount, setSourceProductCount] = useState<number | null>(
     null
   );
-  const [countingProducts, setCountingProducts] = useState(false);
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [billingEnforced, setBillingEnforced] = useState(false);
 
@@ -190,19 +189,24 @@ export function ConnectStoresWizard({
 
   // Estimativa de produtos da vitrine (1 credito = 1 imagem = 1 produto), pra
   // avisar o custo ANTES de clicar em criar destino, nao depois.
+  // Vale contar? Deriva das mesmas condicoes que o efeito checava.
+  //
+  // O efeito fazia setSourceProductCount(null) no ramo de saida e
+  // setCountingProducts(true) no de entrada -- dois setState sincronos. O
+  // primeiro nem precisava existir: "nao se aplica" e calculavel. E a flag
+  // `countingProducts` saiu junto -- com a contagem derivada, "ainda nao
+  // voltou" e simplesmente `contagemVisivel === null`.
+  const contagemSeAplica =
+    open &&
+    wizardMode === "generate" &&
+    imageMode === "queue" &&
+    Boolean(sourceStoreId) &&
+    Boolean(targetStoreId);
+  const contagemVisivel = contagemSeAplica ? sourceProductCount : null;
+
   useEffect(() => {
-    if (
-      !open ||
-      wizardMode !== "generate" ||
-      imageMode !== "queue" ||
-      !sourceStoreId ||
-      !targetStoreId
-    ) {
-      setSourceProductCount(null);
-      return;
-    }
+    if (!contagemSeAplica) return;
     let cancelled = false;
-    setCountingProducts(true);
     fetch("/api/checkout-routes/create-destination", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -219,7 +223,6 @@ export function ConnectStoresWizard({
         if (!cancelled) setSourceProductCount(null);
       })
       .finally(() => {
-        if (!cancelled) setCountingProducts(false);
       });
     return () => {
       cancelled = true;
@@ -227,25 +230,36 @@ export function ConnectStoresWizard({
   }, [open, wizardMode, imageMode, sourceStoreId, targetStoreId]);
 
   // Reseta tudo ao abrir e pre-seleciona vitrine/loja checkout.
-  useEffect(() => {
-    if (!open) {
-      stopImagePoll();
-      return;
+  //
+  // No RENDER, nao em efeito: eram ONZE setState sincronos disparando de uma
+  // vez dentro do efeito toda vez que o assistente abria -- o caso mais caro
+  // da regra set-state-in-effect no projeto inteiro. Na transicao de abertura,
+  // o React aplica tudo numa passada so, antes de pintar.
+  //
+  // O que sobra no efeito e o unico efeito de verdade aqui: parar o poll de
+  // imagens quando fecha.
+  const [abertoAntes, setAbertoAntes] = useState(open);
+  if (open !== abertoAntes) {
+    setAbertoAntes(open);
+    if (open) {
+      setStep(1);
+      setDestinationResult(null);
+      setBatchProgress(null);
+      setImageProgress(null);
+      setCreateError(null);
+      setRouteToken("");
+      setRouteName("");
+      setReuseMatched(null);
+      routeRequestedRef.current = false;
+      setSourceStoreId((current) => current || stores[0]?.id || "");
+      setTargetStoreId((current) => current || stores[1]?.id || "");
+      setReuseFromStoreId((current) => current || stores[1]?.id || "");
     }
-    setStep(1);
-    setDestinationResult(null);
-    setBatchProgress(null);
-    setImageProgress(null);
-    setCreateError(null);
-    setRouteToken("");
-    setRouteName("");
-    setReuseMatched(null);
-    routeRequestedRef.current = false;
-    setSourceStoreId((current) => current || stores[0]?.id || "");
-    setTargetStoreId((current) => current || stores[1]?.id || "");
-    setReuseFromStoreId((current) => current || stores[1]?.id || "");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }
+
+  useEffect(() => {
+    if (!open) stopImagePoll();
+  }, [open, stopImagePoll]);
 
   useEffect(() => () => stopImagePoll(), []);
 
@@ -1120,26 +1134,28 @@ export function ConnectStoresWizard({
                         className={cn(
                           "ml-6 rounded-md border px-2 py-1.5 text-xs",
                           billingEnforced &&
-                            sourceProductCount !== null &&
+                            contagemVisivel !== null &&
                             creditBalance !== null &&
-                            sourceProductCount > creditBalance
+                            contagemVisivel > creditBalance
                             ? "border-destructive/40 bg-destructive/10 text-destructive"
                             : "border-border/60 bg-muted/40 text-muted-foreground"
                         )}
                       >
-                        {countingProducts || sourceProductCount === null ? (
+                        {/* null enquanto a contagem nao voltou: cobre o estado de carregando
+                            sem precisar de uma flag propria. */}
+                        {contagemVisivel === null ? (
                           t("estimateLoading")
                         ) : !billingEnforced ? (
                           t("estimateUnlimited")
                         ) : creditBalance !== null &&
-                          sourceProductCount > creditBalance ? (
+                          contagemVisivel > creditBalance ? (
                           t("estimateLowBalance", {
-                            count: sourceProductCount,
+                            count: contagemVisivel,
                             balance: creditBalance,
                           })
                         ) : (
                           t("estimate", {
-                            count: sourceProductCount,
+                            count: contagemVisivel,
                             balance: creditBalance ?? 0,
                           })
                         )}

@@ -109,6 +109,15 @@ export default function UserDetailPage({
   }
 
   useEffect(() => {
+    // A funcao abaixo e async e TODO setState dela acontece depois do primeiro
+    // await: nao ha atualizacao sincrona no corpo deste efeito, entao nao ha o
+    // render em cascata que a regra combate. O compilador nao consegue provar
+    // isso ao atravessar a funcao, e assume o pior.
+    //
+    // O conserto que a regra realmente quer aqui e nao buscar dados em efeito:
+    // esta pagina e client component e busca da propria API. Mover para o
+    // servidor e mudanca de arquitetura por pagina, nao ajuste de lint.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);

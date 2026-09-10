@@ -70,16 +70,18 @@ export function PagouCardForm({
 }) {
   const [pronto, setPronto] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const publicKey = process.env.NEXT_PUBLIC_PAGOU_PUBLIC_KEY;
+  const erroDeConfig = publicKey ? null : "NEXT_PUBLIC_PAGOU_PUBLIC_KEY não configurada.";
+  const erroVisivel = erro ?? erroDeConfig;
   const [enviando, setEnviando] = useState(false);
   const elementsRef = useRef<PagouElements | null>(null);
   const montado = useRef(false);
 
   useEffect(() => {
-    const publicKey = process.env.NEXT_PUBLIC_PAGOU_PUBLIC_KEY;
-    if (!publicKey) {
-      setErro("NEXT_PUBLIC_PAGOU_PUBLIC_KEY não configurada.");
-      return;
-    }
+    // A chave publica e constante de build: se falta, falta desde o primeiro
+    // render. Setar isso no efeito custava um render so para mostrar um erro
+    // que ja era conhecido -- agora sai de `erroDeConfig`, derivado.
+    if (!publicKey) return;
     let vivo = true;
 
     carregarScript()
@@ -182,17 +184,17 @@ export function PagouCardForm({
         <div id="pagou-card-element" className="min-h-[320px] w-full" />
       </div>
 
-      {!pronto && !erro && (
+      {!pronto && !erroVisivel && (
         <p className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           Carregando formulário seguro…
         </p>
       )}
 
-      {erro && (
+      {erroVisivel && (
         <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-          <p className="text-xs leading-relaxed text-destructive">{erro}</p>
+          <p className="text-xs leading-relaxed text-destructive">{erroVisivel}</p>
         </div>
       )}
 

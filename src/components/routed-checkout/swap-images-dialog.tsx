@@ -61,19 +61,36 @@ export function SwapImagesDialog({
     }
   }
 
-  useEffect(() => {
-    if (!open) {
-      stopPoll();
+  // A limpeza do formulario acontece no RENDER, o efeito fica so com o que e
+  // efeito de verdade (parar o poll, disparar as consultas).
+  //
+  // Antes os quatro setState de reset rodavam sincronos dentro do efeito toda
+  // vez que o dialog fechava: quatro atualizacoes em cascata para chegar a um
+  // estado que o render ja sabia calcular na transicao aberto -> fechado.
+  const [abertoAntes, setAbertoAntes] = useState(open);
+  if (open !== abertoAntes) {
+    setAbertoAntes(open);
+    if (open) {
+      // A estimativa comeca junto com a abertura; ligar a flag aqui evita o
+      // mesmo set sincrono dentro do efeito.
+      setEstimating(true);
+    } else {
       setStarted(false);
       setStarting(false);
       setProgress(null);
       setEstimate(null);
+    }
+  }
+
+  useEffect(() => {
+    if (!open) {
+      stopPoll();
       return;
     }
     // Ao abrir, ja consulta se ha uma fila em andamento para esta loja.
     void poll();
     // ...e quantos creditos esse disparo vai custar, antes do clique.
-    setEstimating(true);
+    // (a flag `estimating` ja foi ligada na transicao de abertura, acima)
     fetch("/api/jobs/neutralize-store-images", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

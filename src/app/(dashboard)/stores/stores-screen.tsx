@@ -196,7 +196,17 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
   const [storeAssets, setStoreAssets] = useState<StoreAsset[]>([]);
   const [assetFiles, setAssetFiles] = useState<File[]>([]);
   const [assetUploading, setAssetUploading] = useState(false);
-  const [materialsStoreId, setMaterialsStoreId] = useState("");
+  // "" significa "ainda nao escolhi" -- a loja efetiva e derivada, com a
+  // primeira da lista como padrao.
+  //
+  // Era um efeito que fazia setMaterialsStoreId(stores[0].id) assim que a
+  // lista chegava. Render extra, e pior: o efeito dependia do proprio
+  // materialsStoreId, entao qualquer mudanca na lista podia reabrir a
+  // condicao. Como o valor sai inteiramente de props/estado que ja existem,
+  // ele nao precisava ser estado proprio.
+  const [materialsStoreEscolhida, setMaterialsStoreId] = useState("");
+  const materialsStoreId =
+    materialsStoreEscolhida || (!loadingStores ? (stores[0]?.id ?? "") : "");
   const [additionalLogoFiles, setAdditionalLogoFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const additionalLogoInputRef = useRef<HTMLInputElement>(null);
@@ -255,11 +265,6 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
     }
   }, [loadingStores, stores.length, open]);
 
-  useEffect(() => {
-    if (!loadingStores && stores.length > 0 && !materialsStoreId) {
-      setMaterialsStoreId(stores[0].id);
-    }
-  }, [loadingStores, stores, materialsStoreId]);
 
   useEffect(() => {
     if (!materialsStoreId) return;

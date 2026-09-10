@@ -153,6 +153,8 @@ export function CloneScreen({
 
 
   const [importStep, setImportStep] = useState(1);
+  // Guarda a rota do render anterior, para detectar a troca sem efeito.
+  const [rotaAnterior, setRotaAnterior] = useState<string | null>(null);
   const [importScope, setImportScope] = useState<"all" | "collection">("all");
   const [selectedSourceCollection, setSelectedSourceCollection] =
     useState<SourceCollection | null>(null);
@@ -267,16 +269,6 @@ export function CloneScreen({
   }, [indiceBusca, termoBusca, previewCollections, previewSort]);
 
 
-  useEffect(() => {
-    if (!routedImportMode) return;
-    setImportMode(routedImportMode);
-  }, [routedImportMode]);
-
-  useEffect(() => {
-    if (!isCloneConfigSubpage) return;
-    setImportMode("bulk");
-  }, [isCloneConfigSubpage]);
-
   function openInlineImport(mode: ImportMode) {
     setImportMode(mode);
   }
@@ -311,14 +303,27 @@ export function CloneScreen({
 
   // Sub-rotas /individual, /bulk, /configuracao abrem o assistente no
   // primeiro passo. O modo vem da propria rota; /configuracao e sempre massa.
-  useEffect(() => {
-    if (isImportSubpage) {
-      setImportStep(1);
-    } else if (isCloneConfigSubpage) {
-      setImportMode("bulk");
-      setImportStep(1);
-    }
-  }, [isImportSubpage, isCloneConfigSubpage]);
+  //
+  // Ajuste DURANTE O RENDER, nao em efeito.
+  //
+  // Eram tres efeitos separados sincronizando estado a partir do pathname.
+  // Cada um disparava um render extra depois do commit -- e como um deles
+  // mexia em importMode e outro em importStep, a troca de rota rendia varias
+  // passadas em cascata. E o padrao que a regra set-state-in-effect existe
+  // para pegar.
+  //
+  // Comparar com a rota anterior e chamar setState no corpo do render e o
+  // caminho que o React documenta para isto: ele descarta o render em
+  // andamento e refaz com o valor novo, antes de pintar. Nao ha commit
+  // intermediario, e o estado continua sendo estado -- importante porque
+  // openInlineImport tambem escreve em importMode, entao derivar da rota
+  // apagaria a escolha feita pelo usuario fora das sub-rotas.
+  if (pathname !== rotaAnterior) {
+    setRotaAnterior(pathname);
+    const modoDaRota = routedImportMode ?? (isCloneConfigSubpage ? "bulk" : null);
+    if (modoDaRota && modoDaRota !== importMode) setImportMode(modoDaRota);
+    if ((isImportSubpage || isCloneConfigSubpage) && importStep !== 1) setImportStep(1);
+  }
 
 
 

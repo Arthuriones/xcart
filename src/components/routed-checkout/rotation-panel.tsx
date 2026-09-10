@@ -69,7 +69,9 @@ export function RotationPanel({
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    // `setLoading(true)` saiu daqui: era sincrono no corpo do efeito, um
+    // render antes de o fetch sequer sair. O estado ja nasce true, e o painel
+    // so monta uma vez por rota.
     fetch(`/api/checkout-routes/${routeId}/targets`)
       .then((response) => response.json())
       .then((data) => {

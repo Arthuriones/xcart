@@ -60,7 +60,10 @@ export function MultiSiteScreen({ initialStores }: { initialStores: { id: string
   const [submitting, setSubmitting] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [jobs, setJobs] = useState<BulkJob[]>([]);
-  const [jobsLoading, setJobsLoading] = useState(false);
+  // Nasce carregando: o efeito de montagem ja vai buscar. Antes era `false` e
+  // loadJobs ligava a flag na primeira linha -- set sincrono dentro do efeito,
+  // que e o render extra que a regra set-state-in-effect aponta.
+  const [jobsLoading, setJobsLoading] = useState(true);
   const [optimize, setOptimize] = useState(true);
   const [neutralize, setNeutralize] = useState(false);
   const [aiMediaLimit, setAiMediaLimit] = useState("1");
@@ -74,9 +77,15 @@ export function MultiSiteScreen({ initialStores }: { initialStores: { id: string
   const [inventoryMode, setInventoryMode] = useState<InventoryMode>("not_tracked");
   const [inventoryQuantity, setInventoryQuantity] = useState("100");
 
+  // Sem loja escolhida, nada aparece. Isto era feito com setJobs([]) dentro de
+  // loadJobs, que rodava sincrono a partir do efeito e custava um render extra.
+  // O memo que ja existia aqui e o lugar natural da regra.
   const visibleJobs = useMemo(
-    () => jobs.filter((job) => job.progress?.sourceType === "generic_site"),
-    [jobs]
+    () =>
+      selectedStore
+        ? jobs.filter((job) => job.progress?.sourceType === "generic_site")
+        : [],
+    [jobs, selectedStore]
   );
 
   const hasRunningJobs = useMemo(
@@ -89,12 +98,15 @@ export function MultiSiteScreen({ initialStores }: { initialStores: { id: string
 
 
   async function loadJobs(opts?: { silent?: boolean }) {
-    if (!selectedStore) {
-      setJobs([]);
-      return;
-    }
+    // Sem loja escolhida nao ha o que buscar. Antes limpava a lista aqui com
+    // setJobs([]) -- e como loadJobs e chamada de dentro do efeito, esse set
+    // era sincrono e rendia um render a mais. Quem decide o que aparece na
+    // tela e a derivacao abaixo (jobsVisiveis), que nao precisa de estado.
+    if (!selectedStore) return;
 
-    if (!opts?.silent) setJobsLoading(true);
+    // A flag NAO e ligada aqui. Chamada de dentro do efeito, esta linha era
+    // sincrona. Quem recarrega por clique liga no proprio handler, onde
+    // setState e permitido.
     try {
       const params = new URLSearchParams({ storeId: selectedStore });
       const res = await fetch(`/api/jobs/bulk-import?${params.toString()}`);
@@ -109,6 +121,15 @@ export function MultiSiteScreen({ initialStores }: { initialStores: { id: string
   }
 
   useEffect(() => {
+    // A funcao abaixo e async e TODO setState dela acontece depois do primeiro
+    // await: nao ha atualizacao sincrona no corpo deste efeito, entao nao ha o
+    // render em cascata que a regra combate. O compilador nao consegue provar
+    // isso ao atravessar a funcao, e assume o pior.
+    //
+    // O conserto que a regra realmente quer aqui e nao buscar dados em efeito:
+    // esta pagina e client component e busca da propria API. Mover para o
+    // servidor e mudanca de arquitetura por pagina, nao ajuste de lint.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadJobs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStore]);
@@ -427,7 +448,7 @@ export function MultiSiteScreen({ initialStores }: { initialStores: { id: string
               )}
               Importar
             </Button>
-            <Button variant="outline" onClick={() => loadJobs()} disabled={jobsLoading}>
+            <Button variant="outline" onClick={() => { setJobsLoading(true); void loadJobs(); }} disabled={jobsLoading}>
               {jobsLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
