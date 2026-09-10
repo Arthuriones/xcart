@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   healRoute,
+  HealBusyError,
   HealRouteError,
   type HealRouteResult,
 } from "@/lib/checkout-routes/heal";
@@ -84,6 +85,18 @@ export async function POST(request: NextRequest) {
       noop: results.every((r) => r.noop),
     });
   } catch (error) {
+    // O cron pegou este destino primeiro. 409 e nao 500: nao houve falha, so
+    // nao da para consertar duas vezes ao mesmo tempo -- e o comprador nao
+    // perde nada esperando o conserto que ja esta rodando terminar.
+    if (error instanceof HealBusyError) {
+      return NextResponse.json(
+        {
+          error:
+            "Esta loja de checkout ja esta sendo conferida agora (conserto automatico). Tente de novo em alguns minutos.",
+        },
+        { status: 409 }
+      );
+    }
     if (error instanceof HealRouteError) {
       return NextResponse.json(
         { error: error.message },

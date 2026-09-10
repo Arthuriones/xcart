@@ -110,8 +110,31 @@ export async function POST(request: NextRequest) {
   }
 
   switch (cab.topic) {
-    case "app/uninstalled":
-      return tratarDesinstalacao(admin, loja);
+    case "app/uninstalled": {
+      const resposta = await tratarDesinstalacao(admin, loja);
+      // ==================================================================
+      // O marcador de idempotencia foi gravado ANTES do processamento (e
+      // tem que ser: e ele que impede duas entregas simultaneas do mesmo
+      // evento de rodarem juntas). Mas isso entra em conflito direto com
+      // pedir retry:
+      //
+      //   entrega 1 -> grava marcador -> processamento FALHA -> 503
+      //   entrega 2 (retry) -> marcador ja existe -> "duplicado", 200
+      //
+      // ...e a loja nunca era marcada como desinstalada. A trava anulava
+      // exatamente o retry com que ela deveria conviver.
+      //
+      // Apagar o marcador quando o processamento falha devolve a entrega
+      // seguinte ao caminho normal.
+      // ==================================================================
+      if (resposta.status >= 500 && cab.webhookId) {
+        await admin
+          .from("shopify_webhook_events")
+          .delete()
+          .eq("webhook_id", cab.webhookId);
+      }
+      return resposta;
+    }
     default:
       // Topico assinado que ainda nao tratamos: registrado (para idempotencia)
       // e aceito, sem retry.
@@ -153,11 +176,20 @@ async function tratarDesinstalacao(
   }
 
   // Rotas em que esta loja e a vitrine: sem ela nao ha o que rotear.
-  await admin
+  //
+  // O erro destas duas gravacoes era ignorado: se falhassem, a loja ficava
+  // marcada como desinstalada mas as rotas continuavam ligadas, mandando
+  // comprador para um checkout morto -- e como o evento ja estava registrado,
+  // nenhum retry consertaria. Agora falha aqui pede reentrega.
+  const { error: erroRotas } = await admin
     .from("routed_checkout_configs")
     .update({ enabled: false })
     .eq("user_id", loja.user_id)
     .eq("source_store_id", loja.id);
+  if (erroRotas) {
+    console.error("[shopify/webhook] nao pausei as rotas", erroRotas.message);
+    return NextResponse.json({ error: "Tente de novo." }, { status: 503 });
+  }
 
   // Destinos de rodizio que apontam para esta loja: desligar so o destino
   // deixa a rota viva com os outros checkouts, que e o comportamento certo.
@@ -168,11 +200,15 @@ async function tratarDesinstalacao(
 
   const ids = (rotas || []).map((r) => r.id);
   if (ids.length > 0) {
-    await admin
+    const { error: erroDestinos } = await admin
       .from("routed_checkout_targets")
       .update({ enabled: false })
       .eq("target_store_id", loja.id)
       .in("route_id", ids);
+    if (erroDestinos) {
+      console.error("[shopify/webhook] nao desliguei os destinos", erroDestinos.message);
+      return NextResponse.json({ error: "Tente de novo." }, { status: 503 });
+    }
   }
 
   console.log("[shopify/webhook] app/uninstalled", { shopDomain: loja.shop_domain });

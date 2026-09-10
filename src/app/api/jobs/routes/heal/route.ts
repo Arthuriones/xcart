@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { healRoute, HealRouteError } from "@/lib/checkout-routes/heal";
+import { healRoute, HealBusyError, HealRouteError } from "@/lib/checkout-routes/heal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -129,6 +129,17 @@ async function executar(request: NextRequest) {
     } catch (erro) {
       // Um destino quebrado (loja desconectada, token expirado) nao pode
       // impedir o conserto dos outros.
+      // Destino ja reservado por outra execucao nao e falha: e a trava
+      // funcionando. Vai para o resultado como "ocupado" e a fila segue.
+      if (erro instanceof HealBusyError) {
+        resultados.push({
+          routeId: alvo.rota.id,
+          targetId: alvo.targetId,
+          name: alvo.rota.name,
+          ocupado: true,
+        });
+        continue;
+      }
       const msg =
         erro instanceof HealRouteError || erro instanceof Error
           ? erro.message

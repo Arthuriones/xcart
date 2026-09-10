@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Globe2,
   Image as ImageIcon,
@@ -64,6 +64,8 @@ export function MultiSiteScreen({ initialStores }: { initialStores: { id: string
   // loadJobs ligava a flag na primeira linha -- set sincrono dentro do efeito,
   // que e o render extra que a regra set-state-in-effect aponta.
   const [jobsLoading, setJobsLoading] = useState(true);
+  // Numero do pedido de jobs em voo; so o mais recente pode gravar.
+  const pedidoDeJobs = useRef(0);
   const [optimize, setOptimize] = useState(true);
   const [neutralize, setNeutralize] = useState(false);
   const [aiMediaLimit, setAiMediaLimit] = useState("1");
@@ -107,11 +109,15 @@ export function MultiSiteScreen({ initialStores }: { initialStores: { id: string
     // A flag NAO e ligada aqui. Chamada de dentro do efeito, esta linha era
     // sincrona. Quem recarrega por clique liga no proprio handler, onde
     // setState e permitido.
+    const meuPedido = ++pedidoDeJobs.current;
     try {
       const params = new URLSearchParams({ storeId: selectedStore });
       const res = await fetch(`/api/jobs/bulk-import?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Falha ao carregar jobs.");
+      // Ultima requisicao vence: trocar de loja rapido fazia a resposta da
+      // anterior chegar depois e sobrescrever a lista da atual.
+      if (meuPedido !== pedidoDeJobs.current) return;
       setJobs(data.jobs || []);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Falha ao carregar jobs.");

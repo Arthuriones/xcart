@@ -148,7 +148,69 @@ async function gravarStatus(
     .eq("id", routeId);
 }
 
-export async function healRoute(
+/** Depois disto, um conserto travado e considerado abandonado. */
+const CLAIM_ABANDONADO_MS = 20 * 60 * 1000;
+
+/**
+ * Reserva o destino para este conserto, de forma atomica.
+ *
+ * O UPDATE condicional E a trava: o Postgres serializa a linha, entao de duas
+ * execucoes simultaneas exatamente uma volta com linha. Mesmo padrao do
+ * claimJob da fila de importacao.
+ *
+ * Sem isso, duas execucoes concorrentes (cron entregue em duplicidade, cron
+ * que passou da hora, ou o lojista clicando "Corrigir agora" enquanto o cron
+ * roda) pegavam o MESMO destino: criavam o mesmo produto duas vezes na loja de
+ * checkout e faziam read-modify-write no sku_map, onde quem grava por ultimo
+ * apaga o que o outro mapeou.
+ */
+async function reservarDestino(
+  admin: ReturnType<typeof createAdminClient>,
+  targetId: string
+): Promise<boolean> {
+  const agora = new Date();
+  const limite = new Date(agora.getTime() - CLAIM_ABANDONADO_MS).toISOString();
+
+  const { data, error } = await admin
+    .from("routed_checkout_targets")
+    .update({ healing_since: agora.toISOString() })
+    .eq("id", targetId)
+    // Livre, ou preso ha tempo demais (a funcao morreu no meio).
+    .or(`healing_since.is.null,healing_since.lt.${limite}`)
+    .select("id");
+
+  if (error) {
+    // Coluna ausente (migration 034 nao aplicada): nao trava o conserto, que
+    // e quem mantem a rota funcionando. Volta ao comportamento antigo.
+    console.warn("[heal] nao consegui reservar o destino:", error.message);
+    return true;
+  }
+  return Array.isArray(data) && data.length > 0;
+}
+
+async function liberarDestino(
+  admin: ReturnType<typeof createAdminClient>,
+  targetId: string
+) {
+  const { error } = await admin
+    .from("routed_checkout_targets")
+    .update({ healing_since: null })
+    .eq("id", targetId);
+  if (error) console.warn("[heal] nao consegui liberar o destino:", error.message);
+}
+
+export class HealBusyError extends Error {
+  constructor() {
+    super("Ja existe um conserto em andamento para esta loja de checkout.");
+    this.name = "HealBusyError";
+  }
+}
+
+/**
+ * O conserto de verdade. So e chamado com o destino ja reservado -- ver o
+ * healRoute exportado logo abaixo.
+ */
+async function executarConserto(
   input: HealRouteInput
 ): Promise<HealRouteResult> {
   const admin = createAdminClient();
@@ -624,4 +686,58 @@ export async function healRoute(
     warnings,
     noop: !mudou,
   };
+}
+
+
+/**
+ * Descobre qual destino esta rota vai consertar.
+ *
+ * Repete a selecao de executarConserto de proposito: a reserva precisa
+ * acontecer ANTES de qualquer trabalho, e o id do destino e a chave dela.
+ * Sao duas leituras baratas contra a chance de criar produto duplicado.
+ */
+async function idDoDestino(
+  admin: ReturnType<typeof createAdminClient>,
+  input: HealRouteInput
+): Promise<string | null> {
+  let q = admin
+    .from("routed_checkout_targets")
+    .select("id")
+    .eq("route_id", input.routeId);
+  if (input.targetId) q = q.eq("id", input.targetId);
+  else q = q.eq("enabled", true);
+
+  const { data } = await q
+    .order("position", { ascending: true })
+    .order("id", { ascending: true })
+    .limit(1);
+  return data?.[0]?.id ?? null;
+}
+
+/**
+ * Conserta uma rota, com o destino reservado durante todo o trabalho.
+ *
+ * A reserva existe porque healRoute cria produtos e depois grava o sku_map
+ * inteiro. Duas execucoes ao mesmo tempo no mesmo destino criavam produto
+ * duplicado na loja de checkout e uma apagava o mapa da outra. Ver a
+ * migration 034 para a cronologia completa.
+ */
+export async function healRoute(
+  input: HealRouteInput
+): Promise<HealRouteResult> {
+  const admin = createAdminClient();
+  const targetId = await idDoDestino(admin, input);
+
+  // Rota legada sem linha de destino: nao ha o que reservar, e tambem nao ha
+  // criacao de produto concorrente para proteger.
+  if (!targetId) return executarConserto(input);
+
+  if (!(await reservarDestino(admin, targetId))) {
+    throw new HealBusyError();
+  }
+  try {
+    return await executarConserto({ ...input, targetId });
+  } finally {
+    await liberarDestino(admin, targetId);
+  }
 }

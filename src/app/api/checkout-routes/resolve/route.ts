@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { normalizarLinhas } from "@/lib/checkout-routes/linhas";
 import {
   buildCartPermalink,
   marketParamsFromLanguage,
@@ -32,9 +33,10 @@ export async function OPTIONS() {
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const token = typeof body.token === "string" ? body.token : "";
-  const lines = Array.isArray(body.lines)
-    ? (body.lines as CheckoutRouteLine[])
-    : [];
+  // As linhas vem do navegador e este endpoint e publico. A normalizacao (com
+  // teto de tamanho, de SKU e de quantidade) mora em lib/checkout-routes/linhas
+  // para ficar testada -- ver tests/resolve-input.test.ts.
+  const lines = normalizarLinhas(body.lines);
   // Chave do comprador para o rodizio sticky. Vem do navegador dele; se nao
   // vier, o sorteio e aleatorio (nao da para prender o comprador sem chave).
   const rotationKey =

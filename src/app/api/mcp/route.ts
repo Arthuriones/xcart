@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { comTempoLimite } from "@/lib/ai/limites";
 import { authenticate } from "@/lib/mcp/auth";
 import { TOOLS, TOOLS_BY_NAME } from "@/lib/mcp/tools";
 
@@ -149,15 +150,16 @@ export async function POST(req: Request) {
       // Prazo por ferramenta. Sem ele, uma loja lenta (ou uma query pesada)
       // segura a funcao serverless ate o maxDuration e o cliente MCP fica
       // pendurado sem saber o que houve.
-      const out = await Promise.race([
+      // comTempoLimite e nao um Promise.race inline: a versao inline nao
+      // limpava o setTimeout quando a ferramenta respondia rapido (o caso
+      // normal), e o timer ficava pendente os 60s inteiros segurando o
+      // closure e o event loop da funcao. comTempoLimite ja faz o
+      // clearTimeout no finally.
+      const out = await comTempoLimite(
         tool.handler(parsed.data as Json, identity),
-        new Promise<never>((_, rejeita) =>
-          setTimeout(
-            () => rejeita(new Error(`A ferramenta ${nome} passou de ${TIMEOUT_MS / 1000}s.`)),
-            TIMEOUT_MS
-          )
-        ),
-      ]);
+        TIMEOUT_MS,
+        `ferramenta ${nome}`
+      );
       return ok(id, {
         content: [{ type: "text", text: recortar(JSON.stringify(out, null, 2)) }],
       });

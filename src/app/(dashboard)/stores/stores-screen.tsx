@@ -205,6 +205,8 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
   // condicao. Como o valor sai inteiramente de props/estado que ja existem,
   // ele nao precisava ser estado proprio.
   const [materialsStoreEscolhida, setMaterialsStoreId] = useState("");
+  // Numero do pedido de materiais em voo; so o mais recente pode gravar.
+  const pedidoDeAssets = useRef(0);
   const materialsStoreId =
     materialsStoreEscolhida || (!loadingStores ? (stores[0]?.id ?? "") : "");
   const [additionalLogoFiles, setAdditionalLogoFiles] = useState<File[]>([]);
@@ -380,12 +382,21 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
   }
 
   async function loadStoreAssets(storeId: string) {
+    // Ultima requisicao vence.
+    //
+    // O efeito refaz esta busca a cada troca de loja e nao havia guarda: se a
+    // pessoa troca de A para B e a resposta de A demora mais, ela chega DEPOIS
+    // e sobrescreve os materiais de B. A tela passa a mostrar o material de
+    // marca de outra loja -- e e esse material que alimenta a geracao de
+    // imagem, entao o erro nao fica so na tela.
+    const meuPedido = ++pedidoDeAssets.current;
     try {
       const resposta = await fetch(
         `/api/store-assets?storeId=${encodeURIComponent(storeId)}`
       );
       if (!resposta.ok) return;
       const dados = await resposta.json();
+      if (meuPedido !== pedidoDeAssets.current) return;
       setStoreAssets(dados.assets || []);
     } catch {
       // best-effort: a tela abre sem os materiais em vez de falhar

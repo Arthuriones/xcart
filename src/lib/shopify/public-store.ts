@@ -540,6 +540,34 @@ const skuIndexCache = new Map<
 >();
 const SKU_INDEX_TTL_MS = 30 * 60 * 1000;
 
+/**
+ * Teto de dominios no cache.
+ *
+ * Nao havia nenhum: o TTL so era conferido na LEITURA do mesmo dominio, entao
+ * entrada de dominio que nunca mais fosse consultado ficava para sempre. Cada
+ * uma guarda o indice SKU -> variantId de ate 5000 produtos (as lojas desta
+ * conta chegam a 2671 variantes), numa instancia serverless que fica quente
+ * por horas.
+ *
+ * E o /resolve e publico: quem tiver tokens de rotas diferentes faz o cache
+ * crescer de proposito.
+ */
+const MAX_DOMINIOS_NO_CACHE = 40;
+
+/** Tira o que expirou e, se ainda estiver cheio, o mais antigo. */
+function podarCacheDeSku() {
+  const agora = Date.now();
+  for (const [dominio, entrada] of skuIndexCache) {
+    if (agora - entrada.at >= SKU_INDEX_TTL_MS) skuIndexCache.delete(dominio);
+  }
+  while (skuIndexCache.size >= MAX_DOMINIOS_NO_CACHE) {
+    // Map itera na ordem de insercao: o primeiro e o mais antigo.
+    const maisAntigo = skuIndexCache.keys().next();
+    if (maisAntigo.done) break;
+    skuIndexCache.delete(maisAntigo.value);
+  }
+}
+
 async function buildSkuIndex(domain: string): Promise<Map<string, number>> {
   const { products } = await fetchPublicShopifyProducts(domain, { limit: 5000 });
   const index = new Map<string, number>();
@@ -568,6 +596,7 @@ export async function resolveVariantIdsBySku(
   if (!index) {
     try {
       index = await buildSkuIndex(domain);
+      podarCacheDeSku();
       skuIndexCache.set(domain, { at: Date.now(), index });
     } catch {
       return new Map();
