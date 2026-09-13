@@ -1,15 +1,52 @@
 (function () {
-  // Forca no-referrer mesmo que o tema ja tenha uma meta/tag de referrer com
-  // outra politica: a dark store nunca pode saber que o trafego veio da
-  // vitrine, entao isso precisa ganhar de qualquer config existente.
-  var existingReferrerMeta = document.querySelector('meta[name="referrer"]');
-  if (existingReferrerMeta) {
-    existingReferrerMeta.setAttribute("content", "no-referrer");
-  } else {
-    var noReferrerMeta = document.createElement("meta");
-    noReferrerMeta.setAttribute("name", "referrer");
-    noReferrerMeta.setAttribute("content", "no-referrer");
-    document.head.insertBefore(noReferrerMeta, document.head.firstChild);
+  // Politica de referrer do DOCUMENTO -- ultimo recurso, nao o caminho normal.
+  //
+  // Antes isto rodava sempre, no topo do arquivo. Como o script vive no
+  // theme.liquid, toda pagina da vitrine passava a mandar no-referrer para
+  // TUDO: pixel do Meta, TikTok, analytics da Shopify e apps. Era canhao para
+  // matar mosca -- a unica navegacao que precisa de protecao e a que sai para
+  // a loja de checkout, e essa da para marcar link a link (irParaCheckout).
+  //
+  // Sobrevive so para o caso de o link marcado falhar: ai a politica do
+  // documento e a unica coisa entre a vitrine e a dark store, e tem que ser
+  // aplicada ANTES de navegar.
+  function forcarNoReferrerNoDocumento() {
+    try {
+      var metaExistente = document.querySelector('meta[name="referrer"]');
+      if (metaExistente) {
+        metaExistente.setAttribute("content", "no-referrer");
+      } else {
+        var meta = document.createElement("meta");
+        meta.setAttribute("name", "referrer");
+        meta.setAttribute("content", "no-referrer");
+        document.head.insertBefore(meta, document.head.firstChild);
+      }
+    } catch (e) {}
+  }
+
+  // Navega para a loja de checkout sem contar de onde o comprador veio.
+  //
+  // Anchor com rel="noreferrer" em vez de location.href: a politica vale para
+  // ESTE link e mais nada, entao o resto da vitrine continua mandando Referer
+  // normalmente. location.href nao aceita rel -- para proteger a navegacao com
+  // ele era preciso mexer na politica do documento inteiro.
+  //
+  // Medido em navegador: com rel="noreferrer" a loja de destino recebe
+  // Referer nulo; sem nada, recebe a origem da vitrine (o padrao dos
+  // navegadores e strict-origin-when-cross-origin, e a Shopify nao manda
+  // header Referrer-Policy nenhum).
+  function irParaCheckout(url) {
+    try {
+      var a = document.createElement("a");
+      a.href = url;
+      a.rel = "noreferrer noopener";
+      a.style.display = "none";
+      (document.body || document.documentElement).appendChild(a);
+      a.click();
+    } catch (e) {
+      forcarNoReferrerNoDocumento();
+      window.location.href = url;
+    }
   }
 
   var scriptTag = document.currentScript;
@@ -545,7 +582,7 @@
         String(cart.item_count || "") + " itens -> " +
           ((lastRoutedTarget && lastRoutedTarget.domain) || "?")
       );
-      window.location.href = destino;
+      irParaCheckout(destino);
     } catch (error) {
       console.warn("[RoutedCheckout] erro ao rotear checkout", error);
       trackFallback("cart_checkout_error", error);

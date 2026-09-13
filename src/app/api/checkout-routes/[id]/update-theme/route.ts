@@ -9,6 +9,34 @@ import { buildEmbedConfig } from "@/lib/checkout-routes/embed-config";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+/**
+ * Rede de seguranca do referrer, no proprio tema da vitrine.
+ *
+ * O loader marca o link de saida com rel="noreferrer", e essa e a protecao
+ * que vale no dia a dia. Mas ela depende do JS do app chegar ao navegador --
+ * se um bloqueador barrar o script, ou se algum botao de carteira navegar por
+ * fora do nosso codigo, a politica do documento e a unica coisa que resta.
+ *
+ * `same-origin` e nao `no-referrer` de proposito: o objetivo e a loja de
+ * checkout nao saber de onde veio o comprador, e ela e cross-origin -- o
+ * cabecalho ja e cortado. `no-referrer` cortaria tambem a navegacao interna
+ * da vitrine, que e o que a analytics da Shopify usa para montar o caminho da
+ * sessao. Protege o mesmo e cobra menos.
+ *
+ * Se o tema ja declara uma politica, respeitamos: o lojista pode ter motivo, e
+ * sobrescrever silenciosamente o ajuste dele seria pior que o problema.
+ */
+function comMetaReferrer(conteudo: string): string {
+  if (/<meta\b[^>]*name=["']referrer["']/i.test(conteudo)) return conteudo;
+  // `<head>` cru nao basta: tema costuma abrir com `<head class="...">` ou
+  // quebrar a tag em varias linhas. Casar so a forma simples deixaria a meta
+  // de fora sem ninguem perceber.
+  const abertura = /<head\b[^>]*>/i.exec(conteudo);
+  if (!abertura) return conteudo;
+  const meta = '<meta name="referrer" content="same-origin">';
+  return conteudo.replace(abertura[0], `${abertura[0]}\n  ${meta}`);
+}
+
 async function shopifyRest(
   domain: string,
   accessToken: string,
@@ -161,6 +189,8 @@ export async function POST(
     } else {
       newContent = currentContent.replace("</head>", `${newScriptTag}\n</head>`);
     }
+
+    newContent = comMetaReferrer(newContent);
 
     if (newContent !== currentContent) {
       await shopifyRest(vitrineDomain, accessToken, `/themes/${mainTheme.id}/assets.json`, {
