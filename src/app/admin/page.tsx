@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import type { FaturamentoAdmin } from "@/lib/sales/admin-types";
 
 interface AdminUser {
   id: string;
@@ -100,6 +101,12 @@ export default function AdminOverviewPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Faturamento dos clientes vem em outra chamada de proposito: ela pergunta
+  // a cada loja de checkout na Shopify e leva alguns segundos. Junto com o
+  // overview, seguraria o painel inteiro nesse tempo.
+  const [gmv, setGmv] = useState<FaturamentoAdmin | null>(null);
+  const [gmvErro, setGmvErro] = useState<string | null>(null);
+
   useEffect(() => {
     fetch("/api/admin/overview")
       .then(async (res) => {
@@ -109,6 +116,16 @@ export default function AdminOverviewPage() {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/admin/revenue?period=30")
+      .then(async (res) => {
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error || "Falha.");
+        setGmv(body);
+      })
+      .catch((e) => setGmvErro(e instanceof Error ? e.message : "Falha."));
   }, []);
 
   if (loading) {
@@ -211,6 +228,92 @@ export default function AdminOverviewPage() {
             </Card>
           ))}
         </div>
+      </div>
+
+      {/* Dinheiro do CLIENTE, nao nosso. Fica em bloco separado de proposito:
+          misturar GMV de terceiro com MRR na mesma fileira faz olhar o painel e
+          nao saber qual parte e receita nossa. */}
+      <div className="space-y-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Faturamento dos clientes · 30 dias
+          </p>
+          <Link
+            href="/admin/faturamento"
+            className="text-xs text-muted-foreground hover:text-primary hover:underline"
+          >
+            ver detalhe →
+          </Link>
+        </div>
+
+        {gmvErro ? (
+          <Card>
+            <CardContent className="p-4 text-sm text-muted-foreground">{gmvErro}</CardContent>
+          </Card>
+        ) : !gmv ? (
+          <Card>
+            <CardContent className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Perguntando a cada loja de checkout na Shopify…
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+            <Card className="border-emerald-500/40">
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">Total faturado pelos clientes</p>
+                <p className="mt-1 text-2xl font-semibold text-emerald-500">
+                  {brl(gmv.totalRevenueBrlCents / 100)}
+                </p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  {gmv.totalOrders} pedidos pagos · {gmv.storeCount} lojas de checkout
+                </p>
+                {(gmv.deniedCount > 0 || gmv.failedCount > 0) && (
+                  <p className="mt-1 text-[10px] text-amber-600">
+                    parcial: {gmv.deniedCount + gmv.failedCount} de {gmv.storeCount} lojas não
+                    responderam
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <p className="mb-2 text-xs text-muted-foreground">Quem mais fatura</p>
+                {gmv.usuarios.filter((u) => u.lojasComDados > 0).length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Nenhuma loja de checkout entregou números ainda.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {gmv.usuarios
+                      .filter((u) => u.lojasComDados > 0)
+                      .slice(0, 5)
+                      .map((u, i) => (
+                        <div key={u.userId} className="flex items-center gap-2 text-sm">
+                          <span className="w-4 shrink-0 text-xs text-muted-foreground">
+                            {i + 1}º
+                          </span>
+                          <Link
+                            href={`/admin/users/${u.userId}`}
+                            className="truncate text-foreground hover:text-primary hover:underline"
+                          >
+                            {u.email}
+                          </Link>
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {u.orders} ped.
+                          </span>
+                          <span className="ml-auto shrink-0 font-medium text-foreground">
+                            {brl(u.revenueBrlCents / 100)}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
 
       <div className="space-y-3">
