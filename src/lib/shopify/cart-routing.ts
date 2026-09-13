@@ -96,10 +96,24 @@ export function marketParamsFromLanguage(
   };
 }
 
+/**
+ * NAO acrescente `attributes[...]` aqui.
+ *
+ * Ate 2026-09 esta funcao recebia `{ routed_checkout: <id da rota>,
+ * routed_mode }` e os anexava a URL. Atributo de carrinho nao morre no
+ * redirect: a Shopify grava no pedido como note_attributes e no landing_site,
+ * onde fica visivel no admin da loja de checkout, em todo pedido, para sempre.
+ * Nao dizia o dominio da vitrine, mas era um id estavel de rota carimbado em
+ * cada venda -- e a loja de checkout nao deve saber de onde veio o comprador.
+ *
+ * Ninguem lia esses atributos: a atribuicao do track-fallback e do painel vem
+ * do `targetId` que o loader manda no corpo da requisicao. E o caminho inline
+ * do loader (o mais usado) ja montava a URL sem eles, entao os dois caminhos
+ * produziam URLs diferentes para o mesmo carrinho.
+ */
 export function buildCartPermalink(
   targetDomain: string,
   lines: { variantId: string; quantity: number }[],
-  attributes?: Record<string, string>,
   market?: { country?: string; locale?: string }
 ) {
   // Parser, nao regex: normalizeShopDomain aprovava "//evil.com", "ftp://evil.com/x"
@@ -121,10 +135,6 @@ export function buildCartPermalink(
   // Markets). Sem isso, cai na moeda base da loja (ex.: USD).
   if (market?.country) url.searchParams.set("country", market.country);
   if (market?.locale) url.searchParams.set("locale", market.locale);
-
-  for (const [key, value] of Object.entries(attributes || {})) {
-    if (key && value) url.searchParams.set(`attributes[${key}]`, value);
-  }
 
   return url.toString();
 }

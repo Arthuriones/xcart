@@ -120,15 +120,8 @@ export async function POST(request: NextRequest) {
         }
       : marketParamsFromLanguage(target.targetLanguage);
 
-    const redirectUrl = buildCartPermalink(
-      target.domain,
-      resolvedLines,
-      {
-        routed_checkout: config.id,
-        routed_mode: config.mode,
-      },
-      market
-    );
+    // Sem atributos de carrinho aqui de proposito -- ver buildCartPermalink.
+    const redirectUrl = buildCartPermalink(target.domain, resolvedLines, market);
 
     return NextResponse.json(
       {
