@@ -42,8 +42,26 @@ interface TargetVariantInfo {
   options: string[];
 }
 
+/**
+ * Chave de combinacao de opcoes dentro de um produto: "gid...|preto|38".
+ *
+ * A Shopify recusa duas variantes com a MESMA combinacao de opcoes no mesmo
+ * produto -- independente do SKU. Indexar so por SKU (como era) deixava o
+ * conserto cego para essa regra.
+ */
+function chaveDeOpcoes(productId: string, valores: (string | null | undefined)[]) {
+  return (
+    productId +
+    "|" +
+    valores.map((v) => (v || "").trim().toLowerCase()).join("|")
+  );
+}
+
 async function getAllTargetVariants(creds: ShopifyCredentials) {
   const bySku = new Map<string, TargetVariantInfo>();
+  // Segundo indice, pela combinacao de opcoes. Aqui entra TODA variante,
+  // inclusive a sem SKU -- que e justamente a que o indice por SKU perdia.
+  const byOpcoes = new Map<string, TargetVariantInfo>();
   let after: string | null = null;
   for (let page = 0; page < 60; page += 1) {
     const data = await getProducts(creds, { first: 250, after });
@@ -53,23 +71,35 @@ async function getAllTargetVariants(creds: ShopifyCredentials) {
         (option: { name: string }) => option.name
       );
       for (const variant of product.variants?.nodes || []) {
+        const info: TargetVariantInfo = {
+          variantId: numericId(variant.id) as string,
+          productId: product.id,
+          productTitle: product.title,
+          options,
+        };
+
+        const selecionadas = (variant.selectedOptions || []) as {
+          name: string;
+          value: string;
+        }[];
+        if (selecionadas.length) {
+          const chave = chaveDeOpcoes(
+            product.id,
+            selecionadas.map((o) => o.value)
+          );
+          if (!byOpcoes.has(chave)) byOpcoes.set(chave, info);
+        }
+
         if (!variant.sku) continue;
         const key = variant.sku.trim().toLowerCase();
-        if (!bySku.has(key)) {
-          bySku.set(key, {
-            variantId: numericId(variant.id) as string,
-            productId: product.id,
-            productTitle: product.title,
-            options,
-          });
-        }
+        if (!bySku.has(key)) bySku.set(key, info);
       }
     }
     const pageInfo = data?.products?.pageInfo;
     if (!pageInfo?.hasNextPage || !pageInfo?.endCursor) break;
     after = pageInfo.endCursor;
   }
-  return bySku;
+  return { bySku, byOpcoes };
 }
 
 export interface HealRouteResult {
@@ -81,6 +111,8 @@ export interface HealRouteResult {
   dedupedSkuCount: number;
   fixedWrongCount: number;
   extendedCount: number;
+  /** Variantes que ja existiam no destino e so entraram no mapa. */
+  adoptedVariantCount: number;
   createdProductCount: number;
   createdVariantCount: number;
   imageQueueCount: number;
@@ -325,10 +357,11 @@ async function executarConserto(
     throw new HealRouteError(mensagem, 409);
   }
 
-  const [targetIndex, { products: sourceProducts }] = await Promise.all([
-    getAllTargetVariants(targetCreds),
-    fetchPublicShopifyProducts(sourceStore.shop_domain, { limit: 5000 }),
-  ]);
+  const [{ bySku: targetIndex, byOpcoes: targetPorOpcoes }, { products: sourceProducts }] =
+    await Promise.all([
+      getAllTargetVariants(targetCreds),
+      fetchPublicShopifyProducts(sourceStore.shop_domain, { limit: 5000 }),
+    ]);
 
   // O catalogo das duas lojas acabou de ser paginado inteiro aqui. Guardar a
   // contagem agora sai de graca; buscar depois, so para a tela de lojas
@@ -428,6 +461,10 @@ async function executarConserto(
   }
 
   let extendedCount = 0;
+  // Variante que ja existia no destino e so precisava entrar no mapa. Conta
+  // separado de extendedCount: uma coisa e criar variante na loja de checkout,
+  // outra e reconhecer a que ja estava la.
+  let adotadasCount = 0;
   let createdProductCount = 0;
   let createdVariantCount = 0;
   const imageQueueItems: {
@@ -455,19 +492,50 @@ async function executarConserto(
 
     if (existingTarget) {
       // Produto ja existe no destino: so faltam variantes.
+      //
+      // "Falta" aqui foi decidido por SKU, mas a Shopify recusa duplicata por
+      // COMBINACAO DE OPCOES. Variante que existe no destino com as opcoes
+      // certas e SKU diferente (ou sem SKU) caia nos dois lados: nunca casava
+      // pelo SKU, sempre colidia nas opcoes. O conserto tentava cria-la de
+      // hora em hora e falhava de hora em hora -- "The variant 'BLACK'
+      // already exists" -- deixando a rota marcada como problematica para
+      // sempre.
+      //
+      // Entao antes de criar, procuramos pela combinacao de opcoes. Se ja
+      // existe, adotamos: mapeamos o SKU da vitrine para a variante que esta
+      // la. Nao mexemos no SKU dela de proposito -- variante da loja de
+      // checkout pode estar mapeada por outra rota, e reescrever SKU ali
+      // quebraria aquela.
+      const paraCriar: typeof items = [];
+      for (const item of items) {
+        const jaExiste = targetPorOpcoes.get(
+          chaveDeOpcoes(existingTarget.productId, item.variant.optionValues)
+        );
+        if (jaExiste) {
+          if (item.variant.sku) {
+            recordCorrect(item.variant.sku, item.variant.id, jaExiste.variantId);
+            adotadasCount += 1;
+          }
+        } else {
+          paraCriar.push(item);
+        }
+      }
+
+      if (paraCriar.length === 0) continue;
+
       try {
         const created = await addProductVariants(
           targetCreds,
           existingTarget.productId,
           existingTarget.options,
-          items.map(({ variant }) => ({
+          paraCriar.map(({ variant }) => ({
             price: variant.price,
             sku: variant.sku || undefined,
             optionValues: variant.optionValues,
           }))
         );
         for (let i = 0; i < created.length; i++) {
-          const sourceVariant = items[i]?.variant;
+          const sourceVariant = paraCriar[i]?.variant;
           if (sourceVariant?.sku) {
             recordCorrect(
               sourceVariant.sku,
@@ -669,6 +737,7 @@ async function executarConserto(
     carimbo.desduplicadas > 0 ||
     fixedWrongCount > 0 ||
     extendedCount > 0 ||
+    adotadasCount > 0 ||
     createdProductCount > 0;
 
   return {
@@ -679,6 +748,7 @@ async function executarConserto(
     dedupedSkuCount: carimbo.desduplicadas,
     fixedWrongCount,
     extendedCount,
+    adoptedVariantCount: adotadasCount,
     createdProductCount,
     createdVariantCount,
     imageQueueCount,
