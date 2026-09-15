@@ -39,6 +39,7 @@ import {
   ChevronDown,
   Copy,
   Check,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getPublicAppUrl } from "@/lib/public-url";
@@ -814,12 +815,16 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
                 monta o carrinho aqui.
               </p>
               <div className="flex flex-col gap-2">
+                {/* A linha era um <button> inteiro, e por isso o domínio só
+                    podia ser texto morto: âncora dentro de botão é HTML
+                    inválido. Agora a linha é um <div> e o clique mora em dois
+                    alvos — o bloco "Gerenciar", que abre o painel da loja, e o
+                    domínio, que abre a vitrine no navegador. */}
                 {vitrines.map((loja) => (
-                  <button
+                  <div
                     key={loja.id}
-                    type="button"
                     onClick={() => void openProfileEditor(loja)}
-                    className="flex w-full items-center gap-4 rounded-lg border border-border bg-surface px-4 py-[13px] text-left transition-colors hover:border-[var(--border-strong)] hover:bg-surface-2"
+                    className="flex w-full cursor-pointer items-center gap-4 rounded-lg border border-border bg-surface px-4 py-[13px] text-left transition-colors hover:border-[var(--border-strong)] hover:bg-surface-2"
                   >
                     <span className="min-w-0 flex-1">
                       {/* Ordem do design: bolinha, nome, palavra. */}
@@ -835,8 +840,33 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
                           {ESTADO[loja.routeState].texto}
                         </span>
                       </span>
-                      <span className="mt-[3px] block truncate font-mono text-[11px] text-t3">
-                        {loja.shop_domain}
+                      {/* Dois destinos: o domínio abre a vitrine, o ícone abre
+                          o admin da Shopify daquela loja — que é para onde o
+                          lojista vai quando precisa mexer em algo.
+
+                          stopPropagation nos dois: sem isso o clique abriria o
+                          link E o painel da loja por baixo. */}
+                      <span className="mt-[3px] flex items-center gap-1.5">
+                        <a
+                          href={`https://${loja.shop_domain}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`Abrir ${loja.shop_domain}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="min-w-0 truncate font-mono text-[11px] text-t3 transition-colors hover:text-ink hover:underline"
+                        >
+                          {loja.shop_domain}
+                        </a>
+                        <a
+                          href={`https://${loja.shop_domain}/admin`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Abrir admin da Shopify"
+                          onClick={(e) => e.stopPropagation()}
+                          className="shrink-0 text-t4 transition-colors hover:text-ink"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
                       </span>
                     </span>
                     {/* Mesma regra da tabela: travessão quando nunca foi
@@ -847,10 +877,20 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
                     <span className="shrink-0 text-[12px] text-t3">
                       Sync {sincronizado(loja.catalog_synced_at)}
                     </span>
-                    <span className="shrink-0 text-[12px] font-semibold text-t1">
+                    {/* O clique da linha é conveniência de mouse; este botão é
+                        o que o teclado alcança. stopPropagation para o handler
+                        da linha não disparar junto. */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void openProfileEditor(loja);
+                      }}
+                      className="shrink-0 text-[12px] font-semibold text-t1 transition-colors hover:text-ink"
+                    >
                       Gerenciar &rarr;
-                    </span>
-                  </button>
+                    </button>
+                  </div>
                 ))}
               </div>
             </section>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Ellipsis } from "lucide-react";
+import { Ellipsis, ExternalLink } from "lucide-react";
 import type { StoreRow } from "@/lib/stores/queries";
 
 /**
@@ -120,18 +120,46 @@ export function StoreTable({
             key={loja.id}
             className={`grid ${GRADE} min-h-[44px] items-center border-b border-[var(--border-subtle)] bg-surface px-3.5 transition-colors last:border-b-0 hover:bg-surface-2`}
           >
-            <button
-              type="button"
-              onClick={() => onAbrir(loja)}
-              className="min-w-0 py-2 text-left"
-            >
-              <span className="block truncate text-[12.5px] font-semibold text-ink">
+            {/* Nome e dominio sao dois alvos diferentes de proposito: o nome
+                abre o painel da loja aqui dentro, o dominio abre a loja no
+                navegador. Antes o dominio era texto morto, e para ver a
+                vitrine o usuario tinha que copiar e colar na barra.
+
+                Nao da para embrulhar os dois num <button> so: ancora dentro de
+                botao e HTML invalido e o navegador decide sozinho o que fazer
+                com o clique. */}
+            <div className="min-w-0 py-2">
+              <button
+                type="button"
+                onClick={() => onAbrir(loja)}
+                className="block max-w-full truncate text-left text-[12.5px] font-semibold text-ink"
+              >
                 {loja.name}
+              </button>
+              {/* Dois destinos: o domínio abre a loja, o ícone abre o admin
+                  da Shopify dela — que é para onde o lojista vai quando
+                  precisa mexer em algo. */}
+              <span className="flex items-center gap-1.5">
+                <a
+                  href={`https://${loja.shop_domain}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={`Abrir ${loja.shop_domain}`}
+                  className="min-w-0 truncate font-mono text-[10.5px] text-t3 transition-colors hover:text-ink hover:underline"
+                >
+                  {loja.shop_domain}
+                </a>
+                <a
+                  href={`https://${loja.shop_domain}/admin`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Abrir admin da Shopify"
+                  className="shrink-0 text-t4 transition-colors hover:text-ink"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                </a>
               </span>
-              <span className="block truncate font-mono text-[10.5px] text-t3">
-                {loja.shop_domain}
-              </span>
-            </button>
+            </div>
 
             <EstadoLoja estado={loja.routeState} />
 
