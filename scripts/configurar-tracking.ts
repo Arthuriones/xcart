@@ -9,6 +9,7 @@
  * aqui custa um comando; descoberto na primeira venda custa a venda.
  *
  * Uso:
+ *   npx tsx scripts/configurar-tracking.ts --loja <dominio> --aw AW-123456789 --rotulo AbC-D_efGh
  *   npx tsx scripts/configurar-tracking.ts --loja <dominio> --pixel <id> --token <token> [--teste TEST12345]
  *   npx tsx scripts/configurar-tracking.ts --loja <dominio> --desligar
  *   npx tsx scripts/configurar-tracking.ts --loja <dominio> --ver
@@ -28,6 +29,8 @@ function arg(nome: string): string | null {
 
 const dominio = arg("loja");
 const pixel = arg("pixel");
+const aw = arg("aw");
+const rotulo = arg("rotulo");
 const token = arg("token");
 const codigoTeste = arg("teste");
 const desligar = process.argv.includes("--desligar");
@@ -57,7 +60,7 @@ async function main() {
   if (apenasVer) {
     const { data: cfg } = await admin
       .from("tracking_configs")
-      .select("enabled, meta_pixel_id, meta_test_event_code, updated_at")
+      .select("enabled, meta_pixel_id, meta_test_event_code, google_conversion_id, google_conversion_label, updated_at")
       .eq("store_id", loja.id)
       .maybeSingle();
     const { data: seg } = await admin
@@ -86,22 +89,51 @@ async function main() {
     return;
   }
 
-  if (!pixel || !token) {
-    console.error("falta --pixel <id> e/ou --token <token>");
+  const querMeta = Boolean(pixel || token);
+  const querGoogle = Boolean(aw || rotulo);
+
+  if (!querMeta && !querGoogle) {
+    console.error("falta --aw + --rotulo (Google) ou --pixel + --token (Meta)");
     process.exit(1);
   }
-  console.log(`  pixel: ${pixel}`);
-  console.log(`  token: ${token.length} chars`);
-  console.log(`  teste: ${codigoTeste || "(sem codigo -- o evento vai para PRODUCAO)"}`);
+  if (querMeta && (!pixel || !token)) {
+    console.error("Meta precisa dos dois: --pixel e --token");
+    process.exit(1);
+  }
+  if (querGoogle && (!aw || !rotulo)) {
+    // Um sem o outro nao identifica conversao nenhuma -- a requisicao sairia
+    // e o Google descartaria em silencio.
+    console.error("Google precisa dos dois: --aw e --rotulo");
+    process.exit(1);
+  }
+  if (querGoogle) {
+    const { apenasNumeroDaConversao } = await import("../src/lib/tracking/normalizar");
+    if (!apenasNumeroDaConversao(aw!)) {
+      console.error(`--aw invalido: "${aw}" (esperado AW-123456789)`);
+      process.exit(1);
+    }
+    console.log(`  google: ${aw} / ${rotulo}`);
+  }
+  if (querMeta) {
+    console.log(`  pixel: ${pixel}`);
+    console.log(`  token: ${token!.length} chars`);
+    console.log(`  teste: ${codigoTeste || "(sem codigo -- o evento vai para PRODUCAO)"}`);
+  }
 
-  // --- valida o token antes de ligar ---------------------------------------
+  // --- valida o token do Meta antes de ligar --------------------------------
+  //
+  // So o Meta da para validar de antemao: a API dele responde se aceitou. O
+  // endpoint de conversao do Google devolve 200 mesmo quando ignora o
+  // conteudo, entao nao existe "testar o AW" -- a conferencia e na tela do
+  // Google Ads, depois da primeira venda.
+  if (querMeta) {
   const { enviarParaMeta } = await import("../src/lib/tracking/meta-capi");
   const { montarUserData, sha256 } = await import("../src/lib/tracking/normalizar");
 
   const agora = Math.floor(Date.now() / 1000);
   const prova = await enviarParaMeta(
-    pixel,
-    token,
+    pixel!,
+    token!,
     [
       {
         event_name: "Purchase",
@@ -127,6 +159,7 @@ async function main() {
   }
   console.log(`\n  Meta aceitou (${prova.recebidos} evento, trace ${prova.trace || "-"})`);
   console.log(`  hash de conferencia do e-mail: ${sha256("teste+config@exemplo.com").slice(0, 16)}...`);
+  }
 
   // --- grava ----------------------------------------------------------------
   const { error: e1 } = await admin.from("tracking_configs").upsert(
@@ -136,6 +169,8 @@ async function main() {
       enabled: true,
       meta_pixel_id: pixel,
       meta_test_event_code: codigoTeste,
+      google_conversion_id: aw,
+      google_conversion_label: rotulo,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "store_id" }
@@ -145,17 +180,19 @@ async function main() {
     process.exit(1);
   }
 
-  const { error: e2 } = await admin.from("tracking_secrets").upsert(
-    {
-      store_id: loja.id,
-      meta_access_token: token,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "store_id" }
-  );
-  if (e2) {
-    console.error("falha ao gravar token:", e2.message);
-    process.exit(1);
+  if (token) {
+    const { error: e2 } = await admin.from("tracking_secrets").upsert(
+      {
+        store_id: loja.id,
+        meta_access_token: token,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "store_id" }
+    );
+    if (e2) {
+      console.error("falha ao gravar token:", e2.message);
+      process.exit(1);
+    }
   }
 
   console.log("\n  rastreamento LIGADO.");
