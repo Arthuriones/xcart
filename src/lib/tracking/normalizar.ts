@@ -250,3 +250,15 @@ export function contarSinais(userData: UserData): number {
     Array.isArray(v) ? v.length > 0 : Boolean(v)
   ).length;
 }
+
+/**
+ * So os digitos do AW-XXXXXXXXX do Google Ads.
+ *
+ * O lojista copia "AW-123456789" do painel, mas o caminho do endpoint de
+ * conversao leva so o numero. Aceitar os dois formatos evita o erro mais bobo
+ * possivel -- colar como veio e a conversao nunca chegar.
+ */
+export function apenasNumeroDaConversao(id: string): string | null {
+  const m = (id || "").trim().match(/(\d{6,})/);
+  return m ? m[1] : null;
+}

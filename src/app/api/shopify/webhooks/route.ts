@@ -194,7 +194,7 @@ async function tratarPedidoCriado(
   if (sinais.visitorId) {
     const { data } = await admin
       .from("tracking_identities")
-      .select("fbp, fbc, fbclid, client_ip_address, client_user_agent")
+      .select("fbp, fbc, fbclid, gclid, client_ip_address, client_user_agent")
       .eq("store_id", loja.id)
       .eq("visitor_id", sinais.visitorId)
       .maybeSingle();
@@ -203,6 +203,7 @@ async function tratarPedidoCriado(
         fbp: data.fbp,
         fbc: data.fbc,
         fbclid: data.fbclid,
+        gclid: data.gclid,
         clientIp: data.client_ip_address,
         userAgent: data.client_user_agent,
       };
@@ -214,32 +215,57 @@ async function tratarPedidoCriado(
     dominioLoja: loja.shop_domain,
   });
 
-  try {
-    const { id, duplicado } = await enfileirar(admin, {
-      storeId: loja.id,
-      destination: "meta",
-      evento,
-      orderId: String(pedido.id ?? ""),
+  // Uma linha de fila por destino configurado. Separadas de proposito: cada
+  // API tem o seu formato, e uma falhar nao pode impedir a outra de sair.
+  const destinos: { destination: "meta" | "google"; payload: unknown }[] = [];
+  if (carregado.config.metaPixelId) {
+    destinos.push({ destination: "meta", payload: evento });
+  }
+  if (carregado.config.googleConversionId && carregado.config.googleConversionLabel) {
+    const { montarConversaoGoogle } = await import("@/lib/tracking/purchase");
+    destinos.push({
+      destination: "google",
+      payload: montarConversaoGoogle(pedido, { identidade }),
     });
+  }
 
-    if (duplicado) {
-      return ok({ duplicado: true, topic: "orders/create", eventId: evento.event_id });
-    }
+  if (destinos.length === 0) {
+    return ok({ ignorado: "nenhum destino configurado", topic: "orders/create" });
+  }
 
-    if (id) {
-      // Melhor esforco: falhou, a linha segue pendente para o cron.
-      await entregar(admin, {
-        id,
-        store_id: loja.id,
-        destination: "meta",
-        payload: evento,
-        attempts: 0,
+  try {
+    const saida: Record<string, string> = {};
+    for (const alvo of destinos) {
+      const { id, duplicado } = await enfileirar(admin, {
+        storeId: loja.id,
+        destination: alvo.destination,
+        evento,
+        orderId: String(pedido.id ?? ""),
+        payload: alvo.payload,
       });
+
+      if (duplicado) {
+        saida[alvo.destination] = "duplicado";
+        continue;
+      }
+
+      if (id) {
+        // Melhor esforco: falhou, a linha segue pendente para o cron.
+        const r = await entregar(admin, {
+          id,
+          store_id: loja.id,
+          destination: alvo.destination,
+          payload: alvo.payload,
+          attempts: 0,
+        });
+        saida[alvo.destination] = r.ok ? "enviado" : "na fila";
+      }
     }
 
     return ok({
       topic: "orders/create",
       eventId: evento.event_id,
+      destinos: saida,
       // Quantos sinais foram junto: e o que vira Event Match Quality.
       sinais: contarSinais(userData),
     });

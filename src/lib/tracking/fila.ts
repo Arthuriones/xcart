@@ -21,6 +21,8 @@ export interface ConfigTracking {
   enabled: boolean;
   metaPixelId: string | null;
   metaTestEventCode: string | null;
+  googleConversionId: string | null;
+  googleConversionLabel: string | null;
 }
 
 /**
@@ -37,7 +39,9 @@ export async function carregarConfig(
   const [{ data: cfg }, { data: seg }] = await Promise.all([
     admin
       .from("tracking_configs")
-      .select("store_id, enabled, meta_pixel_id, meta_test_event_code")
+      .select(
+        "store_id, enabled, meta_pixel_id, meta_test_event_code, google_conversion_id, google_conversion_label"
+      )
       .eq("store_id", storeId)
       .maybeSingle(),
     admin
@@ -54,6 +58,8 @@ export async function carregarConfig(
       enabled: Boolean(cfg.enabled),
       metaPixelId: cfg.meta_pixel_id,
       metaTestEventCode: cfg.meta_test_event_code,
+      googleConversionId: cfg.google_conversion_id,
+      googleConversionLabel: cfg.google_conversion_label,
     },
     token: seg?.meta_access_token ?? null,
   };
@@ -71,8 +77,11 @@ export async function enfileirar(
   entrada: {
     storeId: string;
     destination: "meta" | "google" | "ga4";
+    /** Serve de fonte do nome e da chave de dedupe, iguais para todo destino. */
     evento: EventoCapi;
     orderId?: string | null;
+    /** O que vai para a API do destino. Omitido = o proprio evento (Meta). */
+    payload?: unknown;
   }
 ): Promise<{ id: string | null; duplicado: boolean }> {
   const { data, error } = await admin
@@ -83,7 +92,7 @@ export async function enfileirar(
       event_name: entrada.evento.event_name,
       event_id: entrada.evento.event_id,
       order_id: entrada.orderId ?? null,
-      payload: entrada.evento as unknown as Record<string, unknown>,
+      payload: (entrada.payload ?? entrada.evento) as Record<string, unknown>,
     })
     .select("id")
     .single();
@@ -111,6 +120,9 @@ export async function entregar(
     attempts: number;
   }
 ): Promise<{ ok: boolean; motivo?: string }> {
+  if (linha.destination === "google") {
+    return entregarGoogle(admin, linha);
+  }
   if (linha.destination !== "meta") {
     return { ok: false, motivo: "destino ainda nao implementado" };
   }
@@ -166,6 +178,90 @@ export async function entregar(
     })
     .eq("id", linha.id);
 
+  return { ok: false, motivo: r.erro };
+}
+
+/**
+ * Entrega no Google Ads.
+ *
+ * O payload guardado na fila e o mesmo evento Purchase do CAPI -- reaproveitar
+ * evita montar a venda duas vezes e garante que os dois destinos contam o
+ * MESMO valor. Daqui saem so os campos que o endpoint do Google entende.
+ *
+ * `gclid` e o unico sinal que importa: sem ele a conversao chega mas nao se
+ * liga a nenhum anuncio, e o Google Ads nao tem o que otimizar. Por isso a
+ * ausencia dele vira aviso na linha, nao falha silenciosa.
+ */
+async function entregarGoogle(
+  admin: ReturnType<typeof createAdminClient>,
+  linha: { id: string; store_id: string; payload: unknown; attempts: number }
+): Promise<{ ok: boolean; motivo?: string }> {
+  const { enviarParaGoogleAds } = await import("@/lib/tracking/google-ads");
+  const carregado = await carregarConfig(admin, linha.store_id);
+  const cfg = carregado?.config;
+
+  if (!cfg?.enabled || !cfg.googleConversionId || !cfg.googleConversionLabel) {
+    await admin
+      .from("tracking_events")
+      .update({
+        status: "falhou",
+        attempts: linha.attempts + 1,
+        last_error: !cfg?.enabled
+          ? "rastreamento desligado para esta loja"
+          : "conversion id ou label do Google ausente",
+      })
+      .eq("id", linha.id);
+    return { ok: false, motivo: "sem configuracao" };
+  }
+
+  const conv = linha.payload as {
+    gclid?: string | null;
+    orderId?: string;
+    value?: number;
+    currency?: string;
+  };
+  const gclid = conv.gclid || null;
+
+  const r = await enviarParaGoogleAds({
+    conversionId: cfg.googleConversionId,
+    label: cfg.googleConversionLabel,
+    gclid,
+    orderId: conv.orderId,
+    value: conv.value,
+    currency: conv.currency,
+  });
+
+  const tentativas = linha.attempts + 1;
+
+  if (r.ok) {
+    await admin
+      .from("tracking_events")
+      .update({
+        status: "enviado",
+        attempts: tentativas,
+        sent_at: new Date().toISOString(),
+        // "enviado" aqui e "o Google aceitou a requisicao". O endpoint
+        // responde 200 mesmo ignorando o conteudo -- a confirmacao de verdade
+        // so existe na tela do Google Ads. Guardar a URL permite repetir a
+        // chamada na mao para investigar.
+        last_error: gclid ? null : "sem gclid: conversao sem atribuicao a anuncio",
+        response: { url: r.url, status: r.status } as Record<string, unknown>,
+      })
+      .eq("id", linha.id);
+    return { ok: true };
+  }
+
+  const desistir = !r.podeTentarDeNovo || tentativas >= MAX_TENTATIVAS;
+  await admin
+    .from("tracking_events")
+    .update({
+      status: desistir ? "falhou" : "pendente",
+      attempts: tentativas,
+      next_attempt_at: proximaTentativaEm(tentativas).toISOString(),
+      last_error: r.erro?.slice(0, 500) ?? "falha desconhecida",
+      response: { url: r.url, status: r.status } as Record<string, unknown>,
+    })
+    .eq("id", linha.id);
   return { ok: false, motivo: r.erro };
 }
 

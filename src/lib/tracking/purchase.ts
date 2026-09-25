@@ -84,21 +84,67 @@ export function sinaisDoPedido(pedido: PedidoShopify) {
     fbc: atributo(pedido, "_fbc") || atributo(pedido, "fbc"),
     fbclid: atributo(pedido, "fbclid"),
     gclid: atributo(pedido, "gclid"),
+    gbraid: atributo(pedido, "gbraid"),
     wbraid: atributo(pedido, "wbraid"),
     ttclid: atributo(pedido, "ttclid"),
     visitorId: atributo(pedido, "_xc_vid") || atributo(pedido, "visitor_id"),
   };
 }
 
+/**
+ * O que o coletor guardou para este visitante.
+ *
+ * Um tipo so para os dois destinos: cada um le os campos que usa. Tipos
+ * separados obrigavam o chamador a fatiar o objeto antes de passar, e um
+ * campo novo teria que ser adicionado em dois lugares.
+ */
+export interface IdentidadeGuardada {
+  fbp?: string | null;
+  fbc?: string | null;
+  fbclid?: string | null;
+  gclid?: string | null;
+  clientIp?: string | null;
+  userAgent?: string | null;
+}
+
+/** O que o endpoint do Google Ads precisa. Formato proprio, nao o do CAPI. */
+export interface ConversaoGoogleDoPedido {
+  gclid: string | null;
+  gbraid: string | null;
+  wbraid: string | null;
+  orderId: string;
+  value: number;
+  currency: string;
+}
+
+/**
+ * Recorte do pedido para o Google Ads.
+ *
+ * Fica separado do evento do Meta de proposito: o payload do Meta e enviado
+ * CRU para a API deles, entao pendurar campo de outro destino nele iria junto
+ * na requisicao. Cada destino guarda na fila exatamente o que vai usar.
+ */
+export function montarConversaoGoogle(
+  pedido: PedidoShopify,
+  contexto: { identidade?: IdentidadeGuardada | null } = {}
+): ConversaoGoogleDoPedido {
+  const sinais = sinaisDoPedido(pedido);
+  const valor = Number(pedido.total_price ?? 0);
+  return {
+    gclid: sinais.gclid || contexto.identidade?.gclid || null,
+    gbraid: sinais.gbraid,
+    wbraid: sinais.wbraid,
+    // O numero do pedido vira `oid`: mesma conversion action com o mesmo oid
+    // o Google descarta, que e a protecao contra reentrega de webhook.
+    orderId: String(pedido.id ?? ""),
+    value: Number.isFinite(valor) ? valor : 0,
+    currency: (pedido.currency || "").toUpperCase(),
+  };
+}
+
 export interface ContextoPurchase {
   /** Sinais vindos de tracking_identities, quando o cart attribute nao veio. */
-  identidade?: {
-    fbp?: string | null;
-    fbc?: string | null;
-    fbclid?: string | null;
-    clientIp?: string | null;
-    userAgent?: string | null;
-  } | null;
+  identidade?: IdentidadeGuardada | null;
   /** Origem da loja, para o event_source_url. */
   dominioLoja?: string | null;
 }
