@@ -56,6 +56,8 @@ function pedidoDeTeste(numero: number) {
     client_details: { user_agent: "Mozilla/5.0 (iPhone)", browser_ip: "203.0.113.9" },
     // O que o snippet do tema grava (fase 2). Aqui simulado.
     note_attributes: [
+      { name: "gclid", value: "TESTE-GCLID-ABC123" },
+      { name: "_xc_vid", value: "teste.visitante" },
       { name: "_fbp", value: "fb.1.1700000000000.111" },
       { name: "fbclid", value: "TESTE123" },
     ],
@@ -120,13 +122,15 @@ async function main() {
 
   const { data: fila } = await admin
     .from("tracking_events")
-    .select("event_id, status, attempts, last_error, created_at")
+    .select("event_id, destination, status, attempts, last_error, response, created_at")
     .eq("store_id", data.id)
     .order("created_at", { ascending: false })
-    .limit(3);
+    .limit(6);
   console.log("\nfila de rastreamento:");
   for (const e of fila || []) {
-    console.log(`  ${e.event_id}  ${e.status}  tentativas=${e.attempts}  ${e.last_error || ""}`);
+    console.log(`  ${e.destination.padEnd(7)} ${e.event_id}  ${e.status}  tentativas=${e.attempts}  ${e.last_error || ""}`);
+    const resp = e.response as { url?: string } | null;
+    if (resp?.url) console.log(`          ${resp.url}`);
   }
   if (!fila?.length) {
     console.log("  (vazia -- esperado enquanto a loja nao tiver tracking_configs ligado)");
