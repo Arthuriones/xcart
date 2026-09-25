@@ -69,3 +69,21 @@ describe("conversao do Google Ads a partir do pedido", () => {
     expect(c.gclid).toBeNull();
   });
 });
+
+/**
+ * iOS: o Google manda gbraid OU wbraid no lugar do gclid, nunca os tres.
+ * Capturar e nao enviar deixava esse trafego inteiro sem atribuicao.
+ */
+describe("click id de iOS chega ao envio", () => {
+  it("gbraid vira parametro proprio quando nao ha gclid", async () => {
+    const { montarConversaoGoogle } = await import("../src/lib/tracking/purchase");
+    const c = montarConversaoGoogle({
+      id: 1,
+      currency: "JPY",
+      total_price: "100",
+      note_attributes: [{ name: "wbraid", value: "WB-999" }],
+    });
+    expect(c.gclid).toBeNull();
+    expect(c.wbraid).toBe("WB-999");
+  });
+});

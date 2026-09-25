@@ -216,16 +216,22 @@ async function entregarGoogle(
 
   const conv = linha.payload as {
     gclid?: string | null;
+    gbraid?: string | null;
+    wbraid?: string | null;
     orderId?: string;
     value?: number;
     currency?: string;
   };
-  const gclid = conv.gclid || null;
+  // Qualquer um dos tres serve de atribuicao; nenhum significa conversao
+  // orfa, que o Google conta mas nao liga a anuncio nenhum.
+  const temClique = conv.gclid || conv.gbraid || conv.wbraid || null;
 
   const r = await enviarParaGoogleAds({
     conversionId: cfg.googleConversionId,
     label: cfg.googleConversionLabel,
-    gclid,
+    gclid: conv.gclid,
+    gbraid: conv.gbraid,
+    wbraid: conv.wbraid,
     orderId: conv.orderId,
     value: conv.value,
     currency: conv.currency,
@@ -244,7 +250,9 @@ async function entregarGoogle(
         // responde 200 mesmo ignorando o conteudo -- a confirmacao de verdade
         // so existe na tela do Google Ads. Guardar a URL permite repetir a
         // chamada na mao para investigar.
-        last_error: gclid ? null : "sem gclid: conversao sem atribuicao a anuncio",
+        last_error: temClique
+          ? null
+          : "sem gclid/gbraid/wbraid: conversao sem atribuicao a anuncio",
         response: { url: r.url, status: r.status } as Record<string, unknown>,
       })
       .eq("id", linha.id);

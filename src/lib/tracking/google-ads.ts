@@ -41,6 +41,16 @@ export interface ConversaoGoogle {
   label: string;
   /** Click id capturado na chegada. Sem ele nao ha atribuicao a anuncio. */
   gclid?: string | null;
+  /**
+   * Substitutos do gclid no trafego de iOS.
+   *
+   * O iOS 14 quebrou o gclid em parte das campanhas de app, e o Google passou
+   * a mandar `gbraid` (web-to-app) ou `wbraid` (app-to-web) no lugar -- nunca
+   * os tres juntos. Capturar e nao enviar deixaria esse trafego inteiro sem
+   * atribuicao, que foi exatamente o bug que isto conserta.
+   */
+  gbraid?: string | null;
+  wbraid?: string | null;
   /** Numero do pedido. E o que o Google usa para nao contar duas vezes. */
   orderId?: string | null;
   value?: number | null;
@@ -78,7 +88,11 @@ export async function enviarParaGoogleAds(
   // <noscript> do snippet classico usa.
   url.searchParams.set("script", "0");
 
+  // Um dos tres, nesta ordem de preferencia. O Google nunca manda mais de um
+  // para o mesmo clique, e mandar dois faria a requisicao ser descartada.
   if (conv.gclid) url.searchParams.set("gclaw", conv.gclid);
+  else if (conv.gbraid) url.searchParams.set("gbraid", conv.gbraid);
+  else if (conv.wbraid) url.searchParams.set("wbraid", conv.wbraid);
   // `oid` e o transaction id: mesma conversion action + mesmo oid = o Google
   // descarta a segunda. E a rede de seguranca contra reentrega de webhook e
   // contra o canal nativo mandando a mesma venda.
