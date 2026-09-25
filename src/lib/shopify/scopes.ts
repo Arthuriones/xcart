@@ -69,6 +69,18 @@ export const SHOPIFY_SCOPES = [
   // resto, mas devolve ACCESS_DENIED em pedido ate ser reconectada. A tela de
   // Vendas mostra quais lojas estao nesse estado.
   "read_orders",
+
+  // Rastreamento server-side.
+  //
+  // `read_orders` acima tambem e pre-requisito daqui: sem ele a Shopify recusa
+  // ate a INSCRICAO no webhook orders/create, que e a unica fonte de conversao
+  // que nao depende do navegador do comprador.
+  //
+  // `write_pixels` + `read_customer_events` sao o Custom Web Pixel. Script de
+  // tema nao roda no checkout da Shopify -- e outro dominio, fora do tema --
+  // entao sem pixel nao existe evento de checkout nenhum.
+  "write_pixels",
+  "read_customer_events",
 ] as const;
 
 // String pronta para colar no painel da Shopify e para a URL de authorize.

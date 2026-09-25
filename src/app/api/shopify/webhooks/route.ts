@@ -135,10 +135,118 @@ export async function POST(request: NextRequest) {
       }
       return resposta;
     }
+    case "orders/create": {
+      const resposta = await tratarPedidoCriado(admin, loja, payload);
+      // Mesmo cuidado do uninstalled: o marcador de idempotencia foi gravado
+      // ANTES do processamento, entao pedir retry sem apaga-lo faria a
+      // entrega seguinte bater em "duplicado" e a conversao nunca sairia.
+      if (resposta.status >= 500 && cab.webhookId) {
+        await admin
+          .from("shopify_webhook_events")
+          .delete()
+          .eq("webhook_id", cab.webhookId);
+      }
+      return resposta;
+    }
     default:
       // Topico assinado que ainda nao tratamos: registrado (para idempotencia)
       // e aceito, sem retry.
       return ok({ ignorado: "topico sem tratamento", topic: cab.topic });
+  }
+}
+
+/**
+ * Pedido criado -> Purchase no CAPI.
+ *
+ * Este e o unico evento de conversao que nao depende do navegador do
+ * comprador: bloqueador de anuncio derruba o pixel e o ITP do Safari apaga o
+ * cookie em 7 dias, mas o pedido chega aqui do servidor da Shopify.
+ *
+ * O evento entra na FILA antes de qualquer chamada de rede. A entrega e
+ * tentada na hora porque o Meta prefere evento fresco, mas se falhar a linha
+ * continua pendente e o cron tenta de novo -- perder conversao justo no pico
+ * de venda, que e quando o Meta limita taxa, seria o pior momento possivel.
+ */
+async function tratarPedidoCriado(
+  admin: ReturnType<typeof createAdminClient>,
+  loja: { id: string; shop_domain: string },
+  payload: Record<string, unknown>
+) {
+  const { carregarConfig, enfileirar, entregar } = await import(
+    "@/lib/tracking/fila"
+  );
+  const { montarPurchase, sinaisDoPedido } = await import(
+    "@/lib/tracking/purchase"
+  );
+  const { contarSinais } = await import("@/lib/tracking/normalizar");
+
+  const carregado = await carregarConfig(admin, loja.id);
+  if (!carregado?.config.enabled) {
+    return ok({ ignorado: "rastreamento desligado", topic: "orders/create" });
+  }
+
+  const pedido = payload as Parameters<typeof montarPurchase>[0];
+
+  // Quando o cart attribute nao trouxe o click id, ainda pode haver identidade
+  // guardada pelo coletor para este visitante.
+  const sinais = sinaisDoPedido(pedido);
+  let identidade = null;
+  if (sinais.visitorId) {
+    const { data } = await admin
+      .from("tracking_identities")
+      .select("fbp, fbc, fbclid, client_ip_address, client_user_agent")
+      .eq("store_id", loja.id)
+      .eq("visitor_id", sinais.visitorId)
+      .maybeSingle();
+    if (data) {
+      identidade = {
+        fbp: data.fbp,
+        fbc: data.fbc,
+        fbclid: data.fbclid,
+        clientIp: data.client_ip_address,
+        userAgent: data.client_user_agent,
+      };
+    }
+  }
+
+  const { evento, userData } = montarPurchase(pedido, {
+    identidade,
+    dominioLoja: loja.shop_domain,
+  });
+
+  try {
+    const { id, duplicado } = await enfileirar(admin, {
+      storeId: loja.id,
+      destination: "meta",
+      evento,
+      orderId: String(pedido.id ?? ""),
+    });
+
+    if (duplicado) {
+      return ok({ duplicado: true, topic: "orders/create", eventId: evento.event_id });
+    }
+
+    if (id) {
+      // Melhor esforco: falhou, a linha segue pendente para o cron.
+      await entregar(admin, {
+        id,
+        store_id: loja.id,
+        destination: "meta",
+        payload: evento,
+        attempts: 0,
+      });
+    }
+
+    return ok({
+      topic: "orders/create",
+      eventId: evento.event_id,
+      // Quantos sinais foram junto: e o que vira Event Match Quality.
+      sinais: contarSinais(userData),
+    });
+  } catch (e) {
+    console.error("[shopify/webhook] falha ao enfileirar Purchase", e);
+    // 503 para a Shopify reentregar: conversao perdida nao se recupera.
+    return NextResponse.json({ error: "Tente de novo." }, { status: 503 });
   }
 }
 

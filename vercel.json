@@ -19,6 +19,9 @@
     },
     "src/app/api/checkout-routes/connect-by-sku/route.ts": {
       "maxDuration": 300
+    },
+    "src/app/api/jobs/tracking/drain/route.ts": {
+      "maxDuration": 120
     }
   },
   "crons": [
@@ -29,6 +32,10 @@
     {
       "path": "/api/jobs/routes/heal",
       "schedule": "30 * * * *"
+    },
+    {
+      "path": "/api/jobs/tracking/drain",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

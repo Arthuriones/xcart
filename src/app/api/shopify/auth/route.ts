@@ -1,7 +1,12 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { ensureUninstallWebhook, getShopInfo, getThemes } from "@/lib/shopify/client";
+import {
+  ensureUninstallWebhook,
+  ensureWebhook,
+  getShopInfo,
+  getThemes,
+} from "@/lib/shopify/client";
 import { safeFetch } from "@/lib/net/safe-url";
 import { assertShopDomainPublico } from "@/lib/shopify/safe-shop";
 import { normalizeShopDomain } from "@/lib/shopify/domain";
@@ -300,6 +305,22 @@ export async function GET(request: NextRequest) {
         console.warn("[shopify/auth] webhook app/uninstalled nao inscrito", {
           shopDomain: store.shop_domain,
           motivo: webhook.message,
+        });
+      }
+
+      // orders/create alimenta o rastreamento server-side. Falha aqui e
+      // esperada enquanto a loja nao tiver `read_orders` -- a Shopify recusa
+      // ate a inscricao. Tambem nao derruba a instalacao: o lojista adiciona o
+      // escopo depois e roda scripts/registrar-webhook-pedidos.ts.
+      const pedidos = await ensureWebhook(
+        creds,
+        "ORDERS_CREATE",
+        `${request.nextUrl.origin}/api/shopify/webhooks`
+      );
+      if (!pedidos.ok) {
+        console.warn("[shopify/auth] webhook orders/create nao inscrito", {
+          shopDomain: store.shop_domain,
+          motivo: pedidos.message,
         });
       }
 

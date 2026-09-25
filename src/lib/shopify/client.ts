@@ -2628,8 +2628,27 @@ export async function ensureUninstallWebhook(
   creds: ShopifyCredentials,
   callbackUrl: string
 ): Promise<{ ok: boolean; message?: string }> {
+  return ensureWebhook(creds, "APP_UNINSTALLED", callbackUrl);
+}
+
+/**
+ * Inscreve um topico qualquer no mesmo endpoint de webhook.
+ *
+ * Generalizado de ensureUninstallWebhook quando o rastreamento passou a
+ * precisar de ORDERS_CREATE. A idempotencia do lado da Shopify vale para o par
+ * (topico, endereco), entao chamar de novo nao duplica assinatura.
+ *
+ * Topico que o app nao tem escopo para assinar volta com userError -- e o caso
+ * de ORDERS_CREATE sem `read_orders`. O chamador decide se isso e fatal; na
+ * instalacao nao e.
+ */
+export async function ensureWebhook(
+  creds: ShopifyCredentials,
+  topic: string,
+  callbackUrl: string
+): Promise<{ ok: boolean; message?: string }> {
   const mutation = `
-    mutation inscreverUninstall($topic: WebhookSubscriptionTopic!, $sub: WebhookSubscriptionInput!) {
+    mutation inscreverTopico($topic: WebhookSubscriptionTopic!, $sub: WebhookSubscriptionInput!) {
       webhookSubscriptionCreate(topic: $topic, webhookSubscription: $sub) {
         webhookSubscription { id }
         userErrors { field message }
@@ -2639,7 +2658,7 @@ export async function ensureUninstallWebhook(
 
   try {
     const data = await shopifyGraphQL(creds, mutation, {
-      topic: "APP_UNINSTALLED",
+      topic,
       sub: { callbackUrl, format: "JSON" },
     });
     const erros = data?.webhookSubscriptionCreate?.userErrors || [];
