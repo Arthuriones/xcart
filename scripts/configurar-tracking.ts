@@ -170,6 +170,10 @@ async function main() {
       meta_pixel_id: pixel,
       meta_test_event_code: codigoTeste,
       google_conversion_id: aw,
+      // As duas: o mapa e a fonte de verdade, a coluna e fallback de leitura.
+      // Gravar so a coluna deixaria a compra funcionando por fallback e o mapa
+      // vazio, e ai a tela mostraria o campo do rotulo em branco.
+      ...(rotulo ? { google_labels: { purchase: rotulo } } : {}),
       google_conversion_label: rotulo,
       updated_at: new Date().toISOString(),
     },
