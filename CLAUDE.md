@@ -75,4 +75,26 @@ Every AI call receives `StoreContext` (name, niche, target_audience, brand_voice
 - The rotation draw is mirrored in the loader and on the server — the two hashes must stay identical or a buyer switches checkout store mid-purchase. **Travado por `tests/rotation-parity.test.ts`**, que le o loader do disco e compara com o servidor. A fila ordena por `id || domain` nos dois lados: `embed-config` manda `id: null` de proposito em rota legada, e ordenar so por id divergia.
 - **Policy de UPDATE/INSERT precisa de `WITH CHECK`, nao so `USING`.** `USING` prende a linha ANTIGA; sem `WITH CHECK` a linha NOVA nao e validada e o usuario reatribui o dono -- ou, em `profiles`, se promove a `is_admin`. Ver migration 030.
 - **URL vinda do usuario NUNCA vai direto para `fetch`.** Use `safeFetch`/`assertUrlPublica` de `src/lib/net/safe-url.ts`: resolve o DNS e recusa rede privada, link-local e loopback, revalidando cada redirect. `normalizeShopDomain` so valida FORMATO -- `metadata.google.internal` e `169.254.169.254.nip.io` passavam por ela.
+- **Rastreamento: um rotulo por evento, e dois caminhos de entrada.** No Google
+  Ads cada evento e uma conversion action propria com rotulo proprio -- o `AW-`
+  e da conta, o rotulo muda por evento. O mapa esta em
+  `tracking_configs.google_labels`; `google_conversion_label` e legado, so
+  fallback de leitura da compra, e quem grava espelha as duas (valor velho na
+  coluna faz a compra continuar saindo depois de o rotulo sair do mapa). A
+  compra vem do webhook `orders/create`; ver produto, carrinho e checkout nao
+  tem webhook na Shopify, entao vem do snippet do tema para
+  `/api/tracking/collect`. Catalogo em `src/lib/tracking/eventos.ts`, travado
+  contra o snippet por `tests/tracking-eventos.test.ts`.
+- **`/api/tracking/collect` e publico e NAO aceita valor monetario.** Quem
+  dispara e o visitante: nao ha sessao. Valor vindo dali seria numero que
+  qualquer um infla na conta de anuncios do lojista, e valor de conversao
+  inflado distorce o lance automatico. Nao "conferimos o Origin" -- e escolhido
+  pelo cliente. O que limita e teto por visitante/loja e o indice unico da fila.
+- **Em rota vitrine -> checkout, o gclid NAO chega ao pedido.**
+  `buildCartPermalink` nao leva `attributes` de proposito (a loja de checkout
+  nao deve saber a origem), e o pedido nasce na loja de checkout. Logo a compra
+  sai sem atribuicao em loja roteada -- funciona em loja avulsa (Gotoku).
+  Carrinho e checkout funcionam nos dois casos, porque acontecem na vitrine.
+  Consertar exige um token opaco no permalink que so o nosso servidor resolve;
+  nao esta feito.
 - Funcao nova em `public` vira endpoint em `/rest/v1/rpc/`. Se for SECURITY DEFINER, **revogue de `public, anon, authenticated`** e conceda so a `service_role` — sao DOIS caminhos de privilegio (o grant a PUBLIC e o explicito que o default-privileges do Supabase cria), e tirar um deixa o outro. Confira com `has_function_privilege`: o comando responde sucesso sem ter revogado nada. Ver migration 027.
