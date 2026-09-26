@@ -2,6 +2,11 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  chaveDoEvento,
+  type ChaveEvento,
+  type MapaDeRotulos,
+} from "@/lib/tracking/eventos";
 
 // ============================================================================
 // Dados da tela de rastreamento.
@@ -22,7 +27,8 @@ export interface LojaTracking {
   dominio: string;
   ligado: boolean;
   googleConversionId: string | null;
-  googleConversionLabel: string | null;
+  /** Rotulo por evento. Evento fora do mapa = o lojista nao pediu. */
+  googleLabels: MapaDeRotulos;
   metaPixelId: string | null;
   /** O webhook orders/create esta inscrito? Sem ele nao entra evento nenhum. */
   temWebhook: boolean;
@@ -31,6 +37,14 @@ export interface LojaTracking {
   enviados7d: number;
   falharam7d: number;
   pendentes: number;
+  /**
+   * Enviados por evento nos 7 dias.
+   *
+   * Separado do total porque cada evento e uma conversion action diferente no
+   * Google: 200 "adicionar ao carrinho" somados a 3 compras dariam um numero
+   * que esconde a venda ter parado de ser rastreada.
+   */
+  porEvento: Partial<Record<ChaveEvento, number>>;
   /** Enviados sem nenhum click id: conversao que o Google nao liga a anuncio. */
   semAtribuicao7d: number;
   ultimoEnvio: string | null;
@@ -61,11 +75,13 @@ export async function getPainelTracking(): Promise<PainelTracking> {
   const [{ data: configs }, { data: eventos }] = await Promise.all([
     supabase
       .from("tracking_configs")
-      .select("store_id, enabled, google_conversion_id, google_conversion_label, meta_pixel_id")
+      .select(
+        "store_id, enabled, google_conversion_id, google_conversion_label, google_labels, meta_pixel_id"
+      )
       .in("store_id", ids),
     supabase
       .from("tracking_events")
-      .select("store_id, status, last_error, sent_at, created_at")
+      .select("store_id, event_name, status, last_error, sent_at, created_at")
       .in("store_id", ids)
       .gte("created_at", desde)
       .order("created_at", { ascending: false }),
@@ -80,7 +96,15 @@ export async function getPainelTracking(): Promise<PainelTracking> {
   // completo fica no script.
   const contagem = new Map<
     string,
-    { enviados: number; falharam: number; pendentes: number; semAtrib: number; ultimo: string | null; erro: string | null }
+    {
+      enviados: number;
+      falharam: number;
+      pendentes: number;
+      semAtrib: number;
+      ultimo: string | null;
+      erro: string | null;
+      porEvento: Partial<Record<ChaveEvento, number>>;
+    }
   >();
   for (const e of eventos || []) {
     const atual = contagem.get(e.store_id) || {
@@ -90,9 +114,13 @@ export async function getPainelTracking(): Promise<PainelTracking> {
       semAtrib: 0,
       ultimo: null,
       erro: null,
+      porEvento: {},
     };
     if (e.status === "enviado") {
       atual.enviados += 1;
+      // chaveDoEvento normaliza a caixa: a compra foi gravada como "Purchase".
+      const chave = chaveDoEvento(e.event_name || "");
+      if (chave) atual.porEvento[chave] = (atual.porEvento[chave] ?? 0) + 1;
       if (!atual.ultimo && e.sent_at) atual.ultimo = e.sent_at;
       // O envio grava este aviso quando nao havia click id nenhum.
       if ((e.last_error || "").includes("sem atribuicao")) atual.semAtrib += 1;
@@ -115,13 +143,14 @@ export async function getPainelTracking(): Promise<PainelTracking> {
         dominio: l.shop_domain,
         ligado: Boolean(cfg?.enabled),
         googleConversionId: cfg?.google_conversion_id ?? null,
-        googleConversionLabel: cfg?.google_conversion_label ?? null,
+        googleLabels: (cfg?.google_labels as MapaDeRotulos | null) ?? {},
         metaPixelId: cfg?.meta_pixel_id ?? null,
         temWebhook: false,
         temSnippet: false,
         enviados7d: c?.enviados ?? 0,
         falharam7d: c?.falharam ?? 0,
         pendentes: c?.pendentes ?? 0,
+        porEvento: c?.porEvento ?? {},
         semAtribuicao7d: c?.semAtrib ?? 0,
         ultimoEnvio: c?.ultimo ?? null,
         ultimoErro: c?.erro ?? null,

@@ -255,6 +255,9 @@ async function tratarPedidoCriado(
           id,
           store_id: loja.id,
           destination: alvo.destination,
+          // "Purchase" do Meta; o catalogo normaliza a caixa para achar o
+          // rotulo da conversion action de compra no Google.
+          event_name: evento.event_name,
           payload: alvo.payload,
           attempts: 0,
         });

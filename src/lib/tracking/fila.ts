@@ -6,6 +6,11 @@ import {
   MAX_TENTATIVAS,
   type EventoCapi,
 } from "@/lib/tracking/meta-capi";
+import {
+  rotuloDoEvento,
+  type ChaveEvento,
+  type MapaDeRotulos,
+} from "@/lib/tracking/eventos";
 
 // ============================================================================
 // Fila de saida do rastreamento.
@@ -22,7 +27,10 @@ export interface ConfigTracking {
   metaPixelId: string | null;
   metaTestEventCode: string | null;
   googleConversionId: string | null;
+  /** LEGADO: rotulo da compra de antes do mapa. Lido so como fallback. */
   googleConversionLabel: string | null;
+  /** Rotulo por evento. Evento ausente = o lojista nao pediu esse evento. */
+  googleLabels: MapaDeRotulos | null;
 }
 
 /**
@@ -40,7 +48,7 @@ export async function carregarConfig(
     admin
       .from("tracking_configs")
       .select(
-        "store_id, enabled, meta_pixel_id, meta_test_event_code, google_conversion_id, google_conversion_label"
+        "store_id, enabled, meta_pixel_id, meta_test_event_code, google_conversion_id, google_conversion_label, google_labels"
       )
       .eq("store_id", storeId)
       .maybeSingle(),
@@ -60,6 +68,7 @@ export async function carregarConfig(
       metaTestEventCode: cfg.meta_test_event_code,
       googleConversionId: cfg.google_conversion_id,
       googleConversionLabel: cfg.google_conversion_label,
+      googleLabels: (cfg.google_labels as MapaDeRotulos | null) ?? null,
     },
     token: seg?.meta_access_token ?? null,
   };
@@ -77,9 +86,17 @@ export async function enfileirar(
   entrada: {
     storeId: string;
     destination: "meta" | "google" | "ga4";
-    /** Serve de fonte do nome e da chave de dedupe, iguais para todo destino. */
-    evento: EventoCapi;
+    /**
+     * Serve de fonte do nome e da chave de dedupe, iguais para todo destino.
+     *
+     * Só estes dois campos, e não `EventoCapi` inteiro: o evento de funil que
+     * vem do navegador não tem user_data nem custom_data para preencher, e
+     * exigir o tipo completo obrigaria o coletor a inventar campos.
+     */
+    evento: { event_name: string; event_id: string };
     orderId?: string | null;
+    /** Só nos eventos de navegador. Alimenta o teto de abuso do coletor. */
+    visitorId?: string | null;
     /** O que vai para a API do destino. Omitido = o proprio evento (Meta). */
     payload?: unknown;
   }
@@ -92,6 +109,7 @@ export async function enfileirar(
       event_name: entrada.evento.event_name,
       event_id: entrada.evento.event_id,
       order_id: entrada.orderId ?? null,
+      visitor_id: entrada.visitorId ?? null,
       payload: (entrada.payload ?? entrada.evento) as Record<string, unknown>,
     })
     .select("id")
@@ -116,6 +134,8 @@ export async function entregar(
     id: string;
     store_id: string;
     destination: string;
+    /** Decide QUAL rotulo usar: um por conversion action no Google. */
+    event_name: string;
     payload: unknown;
     attempts: number;
   }
@@ -194,13 +214,30 @@ export async function entregar(
  */
 async function entregarGoogle(
   admin: ReturnType<typeof createAdminClient>,
-  linha: { id: string; store_id: string; payload: unknown; attempts: number }
+  linha: {
+    id: string;
+    store_id: string;
+    event_name: string;
+    payload: unknown;
+    attempts: number;
+  }
 ): Promise<{ ok: boolean; motivo?: string }> {
   const { enviarParaGoogleAds } = await import("@/lib/tracking/google-ads");
   const carregado = await carregarConfig(admin, linha.store_id);
   const cfg = carregado?.config;
 
-  if (!cfg?.enabled || !cfg.googleConversionId || !cfg.googleConversionLabel) {
+  // Cada evento e uma conversion action propria no Google, com rotulo proprio.
+  // Mandar tudo com o rotulo da compra faria o Google contar carrinho como
+  // venda.
+  const rotulo = cfg
+    ? rotuloDoEvento(
+        cfg.googleLabels,
+        linha.event_name as ChaveEvento,
+        cfg.googleConversionLabel
+      )
+    : null;
+
+  if (!cfg?.enabled || !cfg.googleConversionId || !rotulo) {
     await admin
       .from("tracking_events")
       .update({
@@ -208,7 +245,9 @@ async function entregarGoogle(
         attempts: linha.attempts + 1,
         last_error: !cfg?.enabled
           ? "rastreamento desligado para esta loja"
-          : "conversion id ou label do Google ausente",
+          : !cfg.googleConversionId
+            ? "id de conversao do Google ausente"
+            : `sem rotulo configurado para o evento "${linha.event_name}"`,
       })
       .eq("id", linha.id);
     return { ok: false, motivo: "sem configuracao" };
@@ -228,7 +267,7 @@ async function entregarGoogle(
 
   const r = await enviarParaGoogleAds({
     conversionId: cfg.googleConversionId,
-    label: cfg.googleConversionLabel,
+    label: rotulo,
     gclid: conv.gclid,
     gbraid: conv.gbraid,
     wbraid: conv.wbraid,
@@ -282,7 +321,7 @@ export async function drenarFila(limite = 50): Promise<{
   const admin = createAdminClient();
   const { data: linhas } = await admin
     .from("tracking_events")
-    .select("id, store_id, destination, payload, attempts")
+    .select("id, store_id, destination, event_name, payload, attempts")
     .eq("status", "pendente")
     .lte("next_attempt_at", new Date().toISOString())
     .order("next_attempt_at", { ascending: true })

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { apenasNumeroDaConversao } from "@/lib/tracking/normalizar";
+import { limparMapaDeRotulos } from "@/lib/tracking/eventos";
 
 export const runtime = "nodejs";
 
@@ -27,7 +28,8 @@ export async function POST(request: NextRequest) {
     storeId?: string;
     enabled?: boolean;
     googleConversionId?: string | null;
-    googleConversionLabel?: string | null;
+    /** Rotulo por evento: {"purchase":"AbC...","add_to_cart":"XyZ..."}. */
+    googleLabels?: Record<string, string> | null;
   };
   try {
     corpo = await request.json();
@@ -54,7 +56,6 @@ export async function POST(request: NextRequest) {
   }
 
   const id = (corpo.googleConversionId || "").trim() || null;
-  const rotulo = (corpo.googleConversionLabel || "").trim() || null;
 
   if (id && !apenasNumeroDaConversao(id)) {
     return NextResponse.json(
@@ -63,19 +64,28 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Descarta evento desconhecido e rotulo vazio. E o que garante que o mapa
+  // nunca chega ao banco como {"purchase": ""} -- o CHECK da tabela confia
+  // nisso para poder testar so `google_labels <> '{}'`.
+  const rotulos = limparMapaDeRotulos(corpo.googleLabels);
+  const quantos = Object.keys(rotulos).length;
+
   // Um sem o outro nao identifica conversao nenhuma: a requisicao sairia e o
-  // Google descartaria em silencio. Melhor recusar aqui.
-  if (Boolean(id) !== Boolean(rotulo)) {
+  // Google descartaria em silencio.
+  if (Boolean(id) !== (quantos > 0)) {
     return NextResponse.json(
-      { error: "Preencha o ID e o rotulo juntos, ou deixe os dois vazios." },
+      {
+        error:
+          "Preencha o ID de conversao e ao menos um rotulo de evento, ou deixe tudo vazio.",
+      },
       { status: 400 }
     );
   }
 
   const ligar = Boolean(corpo.enabled);
-  if (ligar && !id) {
+  if (ligar && (!id || quantos === 0)) {
     return NextResponse.json(
-      { error: "Para ligar, informe o ID e o rotulo da conversao." },
+      { error: "Para ligar, informe o ID de conversao e o rotulo de pelo menos um evento." },
       { status: 400 }
     );
   }
@@ -86,7 +96,11 @@ export async function POST(request: NextRequest) {
       user_id: loja.user_id,
       enabled: ligar,
       google_conversion_id: id,
-      google_conversion_label: rotulo,
+      google_labels: rotulos,
+      // A coluna legada e espelhada, nao esquecida. Ela ainda e fallback de
+      // leitura: deixar um valor velho ali faria a conversao de compra
+      // continuar saindo depois de o lojista tirar o rotulo do mapa.
+      google_conversion_label: rotulos.purchase ?? null,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "store_id" }
