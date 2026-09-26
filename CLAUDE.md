@@ -93,8 +93,13 @@ Every AI call receives `StoreContext` (name, niche, target_audience, brand_voice
 - **Em rota vitrine -> checkout, o gclid NAO chega ao pedido.**
   `buildCartPermalink` nao leva `attributes` de proposito (a loja de checkout
   nao deve saber a origem), e o pedido nasce na loja de checkout. Logo a compra
-  sai sem atribuicao em loja roteada -- funciona em loja avulsa (Gotoku).
-  Carrinho e checkout funcionam nos dois casos, porque acontecem na vitrine.
-  Consertar exige um token opaco no permalink que so o nosso servidor resolve;
-  nao esta feito.
+  sai sem atribuicao em loja roteada. Carrinho e checkout funcionam, porque
+  acontecem na vitrine.
+  **Nao va consertar isso por conta propria.** A operacao do Arthur decidiu
+  (2026-09-26) rodar o anuncio DIRETO na loja de checkout, sem vitrine -- e ai
+  quem recebe o clique e quem cria o pedido sao a mesma loja, o cart attribute
+  sobrevive e nao existe buraco nenhum. O conserto para quem usa roteamento
+  seria um token opaco no permalink, resolvido so no nosso servidor (nao o id da
+  rota, que era o que existia antes e foi removido de proposito). Fica anotado,
+  nao feito.
 - Funcao nova em `public` vira endpoint em `/rest/v1/rpc/`. Se for SECURITY DEFINER, **revogue de `public, anon, authenticated`** e conceda so a `service_role` — sao DOIS caminhos de privilegio (o grant a PUBLIC e o explicito que o default-privileges do Supabase cria), e tirar um deixa o outro. Confira com `has_function_privilege`: o comando responde sucesso sem ter revogado nada. Ver migration 027.
