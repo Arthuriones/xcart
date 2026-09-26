@@ -36,6 +36,13 @@ rodados a mao com `npx tsx`, nunca importados pela aplicacao.
 
 Eles ficam FORA do type-check do build e fora do deploy:
 
+- `npm run op -- scripts/<arquivo>.ts <args>` -- **e assim que se roda script**,
+  nao com `npx tsx` direto. E `npx tsx --conditions=react-server`: sem essa
+  condicao, todo `import "server-only"` lanca no arranque e o script nem comeca.
+  Metade de `src/lib/tracking/` tem esse import (ele impede que credencial de
+  anunciante vaze para o bundle do cliente), e o caminho do Meta em
+  `configurar-tracking.ts` ficou quebrado por isso sem ninguem notar -- o
+  caminho do Google retornava antes de chegar no import.
 - `npm run typecheck` -- o app. E o que o build da Vercel roda.
 - `npm run typecheck:scripts` -- os scripts. **Rode antes de commitar script.**
 - `npm test` -- vitest. Cobre a paridade do sorteio do rodizio (loader x

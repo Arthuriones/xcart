@@ -7,6 +7,7 @@
     "build": "next build",
     "typecheck": "tsc --noEmit",
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
+    "op": "npx tsx --conditions=react-server",
     "test": "vitest run",
     "test:watch": "vitest",
     "start": "next start",

@@ -19,11 +19,15 @@
  *   3. um refresh token OAuth da conta Google do lojista, com escopo
  *      https://www.googleapis.com/auth/adwords.
  *
- * Uso:
- *   npx tsx scripts/configurar-enhanced-conversions.ts --loja <dominio> --ver
- *   npx tsx scripts/configurar-enhanced-conversions.ts --loja <dominio> \
+ * Uso -- por `npm run op`, NAO por `npx tsx` direto:
+ *   npm run op -- scripts/configurar-enhanced-conversions.ts --loja <dominio> --ver
+ *   npm run op -- scripts/configurar-enhanced-conversions.ts --loja <dominio> \
  *     --customer 1234567890 [--mcc 9876543210] --refresh <token>
- *   npx tsx scripts/configurar-enhanced-conversions.ts --loja <dominio> --desligar
+ *   npm run op -- scripts/configurar-enhanced-conversions.ts --loja <dominio> --desligar
+ *
+ * `npm run op` e `npx tsx --conditions=react-server`. Sem essa condicao o import
+ * de "server-only" -- que existe para impedir que credencial de anunciante vaze
+ * para o bundle do cliente -- lanca no arranque e o script nem comeca.
  *
  * O refresh token nao aparece no terminal -- so o tamanho, para conferir que
  * veio inteiro.
