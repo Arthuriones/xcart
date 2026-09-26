@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { textos } from "@/lib/textos";
 import {
+  Radar,
   Activity,
   ChevronDown,
   CreditCard,
@@ -59,6 +60,7 @@ const NAV: NavSection[] = [
     items: [
       { href: "/stores", label: "connectedStores", icon: Store, counter: "stores" },
       { href: "/sales", label: "sales", icon: TrendingUp },
+      { href: "/tracking", label: "tracking", icon: Radar },
       { href: "/clone/routed-checkout", label: "routing", icon: Waypoints },
       { href: "/clone/shopify", label: "importProducts", icon: Download },
     ],
