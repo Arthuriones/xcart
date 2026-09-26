@@ -38,8 +38,6 @@ const PERMITIDOS: Record<string, string> = {
   "src/lib/aliexpress/scraper.ts":
     "endpoint fixo da API do Bright Data (api.brightdata.com), sem entrada do usuario",
   "src/lib/billing/pagou.ts": "BASE e a URL da API do Pagou, vinda de env",
-  "src/lib/tracking/google-ads-api.ts":
-    "dois endpoints constantes no codigo (oauth2.googleapis.com e o BASE de googleads.googleapis.com); nada do caminho vem do usuario",
 };
 
 const RAIZ = path.resolve(__dirname, "..", "src");

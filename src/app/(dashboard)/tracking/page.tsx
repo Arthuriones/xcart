@@ -1,6 +1,5 @@
 import { Suspense } from "react";
 import { getPainelTracking, getPedidosDaSemana } from "@/lib/tracking/queries";
-import { apiDisponivel } from "@/lib/tracking/google-ads-api";
 import { TrackingScreen } from "./tracking-screen";
 
 export const dynamic = "force-dynamic";
@@ -26,9 +25,6 @@ async function Conteudo() {
     <TrackingScreen
       lojas={painel.lojas}
       pedidos={Object.fromEntries(pedidos)}
-      // Sem developer token no ambiente a tela nem oferece: enhanced
-      // conversions nao teria como sair.
-      ecDisponivel={apiDisponivel()}
     />
   );
 }

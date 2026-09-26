@@ -1,10 +1,6 @@
 import {
-  emailParaGoogle,
   montarFbc,
   montarUserData,
-  nomeParaGoogle,
-  sha256,
-  telefoneE164,
   type UserData,
 } from "@/lib/tracking/normalizar";
 import type { EventoCapi } from "@/lib/tracking/meta-capi";
@@ -144,97 +140,6 @@ export function montarConversaoGoogle(
     value: Number.isFinite(valor) ? valor : 0,
     currency: (pedido.currency || "").toUpperCase(),
   };
-}
-
-/**
- * Um identificador do enhanced conversions.
- *
- * O campo do Google e um oneof: preencher hashedEmail E addressInfo no MESMO
- * objeto limpa um dos dois. Por isso cada sinal vira um item da lista, nunca
- * um campo a mais no item anterior.
- *
- * Mora aqui, e nao em google-ads-api.ts, porque este arquivo e puro -- o de
- * API e server-only e arrastaria o bundler para dentro dos testes.
- */
-export type IdentificadorGoogle =
-  | { hashedEmail: string; userIdentifierSource: "FIRST_PARTY" }
-  | { hashedPhoneNumber: string; userIdentifierSource: "FIRST_PARTY" }
-  | {
-      addressInfo: {
-        hashedFirstName: string;
-        hashedLastName: string;
-        countryCode: string;
-        postalCode: string;
-        city?: string;
-        state?: string;
-      };
-      userIdentifierSource: "FIRST_PARTY";
-    };
-
-/**
- * Pedido -> identificadores hasheados do enhanced conversions.
- *
- * Nao reaproveita o user_data do Meta de proposito, apesar da semelhanca. Sao
- * tres divergencias, e cada uma quebra o match em silencio:
- *
- *   - telefone: o Meta quer digitos sem `+`, o Google exige E.164 com `+`;
- *   - nome: o Meta tira acento antes de hashear, o Google mantem;
- *   - cidade e estado: no Meta vao hasheados, no Google vao em claro.
- *
- * Nada disso da erro. O hash sai valido e simplesmente nao casa com ninguem.
- */
-export function montarIdentificadoresGoogle(
-  pedido: PedidoShopify
-): IdentificadorGoogle[] {
-  const endereco = pedido.billing_address || pedido.shipping_address || null;
-  const pais = endereco?.country_code || null;
-  const ids: IdentificadorGoogle[] = [];
-
-  const email = emailParaGoogle(pedido.customer?.email || pedido.email);
-  if (email) {
-    ids.push({ hashedEmail: sha256(email), userIdentifierSource: "FIRST_PARTY" });
-  }
-
-  const telefone = telefoneE164(
-    pedido.customer?.phone || pedido.phone || endereco?.phone,
-    pais
-  );
-  if (telefone) {
-    ids.push({
-      hashedPhoneNumber: sha256(telefone),
-      userIdentifierSource: "FIRST_PARTY",
-    });
-  }
-
-  const primeiro = nomeParaGoogle(
-    pedido.customer?.first_name || endereco?.first_name
-  );
-  const ultimo = nomeParaGoogle(pedido.customer?.last_name || endereco?.last_name);
-  const codigoPais = (pais || "").trim().toUpperCase();
-  const cep = (endereco?.zip || "").trim();
-
-  // O endereco so conta completo: o Google exige nome, sobrenome, pais e CEP
-  // juntos e descarta o identificador inteiro se faltar um. Montar pela metade
-  // gastaria uma das 5 vagas para nada.
-  if (primeiro && ultimo && /^[A-Z]{2}$/.test(codigoPais) && cep) {
-    const cidade = (endereco?.city || "").trim().toLowerCase();
-    const estado = (endereco?.province_code || endereco?.province || "")
-      .trim()
-      .toLowerCase();
-    ids.push({
-      addressInfo: {
-        hashedFirstName: sha256(primeiro),
-        hashedLastName: sha256(ultimo),
-        countryCode: codigoPais,
-        postalCode: cep,
-        ...(cidade ? { city: cidade } : {}),
-        ...(estado ? { state: estado } : {}),
-      },
-      userIdentifierSource: "FIRST_PARTY",
-    });
-  }
-
-  return ids;
 }
 
 export interface ContextoPurchase {

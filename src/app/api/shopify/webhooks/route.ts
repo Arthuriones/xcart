@@ -217,55 +217,16 @@ async function tratarPedidoCriado(
 
   // Uma linha de fila por destino configurado. Separadas de proposito: cada
   // API tem o seu formato, e uma falhar nao pode impedir a outra de sair.
-  const destinos: {
-    destination: "meta" | "google" | "google_ec";
-    payload: unknown;
-    /** Preenchido = nao entrega agora, so deixa na fila para o cron. */
-    naoAntesDe?: Date;
-  }[] = [];
+  const destinos: { destination: "meta" | "google"; payload: unknown }[] = [];
   if (carregado.config.metaPixelId) {
     destinos.push({ destination: "meta", payload: evento });
   }
-
-  const temGoogle = Boolean(
-    carregado.config.googleConversionId && carregado.config.googleConversionLabel
-  );
-  if (temGoogle) {
+  if (carregado.config.googleConversionId && carregado.config.googleConversionLabel) {
     const { montarConversaoGoogle } = await import("@/lib/tracking/purchase");
     destinos.push({
       destination: "google",
       payload: montarConversaoGoogle(pedido, { identidade }),
     });
-  }
-
-  // Enhanced conversions: segunda chamada, complementando a conversao acima com
-  // a identidade hasheada. So entra se a conta do Google estiver conectada --
-  // enfileirar sem credencial encheria a tela de 'falhou' sem o lojista ter
-  // pedido nada.
-  if (temGoogle && carregado.refreshTokenGoogle && carregado.config.googleCustomerId) {
-    const { apiDisponivel } = await import("@/lib/tracking/google-ads-api");
-    const { montarIdentificadoresGoogle } = await import(
-      "@/lib/tracking/purchase"
-    );
-    const identificadores = montarIdentificadoresGoogle(pedido);
-
-    if (apiDisponivel() && identificadores.length > 0) {
-      destinos.push({
-        destination: "google_ec",
-        payload: {
-          // O MESMO oid da conversao base: e a unica coisa que liga os dois.
-          orderId: String(pedido.id ?? ""),
-          identificadores,
-          userAgent:
-            pedido.client_details?.user_agent || identidade?.userAgent || null,
-        },
-        // O enhancement complementa uma conversao que precisa ja existir no
-        // Google. Saindo agora ele chega antes do ping base ser processado la e
-        // volta CONVERSION_NOT_FOUND -- que e retentavel, mas queima tentativa
-        // e enche a tela de erro por nada.
-        naoAntesDe: new Date(Date.now() + 20 * 60 * 1000),
-      });
-    }
   }
 
   if (destinos.length === 0) {
@@ -281,7 +242,6 @@ async function tratarPedidoCriado(
         evento,
         orderId: String(pedido.id ?? ""),
         payload: alvo.payload,
-        naoAntesDe: alvo.naoAntesDe,
       });
 
       if (duplicado) {
@@ -289,9 +249,7 @@ async function tratarPedidoCriado(
         continue;
       }
 
-      if (id && alvo.naoAntesDe) {
-        saida[alvo.destination] = "agendado";
-      } else if (id) {
+      if (id) {
         // Melhor esforco: falhou, a linha segue pendente para o cron.
         const r = await entregar(admin, {
           id,

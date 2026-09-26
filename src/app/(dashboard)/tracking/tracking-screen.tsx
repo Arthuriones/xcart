@@ -67,17 +67,12 @@ function Saude({ loja, pedidos }: { loja: LojaTracking; pedidos: number | null }
 function LinhaLoja({
   loja,
   pedidos,
-  ecDisponivel,
 }: {
   loja: LojaTracking;
   pedidos: number | null;
-  /** Sem developer token no ambiente, enhanced conversions nao tem como sair --
-   *  e um campo pedindo credencial seria pedir trabalho por nada. */
-  ecDisponivel: boolean;
 }) {
   const [id, setId] = useState(loja.googleConversionId ?? "");
   const [rotulo, setRotulo] = useState(loja.googleConversionLabel ?? "");
-  const [contaAds, setContaAds] = useState(loja.googleCustomerId ?? "");
   const [ligado, setLigado] = useState(loja.ligado);
   const [salvando, setSalvando] = useState(false);
 
@@ -92,7 +87,6 @@ function LinhaLoja({
           enabled: novoLigado,
           googleConversionId: id,
           googleConversionLabel: rotulo,
-          googleCustomerId: contaAds,
         }),
       });
       const j = await r.json();
@@ -166,79 +160,17 @@ function LinhaLoja({
             </Button>
           </div>
         </div>
-
-        {ecDisponivel && <Enhanced loja={loja} conta={contaAds} setConta={setContaAds} />}
       </CardContent>
     </Card>
-  );
-}
-
-/**
- * Enhanced conversions.
- *
- * E uma SEGUNDA chamada por venda, nao um campo a mais na primeira: a conversao
- * base leva o gclid e conta a venda; esta acrescenta o e-mail e o telefone
- * hasheados por cima, casando pelo numero do pedido. Por isso os numeros ficam
- * separados dos de cima -- somados, o total de conversoes dobraria e deixaria de
- * bater com os pedidos, que e a conta que serve de alarme.
- */
-function Enhanced({
-  loja,
-  conta,
-  setConta,
-}: {
-  loja: LojaTracking;
-  conta: string;
-  setConta: (v: string) => void;
-}) {
-  const conectado = loja.temAutorizacaoGoogle && Boolean(loja.googleCustomerId);
-
-  return (
-    <div className="space-y-2 rounded-md border border-dashed p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs font-medium">Enhanced conversions</span>
-        {conectado ? (
-          <span className="text-xs text-muted-foreground">
-            7 dias: <strong className="text-foreground">{loja.ecEnviados7d}</strong> enriquecidas
-            {loja.ecFalharam7d > 0 && (
-              <span className="text-destructive"> · {loja.ecFalharam7d} falharam</span>
-            )}
-          </span>
-        ) : (
-          <span className="text-xs text-muted-foreground">conta não conectada</span>
-        )}
-      </div>
-
-      <div className="space-y-1">
-        <Label className="text-xs">Conta do Google Ads (customer id)</Label>
-        <Input
-          value={conta}
-          onChange={(e) => setConta(e.target.value)}
-          placeholder="1234567890"
-          className="font-mono text-sm"
-        />
-        <p className="text-xs text-muted-foreground">
-          Só dígitos, sem hífen. Fica no topo do painel do Google Ads.
-        </p>
-      </div>
-
-      {loja.ecUltimoErro && (
-        <p className="text-xs text-destructive" title={loja.ecUltimoErro}>
-          {loja.ecUltimoErro}
-        </p>
-      )}
-    </div>
   );
 }
 
 export function TrackingScreen({
   lojas,
   pedidos,
-  ecDisponivel,
 }: {
   lojas: LojaTracking[];
   pedidos: Record<string, number>;
-  ecDisponivel: boolean;
 }) {
   const ativas = lojas.filter((l) => l.ligado);
 
@@ -285,12 +217,7 @@ export function TrackingScreen({
 
       <div className="space-y-3">
         {lojas.map((l) => (
-          <LinhaLoja
-            key={l.storeId}
-            loja={l}
-            pedidos={pedidos[l.storeId] ?? null}
-            ecDisponivel={ecDisponivel}
-          />
+          <LinhaLoja key={l.storeId} loja={l} pedidos={pedidos[l.storeId] ?? null} />
         ))}
       </div>
     </div>
