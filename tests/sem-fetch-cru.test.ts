@@ -38,6 +38,8 @@ const PERMITIDOS: Record<string, string> = {
   "src/lib/aliexpress/scraper.ts":
     "endpoint fixo da API do Bright Data (api.brightdata.com), sem entrada do usuario",
   "src/lib/billing/pagou.ts": "BASE e a URL da API do Pagou, vinda de env",
+  "src/lib/tracking/google-ads-api.ts":
+    "dois endpoints constantes no codigo (oauth2.googleapis.com e o BASE de googleads.googleapis.com); nada do caminho vem do usuario",
 };
 
 const RAIZ = path.resolve(__dirname, "..", "src");
@@ -66,7 +68,14 @@ describe("nenhum fetch cru fora da lista", () => {
     const infratores: string[] = [];
 
     for (const abs of arquivos) {
-      const rel = path.relative(path.resolve(__dirname, ".."), abs);
+      // As chaves de PERMITIDOS usam `/`. No Windows path.relative devolve `\`,
+      // e sem normalizar NENHUMA entrada casava -- o guard acusava os proprios
+      // arquivos permitidos e so passava no CI Linux, que e justamente onde ele
+      // menos precisa rodar.
+      const rel = path
+        .relative(path.resolve(__dirname, ".."), abs)
+        .split(path.sep)
+        .join("/");
       if (rel in PERMITIDOS) continue;
 
       const fonte = readFileSync(abs, "utf8");

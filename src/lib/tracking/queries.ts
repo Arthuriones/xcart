@@ -28,9 +28,16 @@ export interface LojaTracking {
   temWebhook: boolean;
   /** O snippet esta no tema? Sem ele o gclid nunca chega ao pedido. */
   temSnippet: boolean;
+  googleCustomerId: string | null;
+  /** O lojista autorizou a conta Google? Sem isso o enhancement nao sai. */
+  temAutorizacaoGoogle: boolean;
   enviados7d: number;
   falharam7d: number;
   pendentes: number;
+  /** Enhanced conversions: contado separado porque falha por motivos proprios. */
+  ecEnviados7d: number;
+  ecFalharam7d: number;
+  ecUltimoErro: string | null;
   /** Enviados sem nenhum click id: conversao que o Google nao liga a anuncio. */
   semAtribuicao7d: number;
   ultimoEnvio: string | null;
@@ -61,11 +68,13 @@ export async function getPainelTracking(): Promise<PainelTracking> {
   const [{ data: configs }, { data: eventos }] = await Promise.all([
     supabase
       .from("tracking_configs")
-      .select("store_id, enabled, google_conversion_id, google_conversion_label, meta_pixel_id")
+      .select(
+        "store_id, enabled, google_conversion_id, google_conversion_label, meta_pixel_id, google_customer_id"
+      )
       .in("store_id", ids),
     supabase
       .from("tracking_events")
-      .select("store_id, status, last_error, sent_at, created_at")
+      .select("store_id, destination, status, last_error, sent_at, created_at")
       .in("store_id", ids)
       .gte("created_at", desde)
       .order("created_at", { ascending: false }),
@@ -75,12 +84,37 @@ export async function getPainelTracking(): Promise<PainelTracking> {
     (configs || []).map((c) => [c.store_id, c])
   );
 
+  // O refresh token mora em tracking_secrets, que so o service_role alcanca --
+  // de proposito: ele da escrita na conta de anuncios do lojista. A tela nao
+  // precisa do valor, so de saber se existe. As lojas ja foram filtradas por
+  // RLS acima, entao este admin nao amplia o que o usuario ve.
+  const comAutorizacao = new Set<string>();
+  {
+    const { data } = await createAdminClient()
+      .from("tracking_secrets")
+      .select("store_id, google_refresh_token")
+      .in("store_id", ids);
+    for (const l of data || []) {
+      if (l.google_refresh_token) comAutorizacao.add(l.store_id);
+    }
+  }
+
   // Webhook e snippet exigem chamar a Shopify, o que e lento e nem sempre
   // possivel. A tela mostra o que da para saber do banco; o diagnostico
   // completo fica no script.
   const contagem = new Map<
     string,
-    { enviados: number; falharam: number; pendentes: number; semAtrib: number; ultimo: string | null; erro: string | null }
+    {
+      enviados: number;
+      falharam: number;
+      pendentes: number;
+      semAtrib: number;
+      ultimo: string | null;
+      erro: string | null;
+      ecEnviados: number;
+      ecFalharam: number;
+      ecErro: string | null;
+    }
   >();
   for (const e of eventos || []) {
     const atual = contagem.get(e.store_id) || {
@@ -90,7 +124,24 @@ export async function getPainelTracking(): Promise<PainelTracking> {
       semAtrib: 0,
       ultimo: null,
       erro: null,
+      ecEnviados: 0,
+      ecFalharam: 0,
+      ecErro: null,
     };
+
+    // O enhancement e uma SEGUNDA chamada da mesma venda. Somado junto, ele
+    // dobraria o total de "conversoes enviadas" e o numero deixaria de bater
+    // com os pedidos -- que e justamente a conta que serve de alarme.
+    if (e.destination === "google_ec") {
+      if (e.status === "enviado") atual.ecEnviados += 1;
+      else if (e.status === "falhou") {
+        atual.ecFalharam += 1;
+        if (!atual.ecErro && e.last_error) atual.ecErro = e.last_error;
+      }
+      contagem.set(e.store_id, atual);
+      continue;
+    }
+
     if (e.status === "enviado") {
       atual.enviados += 1;
       if (!atual.ultimo && e.sent_at) atual.ultimo = e.sent_at;
@@ -117,11 +168,16 @@ export async function getPainelTracking(): Promise<PainelTracking> {
         googleConversionId: cfg?.google_conversion_id ?? null,
         googleConversionLabel: cfg?.google_conversion_label ?? null,
         metaPixelId: cfg?.meta_pixel_id ?? null,
+        googleCustomerId: cfg?.google_customer_id ?? null,
+        temAutorizacaoGoogle: comAutorizacao.has(l.id),
         temWebhook: false,
         temSnippet: false,
         enviados7d: c?.enviados ?? 0,
         falharam7d: c?.falharam ?? 0,
         pendentes: c?.pendentes ?? 0,
+        ecEnviados7d: c?.ecEnviados ?? 0,
+        ecFalharam7d: c?.ecFalharam ?? 0,
+        ecUltimoErro: c?.ecErro ?? null,
         semAtribuicao7d: c?.semAtrib ?? 0,
         ultimoEnvio: c?.ultimo ?? null,
         ultimoErro: c?.erro ?? null,

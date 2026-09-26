@@ -28,6 +28,8 @@ export async function POST(request: NextRequest) {
     enabled?: boolean;
     googleConversionId?: string | null;
     googleConversionLabel?: string | null;
+    googleCustomerId?: string | null;
+    googleLoginCustomerId?: string | null;
   };
   try {
     corpo = await request.json();
@@ -80,6 +82,38 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Conta de anuncios: o painel do Google mostra 123-456-7890, e a API recusa
+  // qualquer coisa que nao seja digito puro.
+  const soDigitos = (v: string | null | undefined) => {
+    const d = (v || "").replace(/\D/g, "");
+    return d || null;
+  };
+  const customerId = soDigitos(corpo.googleCustomerId);
+  const mcc = soDigitos(corpo.googleLoginCustomerId);
+
+  if (corpo.googleCustomerId?.trim() && !customerId) {
+    return NextResponse.json(
+      { error: "Customer id invalido. Esperado algo como 1234567890." },
+      { status: 400 }
+    );
+  }
+
+  // O id da conversion action e derivado do rotulo e fica guardado para nao
+  // custar uma consulta por pedido. Se o rotulo ou a conta mudou, o id guardado
+  // aponta para OUTRA conversao -- e o enhancement iria enriquecer a conversao
+  // errada, sem erro nenhum aparecendo. Entao o cache e descartado e descoberto
+  // de novo no proximo envio.
+  const { data: anterior } = await admin
+    .from("tracking_configs")
+    .select("google_conversion_label, google_customer_id")
+    .eq("store_id", loja.id)
+    .maybeSingle();
+
+  const mudouAConversao =
+    Boolean(anterior) &&
+    (anterior?.google_conversion_label !== rotulo ||
+      anterior?.google_customer_id !== customerId);
+
   const { error } = await admin.from("tracking_configs").upsert(
     {
       store_id: loja.id,
@@ -87,6 +121,9 @@ export async function POST(request: NextRequest) {
       enabled: ligar,
       google_conversion_id: id,
       google_conversion_label: rotulo,
+      google_customer_id: customerId,
+      google_login_customer_id: mcc,
+      ...(mudouAConversao ? { google_conversion_action_id: null } : {}),
       updated_at: new Date().toISOString(),
     },
     { onConflict: "store_id" }
