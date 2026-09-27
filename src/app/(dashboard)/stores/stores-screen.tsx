@@ -191,6 +191,7 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
   const [profilePriceMarkupPercent, setProfilePriceMarkupPercent] = useState("0");
   const [profileName, setProfileName] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
+  const [deletingStore, setDeletingStore] = useState(false);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
@@ -521,6 +522,78 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
 
     setStoreAssets((prev) => prev.filter((a) => a.id !== asset.id));
   }
+  /**
+   * Remove a loja, em dois passos.
+   *
+   * A primeira chamada nao apaga: o servidor devolve 409 com o inventario do que
+   * sumiria, e e ESSE numero que aparece na confirmacao. Importa porque 12
+   * tabelas apontam para a loja com cascade, e a pior e a configuracao de rota --
+   * apagar uma loja de checkout derruba a rota da vitrine que aponta para ela, e
+   * a vitrine segue no ar recebendo trafego com o carrinho sem destino.
+   */
+  async function handleDeleteStore() {
+    if (!editingStore) return;
+    const loja = editingStore;
+
+    setDeletingStore(true);
+    try {
+      const sondagem = await fetch(`/api/stores/${loja.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      if (sondagem.status === 409) {
+        const j = await sondagem.json();
+        const inv = j.inventario || {};
+        const itens: string[] = [];
+        if (inv.produtos) itens.push(`${inv.produtos} produto(s)`);
+        if (inv.materiais) itens.push(`${inv.materiais} material(is) da marca`);
+        if (inv.rastreamentoLigado) itens.push("o rastreamento (está ligado)");
+        if (inv.rotasComoVitrine)
+          itens.push(`${inv.rotasComoVitrine} rota(s) em que ela é a vitrine`);
+        if (inv.rotasComoCheckout)
+          itens.push(
+            `${inv.rotasComoCheckout} rota(s) em que ela é a loja de checkout — ` +
+              `a vitrine correspondente fica SEM destino de carrinho`
+          );
+
+        const linhas = [
+          `Remover "${loja.name}" (${loja.shop_domain}) do xcart?`,
+          "",
+          "Isto apaga:",
+          ...itens.map((i) => `- ${i}`),
+          "",
+          "A loja na Shopify não é afetada. Não tem como desfazer.",
+        ];
+        if (!confirm(linhas.join("\n"))) return;
+
+        const final = await fetch(`/api/stores/${loja.id}`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ confirmar: true }),
+        });
+        if (!final.ok) {
+          const e = await final.json().catch(() => ({}));
+          throw new Error(e.error || "Falha ao remover a loja.");
+        }
+      } else if (!sondagem.ok) {
+        const e = await sondagem.json().catch(() => ({}));
+        throw new Error(e.error || "Falha ao remover a loja.");
+      }
+      // 200 na primeira chamada = loja vazia, removida sem perguntar nada.
+
+      setStores((prev) => prev.filter((x) => x.id !== loja.id));
+      setProfileOpen(false);
+      setEditingStore(null);
+      toast.success("Loja removida do xcart.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao remover a loja.");
+    } finally {
+      setDeletingStore(false);
+    }
+  }
+
   async function handleSaveProfile() {
     if (!editingStore) return;
 
@@ -965,6 +1038,8 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
           assetsInputRef={assetsInputRef}
           handleRemoveAsset={handleRemoveAsset}
           handleSaveProfile={handleSaveProfile}
+          handleDeleteStore={handleDeleteStore}
+          deletingStore={deletingStore}
         />
       )}
     </div>

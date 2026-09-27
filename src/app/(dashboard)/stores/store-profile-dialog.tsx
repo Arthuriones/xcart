@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { textos } from "@/lib/textos";
-import { Loader2, Upload, Image as ImageIcon, X } from "lucide-react";
+import { Loader2, Upload, Image as ImageIcon, X, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -72,6 +72,9 @@ export interface StoreProfileDialogProps {
   profileAutoConvertPrices: boolean;
   setProfileAutoConvertPrices: (v: boolean) => void;
   profileSaving: boolean;
+  /** Remove a loja do xcart. Pede confirmacao com o inventario do que sai. */
+  handleDeleteStore: () => void;
+  deletingStore: boolean;
   logoUploading: boolean;
   assetUploading: boolean;
   logoPreview: string | null;
@@ -105,6 +108,8 @@ export function StoreProfileDialog({
   profileAutoConvertPrices,
   setProfileAutoConvertPrices,
   profileSaving,
+  handleDeleteStore,
+  deletingStore,
   logoUploading,
   assetUploading,
   logoPreview,
@@ -455,6 +460,38 @@ export function StoreProfileDialog({
               t("save_profile_btn")
             )}
           </Button>
+
+          {/* Separado e discreto de proposito: 12 tabelas apontam para a loja
+              com ON DELETE CASCADE, inclusive a configuracao de rota nas duas
+              pontas. Quem clica aqui ainda ve o inventario do que sai antes de
+              qualquer coisa ser apagada. */}
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-destructive">Remover do xcart</p>
+                <p className="text-xs text-muted-foreground">
+                  Apaga produtos, materiais, rastreamento e rotas desta loja. A loja na
+                  Shopify não é afetada — e se o app continuar instalado lá, ela volta a
+                  aparecer ao reconectar.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleDeleteStore}
+                disabled={deletingStore || profileSaving}
+                className="border-destructive/40 text-destructive hover:bg-destructive/10"
+              >
+                {deletingStore ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <Trash2 className="mr-1.5 h-4 w-4" />
+                    Remover
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

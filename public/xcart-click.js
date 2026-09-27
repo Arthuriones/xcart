@@ -170,10 +170,14 @@
    * servido pelo xcart, entao ele sabe de onde veio. Se o dominio do app mudar,
    * a tag no tema muda junto e isto acompanha sem reinstalar nada.
    */
-  function origemDoApp() {
-    var el =
+  function tagPropria() {
+    return (
       document.currentScript ||
-      document.querySelector("script[data-xcart-click]");
+      document.querySelector("script[data-xcart-click]")
+    );
+  }
+
+  function origemDoApp(el) {
     try {
       return new URL(el.src).origin;
     } catch (e) {
@@ -181,11 +185,24 @@
     }
   }
 
+  var tag = tagPropria();
   var COLETOR = null;
-  var origem = origemDoApp();
+  var origem = tag ? origemDoApp(tag) : null;
   if (origem) COLETOR = origem + "/api/tracking/collect";
 
   var LOJA = (window.Shopify && window.Shopify.shop) || null;
+
+  /**
+   * Qual LINHA de loja do xcart e esta.
+   *
+   * O mesmo dominio da Shopify pode estar cadastrado por mais de uma conta
+   * xcart, cada uma com o seu app. Mandando so o dominio, o coletor tem que
+   * adivinhar entre elas -- e errar manda a conversao para a conta de anuncios
+   * de outra pessoa. O instalador crava o id aqui na tag para nao haver duvida.
+   *
+   * Tag antiga nao tem o atributo; ai o coletor cai no dominio, como antes.
+   */
+  var STORE_ID = (tag && tag.getAttribute("data-xcart-store")) || null;
 
   // Ultimo envio de cada evento, para nao contar a mesma acao duas vezes.
   //
@@ -209,6 +226,7 @@
 
     var corpo = JSON.stringify({
       shop: LOJA,
+      storeId: STORE_ID,
       evento: evento,
       // Instante no id: protege contra reenvio da MESMA acao (o nosso retry, o
       // tema disparando duas vezes), sem impedir a acao repetida de verdade --

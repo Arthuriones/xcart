@@ -90,6 +90,8 @@ export async function POST(request: NextRequest) {
 
   let corpo: {
     shop?: string;
+    /** Linha de loja do xcart, cravada na tag pelo instalador. */
+    storeId?: string;
     evento?: string;
     eventId?: string;
     visitorId?: string;
@@ -143,12 +145,18 @@ export async function POST(request: NextRequest) {
   // linhas ativas, vale a que TEM rastreamento ligado; havendo mais de uma ou
   // nenhuma, a instalacao mais recente. Determinístico, e nunca 500.
   // ------------------------------------------------------------------------
-  const { data: candidatas } = await admin
+  const idDaTag = (corpo.storeId || "").trim();
+  const consulta = admin
     .from("stores")
     .select("id")
-    .eq("shop_domain", loja)
-    .is("uninstalled_at", null)
-    .order("created_at", { ascending: false });
+    .is("uninstalled_at", null);
+
+  // Com o id da tag nao ha o que desempatar: e exatamente a linha que instalou o
+  // snippet. O dominio segue exigido junto -- o id sozinho deixaria alguem
+  // apontar evento para a loja de outro sabendo so o uuid.
+  const { data: candidatas } = idDaTag
+    ? await consulta.eq("id", idDaTag).eq("shop_domain", loja)
+    : await consulta.eq("shop_domain", loja).order("created_at", { ascending: false });
 
   if (!candidatas?.length) return recusado("loja desconhecida");
 
@@ -167,8 +175,8 @@ export async function POST(request: NextRequest) {
   ]);
 
   const porStore = new Map((cfgs || []).map((c) => [c.store_id, c]));
-  // `candidatas` ja vem da mais nova para a mais velha, entao o primeiro com
-  // rastreamento ligado e "a ligada mais recente".
+  // Com id da tag ha uma candidata so. Sem ele (tag antiga), `candidatas` vem da
+  // mais nova para a mais velha e vale a primeira com rastreamento ligado.
   const escolhida =
     candidatas.find((c) => porStore.get(c.id)?.enabled) || candidatas[0];
 
