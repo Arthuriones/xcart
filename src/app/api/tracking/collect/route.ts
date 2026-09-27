@@ -126,29 +126,55 @@ export async function POST(request: NextRequest) {
 
   const admin = createAdminClient();
 
-  const { data: registro } = await admin
+  // ------------------------------------------------------------------------
+  // Qual LINHA de loja e esta?
+  //
+  // `stores` tem mais de uma linha ativa para o mesmo shop_domain -- ha 4 casos
+  // assim em producao hoje. Acontece em reinstalacao, e o webhook ate documenta
+  // que o mesmo dominio pode estar cadastrado por usuarios diferentes, cada um
+  // com o seu app.
+  //
+  // `maybeSingle()` aqui ERRA quando vem mais de uma: o PostgREST recusa, e o
+  // coletor respondia "loja desconhecida" -- rastreamento morto em silencio
+  // justamente nas lojas reinstaladas.
+  //
+  // O webhook desempata pela assinatura HMAC. Aqui nao ha assinatura: o evento
+  // vem do navegador do visitante. Entao o critério e explicito -- entre as
+  // linhas ativas, vale a que TEM rastreamento ligado; havendo mais de uma ou
+  // nenhuma, a instalacao mais recente. Determinístico, e nunca 500.
+  // ------------------------------------------------------------------------
+  const { data: candidatas } = await admin
     .from("stores")
     .select("id")
     .eq("shop_domain", loja)
     .is("uninstalled_at", null)
-    .maybeSingle();
+    .order("created_at", { ascending: false });
 
-  if (!registro) return recusado("loja desconhecida");
+  if (!candidatas?.length) return recusado("loja desconhecida");
 
-  const [{ data: cfg }, { data: seg }] = await Promise.all([
+  const ids = candidatas.map((c) => c.id);
+  const [{ data: cfgs }, { data: segs }] = await Promise.all([
     admin
       .from("tracking_configs")
       .select(
-        "enabled, google_conversion_id, google_conversion_label, google_labels, meta_pixel_id, meta_test_event_code"
+        "store_id, enabled, google_conversion_id, google_conversion_label, google_labels, meta_pixel_id, meta_test_event_code"
       )
-      .eq("store_id", registro.id)
-      .maybeSingle(),
+      .in("store_id", ids),
     admin
       .from("tracking_secrets")
-      .select("meta_access_token")
-      .eq("store_id", registro.id)
-      .maybeSingle(),
+      .select("store_id, meta_access_token")
+      .in("store_id", ids),
   ]);
+
+  const porStore = new Map((cfgs || []).map((c) => [c.store_id, c]));
+  // `candidatas` ja vem da mais nova para a mais velha, entao o primeiro com
+  // rastreamento ligado e "a ligada mais recente".
+  const escolhida =
+    candidatas.find((c) => porStore.get(c.id)?.enabled) || candidatas[0];
+
+  const registro = escolhida;
+  const cfg = porStore.get(registro.id);
+  const seg = (segs || []).find((x) => x.store_id === registro.id);
 
   if (!cfg?.enabled) return recusado("rastreamento desligado");
 
