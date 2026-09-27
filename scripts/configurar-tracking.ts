@@ -127,11 +127,37 @@ async function main() {
   // conteudo, entao nao existe "testar o AW" -- a conferencia e na tela do
   // Google Ads, depois da primeira venda.
   if (querMeta) {
-  const { enviarParaMeta } = await import("../src/lib/tracking/meta-capi");
+  const { enviarParaMeta, validarEscritaNoPixel } = await import(
+    "../src/lib/tracking/meta-capi"
+  );
   const { montarUserData, sha256 } = await import("../src/lib/tracking/normalizar");
 
+  // O que decide: o token consegue ESCREVER no pixel?
+  //
+  // Com um evento custom, nao com um Purchase. Sem `test_event_code` um Purchase
+  // de teste conta como conversao de verdade e entra no aprendizado da campanha;
+  // um nome custom que ninguem configurou como conversao nao otimiza nada.
+  //
+  // Nao uso a leitura do pixel para barrar: medido, um token que escreve sem
+  // problema responde "(#100) Missing Permission" no GET -- system user com
+  // ads_management escreve e nao le metadado.
+  const escrita = await validarEscritaNoPixel(pixel!, token!);
+  if (!escrita.ok) {
+    console.error(`\n  META RECUSOU A CREDENCIAL: ${escrita.erro}`);
+    console.error("  nada foi gravado como ligado.");
+    process.exit(1);
+  }
+  console.log(
+    `\n  Meta aceitou escrita no pixel (trace ${escrita.trace || "-"}).`
+  );
+  console.log(
+    "  o evento de prova e custom (XcartCredentialCheck): aparece no Events\n" +
+      "  Manager e nao e usado para otimizar campanha."
+  );
+
   const agora = Math.floor(Date.now() / 1000);
-  const prova = await enviarParaMeta(
+  const prova = codigoTeste
+    ? await enviarParaMeta(
     pixel!,
     token!,
     [
@@ -149,36 +175,56 @@ async function main() {
     ],
     // Sem codigo de teste isto contaria como conversao de verdade. Com codigo,
     // cai na aba de teste do Events Manager.
-    { testEventCode: codigoTeste }
-  );
+        { testEventCode: codigoTeste }
+      )
+    : null;
 
-  if (!prova.ok) {
-    console.error(`\n  TOKEN RECUSADO PELO META: ${prova.erro}`);
+  if (prova && !prova.ok) {
+    console.error(`\n  EVENTO DE PROVA RECUSADO PELO META: ${prova.erro}`);
     console.error("  nada foi gravado como ligado.");
     process.exit(1);
   }
-  console.log(`\n  Meta aceitou (${prova.recebidos} evento, trace ${prova.trace || "-"})`);
-  console.log(`  hash de conferencia do e-mail: ${sha256("teste+config@exemplo.com").slice(0, 16)}...`);
+  if (prova) {
+    console.log(
+      `  Meta aceitou o evento de prova (${prova.recebidos}, trace ${prova.trace || "-"})`
+    );
+    console.log(
+      `  hash de conferencia do e-mail: ${sha256("teste+config@exemplo.com").slice(0, 16)}...`
+    );
+  }
   }
 
   // --- grava ----------------------------------------------------------------
-  const { error: e1 } = await admin.from("tracking_configs").upsert(
-    {
-      store_id: loja.id,
-      user_id: loja.user_id,
-      enabled: true,
-      meta_pixel_id: pixel,
-      meta_test_event_code: codigoTeste,
-      google_conversion_id: aw,
-      // As duas: o mapa e a fonte de verdade, a coluna e fallback de leitura.
-      // Gravar so a coluna deixaria a compra funcionando por fallback e o mapa
-      // vazio, e ai a tela mostraria o campo do rotulo em branco.
-      ...(rotulo ? { google_labels: { purchase: rotulo } } : {}),
-      google_conversion_label: rotulo,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "store_id" }
-  );
+  //
+  // SO os campos que vieram nesta chamada.
+  //
+  // Antes o upsert escrevia todos, e ai configurar um destino APAGAVA o outro:
+  // rodar `--pixel` depois de `--aw` zerava o Google, sem aviso. Aconteceu de
+  // verdade nesta loja. Upsert grava a linha inteira -- campo ausente do objeto
+  // fica como estava, campo com null vira null.
+  const patch: Record<string, unknown> = {
+    store_id: loja.id,
+    user_id: loja.user_id,
+    enabled: true,
+    updated_at: new Date().toISOString(),
+  };
+  if (pixel) {
+    patch.meta_pixel_id = pixel;
+    // O codigo de teste acompanha o pixel: e dele que ele fala.
+    patch.meta_test_event_code = codigoTeste;
+  }
+  if (aw) patch.google_conversion_id = aw;
+  if (rotulo) {
+    // As duas: o mapa e a fonte de verdade, a coluna e fallback de leitura.
+    // Gravar so a coluna deixaria a compra funcionando por fallback e o mapa
+    // vazio, e ai a tela mostraria o campo do rotulo em branco.
+    patch.google_labels = { purchase: rotulo };
+    patch.google_conversion_label = rotulo;
+  }
+
+  const { error: e1 } = await admin
+    .from("tracking_configs")
+    .upsert(patch, { onConflict: "store_id" });
   if (e1) {
     console.error("falha ao gravar config:", e1.message);
     process.exit(1);
