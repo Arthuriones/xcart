@@ -30,6 +30,17 @@ export async function POST(request: NextRequest) {
     googleConversionId?: string | null;
     /** Rotulo por evento: {"purchase":"AbC...","add_to_cart":"XyZ..."}. */
     googleLabels?: Record<string, string> | null;
+    metaPixelId?: string | null;
+    /**
+     * Token do CAPI. Vazio/ausente = nao mexer no que esta gravado.
+     *
+     * Nunca volta na leitura: a tela so recebe um booleano dizendo se existe.
+     * String vazia nao apaga de proposito -- a tela manda o campo vazio em todo
+     * salvamento normal, e apagar ali derrubaria o rastreamento do Meta a cada
+     * vez que o lojista mudasse outra coisa. Para remover existe --desligar no
+     * script.
+     */
+    metaAccessToken?: string | null;
   };
   try {
     corpo = await request.json();
@@ -70,6 +81,18 @@ export async function POST(request: NextRequest) {
   const rotulos = limparMapaDeRotulos(corpo.googleLabels);
   const quantos = Object.keys(rotulos).length;
 
+  // So digitos: o Events Manager mostra o id com espaco as vezes, e o Meta
+  // recusa a URL do endpoint se vier qualquer outra coisa.
+  const pixel = (corpo.metaPixelId || "").replace(/\D/g, "") || null;
+  if (corpo.metaPixelId?.trim() && !pixel) {
+    return NextResponse.json(
+      { error: "ID do pixel invalido. Esperado so digitos." },
+      { status: 400 }
+    );
+  }
+
+  const tokenMeta = (corpo.metaAccessToken || "").trim() || null;
+
   // Um sem o outro nao identifica conversao nenhuma: a requisicao sairia e o
   // Google descartaria em silencio.
   if (Boolean(id) !== (quantos > 0)) {
@@ -82,10 +105,24 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Ligado exige ao menos UM destino que de fato envie. O banco tambem recusa
+  // (tracking_configs_ligado_precisa_destino), mas a mensagem daqui e legivel.
+  const googlePronto = Boolean(id) && quantos > 0;
+  const { data: segAntes } = await admin
+    .from("tracking_secrets")
+    .select("meta_access_token")
+    .eq("store_id", loja.id)
+    .maybeSingle();
+  const metaPronto = Boolean(pixel) && Boolean(tokenMeta || segAntes?.meta_access_token);
+
   const ligar = Boolean(corpo.enabled);
-  if (ligar && (!id || quantos === 0)) {
+  if (ligar && !googlePronto && !metaPronto) {
     return NextResponse.json(
-      { error: "Para ligar, informe o ID de conversao e o rotulo de pelo menos um evento." },
+      {
+        error:
+          "Para ligar: no Google, o ID de conversao e o rotulo de ao menos um evento; " +
+          "no Meta, o ID do pixel e o token do CAPI.",
+      },
       { status: 400 }
     );
   }
@@ -101,10 +138,23 @@ export async function POST(request: NextRequest) {
       // leitura: deixar um valor velho ali faria a conversao de compra
       // continuar saindo depois de o lojista tirar o rotulo do mapa.
       google_conversion_label: rotulos.purchase ?? null,
+      meta_pixel_id: pixel,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "store_id" }
   );
+
+  // O token vai para a outra tabela, e so quando veio um novo: campo vazio no
+  // formulario significa "nao mexer", nao "apagar".
+  if (!error && tokenMeta) {
+    const { error: erroSegredo } = await admin.from("tracking_secrets").upsert(
+      { store_id: loja.id, meta_access_token: tokenMeta },
+      { onConflict: "store_id" }
+    );
+    if (erroSegredo) {
+      return NextResponse.json({ error: erroSegredo.message }, { status: 500 });
+    }
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

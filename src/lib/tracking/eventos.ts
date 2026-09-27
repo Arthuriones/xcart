@@ -40,6 +40,18 @@ export interface DefinicaoEvento {
    */
   origem: "webhook" | "navegador";
   /**
+   * Nome do evento no Meta.
+   *
+   * O Meta tem nomes proprios e reconhece SO os dele para evento padrao
+   * ("AddToCart", nao "add_to_cart"). Nome fora da lista dele vira evento
+   * personalizado: chega, aparece no Events Manager e NAO serve para otimizacao
+   * de campanha nem para publico. Falha silenciosa classica.
+   *
+   * O Google nao precisa de nome nenhum -- la o evento e identificado pelo
+   * rotulo da conversion action.
+   */
+  nomeNoMeta: "ViewContent" | "AddToCart" | "InitiateCheckout" | "Purchase";
+  /**
    * Manda valor e moeda junto?
    *
    * So a compra. Os eventos de navegador chegam por endpoint publico, e valor
@@ -55,6 +67,7 @@ export const EVENTOS: DefinicaoEvento[] = [
     nome: "Ver produto",
     descricao: "O visitante abriu uma pagina de produto.",
     origem: "navegador",
+    nomeNoMeta: "ViewContent",
     temValor: false,
   },
   {
@@ -62,6 +75,7 @@ export const EVENTOS: DefinicaoEvento[] = [
     nome: "Adicionar ao carrinho",
     descricao: "O visitante colocou um produto no carrinho.",
     origem: "navegador",
+    nomeNoMeta: "AddToCart",
     temValor: false,
   },
   {
@@ -69,6 +83,7 @@ export const EVENTOS: DefinicaoEvento[] = [
     nome: "Iniciar checkout",
     descricao: "O visitante saiu do carrinho para o checkout.",
     origem: "navegador",
+    nomeNoMeta: "InitiateCheckout",
     temValor: false,
   },
   {
@@ -76,6 +91,7 @@ export const EVENTOS: DefinicaoEvento[] = [
     nome: "Compra",
     descricao: "O pedido entrou. Vem do webhook, nao do navegador.",
     origem: "webhook",
+    nomeNoMeta: "Purchase",
     temValor: true,
   },
 ];

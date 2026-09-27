@@ -7,6 +7,7 @@ import {
   type ChaveEvento,
   type MapaDeRotulos,
 } from "@/lib/tracking/eventos";
+import { montarFbc, montarUserData } from "@/lib/tracking/normalizar";
 
 export const runtime = "nodejs";
 
@@ -40,8 +41,19 @@ export const runtime = "nodejs";
 // diferenca e que aqui esta escrito.
 // ============================================================================
 
-/** Eventos por visitante por dia. Compra nao passa por aqui. */
-const TETO_POR_VISITANTE = 40;
+/**
+ * LINHAS de fila por visitante por dia -- nao acoes.
+ *
+ * Uma acao rende uma linha por destino configurado, entao numa loja com Google e
+ * Meta juntos sao duas. Um visitante de verdade faz algo como 10 produtos + 3
+ * carrinhos + 1 checkout = 14 acoes = 28 linhas, e o teto nao pode encostar
+ * nisso. Contar linha em vez de acao e escolha de custo: distinct por event_id
+ * seria outra consulta a cada evento.
+ *
+ * De todo jeito o teto por visitante nao e a defesa principal -- quem troca o
+ * cookie escapa dele. O teto da LOJA e o que limita de verdade.
+ */
+const TETO_POR_VISITANTE = 120;
 
 /** Teto por loja por hora: se estourar, e abuso ou laco no snippet. */
 const TETO_POR_LOJA_HORA = 2000;
@@ -84,6 +96,9 @@ export async function POST(request: NextRequest) {
     gclid?: string | null;
     gbraid?: string | null;
     wbraid?: string | null;
+    fbp?: string | null;
+    fbc?: string | null;
+    fbclid?: string | null;
   };
   try {
     corpo = await request.json();
@@ -120,24 +135,38 @@ export async function POST(request: NextRequest) {
 
   if (!registro) return recusado("loja desconhecida");
 
-  const { data: cfg } = await admin
-    .from("tracking_configs")
-    .select("enabled, google_conversion_id, google_conversion_label, google_labels")
-    .eq("store_id", registro.id)
-    .maybeSingle();
+  const [{ data: cfg }, { data: seg }] = await Promise.all([
+    admin
+      .from("tracking_configs")
+      .select(
+        "enabled, google_conversion_id, google_conversion_label, google_labels, meta_pixel_id, meta_test_event_code"
+      )
+      .eq("store_id", registro.id)
+      .maybeSingle(),
+    admin
+      .from("tracking_secrets")
+      .select("meta_access_token")
+      .eq("store_id", registro.id)
+      .maybeSingle(),
+  ]);
 
-  if (!cfg?.enabled || !cfg.google_conversion_id) {
-    return recusado("rastreamento desligado");
-  }
+  if (!cfg?.enabled) return recusado("rastreamento desligado");
 
-  const rotulo = rotuloDoEvento(
-    cfg.google_labels as MapaDeRotulos | null,
-    evento as ChaveEvento,
-    cfg.google_conversion_label
-  );
-  // Sem rotulo o lojista nao pediu este evento. Silencio, nao erro: o snippet
-  // dispara todos os que sabe e e aqui que se decide o que interessa.
-  if (!rotulo) return ok({ ignorado: "evento nao configurado" });
+  const rotulo = cfg.google_conversion_id
+    ? rotuloDoEvento(
+        cfg.google_labels as MapaDeRotulos | null,
+        evento as ChaveEvento,
+        cfg.google_conversion_label
+      )
+    : null;
+
+  // No Meta um pixel cobre todos os eventos -- nao existe rotulo por evento.
+  // Entao "configurado" ja basta, e o que decide por evento e so o nome.
+  const temMeta = Boolean(cfg.meta_pixel_id && seg?.meta_access_token);
+
+  // Nenhum dos dois quer este evento. Silencio, nao erro: o snippet dispara
+  // todos os que sabe e e aqui que se decide o que interessa.
+  if (!rotulo && !temMeta) return ok({ ignorado: "evento nao configurado" });
 
   // ---- tetos ---------------------------------------------------------------
   const umDiaAtras = new Date(Date.now() - 864e5).toISOString();
@@ -174,38 +203,105 @@ export async function POST(request: NextRequest) {
     wbraid: (corpo.wbraid || "").trim().slice(0, 200) || null,
   };
 
-  const payload = {
-    ...clique,
-    // `oid` = o proprio event_id. Mesma conversion action com o mesmo oid, o
-    // Google descarta -- e a segunda trava contra a mesma acao contar duas
-    // vezes, junto com o indice unico da fila.
-    orderId: eventId,
-    // Sem value/currency de proposito. Ver o cabecalho.
-  };
+  const destinos: { destination: "google" | "meta"; payload: unknown }[] = [];
+
+  if (rotulo) {
+    destinos.push({
+      destination: "google",
+      payload: {
+        ...clique,
+        // `oid` = o proprio event_id. Mesma conversion action com o mesmo oid, o
+        // Google descarta -- e a segunda trava contra a mesma acao contar duas
+        // vezes, junto com o indice unico da fila.
+        orderId: eventId,
+        // Sem value/currency de proposito. Ver o cabecalho.
+      },
+    });
+  }
+
+  if (temMeta) {
+    // O Meta pontua pela quantidade de sinais que conferem, e num evento de
+    // funil nao existe cliente identificado -- nao ha e-mail nem telefone para
+    // mandar. O que da para oferecer e o que o pixel do navegador ofereceria:
+    // cookie, IP e user agent.
+    const ip =
+      (request.headers.get("x-forwarded-for") || "").split(",")[0].trim() ||
+      request.headers.get("x-real-ip") ||
+      null;
+    const userAgent = request.headers.get("user-agent");
+
+    const fbclid = (corpo.fbclid || "").trim().slice(0, 300) || null;
+    const userData = montarUserData(
+      {},
+      {
+        fbp: (corpo.fbp || "").trim().slice(0, 100) || null,
+        // Sem o cookie _fbc, reconstruir a partir do fbclid e o que mantem a
+        // ligacao com o anuncio -- e o caso de quem chega pelo anuncio numa loja
+        // que nao tem pixel no tema.
+        fbc: (corpo.fbc || "").trim().slice(0, 300) || montarFbc(fbclid, Date.now()),
+        clientIp: ip,
+        userAgent,
+      }
+    );
+
+    // A URL da pagina vem do Referer que o proprio navegador manda no beacon.
+    // Aceita so http(s): o header e escolhido pelo cliente, e o Meta recusa o
+    // evento inteiro se o event_source_url nao for URL.
+    let origemDaPagina: string | undefined;
+    const referer = request.headers.get("referer") || "";
+    if (/^https?:\/\//i.test(referer)) origemDaPagina = referer.slice(0, 500);
+
+    destinos.push({
+      destination: "meta",
+      payload: {
+        // O nome do Meta, nao a nossa chave: "AddToCart", nao "add_to_cart".
+        // Nome fora da lista dele vira evento personalizado, que chega e nao
+        // serve para otimizar campanha.
+        event_name: definicao.nomeNoMeta,
+        // Em segundos. Em milissegundos o Meta recusa o evento.
+        event_time: Math.floor(Date.now() / 1000),
+        event_id: eventId,
+        action_source: "website",
+        user_data: userData,
+        ...(origemDaPagina ? { event_source_url: origemDaPagina } : {}),
+        // Sem value/currency, igual ao Google: ver o cabecalho.
+      },
+    });
+  }
 
   try {
-    const { id, duplicado } = await enfileirar(admin, {
-      storeId: registro.id,
-      destination: "google",
-      evento: { event_name: evento, event_id: eventId },
-      orderId: eventId,
-      visitorId,
-      payload,
-    });
+    const saida: Record<string, string> = {};
+    for (const alvo of destinos) {
+      const { id, duplicado } = await enfileirar(admin, {
+        storeId: registro.id,
+        destination: alvo.destination,
+        evento: { event_name: evento, event_id: eventId },
+        orderId: eventId,
+        visitorId,
+        payload: alvo.payload,
+      });
 
-    if (duplicado) return ok({ estado: "duplicado" });
-    if (!id) return ok({ estado: "na fila" });
+      if (duplicado) {
+        saida[alvo.destination] = "duplicado";
+        continue;
+      }
+      if (!id) {
+        saida[alvo.destination] = "na fila";
+        continue;
+      }
 
-    // Melhor esforco: se falhar, a linha segue pendente e o cron tenta.
-    const r = await entregar(admin, {
-      id,
-      store_id: registro.id,
-      destination: "google",
-      event_name: evento,
-      payload,
-      attempts: 0,
-    });
-    return ok({ estado: r.ok ? "enviado" : "na fila" });
+      // Melhor esforco: se falhar, a linha segue pendente e o cron tenta.
+      const r = await entregar(admin, {
+        id,
+        store_id: registro.id,
+        destination: alvo.destination,
+        event_name: evento,
+        payload: alvo.payload,
+        attempts: 0,
+      });
+      saida[alvo.destination] = r.ok ? "enviado" : "na fila";
+    }
+    return ok({ destinos: saida });
   } catch (e) {
     console.error("[tracking/collect] falha ao enfileirar", e);
     return recusado("falha interna");

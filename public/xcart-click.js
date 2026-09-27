@@ -218,6 +218,14 @@
       gclid: achados.gclid || null,
       gbraid: achados.gbraid || null,
       wbraid: achados.wbraid || null,
+      // Sinais do Meta. _fbp e _fbc sao cookies que o pixel do navegador grava;
+      // sem eles o Meta nao liga o evento do servidor a sessao, e o Event Match
+      // Quality cai. O fbclid vai porque em quem chega pelo anuncio e nao tem
+      // pixel no tema, e a unica coisa que existe -- o servidor reconstroi o
+      // _fbc a partir dele.
+      fbp: achados._fbp || null,
+      fbc: achados._fbc || null,
+      fbclid: achados.fbclid || null,
     });
 
     // text/plain de proposito: mantem a requisicao "simples" para o CORS, sem

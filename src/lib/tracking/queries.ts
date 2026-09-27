@@ -30,6 +30,14 @@ export interface LojaTracking {
   /** Rotulo por evento. Evento fora do mapa = o lojista nao pediu. */
   googleLabels: MapaDeRotulos;
   metaPixelId: string | null;
+  /**
+   * O token do CAPI esta gravado?
+   *
+   * So o booleano. O valor mora em tracking_secrets (service_role) e nao volta
+   * para o cliente em hipotese nenhuma -- ele posta eventos na conta de
+   * anuncios do lojista.
+   */
+  temTokenMeta: boolean;
   /** O webhook orders/create esta inscrito? Sem ele nao entra evento nenhum. */
   temWebhook: boolean;
   /** O snippet esta no tema? Sem ele o gclid nunca chega ao pedido. */
@@ -91,6 +99,21 @@ export async function getPainelTracking(): Promise<PainelTracking> {
     (configs || []).map((c) => [c.store_id, c])
   );
 
+  // O token do CAPI mora em tracking_secrets, que so o service_role alcanca --
+  // de proposito: ele posta evento na conta de anuncios do lojista. A tela nao
+  // precisa do valor, so de saber se existe. As lojas ja foram filtradas por
+  // RLS acima, entao este admin nao amplia o que o usuario ve.
+  const comToken = new Set<string>();
+  {
+    const { data } = await createAdminClient()
+      .from("tracking_secrets")
+      .select("store_id, meta_access_token")
+      .in("store_id", ids);
+    for (const l of data || []) {
+      if (l.meta_access_token) comToken.add(l.store_id);
+    }
+  }
+
   // Webhook e snippet exigem chamar a Shopify, o que e lento e nem sempre
   // possivel. A tela mostra o que da para saber do banco; o diagnostico
   // completo fica no script.
@@ -145,6 +168,7 @@ export async function getPainelTracking(): Promise<PainelTracking> {
         googleConversionId: cfg?.google_conversion_id ?? null,
         googleLabels: (cfg?.google_labels as MapaDeRotulos | null) ?? {},
         metaPixelId: cfg?.meta_pixel_id ?? null,
+        temTokenMeta: comToken.has(l.id),
         temWebhook: false,
         temSnippet: false,
         enviados7d: c?.enviados ?? 0,

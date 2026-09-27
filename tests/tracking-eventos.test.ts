@@ -114,6 +114,28 @@ describe("catalogo", () => {
     expect(comValor).toEqual(["purchase"]);
   });
 
+  /**
+   * O Meta reconhece SO os nomes dele para evento padrao. "add_to_cart" chega,
+   * aparece no Events Manager e NAO serve para otimizacao de campanha nem para
+   * publico -- vira evento personalizado. Nao ha erro nem aviso.
+   */
+  it("todo evento tem o nome que o Meta reconhece", () => {
+    const esperado: Record<string, string> = {
+      view_item: "ViewContent",
+      add_to_cart: "AddToCart",
+      begin_checkout: "InitiateCheckout",
+      purchase: "Purchase",
+    };
+    for (const e of EVENTOS) {
+      expect(e.nomeNoMeta, e.chave).toBe(esperado[e.chave]);
+    }
+  });
+
+  it("o nome do Meta nunca e igual a nossa chave", () => {
+    // Se alguem "simplificar" reusando a chave, o evento deixa de ser padrao.
+    for (const e of EVENTOS) expect(e.nomeNoMeta).not.toBe(e.chave);
+  });
+
   it("nao tem chave repetida", () => {
     const chaves = EVENTOS.map((e) => e.chave);
     expect(new Set(chaves).size).toBe(chaves.length);

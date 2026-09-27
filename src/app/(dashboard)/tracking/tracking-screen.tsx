@@ -81,10 +81,16 @@ function LinhaLoja({
     for (const e of EVENTOS) inicial[e.chave] = loja.googleLabels[e.chave] ?? "";
     return inicial;
   });
+  const [pixel, setPixel] = useState(loja.metaPixelId ?? "");
+  // Comeca vazio SEMPRE, mesmo com token gravado: o valor nunca sai do
+  // servidor. Vazio no salvamento significa "nao mexer".
+  const [tokenMeta, setTokenMeta] = useState("");
   const [ligado, setLigado] = useState(loja.ligado);
   const [salvando, setSalvando] = useState(false);
 
   const quantos = Object.values(rotulos).filter((v) => v.trim()).length;
+  const googlePronto = Boolean(id.trim()) && quantos > 0;
+  const metaPronto = Boolean(pixel.trim()) && (loja.temTokenMeta || Boolean(tokenMeta.trim()));
 
   async function salvar(novoLigado: boolean) {
     setSalvando(true);
@@ -97,11 +103,16 @@ function LinhaLoja({
           enabled: novoLigado,
           googleConversionId: id,
           googleLabels: rotulos,
+          metaPixelId: pixel,
+          // Vazio = nao mexer no que esta gravado.
+          metaAccessToken: tokenMeta,
         }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Falha ao salvar.");
       setLigado(novoLigado);
+      // Limpa o campo: o token foi gravado e nao deve continuar na tela.
+      if (tokenMeta.trim()) setTokenMeta("");
       toast.success(novoLigado ? "Rastreamento ligado." : "Salvo.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Falha ao salvar.");
@@ -191,13 +202,63 @@ function LinhaLoja({
           </div>
         </div>
 
+        {/* No Meta um pixel cobre TODOS os eventos -- nao existe rotulo por
+            evento como no Google. Por isso aqui sao dois campos e nao seis. */}
+        <div className="space-y-2 rounded-md border border-dashed p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-medium">Meta (Facebook / Instagram)</span>
+            <span className="text-xs text-muted-foreground">
+              {metaPronto ? "configurado" : "não configurado"}
+            </span>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label className="text-xs">ID do pixel</Label>
+              <Input
+                value={pixel}
+                onChange={(e) => setPixel(e.target.value)}
+                placeholder="1234567890123456"
+                className="font-mono text-sm"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Token do CAPI</Label>
+              <Input
+                type="password"
+                value={tokenMeta}
+                onChange={(e) => setTokenMeta(e.target.value)}
+                placeholder={loja.temTokenMeta ? "gravado — deixe vazio para manter" : "EAA..."}
+                className="font-mono text-sm"
+                autoComplete="off"
+              />
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            O pixel cobre os quatro eventos — não precisa rótulo por evento. Um
+            token novo substitui o anterior; vazio mantém o que está gravado.
+          </p>
+
+          {metaPronto && (
+            /* O Meta deduplica por event_id, e um pixel de navegador nao conhece
+               o id que o nosso servidor gera. Os dois ligados contam dobrado. */
+            <p className="flex items-start gap-1.5 text-xs text-amber-600">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              Desligue o pixel do Meta no tema e o canal Facebook &amp; Instagram da
+              Shopify. Os dois junto com este contam a mesma ação duas vezes — o
+              Meta só deduplica quando o event_id é igual, e o do navegador não é.
+            </p>
+          )}
+        </div>
+
         <div className="flex items-center gap-2">
           <Button onClick={() => salvar(ligado)} disabled={salvando} variant="outline">
             {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar"}
           </Button>
           <Button
             onClick={() => salvar(!ligado)}
-            disabled={salvando || (!ligado && (!id || quantos === 0))}
+            disabled={salvando || (!ligado && !googlePronto && !metaPronto)}
             variant={ligado ? "outline" : "default"}
           >
             {ligado ? "Desligar" : "Ligar"}
