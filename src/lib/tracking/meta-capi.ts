@@ -129,6 +129,96 @@ export async function enviarParaMeta(
 }
 
 /**
+ * O token tem acesso a este pixel?
+ *
+ * Uma LEITURA, nao um evento. Validar mandando um Purchase de teste custa dado
+ * sujo: sem `test_event_code` o Meta conta aquilo como conversao de verdade, e o
+ * codigo de teste so existe se alguem foi buscar na aba Test Events. Este
+ * caminho confirma a credencial e nao escreve nada.
+ *
+ * NAO SERVE PARA BARRAR. Medido: um token que posta evento sem problema
+ * responde "(#100) Missing Permission" aqui -- token de system user com
+ * ads_management costuma escrever e nao ler metadado do pixel. O inverso
+ * tambem existe (le e nao escreve). Ou seja, este resultado e informativo nos
+ * dois sentidos; quem decide se o token vale e `validarEscritaNoPixel`.
+ */
+export async function validarAcessoAoPixel(
+  pixelId: string,
+  accessToken: string
+): Promise<{ ok: boolean; nome?: string; erro?: string }> {
+  const url = new URL(
+    `https://graph.facebook.com/${VERSAO}/${encodeURIComponent(pixelId)}`
+  );
+  url.searchParams.set("fields", "id,name");
+  url.searchParams.set("access_token", accessToken);
+
+  try {
+    const resposta = await safeFetch(url.toString(), { method: "GET" });
+    const texto = await resposta.text();
+    let json: unknown = null;
+    try {
+      json = JSON.parse(texto);
+    } catch {
+      /* resposta nao-JSON cai no erro abaixo */
+    }
+    const dados = json as {
+      id?: string;
+      name?: string;
+      error?: { message?: string; error_user_msg?: string };
+    } | null;
+
+    if (!resposta.ok || dados?.error || !dados?.id) {
+      return {
+        ok: false,
+        erro:
+          dados?.error?.error_user_msg ||
+          dados?.error?.message ||
+          `HTTP ${resposta.status}: ${texto.slice(0, 200)}`,
+      };
+    }
+    return { ok: true, nome: dados.name };
+  } catch (e) {
+    return {
+      ok: false,
+      erro: e instanceof Error ? e.message.slice(0, 200) : "falha de rede",
+    };
+  }
+}
+
+/**
+ * O token consegue ESCREVER neste pixel?
+ *
+ * Manda um evento custom, nao um Purchase. A diferenca importa: sem
+ * `test_event_code`, um Purchase de teste conta como conversao de verdade e
+ * entra no aprendizado da campanha. Um nome custom que ninguem configurou como
+ * conversao aparece no Events Manager e nao e usado para otimizar nada.
+ *
+ * Nenhum dado de pessoa real vai junto. O IP e da faixa 203.0.113.0/24
+ * (TEST-NET-3), reservada para documentacao -- nao pertence a ninguem. Ele esta
+ * aqui porque o Meta RECUSA o evento com user_data vazio: "no customer
+ * information parameters". IP + user agent e a combinacao minima que ele aceita.
+ */
+export async function validarEscritaNoPixel(
+  pixelId: string,
+  accessToken: string
+): Promise<ResultadoCapi> {
+  return enviarParaMeta(pixelId, accessToken, [
+    {
+      // Nome fora da lista de eventos padrao do Meta, de proposito: evento
+      // custom que ninguem configurou como conversao nao otimiza campanha.
+      event_name: "XcartCredentialCheck",
+      event_time: Math.floor(Date.now() / 1000),
+      event_id: `xcart_check_${Date.now()}`,
+      action_source: "website",
+      user_data: {
+        client_ip_address: "203.0.113.9",
+        client_user_agent: "xcart/credential-check",
+      },
+    },
+  ]);
+}
+
+/**
  * Espera antes da proxima tentativa.
  *
  * Backoff exponencial com teto de 6 h. O primeiro retry vem rapido porque a
