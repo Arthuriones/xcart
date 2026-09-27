@@ -38,16 +38,58 @@ async function main() {
   const { getPublicAppUrl } = await import("../src/lib/public-url");
   const admin = createAdminClient();
 
-  const { data: loja } = await admin
+  // Todas as linhas ativas, nao maybeSingle(): o MESMO shop_domain pode estar
+  // cadastrado por mais de uma conta xcart, cada uma com o seu app da Shopify --
+  // ha 4 casos assim em producao. maybeSingle() ERRA nesses, e o script morria
+  // dizendo "loja nao encontrada" numa loja que existe.
+  const { data: candidatas } = await admin
     .from("stores")
-    .select("id, name, shop_domain, client_id, client_secret, access_token")
+    .select("id, name, shop_domain, user_id, client_id, client_secret, access_token")
     .eq("shop_domain", dominio)
-    .maybeSingle();
+    .is("uninstalled_at", null)
+    .order("created_at", { ascending: false });
 
-  if (!loja?.client_id) {
-    console.error(`loja ${dominio} nao encontrada ou sem credencial`);
+  if (!candidatas?.length) {
+    console.error(`loja ${dominio} nao encontrada`);
     process.exit(1);
   }
+
+  const escolhidoPorArg = (() => {
+    const i = process.argv.indexOf("--store");
+    return i >= 0 ? process.argv[i + 1] : null;
+  })();
+
+  if (candidatas.length > 1 && !escolhidoPorArg) {
+    console.error(`\n${dominio} esta cadastrada ${candidatas.length} vezes:`);
+    for (const c of candidatas) {
+      console.error(
+        `  --store ${c.id}   "${c.name}"  (conta ${String(c.user_id).slice(0, 8)})`
+      );
+    }
+    console.error(
+      [
+        "",
+        "Escolha uma com --store <id>. O id vai dentro da tag no tema, e e ele",
+        "que o coletor usa para saber de QUAL conta e o evento -- chutar aqui",
+        "mandaria conversao para a conta de anuncios errada.",
+      ].join("\n")
+    );
+    process.exit(1);
+  }
+
+  const loja = escolhidoPorArg
+    ? candidatas.find((c) => c.id === escolhidoPorArg)
+    : candidatas[0];
+
+  if (!loja) {
+    console.error(`--store ${escolhidoPorArg} nao e uma das linhas de ${dominio}`);
+    process.exit(1);
+  }
+  if (!loja.client_id) {
+    console.error(`loja ${dominio} sem credencial do app`);
+    process.exit(1);
+  }
+  console.log(`  linha: "${loja.name}" (${loja.id})`);
   const creds = {
     shopDomain: loja.shop_domain,
     clientId: loja.client_id,
@@ -86,8 +128,16 @@ async function main() {
     // `defer` e nao `async`: precisa do window.Shopify.routes.root, que o tema
     // define no head. Com async pode correr antes e montar a URL do carrinho
     // errada em loja com Markets por sub-caminho (/ja, /en).
+    // `data-xcart-store` carrega a LINHA de loja, nao so o dominio.
+    //
+    // Sem isso o coletor recebe apenas `Shopify.shop` e tem que adivinhar entre
+    // as contas que cadastraram o mesmo dominio -- e adivinhar errado manda a
+    // conversao para a conta de anuncios de outra pessoa. O id nao e segredo:
+    // com ele da para postar evento desta loja, exatamente o que o dominio ja
+    // permitia.
     const tag =
-      `<script src="${getPublicAppUrl()}/${MARCA}.js" data-xcart-click defer></script>`;
+      `<script src="${getPublicAppUrl()}/${MARCA}.js" data-xcart-click` +
+      ` data-xcart-store="${loja.id}" defer></script>`;
     novo = jaTem ? atual.replace(RE_TAG, tag) : atual.replace("</head>", `  ${tag}\n</head>`);
   }
 
