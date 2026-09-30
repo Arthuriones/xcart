@@ -21,6 +21,8 @@ config({ path: ".env.local", override: true });
 
 const dominio = process.argv[2];
 const aplicar = process.argv.includes("--aplicar");
+/** Liga tambem a tag de remarketing do Google, usando o AW da configuracao. */
+const comRemarketing = process.argv.includes("--remarketing");
 const remover = process.argv.includes("--remover");
 
 if (!dominio || dominio.startsWith("--")) {
@@ -31,6 +33,30 @@ if (!dominio || dominio.startsWith("--")) {
 /** Marca propria, para achar e trocar sem depender do conteudo. */
 const MARCA = "xcart-click";
 const RE_TAG = /<script\b[^>]*data-xcart-click[^>]*>\s*<\/script>\s*/g;
+
+/** O AW-XXXXXXXXX ja configurado em tracking_configs. */
+async function idDeRemarketing(
+  admin: { from: (t: string) => any },
+  storeId: string
+): Promise<string | null> {
+  const { data } = await admin
+    .from("tracking_configs")
+    .select("google_conversion_id")
+    .eq("store_id", storeId)
+    .maybeSingle();
+  const aw = (data?.google_conversion_id || "").trim();
+  if (!aw) {
+    console.error(
+      [
+        "--remarketing pedido, mas a loja nao tem ID de conversao configurado.",
+        "Configure com: npm run op -- scripts/configurar-tracking.ts \\",
+        "  --loja <dominio> --aw AW-XXXXXXXXX --rotulo <rotulo>",
+      ].join("\n")
+    );
+    process.exit(1);
+  }
+  return aw;
+}
 
 async function main() {
   const { createAdminClient } = await import("../src/lib/supabase/admin");
@@ -135,9 +161,23 @@ async function main() {
     // conversao para a conta de anuncios de outra pessoa. O id nao e segredo:
     // com ele da para postar evento desta loja, exatamente o que o dominio ja
     // permitia.
+    // `data-xcart-remarketing` liga a tag do Google no NAVEGADOR.
+    //
+    // Remarketing nao da para fazer do servidor: quem monta o publico e o
+    // Google, a partir de um cookie que ele so grava quando o navegador fala com
+    // ele. O nosso ping de conversao sai do servidor -- nao ha navegador do
+    // outro lado para entrar em lista.
+    //
+    // Vale repetir porque e o erro caro: o snippet NAO dispara conversao pelo
+    // gtag. Se disparasse, a venda contaria duas vezes (navegador + servidor) e
+    // o Google nao deduplica entre os dois caminhos.
+    const remarketing = comRemarketing ? await idDeRemarketing(admin, loja.id) : null;
+
     const tag =
       `<script src="${getPublicAppUrl()}/${MARCA}.js" data-xcart-click` +
-      ` data-xcart-store="${loja.id}" defer></script>`;
+      ` data-xcart-store="${loja.id}"` +
+      (remarketing ? ` data-xcart-remarketing="${remarketing}"` : "") +
+      ` defer></script>`;
     novo = jaTem ? atual.replace(RE_TAG, tag) : atual.replace("</head>", `  ${tag}\n</head>`);
   }
 
