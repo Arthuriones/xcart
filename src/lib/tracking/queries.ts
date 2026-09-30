@@ -31,6 +31,15 @@ export interface ContagemDestino {
   semAtribuicao: number;
   ultimoErro: string | null;
   porEvento: Partial<Record<ChaveEvento, number>>;
+  /**
+   * Sem click id, POR evento.
+   *
+   * O total sozinho mistura funil com venda, e sao leituras diferentes: 300
+   * view_item sem click id e normal (trafego organico entra na loja tambem);
+   * 2 de 2 COMPRAS sem click id quer dizer que nenhuma venda foi creditada a
+   * anuncio nenhum, que e a informacao que decide se a campanha esta medindo.
+   */
+  semAtribPorEvento: Partial<Record<ChaveEvento, number>>;
 }
 
 export interface LojaTracking {
@@ -64,6 +73,7 @@ function contagemVazia(): ContagemDestino {
     semAtribuicao: 0,
     ultimoErro: null,
     porEvento: {},
+    semAtribPorEvento: {},
   };
 }
 
@@ -150,7 +160,12 @@ export async function getPainelTracking(): Promise<PainelTracking> {
       if (chave) alvo.porEvento[chave] = (alvo.porEvento[chave] ?? 0) + 1;
       if (!atual.ultimo && e.sent_at) atual.ultimo = e.sent_at;
       // O envio grava este aviso quando nao havia click id nenhum.
-      if ((e.last_error || "").includes("sem atribuicao")) alvo.semAtribuicao += 1;
+      if ((e.last_error || "").includes("sem atribuicao")) {
+        alvo.semAtribuicao += 1;
+        if (chave) {
+          alvo.semAtribPorEvento[chave] = (alvo.semAtribPorEvento[chave] ?? 0) + 1;
+        }
+      }
     } else if (e.status === "falhou") {
       alvo.falharam += 1;
       if (!alvo.ultimoErro && e.last_error) alvo.ultimoErro = e.last_error;

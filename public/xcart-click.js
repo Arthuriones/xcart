@@ -385,6 +385,96 @@
     );
   }
 
+  // =========================================================================
+  // 4. REMARKETING DO GOOGLE
+  //
+  // Isto NAO da para fazer do servidor, e e o motivo de existir aqui.
+  //
+  // Quem monta o publico de remarketing e o Google, a partir de um cookie que
+  // ele so consegue gravar quando o NAVEGADOR fala com ele diretamente. O nosso
+  // ping de conversao sai do servidor com um gclid -- nao ha navegador nenhum
+  // do outro lado para entrar em lista. Conversao server-side e remarketing sao
+  // coisas diferentes, e uma nao substitui a outra.
+  //
+  // O QUE NAO PODE ACONTECER AQUI: disparar conversao.
+  //
+  // `gtag('config', 'AW-x')` sozinho manda um hit de remarketing e nada mais.
+  // Conversao so sai com `gtag('event','conversion',{send_to:'AW-x/rotulo'})`.
+  // Se alguem acrescentar isso, a venda passa a contar duas vezes -- uma pelo
+  // navegador e outra pelo nosso servidor -- e o Google nao deduplica, porque os
+  // dois caminhos nao compartilham identificador de transacao.
+  // =========================================================================
+  var REMARKETING = (tag && tag.getAttribute("data-xcart-remarketing")) || null;
+
+  function tipoDaPagina() {
+    // A propria Shopify classifica a pagina; so caio na URL quando ela nao
+    // preencheu, porque o caminho muda em loja com Markets por sub-caminho.
+    var meta = window.ShopifyAnalytics && window.ShopifyAnalytics.meta;
+    var doShopify = meta && meta.page && meta.page.pageType;
+    if (doShopify) {
+      if (doShopify === "product") return "product";
+      if (doShopify === "collection") return "category";
+      if (doShopify === "cart") return "cart";
+      if (doShopify === "home" || doShopify === "index") return "home";
+      return "other";
+    }
+    var p = location.pathname;
+    if (p.indexOf("/products/") !== -1) return "product";
+    if (p.indexOf("/collections/") !== -1) return "category";
+    if (p.indexOf("/cart") !== -1) return "cart";
+    if (p === "/" || /^\/[a-z]{2}(-[a-z]{2})?\/?$/i.test(p)) return "home";
+    return "other";
+  }
+
+  function dadosDoProduto() {
+    var meta = window.ShopifyAnalytics && window.ShopifyAnalytics.meta;
+    var prod = meta && meta.product;
+    if (!prod) return null;
+    var v = (prod.variants && prod.variants[0]) || null;
+    return {
+      id: String(v && v.id ? v.id : prod.id || ""),
+      // `price` vem em centavos no ShopifyAnalytics.
+      valor: v && typeof v.price === "number" ? v.price / 100 : null,
+    };
+  }
+
+  function ligarRemarketing() {
+    if (!REMARKETING) return;
+
+    window.dataLayer = window.dataLayer || [];
+    function gtag() {
+      window.dataLayer.push(arguments);
+    }
+
+    var s = document.createElement("script");
+    s.async = true;
+    s.src =
+      "https://www.googletagmanager.com/gtag/js?id=" +
+      encodeURIComponent(REMARKETING);
+    document.head.appendChild(s);
+
+    gtag("js", new Date());
+    gtag("config", REMARKETING);
+
+    var params = { send_to: REMARKETING, ecomm_pagetype: tipoDaPagina() };
+    var prod = dadosDoProduto();
+    if (prod && prod.id) {
+      params.ecomm_prodid = prod.id;
+      if (prod.valor !== null) params.ecomm_totalvalue = prod.valor;
+    }
+    // `page_view` com send_to e o hit de remarketing. NAO e conversao -- o
+    // Google so conta conversao no evento com nome `conversion` e um rotulo.
+    gtag("event", "page_view", params);
+  }
+
+  if (document.readyState === "loading") {
+    // Espera o ShopifyAnalytics.meta, que a Shopify preenche depois deste
+    // script; sem ele o produto sai sem id e o publico fica generico.
+    document.addEventListener("DOMContentLoaded", ligarRemarketing);
+  } else {
+    ligarRemarketing();
+  }
+
   if (COLETOR && LOJA) {
     // AGORA, sincronamente, nao no DOMContentLoaded.
     //

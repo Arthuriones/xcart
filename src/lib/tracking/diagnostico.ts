@@ -34,6 +34,14 @@ export interface DiagnosticoLoja {
    * Instalacao antiga fica assim ate o snippet ser reinstalado.
    */
   snippetComId: boolean | null;
+  /**
+   * A tag do Google de remarketing esta no tema?
+   *
+   * Remarketing NAO sai do servidor: quem monta o publico e o Google, a partir
+   * de um cookie que ele so grava quando o navegador fala com ele. Sem esta tag
+   * o rastreamento de conversao funciona e o publico de remarketing fica vazio.
+   */
+  temRemarketing: boolean | null;
   /** Por que o diagnostico falhou, quando falhou. */
   problema: string | null;
 }
@@ -43,6 +51,7 @@ const VAZIO: DiagnosticoLoja = {
   temWebhook: null,
   temSnippet: null,
   snippetComId: null,
+  temRemarketing: null,
   problema: null,
 };
 
@@ -69,7 +78,7 @@ async function checarWebhook(creds: Creds): Promise<boolean | null> {
 
 async function checarSnippet(
   creds: Creds
-): Promise<{ tem: boolean; comId: boolean } | null> {
+): Promise<{ tem: boolean; comId: boolean; remarketing: boolean } | null> {
   try {
     const temas = (await shopifyGraphQL(
       creds,
@@ -99,6 +108,7 @@ async function checarSnippet(
     return {
       tem: corpo.includes("data-xcart-click"),
       comId: corpo.includes("data-xcart-store"),
+      remarketing: corpo.includes("data-xcart-remarketing"),
     };
   } catch {
     return null;
@@ -149,6 +159,7 @@ export async function diagnosticar(
       temWebhook: webhook,
       temSnippet: snippet ? snippet.tem : null,
       snippetComId: snippet ? snippet.comId : null,
+      temRemarketing: snippet ? snippet.remarketing : null,
       problema: pedidos?.problem ?? null,
     });
   });

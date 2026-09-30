@@ -186,7 +186,36 @@ function Veredito({
           {sobrando} sem conversão — normal se vieram de fora do anúncio
         </span>
       )}
+      <Atribuicao loja={loja} />
     </div>
+  );
+}
+
+/**
+ * Quantas COMPRAS foram creditadas a um anuncio.
+ *
+ * E a leitura que o total de "sem click id" esconde. Trafego organico sem click
+ * id e normal e enche o numero geral; venda sem click id quer dizer que aquela
+ * venda nao foi creditada a campanha nenhuma. Se TODAS estiverem assim, ou o
+ * trafego nao veio de anuncio, ou a captura quebrou -- e sao conclusoes bem
+ * diferentes.
+ */
+function Atribuicao({ loja }: { loja: LojaTracking }) {
+  const total =
+    (loja.google.porEvento.purchase ?? 0) + (loja.meta.porEvento.purchase ?? 0);
+  if (total === 0) return null;
+
+  const semClique =
+    (loja.google.semAtribPorEvento.purchase ?? 0) +
+    (loja.meta.semAtribPorEvento.purchase ?? 0);
+  if (semClique === 0) return null;
+
+  const todas = semClique >= total;
+  return (
+    <span className={todas ? "text-amber-600" : "text-muted-foreground"}>
+      {semClique} de {total} compras sem click id
+      {todas ? " — nenhuma venda foi creditada a um anúncio" : ""}
+    </span>
   );
 }
 
@@ -359,6 +388,11 @@ function CardLoja({
                   rotulo="Snippet no tema"
                   conserto="npm run op -- scripts/instalar-snippet-click.ts <dominio> --aplicar"
                 />
+                <Checagem
+                  ok={diag?.temRemarketing ?? null}
+                  rotulo="Tag de remarketing"
+                  conserto="npm run op -- scripts/instalar-snippet-click.ts <dominio> --aplicar --remarketing"
+                />
                 <a
                   href={`https://${loja.dominio}`}
                   target="_blank"
@@ -416,6 +450,18 @@ function CardLoja({
                 de cada uma. Deixe <strong>compra</strong> como principal e as outras
                 como <strong>secundárias</strong>, senão o lance passa a otimizar para
                 carrinho em vez de venda.
+              </p>
+
+              {/* Isto confunde todo mundo uma vez, entao esta escrito: publico de
+                  remarketing nao vem daqui. */}
+              <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
+                <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  Estes rótulos são <strong>conversão</strong>, não remarketing. Público
+                  de remarketing o Google só monta com a tag no navegador — o envio do
+                  servidor não coloca ninguém em lista. É a checagem
+                  &quot;Tag de remarketing&quot; acima.
+                </span>
               </p>
 
               <Erros c={loja.google} nome="Google" />
