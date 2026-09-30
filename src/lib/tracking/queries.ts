@@ -21,46 +21,50 @@ import {
 // parando. Por isso a divergencia aparece na tela, nao so a fila.
 // ============================================================================
 
+/** Contagem de UM destino. Separado porque cada venda gera uma linha por
+ *  destino configurado -- somados, "1 pedido" viraria "2 compras". */
+export interface ContagemDestino {
+  enviados: number;
+  falharam: number;
+  pendentes: number;
+  /** Enviados sem nenhum click id: conversao que o Google nao liga a anuncio. */
+  semAtribuicao: number;
+  ultimoErro: string | null;
+  porEvento: Partial<Record<ChaveEvento, number>>;
+}
+
 export interface LojaTracking {
   storeId: string;
   nome: string;
   dominio: string;
   ligado: boolean;
+
   googleConversionId: string | null;
   /** Rotulo por evento. Evento fora do mapa = o lojista nao pediu. */
   googleLabels: MapaDeRotulos;
+
   metaPixelId: string | null;
-  /**
-   * O token do CAPI esta gravado?
-   *
-   * So o booleano. O valor mora em tracking_secrets (service_role) e nao volta
-   * para o cliente em hipotese nenhuma -- ele posta eventos na conta de
-   * anuncios do lojista.
-   */
+  /** O token do CAPI esta gravado? So o booleano -- o valor nunca sai do servidor. */
   temTokenMeta: boolean;
-  /** O webhook orders/create esta inscrito? Sem ele nao entra evento nenhum. */
-  temWebhook: boolean;
-  /** O snippet esta no tema? Sem ele o gclid nunca chega ao pedido. */
-  temSnippet: boolean;
-  enviados7d: number;
-  falharam7d: number;
-  pendentes: number;
-  /**
-   * Enviados por evento nos 7 dias.
-   *
-   * Separado do total porque cada evento e uma conversion action diferente no
-   * Google: 200 "adicionar ao carrinho" somados a 3 compras dariam um numero
-   * que esconde a venda ter parado de ser rastreada.
-   */
-  porEvento: Partial<Record<ChaveEvento, number>>;
-  /** Enviados sem nenhum click id: conversao que o Google nao liga a anuncio. */
-  semAtribuicao7d: number;
+
+  google: ContagemDestino;
+  meta: ContagemDestino;
   ultimoEnvio: string | null;
-  ultimoErro: string | null;
 }
 
 export interface PainelTracking {
   lojas: LojaTracking[];
+}
+
+function contagemVazia(): ContagemDestino {
+  return {
+    enviados: 0,
+    falharam: 0,
+    pendentes: 0,
+    semAtribuicao: 0,
+    ultimoErro: null,
+    porEvento: {},
+  };
 }
 
 export async function getPainelTracking(): Promise<PainelTracking> {
@@ -77,7 +81,7 @@ export async function getPainelTracking(): Promise<PainelTracking> {
 
   const ids = lojas.map((l) => l.id);
 
-  // A configuracao e lida com o cliente do usuario (RLS garante que so vem o
+  // A configuracao e lida com o cliente do usuario (RLS garante que so vem a
   // dele). A fila tambem: a policy de leitura ja limita por dono.
   const desde = new Date(Date.now() - 7 * 864e5).toISOString();
   const [{ data: configs }, { data: eventos }] = await Promise.all([
@@ -89,15 +93,13 @@ export async function getPainelTracking(): Promise<PainelTracking> {
       .in("store_id", ids),
     supabase
       .from("tracking_events")
-      .select("store_id, event_name, status, last_error, sent_at, created_at")
+      .select("store_id, destination, event_name, status, last_error, sent_at, created_at")
       .in("store_id", ids)
       .gte("created_at", desde)
       .order("created_at", { ascending: false }),
   ]);
 
-  const porLoja = new Map(
-    (configs || []).map((c) => [c.store_id, c])
-  );
+  const porLoja = new Map((configs || []).map((c) => [c.store_id, c]));
 
   // O token do CAPI mora em tracking_secrets, que so o service_role alcanca --
   // de proposito: ele posta evento na conta de anuncios do lojista. A tela nao
@@ -114,45 +116,48 @@ export async function getPainelTracking(): Promise<PainelTracking> {
     }
   }
 
-  // Webhook e snippet exigem chamar a Shopify, o que e lento e nem sempre
-  // possivel. A tela mostra o que da para saber do banco; o diagnostico
-  // completo fica no script.
   const contagem = new Map<
     string,
-    {
-      enviados: number;
-      falharam: number;
-      pendentes: number;
-      semAtrib: number;
-      ultimo: string | null;
-      erro: string | null;
-      porEvento: Partial<Record<ChaveEvento, number>>;
-    }
+    { google: ContagemDestino; meta: ContagemDestino; ultimo: string | null }
   >();
+
   for (const e of eventos || []) {
-    const atual = contagem.get(e.store_id) || {
-      enviados: 0,
-      falharam: 0,
-      pendentes: 0,
-      semAtrib: 0,
-      ultimo: null,
-      erro: null,
-      porEvento: {},
-    };
+    const atual =
+      contagem.get(e.store_id) || {
+        google: contagemVazia(),
+        meta: contagemVazia(),
+        ultimo: null,
+      };
+
+    // Cada venda rende uma linha POR DESTINO. Somar os dois num numero so faria
+    // "1 pedido, 2 compras" -- e ai a comparacao com pedidos, que e o alarme,
+    // nunca mais acusaria falta.
+    const alvo =
+      e.destination === "meta"
+        ? atual.meta
+        : e.destination === "google"
+          ? atual.google
+          : null;
+    if (!alvo) {
+      contagem.set(e.store_id, atual);
+      continue;
+    }
+
     if (e.status === "enviado") {
-      atual.enviados += 1;
+      alvo.enviados += 1;
       // chaveDoEvento normaliza a caixa: a compra foi gravada como "Purchase".
       const chave = chaveDoEvento(e.event_name || "");
-      if (chave) atual.porEvento[chave] = (atual.porEvento[chave] ?? 0) + 1;
+      if (chave) alvo.porEvento[chave] = (alvo.porEvento[chave] ?? 0) + 1;
       if (!atual.ultimo && e.sent_at) atual.ultimo = e.sent_at;
       // O envio grava este aviso quando nao havia click id nenhum.
-      if ((e.last_error || "").includes("sem atribuicao")) atual.semAtrib += 1;
+      if ((e.last_error || "").includes("sem atribuicao")) alvo.semAtribuicao += 1;
     } else if (e.status === "falhou") {
-      atual.falharam += 1;
-      if (!atual.erro && e.last_error) atual.erro = e.last_error;
+      alvo.falharam += 1;
+      if (!alvo.ultimoErro && e.last_error) alvo.ultimoErro = e.last_error;
     } else {
-      atual.pendentes += 1;
+      alvo.pendentes += 1;
     }
+
     contagem.set(e.store_id, atual);
   }
 
@@ -169,55 +174,10 @@ export async function getPainelTracking(): Promise<PainelTracking> {
         googleLabels: (cfg?.google_labels as MapaDeRotulos | null) ?? {},
         metaPixelId: cfg?.meta_pixel_id ?? null,
         temTokenMeta: comToken.has(l.id),
-        temWebhook: false,
-        temSnippet: false,
-        enviados7d: c?.enviados ?? 0,
-        falharam7d: c?.falharam ?? 0,
-        pendentes: c?.pendentes ?? 0,
-        porEvento: c?.porEvento ?? {},
-        semAtribuicao7d: c?.semAtrib ?? 0,
+        google: c?.google ?? contagemVazia(),
+        meta: c?.meta ?? contagemVazia(),
         ultimoEnvio: c?.ultimo ?? null,
-        ultimoErro: c?.erro ?? null,
       };
     }),
   };
-}
-
-/**
- * Pedidos pagos por loja nos ultimos 7 dias.
- *
- * E o outro lado da conta do alarme: sem isso, "10 conversoes enviadas" nao
- * diz nada -- pode ser 10 de 10 ou 10 de 200. Vem da Shopify, porque o xcart
- * nao guarda pedido.
- */
-export async function getPedidosDaSemana(
-  storeIds: string[]
-): Promise<Map<string, number>> {
-  const admin = createAdminClient();
-  const { getOrdersSummary } = await import("@/lib/shopify/orders");
-  const { runWithConcurrency } = await import("@/lib/concurrency");
-
-  const { data: lojas } = await admin
-    .from("stores")
-    .select("id, shop_domain, client_id, client_secret, access_token")
-    .in("id", storeIds);
-
-  const desde = new Date(Date.now() - 7 * 864e5);
-  const saida = new Map<string, number>();
-
-  await runWithConcurrency(lojas || [], 6, async (l) => {
-    if (!l.client_id || !l.client_secret) return;
-    const r = await getOrdersSummary(
-      {
-        shopDomain: l.shop_domain,
-        clientId: l.client_id,
-        clientSecret: l.client_secret,
-        accessToken: l.access_token,
-      },
-      desde
-    );
-    if (!r.problem) saida.set(l.id, r.orders);
-  });
-
-  return saida;
 }
