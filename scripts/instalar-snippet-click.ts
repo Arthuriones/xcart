@@ -123,92 +123,39 @@ async function main() {
     accessToken: loja.access_token,
   };
 
-  const temas = await shopifyGraphQL(creds, `{ themes(first:20){nodes{id name role}} }`);
-  const principal = temas.themes.nodes.find((t: { role: string }) => t.role === "MAIN");
-  if (!principal) {
-    console.error("tema principal nao encontrado");
-    process.exit(1);
-  }
-  console.log(`loja: ${loja.name} | tema: ${principal.name}`);
+  // A montagem da tag e a gravacao no tema moram em src/lib/tracking/snippet-tema.ts
+  // porque a TELA tambem instala agora. Duplicar aqui significaria, um dia, uma
+  // tag com data-xcart-store e outra sem -- e o coletor voltando a adivinhar
+  // entre contas que cadastraram o mesmo dominio.
+  const { aplicarSnippet } = await import("../src/lib/tracking/snippet-tema");
 
-  const arquivo = await shopifyGraphQL(
-    creds,
-    `query($id:ID!,$n:[String!]){ theme(id:$id){ files(filenames:$n, first:5){ nodes{
-       body{ ... on OnlineStoreThemeFileBodyText{ content } } } } } }`,
-    { id: principal.id, n: ["layout/theme.liquid"] }
-  );
-  const atual: string = arquivo.theme.files.nodes[0]?.body?.content || "";
-  if (!atual) {
-    console.error("theme.liquid vazio ou inacessivel");
-    process.exit(1);
-  }
+  const remarketing = comRemarketing ? await idDeRemarketing(admin, loja.id) : null;
 
-  const jaTem = RE_TAG.test(atual);
-  RE_TAG.lastIndex = 0;
-  console.log(`  snippet ja instalado: ${jaTem ? "sim" : "nao"}`);
+  const r = await aplicarSnippet(creds, {
+    storeId: loja.id,
+    remarketing,
+    remover,
+    ensaio: !aplicar && !remover,
+  });
 
-  let novo: string;
-  if (remover) {
-    novo = atual.replace(RE_TAG, "");
-  } else {
-    // `defer` e nao `async`: precisa do window.Shopify.routes.root, que o tema
-    // define no head. Com async pode correr antes e montar a URL do carrinho
-    // errada em loja com Markets por sub-caminho (/ja, /en).
-    // `data-xcart-store` carrega a LINHA de loja, nao so o dominio.
-    //
-    // Sem isso o coletor recebe apenas `Shopify.shop` e tem que adivinhar entre
-    // as contas que cadastraram o mesmo dominio -- e adivinhar errado manda a
-    // conversao para a conta de anuncios de outra pessoa. O id nao e segredo:
-    // com ele da para postar evento desta loja, exatamente o que o dominio ja
-    // permitia.
-    // `data-xcart-remarketing` liga a tag do Google no NAVEGADOR.
-    //
-    // Remarketing nao da para fazer do servidor: quem monta o publico e o
-    // Google, a partir de um cookie que ele so grava quando o navegador fala com
-    // ele. O nosso ping de conversao sai do servidor -- nao ha navegador do
-    // outro lado para entrar em lista.
-    //
-    // Vale repetir porque e o erro caro: o snippet NAO dispara conversao pelo
-    // gtag. Se disparasse, a venda contaria duas vezes (navegador + servidor) e
-    // o Google nao deduplica entre os dois caminhos.
-    const remarketing = comRemarketing ? await idDeRemarketing(admin, loja.id) : null;
+  console.log(`loja: ${loja.name} | tema: ${r.temaNome}`);
 
-    const tag =
-      `<script src="${getPublicAppUrl()}/${MARCA}.js" data-xcart-click` +
-      ` data-xcart-store="${loja.id}"` +
-      (remarketing ? ` data-xcart-remarketing="${remarketing}"` : "") +
-      ` defer></script>`;
-    novo = jaTem ? atual.replace(RE_TAG, tag) : atual.replace("</head>", `  ${tag}\n</head>`);
-  }
-
-  if (novo === atual) {
+  if (!r.mudou) {
     console.log("  nada a mudar.");
     return;
   }
 
   if (!aplicar && !remover) {
+    const linhas = r.conteudo.split("\n");
+    const alvo = linhas.findIndex((l) => l.includes("data-xcart-click"));
     console.log("\n  (modo leitura -- use --aplicar para gravar)");
-    const linha = novo.split("\n").findIndex((l) => l.includes("data-xcart-click"));
-    console.log(`  entraria na linha ${linha + 1} do theme.liquid:`);
-    console.log("    " + novo.split("\n")[linha].trim());
+    console.log(`  entraria na linha ${alvo + 1} do theme.liquid:`);
+    console.log("    " + (linhas[alvo] || "").trim());
     return;
   }
 
-  const r = await shopifyGraphQL(
-    creds,
-    `mutation($id:ID!,$f:[OnlineStoreThemeFilesUpsertFileInput!]!){
-       themeFilesUpsert(themeId:$id, files:$f){ userErrors{filename message} } }`,
-    {
-      id: principal.id,
-      f: [{ filename: "layout/theme.liquid", body: { type: "TEXT", value: novo } }],
-    }
-  );
-  const erros = r.themeFilesUpsert?.userErrors || [];
-  if (erros.length) {
-    console.error("  falhou:", erros);
-    process.exit(1);
-  }
   console.log(remover ? "  snippet REMOVIDO." : "  snippet instalado.");
+  if (r.comRemarketing) console.log(`  remarketing ligado: ${remarketing}`);
 }
 
 main().catch((e) => {
