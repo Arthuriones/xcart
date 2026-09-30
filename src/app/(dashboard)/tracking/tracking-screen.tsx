@@ -310,11 +310,42 @@ function CardLoja({
   const [tokenMeta, setTokenMeta] = useState("");
   const [ligado, setLigado] = useState(loja.ligado);
   const [salvando, setSalvando] = useState(false);
+  const [instalando, setInstalando] = useState<string | null>(null);
 
   const quantosRotulos = Object.values(rotulos).filter((v) => v.trim()).length;
   const googlePronto = Boolean(id.trim()) && quantosRotulos > 0;
   const metaPronto =
     Boolean(pixel.trim()) && (loja.temTokenMeta || Boolean(tokenMeta.trim()));
+
+  /**
+   * Instala a tag no tema pela tela.
+   *
+   * Antes isto so existia como script, entao ligar rastreamento numa loja nova
+   * dependia de alguem com o repo na mao -- e sem a tag no tema o gclid nunca
+   * vira cart attribute e o funil inteiro nao sai, com a configuracao parecendo
+   * perfeita aqui.
+   */
+  async function instalarTag(comRemarketing: boolean) {
+    setInstalando(comRemarketing ? "remarketing" : "snippet");
+    try {
+      const r = await fetch("/api/tracking/snippet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storeId: loja.storeId, remarketing: comRemarketing }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Falha ao gravar o tema.");
+      toast.success(
+        j.mudou
+          ? `Tag gravada no tema "${j.temaNome}".`
+          : "O tema já estava assim."
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao gravar o tema.");
+    } finally {
+      setInstalando(null);
+    }
+  }
 
   async function salvar(novoLigado: boolean) {
     setSalvando(true);
@@ -402,6 +433,52 @@ function CardLoja({
                   abrir loja
                   <ExternalLink className="h-3 w-3" />
                 </a>
+              </div>
+            )}
+
+            {/* Os dois botoes que antes so existiam como script. Ficam sempre
+                visiveis, nao so quando falta algo: reinstalar tambem serve para
+                atualizar uma tag antiga (instalacao sem data-xcart-store) e para
+                depois de trocar de tema, que apaga a tag junto. */}
+            {ligado && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => instalarTag(false)}
+                  disabled={instalando !== null}
+                >
+                  {instalando === "snippet" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : diag?.temSnippet ? (
+                    "Reinstalar snippet"
+                  ) : (
+                    "Instalar snippet"
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => instalarTag(true)}
+                  disabled={instalando !== null || !id.trim()}
+                  title={
+                    !id.trim()
+                      ? "Preencha o ID de conversão do Google e salve antes"
+                      : undefined
+                  }
+                >
+                  {instalando === "remarketing" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : diag?.temRemarketing ? (
+                    "Reinstalar com remarketing"
+                  ) : (
+                    "Ligar remarketing"
+                  )}
+                </Button>
+                <span className="text-[11px] text-muted-foreground">
+                  grava no tema publicado — recarregue a página para atualizar as
+                  checagens
+                </span>
               </div>
             )}
 

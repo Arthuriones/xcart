@@ -1,0 +1,105 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { aplicarSnippet } from "@/lib/tracking/snippet-tema";
+
+export const runtime = "nodejs";
+
+// ============================================================================
+// Instala, atualiza ou remove a tag do xcart no tema, pela tela.
+//
+// Antes isto so existia como script de operacao, entao ligar rastreamento numa
+// loja nova dependia de alguem com o repo na mao. E nao era um detalhe: sem a
+// tag no tema o gclid nunca vira cart attribute e o funil inteiro nao sai --
+// a configuracao fica perfeita na tela e nada acontece.
+//
+// O remarketing vem junto porque e a mesma tag: o AW e lido da propria
+// configuracao da loja, entao nao ha um segundo lugar para o id ficar
+// desatualizado.
+// ============================================================================
+
+export async function POST(request: NextRequest) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let corpo: { storeId?: string; remarketing?: boolean; remover?: boolean };
+  try {
+    corpo = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Corpo invalido." }, { status: 400 });
+  }
+  if (!corpo.storeId) {
+    return NextResponse.json({ error: "storeId ausente." }, { status: 400 });
+  }
+
+  // Cliente do usuario + `.eq("user_id")`: a loja tem que ser dele. O passo
+  // seguinte grava no TEMA da loja, entao errar aqui edita a loja de outro.
+  const { data: loja } = await supabase
+    .from("stores")
+    .select("id, user_id")
+    .eq("id", corpo.storeId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!loja) {
+    return NextResponse.json({ error: "Loja nao encontrada." }, { status: 404 });
+  }
+
+  const admin = createAdminClient();
+  const { data: cheia } = await admin
+    .from("stores")
+    .select("id, shop_domain, client_id, client_secret, access_token")
+    .eq("id", loja.id)
+    .single();
+
+  if (!cheia?.client_id || !cheia.client_secret) {
+    return NextResponse.json(
+      { error: "Loja sem credencial do app da Shopify." },
+      { status: 400 }
+    );
+  }
+
+  let remarketing: string | null = null;
+  if (corpo.remarketing) {
+    const { data: cfg } = await admin
+      .from("tracking_configs")
+      .select("google_conversion_id")
+      .eq("store_id", loja.id)
+      .maybeSingle();
+    remarketing = (cfg?.google_conversion_id || "").trim() || null;
+    if (!remarketing) {
+      return NextResponse.json(
+        {
+          error:
+            "Para o remarketing, preencha antes o ID de conversão do Google e salve.",
+        },
+        { status: 400 }
+      );
+    }
+  }
+
+  try {
+    const r = await aplicarSnippet(
+      {
+        shopDomain: cheia.shop_domain,
+        clientId: cheia.client_id,
+        clientSecret: cheia.client_secret,
+        accessToken: cheia.access_token,
+      },
+      { storeId: loja.id, remarketing, remover: corpo.remover }
+    );
+    return NextResponse.json({ ok: true, ...r, conteudo: undefined });
+  } catch (e) {
+    // write_themes pode nao estar no app da loja; a mensagem da Shopify e o
+    // que diz isso, entao ela passa adiante em vez de virar "falhou".
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Falha ao gravar o tema." },
+      { status: 500 }
+    );
+  }
+}
