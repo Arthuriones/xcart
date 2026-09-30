@@ -85,6 +85,16 @@ Every AI call receives `StoreContext` (name, niche, target_audience, brand_voice
   tem webhook na Shopify, entao vem do snippet do tema para
   `/api/tracking/collect`. Catalogo em `src/lib/tracking/eventos.ts`, travado
   contra o snippet por `tests/tracking-eventos.test.ts`.
+- **Advertorial no meio do caminho perde o click id, e o conserto e no
+  advertorial.** O `?gclid=` chega na URL do ADVERTORIAL; o cookie que ele
+  gravaria fica no dominio dele, e a loja nao pode ler cookie de outro dominio.
+  Se o CTA nao levar o parametro adiante, a venda vira "direto" -- a conversao
+  sai, sem ligacao com o anuncio. `public/xcart-bridge.js` reescreve os links do
+  CTA; a loja nao muda nada, porque o snippet de la ja le da URL.
+  `data-xcart-destinos` e obrigatorio e sem curinga: reescrever "todo link
+  externo" entregaria o gclid para o Instagram e o WhatsApp da pagina. A lista de
+  parametros dos dois arquivos e travada por
+  `tests/tracking-ponte-advertorial.test.ts`.
 - **`/api/tracking/collect` e publico e NAO aceita valor monetario.** Quem
   dispara e o visitante: nao ha sessao. Valor vindo dali seria numero que
   qualquer um infla na conta de anuncios do lojista, e valor de conversao
