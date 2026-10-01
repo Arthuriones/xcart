@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { apenasNumeroDaConversao } from "@/lib/tracking/normalizar";
-import { limparMapaDeRotulos } from "@/lib/tracking/eventos";
+import { chaveDoEvento, limparMapaDeRotulos } from "@/lib/tracking/eventos";
 import { TEMPLATE_PADRAO, validarTemplate } from "@/lib/tracking/id-produto";
+import { validarEscritaNoPixel } from "@/lib/tracking/meta-capi";
 
 export const runtime = "nodejs";
 
@@ -26,7 +27,9 @@ export const runtime = "nodejs";
 //
 // A linha carrega `user_id`, e deixar o cliente escolher esse campo abriria a
 // porta para apontar o destino para a loja de outro. O dono e lido do banco a
-// partir da sessao, nunca do corpo da requisicao.
+// partir da sessao, nunca do corpo da requisicao. E o dono que vale e o da
+// LOJA, conferido em toda escrita -- o `user_id` da linha sozinho nao prova
+// nada sobre o `store_id` ao lado dele.
 // ============================================================================
 
 /**
@@ -100,6 +103,140 @@ async function autorizar(storeId: string): Promise<Autorizacao> {
     return { erro: NextResponse.json({ error: "Loja nao encontrada." }, { status: 404 }) };
   }
   return { erro: null, admin, loja };
+}
+
+/**
+ * A loja do destino e de quem esta logado?
+ *
+ * O `user_id` da linha sozinho nao basta. Ele foi gravado uma vez e nada o
+ * amarra a loja depois: uma linha com o user_id de um e o store_id de outro
+ * (escrita direta pela API do Supabase, antes de a migration fechar isso) daria
+ * ao primeiro o poder de mexer no rastreamento -- e no token -- da loja do
+ * segundo. Quem manda no destino e quem manda na LOJA.
+ */
+async function lojaEDoUsuario(
+  admin: ReturnType<typeof createAdminClient>,
+  storeId: string,
+  userId: string
+): Promise<boolean> {
+  const { data: loja } = await admin
+    .from("stores")
+    .select("user_id")
+    .eq("id", storeId)
+    .maybeSingle();
+  return Boolean(loja) && loja?.user_id === userId;
+}
+
+/**
+ * Confere o token do Meta ANTES de gravar.
+ *
+ * Token que o Meta recusa nao envia nada, e o lojista so descobriria na fila,
+ * venda por venda. Pior: na troca de token depois de um 190, gravar um token
+ * ruim e reenfileirar as compras que falharam faria todas falharem de novo --
+ * e cada tentativa queimada aproxima o evento do limite de 7 dias do Meta.
+ *
+ * O teste e um evento custom (`XcartCredentialCheck`), nao um Purchase: nao
+ * conta como conversao nem entra no aprendizado da campanha.
+ *
+ * Devolve a resposta de erro pronta, ou null quando o token vale.
+ */
+async function conferirTokenNoMeta(
+  pixelId: string,
+  token: string
+): Promise<NextResponse | null> {
+  const r = await validarEscritaNoPixel(pixelId, token);
+  if (r.ok) return null;
+
+  if (r.podeTentarDeNovo) {
+    // Rede, timeout, 429, 5xx: o Meta nao disse que o token e ruim, so nao
+    // respondeu. Gravar sem conferir abriria mao da garantia acima; recusar
+    // com "token invalido" seria mentira. Pede para tentar de novo.
+    return NextResponse.json(
+      {
+        error:
+          `O Meta não respondeu ao conferir o token (${r.erro ?? "sem resposta"}). ` +
+          "Nada foi gravado — tente de novo em instantes.",
+      },
+      { status: 503 }
+    );
+  }
+
+  return NextResponse.json(
+    { error: `O Meta recusou o token: ${r.erro ?? `HTTP ${r.status}`}` },
+    { status: 400 }
+  );
+}
+
+/**
+ * Janela de reenvio, em dias.
+ *
+ * O Meta aceita `event_time` de ate 7 dias atras e recusa o resto. Seis deixa
+ * um dia de folga para a fila drenar (50 linhas a cada 10 min) antes de o
+ * evento passar do limite.
+ */
+const JANELA_REENVIO_DIAS = 6;
+
+/**
+ * Codigos do Meta que significam "a credencial e o problema", nao o evento.
+ *
+ * 190 = token invalido/expirado/revogado; 200 = token sem permissao no pixel.
+ * Sao os unicos que um token novo conserta. Um 100 (parametro ruim) falharia
+ * de novo com qualquer token, entao fica fora.
+ */
+const CODIGOS_DE_CREDENCIAL = "(190,200)";
+
+/**
+ * Devolve para a fila as compras que falharam por causa do token antigo.
+ *
+ * `meta-capi` classifica 190/200 como permanente -- corretamente, porque
+ * insistir com o MESMO token nao adianta. Mas isso deixava a linha em 'falhou'
+ * para sempre, mesmo depois de o lojista trocar o token: uma queda de fim de
+ * semana virava dois dias de compras que o Meta nunca viu, e a campanha
+ * otimizando sem elas. Com o token novo conferido, elas voltam.
+ *
+ * O `event_id` nao muda, entao se alguma ja tiver chegado por outro caminho o
+ * Meta deduplica -- nao ha risco de contar duas vezes.
+ *
+ * O codigo fica em `response.error.code` porque `gravarFalha` grava ali o corpo
+ * JSON do Meta como veio. O `->>` devolve texto; o `in` do PostgREST compara
+ * como texto tambem, entao "190" casa.
+ */
+async function reenfileirarFalhasDeCredencial(
+  admin: ReturnType<typeof createAdminClient>,
+  destinoId: string
+): Promise<{ total: number; compras: number }> {
+  const desde = new Date(
+    Date.now() - JANELA_REENVIO_DIAS * 24 * 60 * 60 * 1000
+  ).toISOString();
+
+  const { data, error } = await admin
+    .from("tracking_events")
+    .update({
+      status: "pendente",
+      attempts: 0,
+      next_attempt_at: new Date().toISOString(),
+      last_error: null,
+    })
+    .eq("destination_id", destinoId)
+    .eq("status", "falhou")
+    .gte("created_at", desde)
+    .filter("response->error->>code", "in", CODIGOS_DE_CREDENCIAL)
+    .select("event_name");
+
+  // O token ja foi gravado; falhar aqui nao desfaz isso. As compras ficam em
+  // 'falhou' e salvar de novo com o mesmo token tenta outra vez.
+  if (error) {
+    console.error("[tracking/destinos] falha ao reenfileirar:", error.message);
+    return { total: 0, compras: 0 };
+  }
+  // Volta tudo que caiu pela credencial, funil incluido: carrinho e checkout
+  // tambem alimentam a otimizacao. Mas o que o lojista quer saber e quantas
+  // VENDAS voltaram, entao a compra e contada a parte para a tela.
+  const linhas = data ?? [];
+  return {
+    total: linhas.length,
+    compras: linhas.filter((l) => chaveDoEvento(l.event_name) === "purchase").length,
+  };
 }
 
 /**
@@ -228,6 +365,12 @@ export async function POST(request: NextRequest) {
   const v = validar(corpo.plataforma, corpo, { exigirToken: true });
   if ("erro" in v) return NextResponse.json({ error: v.erro }, { status: 400 });
 
+  // Antes do insert: token recusado nao cria destino nenhum.
+  if (corpo.plataforma === "meta" && v.token) {
+    const recusa = await conferirTokenNoMeta(v.conta, v.token);
+    if (recusa) return recusa;
+  }
+
   const { data: criado, error } = await admin
     .from("tracking_destinations")
     .insert({
@@ -293,9 +436,14 @@ export async function PATCH(request: NextRequest) {
     .eq("id", corpo.id)
     .maybeSingle();
 
-  // user_id da propria linha, nao da loja: a linha e que decide, e e ela que a
-  // policy usaria.
-  if (!atual || atual.user_id !== user.id) {
+  // A linha E a loja precisam ser do usuario. So o user_id da linha deixava
+  // passar linha com dono de um e loja de outro; ver `lojaEDoUsuario`. Mesmo
+  // 404 nos dois casos: dizer "existe, mas nao e sua" confirmaria o id.
+  if (
+    !atual ||
+    atual.user_id !== user.id ||
+    !(await lojaEDoUsuario(admin, atual.store_id, user.id))
+  ) {
     return NextResponse.json({ error: "Destino nao encontrado." }, { status: 404 });
   }
 
@@ -338,6 +486,14 @@ export async function PATCH(request: NextRequest) {
   );
   if ("erro" in v) return NextResponse.json({ error: v.erro }, { status: 400 });
 
+  // Antes de qualquer escrita: token recusado nao muda nada, nem o resto do
+  // formulario -- senao o lojista veria "erro" e acharia que nada foi salvo.
+  const tokenNovo = plataforma === "meta" ? v.token : null;
+  if (tokenNovo) {
+    const recusa = await conferirTokenNoMeta(v.conta, tokenNovo);
+    if (recusa) return recusa;
+  }
+
   const mudancas: Record<string, unknown> = {
     conta: v.conta,
     labels: v.labels,
@@ -368,7 +524,32 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true });
+  // Token novo e conferido: as compras que cairam pelo token antigo voltam.
+  //
+  // So com o MESMO pixel. As falhas foram contra o pixel antigo; trocar o pixel
+  // junto com o token e apontar para outro conjunto de dados, e despejar ali
+  // compras de outro pixel nao e recuperacao, e mistura.
+  //
+  // E so com o destino ativo e a loja ligada: senao `entregar` derrubaria cada
+  // linha de volta para 'falhou' com "destino desativado", e a tela teria dito
+  // "vao ser reenviadas" sem nada sair.
+  let reenviados = { total: 0, compras: 0 };
+  if (tokenNovo && v.conta === atual.conta && mudancas.ativo === true) {
+    const { data: config } = await admin
+      .from("tracking_configs")
+      .select("enabled")
+      .eq("store_id", atual.store_id)
+      .maybeSingle();
+    if (config?.enabled) {
+      reenviados = await reenfileirarFalhasDeCredencial(admin, atual.id);
+    }
+  }
+
+  return NextResponse.json({
+    ok: true,
+    requeued: reenviados.total,
+    requeuedPurchases: reenviados.compras,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -392,11 +573,17 @@ export async function DELETE(request: NextRequest) {
   const admin = createAdminClient();
   const { data: atual } = await admin
     .from("tracking_destinations")
-    .select("id, user_id")
+    .select("id, store_id, user_id")
     .eq("id", id)
     .maybeSingle();
 
-  if (!atual || atual.user_id !== user.id) {
+  // Mesma regra do PATCH: a linha e a loja. Aqui pesa mais, porque apagar leva
+  // o historico junto (cascade) e nao tem volta.
+  if (
+    !atual ||
+    atual.user_id !== user.id ||
+    !(await lojaEDoUsuario(admin, atual.store_id, user.id))
+  ) {
     return NextResponse.json({ error: "Destino nao encontrado." }, { status: 404 });
   }
 

@@ -150,9 +150,37 @@ function FormularioDestino({
         ),
       });
       const j = await r.json();
+      // Token recusado pelo Meta volta 400 com a mensagem DELE ("Invalid OAuth
+      // access token", "...does not have permission"): e o que diz ao lojista o
+      // que consertar no Events Manager, entao vai inteira para o toast.
       if (!r.ok) throw new Error(j.error || "Falha ao salvar.");
 
-      toast.success(editando ? "Destino atualizado." : "Destino adicionado.");
+      // Compras que tinham caido pelo token antigo voltaram para a fila. Dizer
+      // quantas e o que tira a duvida "e as vendas do fim de semana?" -- sem
+      // isto, o "falharam" da linha so some sozinho, sem explicacao.
+      // `requeued` conta todo evento devolvido a fila (funil incluido);
+      // `requeuedPurchases` so as compras, que e o numero que importa ao lojista.
+      const total = typeof j.requeued === "number" ? j.requeued : 0;
+      const compras = typeof j.requeuedPurchases === "number" ? j.requeuedPurchases : 0;
+      if (compras > 0) {
+        toast.success(
+          `Token atualizado. ${compras} ${
+            compras === 1
+              ? "compra que tinha falhado vai ser reenviada"
+              : "compras que tinham falhado vão ser reenviadas"
+          }.`
+        );
+      } else if (total > 0) {
+        toast.success(
+          `Token atualizado. ${total} ${
+            total === 1
+              ? "evento que tinha falhado vai ser reenviado"
+              : "eventos que tinham falhado vão ser reenviados"
+          }.`
+        );
+      } else {
+        toast.success(editando ? "Destino atualizado." : "Destino adicionado.");
+      }
       onFechar();
       // A contagem e o veredito vem do servidor; sem isto a linha nova apareceria
       // sem nenhum numero e pareceria quebrada.
