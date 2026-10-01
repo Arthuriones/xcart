@@ -6,6 +6,7 @@ import {
 } from "@/lib/shopify/client";
 import { normalizeShopDomain } from "@/lib/shopify/domain";
 import { createClient } from "@/lib/supabase/server";
+import { detectarIdiomaDaLoja } from "@/lib/stores/idioma-da-loja";
 
 function asTrimmedString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -39,6 +40,7 @@ async function upsertStore(
     name: string;
     theme_id?: string | null;
     uninstalled_at?: string | null;
+    target_language?: string;
   },
   select = "*"
 ) {
@@ -113,6 +115,11 @@ export async function POST(request: NextRequest) {
       (t: { role: string }) => t.role === "MAIN"
     );
 
+    // O idioma da IA vem da propria loja, nao de um campo do cadastro que
+    // ninguem preenchia. Sem deteccao, fica o que ja estava. Ver
+    // idioma-da-loja.ts.
+    const idioma = await detectarIdiomaDaLoja(shopData.shop.primaryDomain?.url);
+
     const { data: store, error } = await upsertStore(supabase, {
       user_id: user.id,
       shop_domain: shopDomain,
@@ -127,6 +134,7 @@ export async function POST(request: NextRequest) {
       // registro de webhook a tratavam como morta. O ramo needsInstall abaixo
       // nao mexe nela -- la o app ainda nao esta na loja.
       uninstalled_at: null,
+      ...(idioma ? { target_language: idioma } : {}),
     });
 
     if (error) {

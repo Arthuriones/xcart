@@ -175,20 +175,12 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
   // Guarda se ja abrimos o tutorial automaticamente, para nao reabrir depois que
   // o usuario fechar.
   const tutorialAutoOpenedRef = useRef(false);
-  // Sinaliza que voltamos do OAuth (?installed=1) e devemos abrir o perfil da
-  // loja recem-instalada assim que a lista carregar.
-  const pendingProfileAfterInstallRef = useRef(false);
-
   // Profile editing
   const [profileOpen, setProfileOpen] = useState(false);
   // Uma vez baixado, fica montado: fechar e reabrir nao deve baixar de novo.
   const [montarEditor, setMontarEditor] = useState(false);
   const [editingStore, setEditingStore] = useState<ConnectedStore | null>(null);
   const [profileTargetLanguage, setProfileTargetLanguage] = useState("pt-BR");
-  const [profileCurrencyCode, setProfileCurrencyCode] = useState("USD");
-  const [profileAutoConvertPrices, setProfileAutoConvertPrices] = useState(false);
-  const [profileCurrencyRate, setProfileCurrencyRate] = useState("1");
-  const [profilePriceMarkupPercent, setProfilePriceMarkupPercent] = useState("0");
   const [profileName, setProfileName] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
   const [deletingStore, setDeletingStore] = useState(false);
@@ -227,11 +219,6 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
     const errorMessage = params.get("error");
     if (installed) {
       toast.success("Loja instalada e conectada com sucesso!");
-      // Marca para abrir o perfil assim que a lista de lojas carregar. Sem isso
-      // o usuario terminava toda a instalacao e caia num card "Perfil
-      // incompleto" sem nenhuma acao sugerida — e o perfil (nicho) e o que
-      // destrava toda a IA do produto.
-      pendingProfileAfterInstallRef.current = true;
     }
     if (errorMessage) {
       toast.error(errorMessage);
@@ -243,16 +230,6 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
     }
   }, []);
 
-  useEffect(() => {
-    if (loadingStores || !pendingProfileAfterInstallRef.current) return;
-    if (stores.length === 0) return;
-    pendingProfileAfterInstallRef.current = false;
-    // Abre a loja recem-instalada que ainda esta sem logo, que e a unica
-    // configuracao que o app nao consegue preencher sozinho.
-    const target = stores.find((store) => !store.logo_path);
-    if (target) void openProfileEditor(target);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadingStores, stores]);
 
   useEffect(() => {
     // Primeira loja do usuario: o passo a passo da Shopify e a unica coisa que
@@ -358,29 +335,21 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
       }
 
       await loadStores();
-      toast.success(`Loja "${data.shop.name}" conectada! Configure o perfil para usar a IA.`);
+      toast.success(`Loja "${data.shop.name}" conectada.`);
       setOpen(false);
       setShopDomain("");
       setClientId("");
       setClientSecret("");
-
-      // Auto-abrir edição de perfil da loja recém-conectada
-      const updatedStores = await loadStoresAndReturn();
-      const newStore = updatedStores?.find((s) => s.shop_domain === data.store.shop_domain);
-      if (newStore) {
-        await openProfileEditor(newStore);
-      }
+      // O editor NAO abre mais sozinho. Ele pedia logo, materiais, idioma,
+      // moeda e preco logo depois de conectar -- e nada disso era necessario:
+      // o idioma agora vem da propria loja (idioma-da-loja.ts), os campos de
+      // preco nao eram usados por codigo nenhum, e logo/materiais so servem a
+      // geracao de imagem, que fica no editor para quem usar.
     } catch {
       toast.error("Erro ao conectar loja");
     } finally {
       setLoading(false);
     }
-  }
-
-  async function loadStoresAndReturn(): Promise<ConnectedStore[] | null> {
-    const lista = await buscarLojas();
-    if (lista) setStores(lista);
-    return lista;
   }
 
   async function loadStoreAssets(storeId: string) {
@@ -410,16 +379,6 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
     setEditingStore(store);
     setProfileName(store.name || "");
     setProfileTargetLanguage(store.target_language || "pt-BR");
-    setProfileCurrencyCode(store.currency_code || "USD");
-    setProfileAutoConvertPrices(Boolean(store.auto_convert_prices));
-    setProfileCurrencyRate(
-      Number.isFinite(store.currency_rate) ? String(store.currency_rate) : "1"
-    );
-    setProfilePriceMarkupPercent(
-      Number.isFinite(store.price_markup_percent)
-        ? String(store.price_markup_percent)
-        : "0"
-    );
     setLogoPreview(store.logo_path ? getLogoUrl(store.logo_path) : null);
     setLogoFile(null);
     setAdditionalLogoFiles([]);
@@ -597,17 +556,6 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
   async function handleSaveProfile() {
     if (!editingStore) return;
 
-    const parsedCurrencyRate = Number(profileCurrencyRate.replace(",", "."));
-    if (!Number.isFinite(parsedCurrencyRate) || parsedCurrencyRate <= 0) {
-      toast.error("Taxa de conversão deve ser maior que zero.");
-      return;
-    }
-    const parsedMarkupPercent = Number(profilePriceMarkupPercent.replace(",", "."));
-    if (!Number.isFinite(parsedMarkupPercent) || parsedMarkupPercent < -100) {
-      toast.error("Markup inválido. Use um valor maior que -100.");
-      return;
-    }
-
     setProfileSaving(true);
 
     try {
@@ -663,10 +611,6 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
           name: profileName.trim() || editingStore.name,
           logo_path: logoPath,
           target_language: profileTargetLanguage,
-          currency_code: profileCurrencyCode,
-          auto_convert_prices: profileAutoConvertPrices,
-          currency_rate: parsedCurrencyRate,
-          price_markup_percent: parsedMarkupPercent,
         }),
       });
       if (!resposta.ok) {
@@ -1015,14 +959,6 @@ export function StoresScreen({ initialStores }: { initialStores: StoreRow[] }) {
           setProfileName={setProfileName}
           profileTargetLanguage={profileTargetLanguage}
           setProfileTargetLanguage={setProfileTargetLanguage}
-          profileCurrencyCode={profileCurrencyCode}
-          setProfileCurrencyCode={setProfileCurrencyCode}
-          profileCurrencyRate={profileCurrencyRate}
-          setProfileCurrencyRate={setProfileCurrencyRate}
-          profilePriceMarkupPercent={profilePriceMarkupPercent}
-          setProfilePriceMarkupPercent={setProfilePriceMarkupPercent}
-          profileAutoConvertPrices={profileAutoConvertPrices}
-          setProfileAutoConvertPrices={setProfileAutoConvertPrices}
           profileSaving={profileSaving}
           logoUploading={logoUploading}
           assetUploading={assetUploading}

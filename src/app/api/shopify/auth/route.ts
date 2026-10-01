@@ -8,6 +8,7 @@ import {
   getThemes,
 } from "@/lib/shopify/client";
 import { safeFetch } from "@/lib/net/safe-url";
+import { detectarIdiomaDaLoja } from "@/lib/stores/idioma-da-loja";
 import { assertShopDomainPublico } from "@/lib/shopify/safe-shop";
 import { normalizeShopDomain } from "@/lib/shopify/domain";
 import { SHOPIFY_SCOPES_STRING } from "@/lib/shopify/scopes";
@@ -340,11 +341,15 @@ export async function GET(request: NextRequest) {
         (t: { role: string }) => t.role === "MAIN"
       );
 
+      // O idioma da IA vem da propria loja. Ver idioma-da-loja.ts.
+      const idioma = await detectarIdiomaDaLoja(shopData.shop.primaryDomain?.url);
+
       await supabase
         .from("stores")
         .update({
           name: shopData.shop.name,
           theme_id: activeTheme?.id || null,
+          ...(idioma ? { target_language: idioma } : {}),
         })
         .eq("id", store.id);
 
