@@ -240,7 +240,9 @@ export async function entregar(
     return r.ok
       ? gravarSucesso(
           (r.corpo ?? null) as Record<string, unknown> | null,
-          semClique ? "sem fbc: conversao sem atribuicao a anuncio" : null
+          // Sem fbc o Meta ainda casa por _fbp, IP, user agent e e-mail: o
+          // que falta e so o clique no anuncio dele.
+          semClique ? "sem fbc: nao veio de clique em anuncio do Meta" : null
         )
       : gravarFalha(
           r.erro ?? "falha desconhecida",

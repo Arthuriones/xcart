@@ -711,8 +711,13 @@ function LinhaDestino({
           {c.semAtribuicao > 0 && (
             <p className="flex items-start gap-1.5 text-t3">
               <Ponto tom="neutro" tamanho={5} className="mt-[5px]" />
+              {/* Visita que nao veio de clique em anuncio DESTA plataforma:
+                  organico, direto, ou o anuncio da outra. Normal. O alarme
+                  de verdade -- venda sem clique -- e o aviso de compra. */}
               <span>
-                {c.semAtribuicao} sem click id: chegam, sem ligação com anúncio
+                {c.semAtribuicao} sem clique de anúncio do{" "}
+                {NOME_DA_PLATAFORMA[destino.plataforma]} — visita orgânica, direta
+                ou de outro canal
               </span>
             </p>
           )}
