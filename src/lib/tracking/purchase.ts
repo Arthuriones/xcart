@@ -4,6 +4,10 @@ import {
   type UserData,
 } from "@/lib/tracking/normalizar";
 import type { EventoCapi } from "@/lib/tracking/meta-capi";
+import {
+  montarIdDeProduto,
+  montarIdsDeProdutos,
+} from "@/lib/tracking/id-produto";
 
 // ============================================================================
 // Pedido da Shopify -> evento Purchase do CAPI.
@@ -29,6 +33,8 @@ export interface PedidoShopify {
     phone?: string | null;
     first_name?: string | null;
     last_name?: string | null;
+    /** Quantos pedidos este cliente ja fez. Decide novo x recorrente. */
+    orders_count?: number | null;
   } | null;
   billing_address?: EnderecoShopify | null;
   shipping_address?: EnderecoShopify | null;
@@ -37,6 +43,8 @@ export interface PedidoShopify {
   line_items?: {
     product_id?: number | string | null;
     variant_id?: number | string | null;
+    /** Precisa para o template de id que usa {sku}. */
+    sku?: string | null;
     quantity?: number | null;
     price?: string | number | null;
   }[] | null;
@@ -165,6 +173,13 @@ export interface ContextoPurchase {
   identidade?: IdentidadeGuardada | null;
   /** Origem da loja, para o event_source_url. */
   dominioLoja?: string | null;
+  /**
+   * Formato do id de produto do DESTINO. Ausente = `{variant_id}`.
+   *
+   * Por destino e nao por loja: o catalogo do Meta e o feed do Google sao dois
+   * catalogos distintos, montados por caminhos distintos na mesma loja.
+   */
+  idTemplate?: string | null;
 }
 
 export interface PurchaseMontado {
@@ -184,6 +199,10 @@ export function montarPurchase(
   pedido: PedidoShopify,
   contexto: ContextoPurchase = {}
 ): PurchaseMontado {
+  // O formato do id de produto e do DESTINO: o catalogo do Meta e o feed do
+  // Google sao dois catalogos, e podem ter sido montados de formas diferentes
+  // na mesma loja. Ausente = `{variant_id}`, o comportamento de antes.
+  const idTemplate = contexto.idTemplate ?? null;
   const endereco = pedido.billing_address || pedido.shipping_address || null;
   const sinais = sinaisDoPedido(pedido);
   const identidade = contexto.identidade || {};
@@ -234,6 +253,11 @@ export function montarPurchase(
   );
 
   const itens = pedido.line_items || [];
+  const itensParaId = itens.map((i) => ({
+    variantId: i.variant_id,
+    productId: i.product_id,
+    sku: i.sku,
+  }));
   const valor = Number(pedido.total_price ?? 0);
 
   const evento: EventoCapi = {
@@ -247,21 +271,24 @@ export function montarPurchase(
       currency: (pedido.currency || "").toUpperCase() || undefined,
       value: Number.isFinite(valor) ? valor : 0,
       content_type: "product",
-      content_ids: itens
-        .map((i) => (i.variant_id ?? i.product_id) ?? null)
-        .filter((id): id is string | number => id !== null)
-        .map(String),
+      content_ids: montarIdsDeProdutos(idTemplate, itensParaId),
       // `contents` alem de `content_ids`: ele carrega quantidade e preco por
       // item, que e o formato que o Meta pede para anuncio de catalogo. Com
       // apenas os ids, uma compra de 3 unidades e indistinguivel de 1, e o
       // catalogo nao sabe por quanto cada item saiu.
       contents: itens
         .map((i) => {
-          const id = (i.variant_id ?? i.product_id) ?? null;
-          if (id === null) return null;
+          const id = montarIdDeProduto(idTemplate, {
+            variantId: i.variant_id,
+            productId: i.product_id,
+            sku: i.sku,
+          });
+          // Item sem id sai da lista. `contents: [{id: ""}]` e id invalido para
+          // o Meta e pode derrubar o evento inteiro.
+          if (!id) return null;
           const preco = Number(i.price ?? 0);
           return {
-            id: String(id),
+            id,
             quantity: Number(i.quantity) || 1,
             ...(Number.isFinite(preco) && preco > 0 ? { item_price: preco } : {}),
           };
@@ -271,6 +298,20 @@ export function montarPurchase(
       order_id: String(pedido.id ?? ""),
     },
   };
+
+  // Cliente novo ou recorrente.
+  //
+  // E o que alimenta a otimizacao de AQUISICAO DE CLIENTE NOVO do Meta: sem
+  // este sinal ele nao tem como distinguir uma venda para quem ja comprava de
+  // uma conquista, e a campanha de aquisicao otimiza para a base antiga.
+  //
+  // `orders_count` ja inclui este pedido, entao 1 e a primeira compra. Ausente
+  // fica ausente de proposito -- chutar "novo" inflaria a conquista.
+  const quantos = pedido.customer?.orders_count;
+  if (typeof quantos === "number" && quantos > 0) {
+    evento.customer_segmentation =
+      quantos <= 1 ? "new_customer" : "existing_customer";
+  }
 
   if (contexto.dominioLoja) {
     // O caminho de chegada ajuda o Meta a casar com a sessao do navegador.

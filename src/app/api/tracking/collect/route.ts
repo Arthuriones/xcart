@@ -106,7 +106,11 @@ export async function POST(request: NextRequest) {
     /** A URL da pagina, mandada explicita pelo snippet. Ver abaixo. */
     pageUrl?: string | null;
     /** Produto em tela, nos eventos que tem um. Ver `custom_data` abaixo. */
-    produto?: { variante?: string | null; produto?: string | null } | null;
+    produto?: {
+      variante?: string | null;
+      produto?: string | null;
+      sku?: string | null;
+    } | null;
     /** 'pixel' quando vem do Web Pixel do checkout; ausente = snippet do tema. */
     fonte?: string | null;
     /** Identificador de visitante da Shopify. A unica chave que o pixel tem. */
@@ -451,48 +455,62 @@ export async function POST(request: NextRequest) {
     const candidata = /^https?:\/\//i.test(doCorpo) ? doCorpo : doHeader;
     if (/^https?:\/\//i.test(candidata)) origemDaPagina = candidata.slice(0, 500);
 
-    // Variante antes do produto: e o item concreto do catalogo. Os dois juntos
-    // aumentam a chance de casar com o feed, que em loja Shopify as vezes usa
-    // um e as vezes outro como id de varejista.
-    const conteudo = [
-      (corpo.produto?.variante || "").trim(),
-      (corpo.produto?.produto || "").trim(),
-    ].filter((v, i, todos) => v && todos.indexOf(v) === i);
+    // O id do produto sai do TEMPLATE do destino.
+    //
+    // Antes mandavamos variante e produto juntos, torcendo para um dos dois
+    // casar com o catalogo. Nao casava: o feed que a Shopify manda para o
+    // Merchant Center identifica o item como
+    // `shopify_<PAIS>_<idDoProduto>_<idDaVariante>`, que nao e nem um nem
+    // outro -- e a falha e silenciosa, o evento e aceito e o anuncio dinamico
+    // so nao serve aquele item.
+    //
+    // Por destino, e nao por loja: o catalogo do Meta e o feed do Google sao
+    // dois catalogos, montados por caminhos diferentes na mesma loja.
+    const { montarIdsDeProdutos } = await import("@/lib/tracking/id-produto");
+    const doProduto = {
+      variantId: corpo.produto?.variante,
+      productId: corpo.produto?.produto,
+      sku: corpo.produto?.sku,
+    };
 
-    for (const d of querem.filter((x) => x.plataforma === "meta"))
-    destinos.push({
-      destination: "meta",
-      destinationId: d.id,
-      payload: {
-        // O nome do Meta, nao a nossa chave: "AddToCart", nao "add_to_cart".
-        // Nome fora da lista dele vira evento personalizado, que chega e nao
-        // serve para otimizar campanha.
-        event_name: definicao!.nomeNoMeta,
-        // Em segundos. Em milissegundos o Meta recusa o evento.
-        event_time: Math.floor(Date.now() / 1000),
-        event_id: eventId,
-        action_source: "website",
-        user_data: userData,
-        ...(origemDaPagina ? { event_source_url: origemDaPagina } : {}),
-        ...(conteudo.length
-          ? {
-              custom_data: {
-                // `content_ids` e exigencia do Meta para publico dinamico e
-                // anuncio de catalogo; sem ele, ViewContent e AddToCart chegam
-                // sem dizer de QUAL produto.
-                //
-                // `product`, nunca `product_group`: a documentacao dele e
-                // explicita de que AddToCart e Purchase sao sempre sobre o item
-                // concreto, porque e um item concreto que a pessoa compra.
-                content_type: "product",
-                content_ids: conteudo,
-                // Sem value/currency, igual ao Google. Id de produto o
-                // visitante nao tem por que forjar; valor ele teria.
-              },
-            }
-          : {}),
-      },
-    });
+    for (const d of querem.filter((x) => x.plataforma === "meta")) {
+      const conteudo = montarIdsDeProdutos(d.idTemplate, [doProduto]);
+
+      destinos.push({
+        destination: "meta",
+        destinationId: d.id,
+        payload: {
+          // O nome do Meta, nao a nossa chave: "AddToCart", nao "add_to_cart".
+          // Nome fora da lista dele vira evento personalizado, que chega e nao
+          // serve para otimizar campanha.
+          event_name: definicao!.nomeNoMeta,
+          // Em segundos. Em milissegundos o Meta recusa o evento.
+          event_time: Math.floor(Date.now() / 1000),
+          event_id: eventId,
+          action_source: "website",
+          user_data: userData,
+          ...(origemDaPagina ? { event_source_url: origemDaPagina } : {}),
+          ...(conteudo.length
+            ? {
+                custom_data: {
+                  // `content_ids` e exigencia do Meta para publico dinamico e
+                  // anuncio de catalogo; sem ele, ViewContent e AddToCart
+                  // chegam sem dizer de QUAL produto.
+                  //
+                  // `product`, nunca `product_group`: a documentacao dele e
+                  // explicita de que AddToCart e Purchase sao sempre sobre o
+                  // item concreto, porque e um item concreto que a pessoa
+                  // compra.
+                  content_type: "product",
+                  content_ids: conteudo,
+                  // Sem value/currency, igual ao Google. Id de produto o
+                  // visitante nao tem por que forjar; valor ele teria.
+                },
+              }
+            : {}),
+        },
+      });
+    }
   }
 
   try {

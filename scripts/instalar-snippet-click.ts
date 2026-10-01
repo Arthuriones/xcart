@@ -44,12 +44,12 @@ const RE_TAG = /<script\b[^>]*data-xcart-click[^>]*>\s*<\/script>\s*/g;
  */
 async function contasDeRemarketing(
   admin: Parameters<
-    typeof import("../src/lib/tracking/destinos").contasGoogleDaLoja
+    typeof import("../src/lib/tracking/destinos").remarketingDaLoja
   >[0],
   storeId: string
 ): Promise<string[]> {
-  const { contasGoogleDaLoja } = await import("../src/lib/tracking/destinos");
-  const contas = await contasGoogleDaLoja(admin, storeId);
+  const { remarketingDaLoja } = await import("../src/lib/tracking/destinos");
+  const { contas } = await remarketingDaLoja(admin, storeId);
   if (contas.length === 0) {
     console.error(
       [

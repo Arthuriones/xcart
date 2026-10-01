@@ -240,7 +240,20 @@ async function tratarPedidoCriado(
   const destinos = querem.map((d) => ({
     destination: d.plataforma,
     destinationId: d.id,
-    payload: d.plataforma === "google" ? conversaoGoogle : evento,
+    payload:
+      d.plataforma === "google"
+        ? conversaoGoogle
+        : // O id de produto e do DESTINO: dois pixels Meta na mesma loja podem
+          // apontar para catalogos montados de formas diferentes. Sem template
+          // configurado reusa o evento ja montado -- e o caso comum, e remontar
+          // so repetiria os hashes do user_data.
+          d.idTemplate
+          ? montarPurchase(pedido, {
+              identidade,
+              dominioLoja: loja.shop_domain,
+              idTemplate: d.idTemplate,
+            }).evento
+          : evento,
   }));
 
   try {

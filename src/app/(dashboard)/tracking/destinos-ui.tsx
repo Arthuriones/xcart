@@ -24,6 +24,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EVENTOS } from "@/lib/tracking/eventos";
+import {
+  TEMPLATE_PADRAO,
+  TEMPLATES_SUGERIDOS,
+  validarTemplate,
+} from "@/lib/tracking/id-produto";
 import type { DestinoNaTela } from "@/lib/tracking/queries";
 
 // ============================================================================
@@ -120,6 +125,9 @@ function FormularioDestino({
   // Comeca vazio SEMPRE, mesmo com token gravado: o valor nunca sai do servidor.
   const [token, setToken] = useState("");
   const [codigoTeste, setCodigoTeste] = useState(destino?.testEventCode ?? "");
+  const [idTemplate, setIdTemplate] = useState(
+    destino?.idTemplate ?? TEMPLATE_PADRAO
+  );
   const [salvando, setSalvando] = useState(false);
 
   async function salvar() {
@@ -128,6 +136,7 @@ function FormularioDestino({
       const corpo: Record<string, unknown> = {
         nome,
         conta,
+        idTemplate,
         ...(plataforma === "google"
           ? { labels: rotulos }
           : { accessToken: token, testEventCode: codigoTeste }),
@@ -155,11 +164,17 @@ function FormularioDestino({
     }
   }
 
+  const erroDoTemplate =
+    idTemplate.trim() && idTemplate.trim() !== TEMPLATE_PADRAO
+      ? validarTemplate(idTemplate)
+      : null;
+
   const quantosRotulos = Object.values(rotulos).filter((v) => v.trim()).length;
   const podeSalvar =
-    plataforma === "google"
+    !erroDoTemplate &&
+    (plataforma === "google"
       ? Boolean(conta.trim()) && quantosRotulos > 0
-      : Boolean(conta.trim()) && (editando ? true : Boolean(token.trim()));
+      : Boolean(conta.trim()) && (editando ? true : Boolean(token.trim())));
 
   return (
     <Dialog open={aberto} onOpenChange={(v) => !v && onFechar()}>
@@ -248,6 +263,71 @@ function FormularioDestino({
               </p>
             </div>
           )}
+
+
+          {/* ---- id do produto ---- */}
+          <div className="space-y-1.5 rounded-md border border-dashed p-2.5">
+            <Label className="text-[11px]">Formato do ID de produto</Label>
+            <p className="text-[11px] text-muted-foreground">
+              Tem que ser <strong>idêntico</strong> ao ID do{" "}
+              {plataforma === "google"
+                ? "seu feed no Merchant Center"
+                : "seu catálogo no Commerce Manager"}
+              . Se não bater, o evento é aceito normalmente e o anúncio dinâmico
+              simplesmente não serve aquele produto — sem erro nenhum em lugar nenhum.
+            </p>
+
+            <Input
+              value={idTemplate}
+              onChange={(e) => setIdTemplate(e.target.value)}
+              placeholder={TEMPLATE_PADRAO}
+              className="h-8 font-mono text-xs"
+              aria-label="Formato do ID de produto"
+            />
+
+            <div className="flex flex-wrap gap-1">
+              {TEMPLATES_SUGERIDOS.map((t) => (
+                <button
+                  key={t.template}
+                  type="button"
+                  title={t.dica}
+                  onClick={() => setIdTemplate(t.template)}
+                  className={`rounded-md border px-1.5 py-0.5 text-[10px] transition-colors ${
+                    idTemplate.trim() === t.template
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  {t.rotulo}
+                </button>
+              ))}
+            </div>
+
+            {erroDoTemplate ? (
+              <p className="text-[11px] text-destructive">{erroDoTemplate}</p>
+            ) : (
+              <p className="text-[10px] text-muted-foreground">
+                Marcadores: <code>{"{variant_id}"}</code> <code>{"{product_id}"}</code>{" "}
+                <code>{"{sku}"}</code>
+              </p>
+            )}
+
+            {plataforma === "google" && (
+              /* O remarketing monta o id no NAVEGADOR, a partir da tag do tema --
+                 trocar aqui nao alcanca quem ja tem a tag antiga instalada. */
+              <p className="flex items-start gap-1.5 text-[11px] text-amber-600">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                {/* O texto vai dentro de um span: sem ele, cada trecho vira um
+                    item do flex e a frase quebra em colunas. */}
+                <span>
+                  Depois de mudar, clique em{" "}
+                  <strong>&quot;Reinstalar com remarketing&quot;</strong> no card da
+                  loja: a tag do tema carrega este formato e só muda quando o tema é
+                  gravado de novo.
+                </span>
+              </p>
+            )}
+          </div>
 
           {plataforma === "meta" && (
             <div className="space-y-3">

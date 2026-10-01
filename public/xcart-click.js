@@ -369,6 +369,7 @@
   function produtoAtual() {
     var variante = null;
     var produto = null;
+    var sku = null;
 
     try {
       variante = new URLSearchParams(location.search).get("variant");
@@ -391,9 +392,27 @@
       if (!variante && meta.variants && meta.variants[0]) {
         variante = String(meta.variants[0].id);
       }
+      // O SKU da variante que de fato esta selecionada -- nao o da primeira.
+      //
+      // Vai junto porque o id que a plataforma espera nao e sempre o da
+      // variante: catalogo exportado por planilha costuma usar SKU, e sem este
+      // campo o servidor nao teria como montar esse formato.
+      if (meta.variants && meta.variants.length) {
+        for (var k = 0; k < meta.variants.length; k++) {
+          if (String(meta.variants[k].id) === String(variante)) {
+            sku = meta.variants[k].sku || null;
+            break;
+          }
+        }
+        if (!sku && !variante) sku = meta.variants[0].sku || null;
+      }
     }
 
-    return { variante: variante ? String(variante) : null, produto: produto };
+    return {
+      variante: variante ? String(variante) : null,
+      produto: produto,
+      sku: sku ? String(sku) : null,
+    };
   }
 
   /**
@@ -706,13 +725,78 @@
     return "other";
   }
 
+  /**
+   * O formato do id de produto, vindo da tag.
+   *
+   * Tem que casar BYTE A BYTE com o id do Merchant Center, senao o Google nao
+   * liga o visitante ao produto e o anuncio dinamico nao serve aquele item --
+   * sem erro nenhum, so campanha que nao entrega. Medido: o feed da Shopify usa
+   * `shopify_<PAIS>_<idDoProduto>_<idDaVariante>` e nos mandavamos o id da
+   * variante cru.
+   *
+   * Vazio = `{variant_id}`, que e o que esta tag fazia antes.
+   */
+  var ID_TEMPLATE =
+    (tag && tag.getAttribute("data-xcart-id-template")) || "{variant_id}";
+
+  /**
+   * Aplica o template. Devolve null se faltar algum dado que ele pede.
+   *
+   * Null de proposito: `shopify_US__67606346727697`, com o id do produto
+   * faltando, nao casa com nada e ainda PARECE um id valido. Produto sem id sai
+   * do hit; produto com id errado mente para o Google.
+   *
+   * Espelha `montarIdDeProduto` em src/lib/tracking/id-produto.ts -- os dois
+   * tem que concordar, senao o remarketing e a conversao falam de itens
+   * diferentes.
+   */
+  function montarIdDeProduto(dados) {
+    if (!dados) return null;
+    var faltou = false;
+    var saida = String(ID_TEMPLATE).replace(
+      /\{(variant_id|product_id|sku)\}/g,
+      function (inteiro, marcador) {
+        var v =
+          marcador === "variant_id"
+            ? dados.variante
+            : marcador === "product_id"
+              ? dados.produto
+              : dados.sku;
+        v = v === null || v === undefined ? "" : String(v).trim();
+        if (!v) {
+          faltou = true;
+          return "";
+        }
+        return v;
+      }
+    );
+    return faltou ? null : saida;
+  }
+
   function dadosDoProduto() {
     var meta = window.ShopifyAnalytics && window.ShopifyAnalytics.meta;
     var prod = meta && meta.product;
     if (!prod) return null;
-    var v = (prod.variants && prod.variants[0]) || null;
+
+    var atual = produtoAtual();
+    var id = montarIdDeProduto(atual);
+    if (!id) return null;
+
+    // O preco da variante SELECIONADA, nao o da primeira: em produto com kit e
+    // avulso, o valor do publico sairia errado.
+    var v = null;
+    if (prod.variants) {
+      for (var i = 0; i < prod.variants.length; i++) {
+        if (String(prod.variants[i].id) === String(atual.variante)) {
+          v = prod.variants[i];
+          break;
+        }
+      }
+      if (!v) v = prod.variants[0] || null;
+    }
+
     return {
-      id: String(v && v.id ? v.id : prod.id || ""),
+      id: id,
       // `price` vem em centavos no ShopifyAnalytics.
       valor: v && typeof v.price === "number" ? v.price / 100 : null,
     };

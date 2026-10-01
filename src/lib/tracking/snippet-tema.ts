@@ -103,7 +103,8 @@ export async function lerEstado(creds: CredsLoja): Promise<EstadoDoSnippet> {
  */
 export function montarTag(
   storeId: string,
-  remarketing?: string | string[] | null
+  remarketing?: string | string[] | null,
+  idTemplate?: string | null
 ): string {
   // Vai para dentro de um atributo HTML. Os ids ja sao validados na API, mas a
   // mesma funcao e chamada por script de operacao -- filtrar aqui e o que
@@ -112,10 +113,16 @@ export function montarTag(
     .map((c) => (c || "").trim().replace(/[^A-Za-z0-9_-]/g, ""))
     .filter(Boolean);
 
+  // `ecomm_prodid` e montado AQUI, no navegador, e tem que casar com o id do
+  // Merchant Center igual aos eventos do servidor -- entao o formato viaja
+  // dentro da tag. Mesma filtragem: o valor vai para dentro de um atributo.
+  const template = (idTemplate || "").trim().replace(/[^A-Za-z0-9_.{}-]/g, "");
+
   return (
     `<script src="${getPublicAppUrl()}/${MARCA}.js" data-xcart-click` +
     ` data-xcart-store="${storeId}"` +
     (contas.length ? ` data-xcart-remarketing="${contas.join(",")}"` : "") +
+    (contas.length && template ? ` data-xcart-id-template="${template}"` : "") +
     ` defer></script>`
   );
 }
@@ -136,6 +143,8 @@ export async function aplicarSnippet(
     storeId: string;
     /** AW-XXXXXXXXX para ligar o remarketing; varios ligam um por conta. */
     remarketing?: string | string[] | null;
+    /** Formato do id de produto do remarketing. Vazio = {variant_id}. */
+    idTemplate?: string | null;
     /** Tira a tag em vez de por. */
     remover?: boolean;
     /** Calcula e nao grava. */
@@ -149,11 +158,11 @@ export async function aplicarSnippet(
     : estado.instalado
       ? estado.conteudo.replace(
           reGlobal(),
-          montarTag(opcoes.storeId, opcoes.remarketing)
+          montarTag(opcoes.storeId, opcoes.remarketing, opcoes.idTemplate)
         )
       : estado.conteudo.replace(
           "</head>",
-          `  ${montarTag(opcoes.storeId, opcoes.remarketing)}\n</head>`
+          `  ${montarTag(opcoes.storeId, opcoes.remarketing, opcoes.idTemplate)}\n</head>`
         );
 
   const mudou = novo !== estado.conteudo;

@@ -61,6 +61,8 @@ export interface DestinoNaTela {
   labels: MapaDeRotulos;
   /** So Meta. */
   testEventCode: string | null;
+  /** Formato do id de produto. null = {variant_id}. */
+  idTemplate: string | null;
   ativo: boolean;
   /** O token do CAPI esta gravado? So o booleano -- o valor nunca sai do servidor. */
   temToken: boolean;
@@ -212,6 +214,7 @@ export async function getPainelTracking(): Promise<PainelTracking> {
           conta: d.conta,
           labels: d.labels,
           testEventCode: d.testEventCode,
+          idTemplate: d.idTemplate,
           ativo: d.ativo,
           temToken: d.temToken,
           // Mesma regra de `destinoAceita`, sem o evento: no Meta o pixel cobre

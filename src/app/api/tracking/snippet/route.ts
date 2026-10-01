@@ -71,9 +71,15 @@ export async function POST(request: NextRequest) {
   // uma deixaria quatro sem publico -- e sem jeito de notar, porque a lista
   // simplesmente nunca enche.
   let remarketing: string[] = [];
+  // O `ecomm_prodid` do remarketing e montado no NAVEGADOR e tem que casar com
+  // o id do Merchant Center igual aos eventos do servidor -- entao o formato
+  // viaja junto, dentro da tag.
+  let idTemplate: string | null = null;
   if (corpo.remarketing) {
-    const { contasGoogleDaLoja } = await import("@/lib/tracking/destinos");
-    remarketing = await contasGoogleDaLoja(admin, loja.id);
+    const { remarketingDaLoja } = await import("@/lib/tracking/destinos");
+    const r = await remarketingDaLoja(admin, loja.id);
+    remarketing = r.contas;
+    idTemplate = r.idTemplate;
     if (remarketing.length === 0) {
       return NextResponse.json(
         {
@@ -93,7 +99,7 @@ export async function POST(request: NextRequest) {
         clientSecret: cheia.client_secret,
         accessToken: cheia.access_token,
       },
-      { storeId: loja.id, remarketing, remover: corpo.remover }
+      { storeId: loja.id, remarketing, idTemplate, remover: corpo.remover }
     );
     return NextResponse.json({ ok: true, ...r, conteudo: undefined });
   } catch (e) {

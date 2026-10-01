@@ -26,6 +26,14 @@ export interface Destino {
   conta: string;
   labels: MapaDeRotulos;
   testEventCode: string | null;
+  /**
+   * Formato do id de produto, com {variant_id}, {product_id} e {sku}.
+   *
+   * null = `{variant_id}`, que e o que o codigo fazia antes de isto existir.
+   * Mora por destino porque o catalogo do Meta e o feed do Google sao dois
+   * catalogos diferentes e podem usar formatos diferentes na mesma loja.
+   */
+  idTemplate: string | null;
   ativo: boolean;
   /** So no Meta, e so quando o chamador pediu. Nunca sai para o cliente. */
   token?: string | null;
@@ -47,7 +55,7 @@ export async function destinosDaLoja(
 ): Promise<Destino[]> {
   const { data } = await admin
     .from("tracking_destinations")
-    .select("id, store_id, plataforma, nome, conta, labels, test_event_code, ativo")
+    .select("id, store_id, plataforma, nome, conta, labels, test_event_code, id_template, ativo")
     .eq("store_id", storeId)
     .eq("ativo", true)
     .order("created_at", { ascending: true });
@@ -60,6 +68,7 @@ export async function destinosDaLoja(
     conta: d.conta,
     labels: (d.labels as MapaDeRotulos | null) ?? {},
     testEventCode: d.test_event_code,
+    idTemplate: d.id_template,
     ativo: d.ativo,
   }));
 
@@ -95,7 +104,7 @@ export async function destinosParaTela(
 
   const { data } = await admin
     .from("tracking_destinations")
-    .select("id, store_id, plataforma, nome, conta, labels, test_event_code, ativo")
+    .select("id, store_id, plataforma, nome, conta, labels, test_event_code, id_template, ativo")
     .in("store_id", storeIds)
     .order("created_at", { ascending: true });
 
@@ -125,6 +134,7 @@ export async function destinosParaTela(
       conta: d.conta,
       labels: (d.labels as MapaDeRotulos | null) ?? {},
       testEventCode: d.test_event_code,
+      idTemplate: d.id_template,
       ativo: d.ativo,
       temToken: comToken.has(d.id),
     });
@@ -134,31 +144,39 @@ export async function destinosParaTela(
 }
 
 /**
- * As contas do Google ATIVAS de uma loja, para a tag do tema.
+ * O que a tag do tema precisa saber sobre o Google: as contas e o formato do id.
  *
- * O remarketing e a unica parte do rastreamento que roda no navegador, e cada
- * conta de anuncio monta a SUA lista -- publico criado na conta A nao serve na
- * conta B. Com cinco contas anunciando a mesma loja, mandar so a primeira
- * deixaria quatro sem publico nenhum.
+ * As contas no PLURAL porque cada conta de anuncio monta a SUA lista de
+ * remarketing -- publico criado na conta A nao serve na conta B. Com cinco
+ * contas anunciando a mesma loja, mandar so a primeira deixaria quatro sem
+ * publico nenhum.
+ *
+ * O template vem junto porque `ecomm_prodid` e montado no NAVEGADOR, e ele tem
+ * que casar com o id do Merchant Center igual aos eventos do servidor. Com
+ * varias contas vale o template da primeira: o feed do Merchant Center da loja
+ * e um so, entao elas nao deveriam divergir -- e se divergirem, a tela mostra
+ * cada destino com o seu.
  */
-export async function contasGoogleDaLoja(
+export async function remarketingDaLoja(
   admin: Admin,
   storeId: string
-): Promise<string[]> {
+): Promise<{ contas: string[]; idTemplate: string | null }> {
   const { data } = await admin
     .from("tracking_destinations")
-    .select("conta")
+    .select("conta, id_template")
     .eq("store_id", storeId)
     .eq("plataforma", "google")
     .eq("ativo", true)
     .order("created_at", { ascending: true });
 
-  const vistas = new Set<string>();
+  const contas: string[] = [];
+  let idTemplate: string | null = null;
   for (const d of data || []) {
     const conta = (d.conta || "").trim();
-    if (conta) vistas.add(conta);
+    if (conta && !contas.includes(conta)) contas.push(conta);
+    if (idTemplate === null && d.id_template) idTemplate = d.id_template;
   }
-  return [...vistas];
+  return { contas, idTemplate };
 }
 
 /** Um destino pelo id, com token. Usado pela fila ao entregar. */
@@ -168,7 +186,7 @@ export async function destinoPorId(
 ): Promise<Destino | null> {
   const { data } = await admin
     .from("tracking_destinations")
-    .select("id, store_id, plataforma, nome, conta, labels, test_event_code, ativo")
+    .select("id, store_id, plataforma, nome, conta, labels, test_event_code, id_template, ativo")
     .eq("id", destinationId)
     .maybeSingle();
 
@@ -188,6 +206,7 @@ export async function destinoPorId(
     conta: data.conta,
     labels: (data.labels as MapaDeRotulos | null) ?? {},
     testEventCode: data.test_event_code,
+    idTemplate: data.id_template,
     ativo: data.ativo,
     token: segredo?.access_token ?? null,
   };

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { apenasNumeroDaConversao } from "@/lib/tracking/normalizar";
 import { limparMapaDeRotulos } from "@/lib/tracking/eventos";
+import { TEMPLATE_PADRAO, validarTemplate } from "@/lib/tracking/id-produto";
 
 export const runtime = "nodejs";
 
@@ -46,6 +47,12 @@ interface CorpoDestino {
   /** So Google: {"purchase":"AbC...","add_to_cart":"XyZ..."}. */
   labels?: Record<string, string> | null;
   testEventCode?: string | null;
+  /**
+   * Formato do id de produto: {variant_id}, {product_id}, {sku}.
+   *
+   * Vazio = `{variant_id}`, o comportamento de antes de isto existir.
+   */
+  idTemplate?: string | null;
   ativo?: boolean;
   /**
    * Token do CAPI do Meta. Vazio/ausente na EDICAO = nao mexer no gravado.
@@ -111,9 +118,21 @@ function validar(
       conta: string;
       labels: Record<string, string>;
       testEventCode: string | null;
+      idTemplate: string | null;
       token: string | null;
     } {
   const token = (corpo.accessToken || "").trim() || null;
+
+  // O template vai cru para dentro de `content_ids` do Meta e de `ecomm_prodid`
+  // do Google. Template invalido nao da erro em lugar nenhum: o evento e
+  // aceito e o anuncio dinamico so nao serve aquele item. Entao a recusa e
+  // aqui, enquanto o lojista ainda esta olhando.
+  const template = (corpo.idTemplate || "").trim();
+  if (template && template !== TEMPLATE_PADRAO) {
+    const erro = validarTemplate(template);
+    if (erro) return { erro };
+  }
+  const idTemplate = template && template !== TEMPLATE_PADRAO ? template : null;
 
   if (plataforma === "google") {
     const bruto = (corpo.conta || "").trim();
@@ -135,7 +154,7 @@ function validar(
 
     // Guardado como AW-<digitos>: o lojista cola o que o painel mostra, com
     // espaco ou sem prefixo, e a URL do endpoint recusa qualquer outra forma.
-    return { conta: `AW-${numero}`, labels, testEventCode: null, token: null };
+    return { conta: `AW-${numero}`, labels, testEventCode: null, idTemplate, token: null };
   }
 
   // So digitos: o Events Manager as vezes mostra o id com espaco, e o Meta
@@ -155,6 +174,7 @@ function validar(
     conta: pixel,
     labels: {},
     testEventCode: (corpo.testEventCode || "").trim() || null,
+    idTemplate,
     token,
   };
 }
@@ -218,6 +238,7 @@ export async function POST(request: NextRequest) {
       conta: v.conta,
       labels: v.labels,
       test_event_code: v.testEventCode,
+      id_template: v.idTemplate,
       ativo: corpo.ativo ?? true,
     })
     .select("id")
@@ -266,7 +287,9 @@ export async function PATCH(request: NextRequest) {
   const admin = createAdminClient();
   const { data: atual } = await admin
     .from("tracking_destinations")
-    .select("id, store_id, user_id, plataforma, conta, labels, test_event_code, ativo")
+    .select(
+      "id, store_id, user_id, plataforma, conta, labels, test_event_code, id_template, ativo"
+    )
     .eq("id", corpo.id)
     .maybeSingle();
 
@@ -309,6 +332,7 @@ export async function PATCH(request: NextRequest) {
       conta: corpo.conta ?? atual.conta,
       labels: corpo.labels ?? (atual.labels as Record<string, string> | null),
       testEventCode: corpo.testEventCode ?? atual.test_event_code,
+      idTemplate: corpo.idTemplate ?? atual.id_template,
     },
     { exigirToken: true, jaTemToken: Boolean(segredo?.access_token) }
   );
@@ -318,6 +342,7 @@ export async function PATCH(request: NextRequest) {
     conta: v.conta,
     labels: v.labels,
     test_event_code: v.testEventCode,
+    id_template: v.idTemplate,
     ativo: corpo.ativo ?? atual.ativo,
     updated_at: new Date().toISOString(),
   };
