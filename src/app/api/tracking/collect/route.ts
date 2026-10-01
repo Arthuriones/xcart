@@ -105,6 +105,8 @@ export async function POST(request: NextRequest) {
     referrer?: string | null;
     /** A URL da pagina, mandada explicita pelo snippet. Ver abaixo. */
     pageUrl?: string | null;
+    /** Produto em tela, nos eventos que tem um. Ver `custom_data` abaixo. */
+    produto?: { variante?: string | null; produto?: string | null } | null;
   };
   try {
     corpo = await request.json();
@@ -304,6 +306,14 @@ export async function POST(request: NextRequest) {
     const candidata = /^https?:\/\//i.test(doCorpo) ? doCorpo : doHeader;
     if (/^https?:\/\//i.test(candidata)) origemDaPagina = candidata.slice(0, 500);
 
+    // Variante antes do produto: e o item concreto do catalogo. Os dois juntos
+    // aumentam a chance de casar com o feed, que em loja Shopify as vezes usa
+    // um e as vezes outro como id de varejista.
+    const conteudo = [
+      (corpo.produto?.variante || "").trim(),
+      (corpo.produto?.produto || "").trim(),
+    ].filter((v, i, todos) => v && todos.indexOf(v) === i);
+
     destinos.push({
       destination: "meta",
       payload: {
@@ -317,7 +327,23 @@ export async function POST(request: NextRequest) {
         action_source: "website",
         user_data: userData,
         ...(origemDaPagina ? { event_source_url: origemDaPagina } : {}),
-        // Sem value/currency, igual ao Google: ver o cabecalho.
+        ...(conteudo.length
+          ? {
+              custom_data: {
+                // `content_ids` e exigencia do Meta para publico dinamico e
+                // anuncio de catalogo; sem ele, ViewContent e AddToCart chegam
+                // sem dizer de QUAL produto.
+                //
+                // `product`, nunca `product_group`: a documentacao dele e
+                // explicita de que AddToCart e Purchase sao sempre sobre o item
+                // concreto, porque e um item concreto que a pessoa compra.
+                content_type: "product",
+                content_ids: conteudo,
+                // Sem value/currency, igual ao Google. Id de produto o
+                // visitante nao tem por que forjar; valor ele teria.
+              },
+            }
+          : {}),
       },
     });
   }

@@ -148,3 +148,47 @@ describe("Purchase montado a partir do pedido", () => {
     ).toBe("https://gotoku-ya.shop/products/bolsa?fbclid=ABC123");
   });
 });
+
+/**
+ * O Meta exige content_ids ou contents para publico dinamico e anuncio de
+ * catalogo. `contents` e o formato melhor: carrega quantidade e preco por item,
+ * entao uma compra de 3 unidades deixa de ser indistinguivel de 1.
+ */
+describe("compra carrega o catalogo no formato que o Meta pede", () => {
+  const pedido = {
+    id: 9001,
+    currency: "USD",
+    total_price: "119.70",
+    line_items: [
+      { variant_id: 111, product_id: 11, quantity: 3, price: "29.90" },
+      { variant_id: 222, product_id: 22, quantity: 1, price: "30.00" },
+    ],
+  };
+
+  it("manda contents com id, quantidade e preco unitario", () => {
+    const { evento } = montarPurchase(pedido);
+    expect(evento.custom_data?.contents).toEqual([
+      { id: "111", quantity: 3, item_price: 29.9 },
+      { id: "222", quantity: 1, item_price: 30 },
+    ]);
+  });
+
+  it("continua mandando content_ids, que e o que o catalogo casa", () => {
+    const { evento } = montarPurchase(pedido);
+    expect(evento.custom_data?.content_ids).toEqual(["111", "222"]);
+  });
+
+  it("usa a variante, nao o produto -- e o item concreto que foi comprado", () => {
+    const { evento } = montarPurchase(pedido);
+    const contents = evento.custom_data?.contents as { id: string }[];
+    expect(contents.map((c) => c.id)).not.toContain("11");
+  });
+
+  it("nao quebra em item sem preco", () => {
+    const { evento } = montarPurchase({
+      id: 1,
+      line_items: [{ variant_id: 5, quantity: 2 }],
+    });
+    expect(evento.custom_data?.contents).toEqual([{ id: "5", quantity: 2 }]);
+  });
+});

@@ -298,6 +298,57 @@
     return false;
   }
 
+  /**
+   * Qual produto e variante esta em tela.
+   *
+   * A ordem importa. `?variant=` e a escolha explicita do comprador; o input
+   * `id` do formulario acompanha o seletor de variante e e o que sera de fato
+   * adicionado; `ShopifyAnalytics.meta` so conhece a primeira variante, entao
+   * fica por ultimo -- usar ela antes mandaria "P preto" quando a pessoa
+   * escolheu "GG branco".
+   *
+   * getAttribute, nao `.id`: formulario com <input name="id"> sombreia a
+   * propriedade e devolve o elemento. Ja mordeu neste repo.
+   */
+  function produtoAtual() {
+    var variante = null;
+    var produto = null;
+
+    try {
+      variante = new URLSearchParams(location.search).get("variant");
+    } catch (e) {
+      variante = null;
+    }
+
+    if (!variante) {
+      var form = document.querySelector('form[action*="/cart/add"]');
+      var campo = form && form.querySelector('[name="id"]');
+      if (campo && campo.value) variante = campo.value;
+    }
+
+    var meta =
+      window.ShopifyAnalytics && window.ShopifyAnalytics.meta
+        ? window.ShopifyAnalytics.meta.product
+        : null;
+    if (meta) {
+      produto = meta.id ? String(meta.id) : null;
+      if (!variante && meta.variants && meta.variants[0]) {
+        variante = String(meta.variants[0].id);
+      }
+    }
+
+    return { variante: variante ? String(variante) : null, produto: produto };
+  }
+
+  /**
+   * Eventos que carregam identificacao de produto.
+   *
+   * `begin_checkout` fica de fora de proposito: o carrinho pode ter varios
+   * itens, e mandar so o ultimo produto visto descreveria uma compra que nao e
+   * aquela. Melhor sem do que errado.
+   */
+  var COM_PRODUTO = { view_item: 1, add_to_cart: 1 };
+
   function mandar(evento) {
     if (!COLETOR || !LOJA) return;
     if (repetido(evento)) return;
@@ -323,6 +374,11 @@
       fbc: achados._fbc || null,
       fbclid: achados.fbclid || null,
       referrer: ORIGEM || null,
+      // Sem isto o Meta recebe AddToCart e ViewContent sem saber de QUAL
+      // produto -- e `content_ids` e exigencia dele para publico dinamico e
+      // para anuncio de catalogo. Nao e dado que o visitante possa inflar:
+      // valor continua de fora.
+      produto: COM_PRODUTO[evento] ? produtoAtual() : null,
       // A URL da pagina, EXPLICITA.
       //
       // O servidor nao pode deduzir do header Referer: o beacon vai para outro

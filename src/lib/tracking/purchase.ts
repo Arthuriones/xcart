@@ -233,6 +233,22 @@ export function montarPurchase(
         .map((i) => (i.variant_id ?? i.product_id) ?? null)
         .filter((id): id is string | number => id !== null)
         .map(String),
+      // `contents` alem de `content_ids`: ele carrega quantidade e preco por
+      // item, que e o formato que o Meta pede para anuncio de catalogo. Com
+      // apenas os ids, uma compra de 3 unidades e indistinguivel de 1, e o
+      // catalogo nao sabe por quanto cada item saiu.
+      contents: itens
+        .map((i) => {
+          const id = (i.variant_id ?? i.product_id) ?? null;
+          if (id === null) return null;
+          const preco = Number(i.price ?? 0);
+          return {
+            id: String(id),
+            quantity: Number(i.quantity) || 1,
+            ...(Number.isFinite(preco) && preco > 0 ? { item_price: preco } : {}),
+          };
+        })
+        .filter((c): c is { id: string; quantity: number } => c !== null),
       num_items: itens.reduce((s, i) => s + (Number(i.quantity) || 0), 0),
       order_id: String(pedido.id ?? ""),
     },
