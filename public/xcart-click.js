@@ -115,11 +115,38 @@
   }
   achados._fbp = fbp;
 
-  // _fbc e diferente: ele representa um CLIQUE real em anuncio, e inventar um
-  // sem fbclid na URL seria afirmar uma origem que nao aconteceu. So lemos o
-  // cookie; quando ele nao existe, o servidor reconstroi a partir do fbclid --
-  // e se nao houver fbclid, o evento vai sem, que e o correto.
-  var fbc = lerCookie("_fbc");
+  // _fbc representa um CLIQUE real em anuncio: inventar um sem fbclid na URL
+  // seria afirmar uma origem que nao aconteceu. Entao so existe quando ha
+  // fbclid -- e quando ha, ele e montado UMA VEZ e guardado.
+  //
+  // POR QUE GUARDAR, E NAO RECONSTRUIR A CADA EVENTO
+  //
+  // O formato e `fb.1.<instante do clique>.<fbclid>`, e o Meta trata o valor
+  // inteiro como UM identificador. Reconstruir no servidor com a hora de agora
+  // dava um valor diferente em cada evento: medido, um visitante com 11 eventos
+  // mandou 11 _fbc distintos -- o mesmo clique parecendo 11 cliques, e o funil
+  // deixando de se ligar a compra.
+  //
+  // O carimbo certo e o instante em que o clique foi OBSERVADO, que so o
+  // navegador conhece. Guardado no nosso cookie, todos os eventos daquele
+  // visitante levam a mesma string -- inclusive o pedido, porque `achados` vira
+  // cart attribute.
+  function fbclidDoFbc(valor) {
+    var p = String(valor || "").split(".");
+    return p.length > 3 ? p.slice(3).join(".") : null;
+  }
+
+  // O cookie do PROPRIO Meta vence, quando existe: se o pixel do navegador
+  // estiver instalado, o valor dele e a verdade e nao ha o que montar.
+  var fbc = lerCookie("_fbc") || lerCookie(PREFIXO + "fbc");
+
+  // Clique NOVO refaz: o fbclid da URL e uma atribuicao mais recente que a
+  // guardada, e manter a antiga creditaria o anuncio errado.
+  if (achados.fbclid && fbclidDoFbc(fbc) !== achados.fbclid && !lerCookie("_fbc")) {
+    fbc = "fb.1." + Date.now() + "." + achados.fbclid;
+    gravarCookie(PREFIXO + "fbc", fbc);
+  }
+
   if (fbc) achados._fbc = fbc;
 
   // ---- 1c. os cookies que o proprio Google escreve ------------------------
