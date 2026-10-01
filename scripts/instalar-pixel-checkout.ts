@@ -75,23 +75,18 @@ async function main() {
   const loja = candidatas[0];
 
   if (desmarcar || marcarAtivo) {
-    const { error } = await admin
-      .from("tracking_configs")
-      .update({
-        web_pixel_ativo: marcarAtivo,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("store_id", loja.id);
-    if (error) {
-      console.error("falha ao marcar:", error.message);
-      process.exit(1);
-    }
+    // Nao existe mais marcar na mao. O coletor carimba `web_pixel_visto_em` no
+    // primeiro evento do pixel, e a cobertura expira sozinha se ele parar de
+    // mandar -- booleano manual era um estado que podia mentir nos dois
+    // sentidos: marcado sem pixel suprime o evento do tema e nada entra no
+    // lugar; nao marcado com pixel conta os dois.
     console.log(
-      marcarAtivo
-        ? `\nWeb Pixel marcado como ATIVO em "${loja.name}".\n` +
-            "  O coletor passa a ignorar o begin_checkout vindo do tema."
-        : `\nWeb Pixel marcado como inativo em "${loja.name}".\n` +
-            "  O begin_checkout do tema volta a valer."
+      [
+        "",
+        "--marcar-ativo e --desmarcar nao existem mais.",
+        "  O pixel se anuncia sozinho no primeiro evento que manda, e a tela",
+        "  volta a mostrar 'falta instalar' se ele parar.",
+      ].join("\n")
     );
     return;
   }

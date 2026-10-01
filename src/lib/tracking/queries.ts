@@ -52,7 +52,13 @@ export interface LojaTracking {
   /** Rotulo por evento. Evento fora do mapa = o lojista nao pediu. */
   googleLabels: MapaDeRotulos;
 
-  /** O Custom Pixel do checkout esta instalado? Ele se anuncia no 1o evento. */
+  /**
+   * O Custom Pixel esta MANDANDO evento?
+   *
+   * Nao "foi instalado um dia": o pixel removido da Shopify precisa voltar a
+   * aparecer como faltando, senao a tela diria "instalado" enquanto o checkout
+   * nao e rastreado por ninguem.
+   */
   pixelCheckoutAtivo: boolean;
   metaPixelId: string | null;
   /** O token do CAPI esta gravado? So o booleano -- o valor nunca sai do servidor. */
@@ -100,7 +106,7 @@ export async function getPainelTracking(): Promise<PainelTracking> {
     supabase
       .from("tracking_configs")
       .select(
-        "store_id, enabled, google_conversion_id, google_conversion_label, google_labels, meta_pixel_id, web_pixel_ativo"
+        "store_id, enabled, google_conversion_id, google_conversion_label, google_labels, meta_pixel_id, web_pixel_visto_em"
       )
       .in("store_id", ids),
     supabase
@@ -189,7 +195,9 @@ export async function getPainelTracking(): Promise<PainelTracking> {
         ligado: Boolean(cfg?.enabled),
         googleConversionId: cfg?.google_conversion_id ?? null,
         googleLabels: (cfg?.google_labels as MapaDeRotulos | null) ?? {},
-        pixelCheckoutAtivo: Boolean(cfg?.web_pixel_ativo),
+        pixelCheckoutAtivo: cfg?.web_pixel_visto_em
+          ? Date.now() - new Date(cfg.web_pixel_visto_em).getTime() < 864e5
+          : false,
         metaPixelId: cfg?.meta_pixel_id ?? null,
         temTokenMeta: comToken.has(l.id),
         google: c?.google ?? contagemVazia(),

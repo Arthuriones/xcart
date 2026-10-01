@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
     admin
       .from("tracking_configs")
       .select(
-        "store_id, enabled, google_conversion_id, google_conversion_label, google_labels, meta_pixel_id, meta_test_event_code, web_pixel_ativo"
+        "store_id, enabled, google_conversion_id, google_conversion_label, google_labels, meta_pixel_id, meta_test_event_code, web_pixel_visto_em"
       )
       .in("store_id", ids),
     admin
@@ -212,25 +212,37 @@ export async function POST(request: NextRequest) {
 
   const doPixel = (corpo.fonte || "").trim() === "pixel";
 
-  // O pixel se ANUNCIA. Nao ha passo manual de "marcar como instalado", e nao
-  // da para detectar pela API: `read_pixels` nao esta nos nossos escopos, e
-  // pedir mais escopo so para isso obrigaria toda loja a reautorizar.
+  // O pixel se ANUNCIA, carimbando a hora. Nao ha passo manual de "marcar como
+  // instalado", e nao da para detectar pela API: `read_pixels` nao esta nos
+  // nossos escopos, e pedir mais escopo so para isso obrigaria toda loja a
+  // reautorizar.
   //
-  // Quando o primeiro evento com fonte=pixel chega, ele esta instalado -- e o
-  // proprio funcionamento e a prova. Um lojista que cola o codigo nao precisa
-  // fazer mais nada.
-  if (doPixel && !cfg.web_pixel_ativo) {
+  // E um CARIMBO, nao um booleano, porque booleano nunca desligaria: pixel
+  // removido da Shopify deixaria o begin_checkout do tema suprimido para
+  // sempre, e o evento sumiria em silencio.
+  //
+  // Nao carimba a cada evento: seria uma escrita por pageview de checkout sem
+  // mudar a decisao. Uma vez por hora basta para a janela de um dia.
+  const vistoEm = cfg.web_pixel_visto_em
+    ? new Date(cfg.web_pixel_visto_em).getTime()
+    : 0;
+  if (doPixel && Date.now() - vistoEm > 36e5) {
+    const agora = new Date().toISOString();
     await admin
       .from("tracking_configs")
-      .update({ web_pixel_ativo: true, updated_at: new Date().toISOString() })
+      .update({ web_pixel_visto_em: agora, updated_at: agora })
       .eq("store_id", registro.id);
-    cfg.web_pixel_ativo = true;
+    cfg.web_pixel_visto_em = agora;
   }
 
-  // Com o Web Pixel ativo, o clique no botao (tema) e o `checkout_started`
-  // (pixel) descrevem a MESMA acao, e nao tem como compartilhar event_id -- um
-  // nasce do clique, o outro do checkout. O do pixel e o checkout de verdade.
-  if (!doPixel && evento === "begin_checkout" && cfg.web_pixel_ativo) {
+  // Com o Web Pixel cobrindo o checkout, o clique no botao (tema) e o
+  // `checkout_started` (pixel) descrevem a MESMA acao, e nao tem como
+  // compartilhar event_id -- um nasce do clique, o outro do checkout de verdade.
+  //
+  // A janela de um dia e o que faz isto se curar: se o pixel parar de mandar,
+  // o tema volta a cobrir sozinho, sem ninguem precisar notar.
+  const pixelCobrindo = Date.now() - vistoEm < 864e5;
+  if (!doPixel && evento === "begin_checkout" && pixelCobrindo) {
     return ok({ ignorado: "checkout coberto pelo Web Pixel" });
   }
 

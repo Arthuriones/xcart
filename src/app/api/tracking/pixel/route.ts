@@ -15,7 +15,7 @@ export const runtime = "nodejs";
 // caminho, e ele roda no MESMO sandbox.
 //
 // Depois de colado nao ha mais nada a fazer: o pixel se anuncia no primeiro
-// evento que manda, e o coletor liga o `web_pixel_ativo` sozinho.
+// evento que manda, e o coletor carimba `web_pixel_visto_em` sozinho.
 // ============================================================================
 
 export async function GET(request: NextRequest) {
