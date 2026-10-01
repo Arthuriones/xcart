@@ -259,27 +259,41 @@ async function tratarPedidoCriado(
 
   try {
     const saida: Record<string, string> = {};
-    for (const alvo of destinos) {
-      // A chave do mapa carrega o id do destino: com duas contas do Google, uma
-      // chave "google" sozinha faria a segunda sobrescrever a primeira e o log
-      // mentiria sobre o que saiu.
-      const chave = `${alvo.destination}:${alvo.destinationId.slice(0, 8)}`;
 
-      const { id, duplicado } = await enfileirar(admin, {
-        storeId: loja.id,
-        destination: alvo.destination,
-        destinationId: alvo.destinationId,
-        evento,
-        orderId: String(pedido.id ?? ""),
-        payload: alvo.payload,
-      });
+    // EM PARALELO, nao em fila.
+    //
+    // Cada destino e uma chamada de rede para outra empresa, e elas nao
+    // dependem umas das outras: linhas de fila distintas, contas distintas.
+    // Em serie, cinco contas do Google somavam cinco idas e voltas antes de o
+    // webhook responder -- e a Shopify tem limite de tempo para a resposta.
+    //
+    // Uma falhar continua nao impedindo as outras: cada `entregar` trata o
+    // proprio erro e grava o desfecho na linha dela.
+    await Promise.all(
+      destinos.map(async (alvo) => {
+        // A chave do mapa carrega o id do destino: com duas contas do Google,
+        // uma chave "google" sozinha faria a segunda sobrescrever a primeira e
+        // o log mentiria sobre o que saiu.
+        const chave = `${alvo.destination}:${alvo.destinationId.slice(0, 8)}`;
 
-      if (duplicado) {
-        saida[chave] = "duplicado";
-        continue;
-      }
+        const { id, duplicado } = await enfileirar(admin, {
+          storeId: loja.id,
+          destination: alvo.destination,
+          destinationId: alvo.destinationId,
+          evento,
+          orderId: String(pedido.id ?? ""),
+          payload: alvo.payload,
+        });
 
-      if (id) {
+        if (duplicado) {
+          saida[chave] = "duplicado";
+          return;
+        }
+        if (!id) {
+          saida[chave] = "na fila";
+          return;
+        }
+
         // Melhor esforco: falhou, a linha segue pendente para o cron.
         const r = await entregar(
           admin,
@@ -299,8 +313,9 @@ async function tratarPedidoCriado(
           { destino: alvo.destino, lojaLigada: true }
         );
         saida[chave] = r.ok ? "enviado" : "na fila";
-      }
-    }
+      })
+    );
+
 
     return ok({
       topic: "orders/create",

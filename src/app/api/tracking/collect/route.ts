@@ -569,54 +569,67 @@ export async function POST(request: NextRequest) {
 
   try {
     const saida: Record<string, string> = {};
-    for (const alvo of destinos) {
-      const { id, duplicado } = await enfileirar(admin, {
-        storeId: registro.id,
-        destination: alvo.destination,
-        destinationId: alvo.destinationId,
-        evento: { event_name: evento, event_id: eventId },
-        orderId: eventId,
-        visitorId,
-        // Ficam na LINHA, nao no payload: o payload do Meta vai cru para a API
-        // deles, e campo desconhecido ali pode derrubar o evento inteiro.
-        referrer: (corpo.referrer || "").trim().slice(0, 500) || null,
-        // Liga o evento de checkout ao pedido sem depender de cart attribute,
-        // que se perde quando a sessao comeca no proprio checkout.
-        checkoutToken: (corpo.checkoutToken || "").trim().slice(0, 120) || null,
-        payload: alvo.payload,
-      });
 
-      if (duplicado) {
-        saida[alvo.destination] = "duplicado";
-        continue;
-      }
-      if (!id) {
-        saida[alvo.destination] = "na fila";
-        continue;
-      }
+    // EM PARALELO, nao em fila.
+    //
+    // Cada destino e uma chamada de rede para outra empresa, e elas nao
+    // dependem umas das outras: linhas de fila distintas, contas distintas.
+    // Em serie, cinco contas do Google -- o caso real do Arthur -- somavam
+    // cinco idas e voltas antes de a funcao responder.
+    //
+    // Uma falhar continua nao impedindo as outras: cada `entregar` trata o
+    // proprio erro e grava o desfecho na linha dela.
+    await Promise.all(
+      destinos.map(async (alvo) => {
+        // Chave por DESTINO em todos os desfechos: com duas contas Google uma
+        // chave "google" sozinha faria a segunda sobrescrever a primeira.
+        const chave = `${alvo.destination}:${alvo.destinationId.slice(0, 8)}`;
 
-      // Melhor esforco: se falhar, a linha segue pendente e o cron tenta.
-      const r = await entregar(
-        admin,
-        {
-          id,
-          store_id: registro.id,
+        const { id, duplicado } = await enfileirar(admin, {
+          storeId: registro.id,
           destination: alvo.destination,
-          destination_id: alvo.destinationId,
-          event_name: evento,
+          destinationId: alvo.destinationId,
+          evento: { event_name: evento, event_id: eventId },
+          orderId: eventId,
+          visitorId,
+          // Ficam na LINHA, nao no payload: o payload do Meta vai cru para a
+          // API deles, e campo desconhecido ali pode derrubar o evento inteiro.
+          referrer: (corpo.referrer || "").trim().slice(0, 500) || null,
+          // Liga o evento de checkout ao pedido sem depender de cart attribute,
+          // que se perde quando a sessao comeca no proprio checkout.
+          checkoutToken: (corpo.checkoutToken || "").trim().slice(0, 120) || null,
           payload: alvo.payload,
-          attempts: 0,
-        },
-        // O destino e o interruptor ja foram lidos la em cima. Sem isto, cada
-        // destino custava mais tres idas ao banco por pageview.
-        { destino: alvo.destino, lojaLigada: true }
-      );
-      // Chave por DESTINO, nao por plataforma: com duas contas Google a
-      // segunda sobrescreveria o resultado da primeira na resposta.
-      saida[`${alvo.destination}:${alvo.destinationId.slice(0, 8)}`] = r.ok
-        ? "enviado"
-        : "na fila";
-    }
+        });
+
+        if (duplicado) {
+          saida[chave] = "duplicado";
+          return;
+        }
+        if (!id) {
+          saida[chave] = "na fila";
+          return;
+        }
+
+        // Melhor esforco: se falhar, a linha segue pendente e o cron tenta.
+        const r = await entregar(
+          admin,
+          {
+            id,
+            store_id: registro.id,
+            destination: alvo.destination,
+            destination_id: alvo.destinationId,
+            event_name: evento,
+            payload: alvo.payload,
+            attempts: 0,
+          },
+          // O destino e o interruptor ja foram lidos la em cima. Sem isto, cada
+          // destino custava mais tres idas ao banco por pageview.
+          { destino: alvo.destino, lojaLigada: true }
+        );
+        saida[chave] = r.ok ? "enviado" : "na fila";
+      })
+    );
+
     return ok({ destinos: saida });
   } catch (e) {
     console.error("[tracking/collect] falha ao enfileirar", e);
