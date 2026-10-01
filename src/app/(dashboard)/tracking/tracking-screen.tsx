@@ -111,14 +111,70 @@ function apelido(d: DestinoNaTela): string {
   return d.nome ? `${plataforma} "${d.nome}"` : `${plataforma} ${d.conta}`;
 }
 
-/** Os destinos que deveriam estar recebendo a COMPRA. */
-function recebemCompra(loja: LojaTracking): DestinoNaTela[] {
+/**
+ * Meta com test_event_code: o evento cai na aba de TESTE do Events Manager e
+ * nao conta como conversao. Contar essas compras como "rastreadas" diria que a
+ * campanha esta medindo quando nao esta.
+ */
+function emModoTeste(d: DestinoNaTela): boolean {
+  return d.plataforma === "meta" && Boolean(d.testEventCode);
+}
+
+/** Os destinos para onde a compra SAI -- inclusive o Meta em modo teste. */
+function aceitamCompra(loja: LojaTracking): DestinoNaTela[] {
   return loja.destinos.filter(
     (d) =>
       d.ativo &&
       d.completo &&
       (d.plataforma === "meta" || Boolean(d.labels.purchase))
   );
+}
+
+/** Os destinos que deveriam estar recebendo a compra COMO CONVERSAO. */
+function recebemCompra(loja: LojaTracking): DestinoNaTela[] {
+  return aceitamCompra(loja).filter((d) => !emModoTeste(d));
+}
+
+/**
+ * Quantos pedidos esperados NAO tiveram a compra enviada por este destino.
+ *
+ * Todo pedido vai para todo destino que aceita a compra, entao nao ha pedido
+ * que "veio de fora do anuncio" e pode faltar: faltou, perdeu. Fica fora so o
+ * que nao tinha como ter ido -- pedido anterior ao cadastro do destino -- e o
+ * que ainda esta na fila do cron, que nao saiu mas nao se perdeu.
+ *
+ * Null = o diagnostico nao trouxe a lista de pedidos.
+ */
+function pedidosSemCompra(d: DestinoNaTela, diag: DiagnosticoLoja | null): number | null {
+  if (!diag?.pedidoIds) return null;
+  const desde = d.criadoEm ? Date.parse(d.criadoEm) : NaN;
+  const chegou = new Set([...d.contagem.pedidosComCompra, ...d.contagem.pedidosNaFila]);
+  let faltam = 0;
+  for (const id of diag.pedidoIds) {
+    if (chegou.has(id)) continue;
+    const criado = Date.parse(diag.pedidoCriadoEm?.[id] ?? "");
+    if (Number.isFinite(desde) && Number.isFinite(criado) && criado < desde) continue;
+    faltam += 1;
+  }
+  return faltam;
+}
+
+/** O destino da plataforma que mais recebeu compra. */
+function melhorDa(
+  alvos: DestinoNaTela[],
+  plataforma: DestinoNaTela["plataforma"]
+): DestinoNaTela | null {
+  let melhor: DestinoNaTela | null = null;
+  for (const d of alvos) {
+    if (d.plataforma !== plataforma) continue;
+    if (
+      !melhor ||
+      (d.contagem.porEvento.purchase ?? 0) > (melhor.contagem.porEvento.purchase ?? 0)
+    ) {
+      melhor = d;
+    }
+  }
+  return melhor;
 }
 
 /**
@@ -128,6 +184,10 @@ function recebemCompra(loja: LojaTracking): DestinoNaTela[] {
  * acontecem muito mais que venda, e somados dariam "300 de 4 pedidos", que nao
  * diz nada. E compara POR DESTINO -- a mesma venda rende uma linha para cada
  * conta configurada, e somar transformaria 1 pedido em 5 compras.
+ *
+ * E compara PEDIDO A PEDIDO: todo pedido vai para todo destino, entao 8 compras
+ * para 10 pedidos sao 2 vendas perdidas, nao "2 que vieram de fora do anuncio".
+ * So o "nenhuma compra" acusava antes, e perda parcial passava calada.
  */
 function Veredito({
   loja,
@@ -137,93 +197,104 @@ function Veredito({
   diag: DiagnosticoLoja | null;
 }) {
   const alvos = recebemCompra(loja);
+  const emTeste = aceitamCompra(loja).filter(emModoTeste);
+
+  // Fica acima de tudo: muda como ler o resto. A compra sai, aparece no
+  // Events Manager, e a campanha nao recebe conversao nenhuma.
+  const avisoTeste = emTeste.length > 0 && (
+    <div className="flex items-start gap-2 rounded-md bg-amber-500/10 p-2.5 text-xs">
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+      <div className="space-y-0.5">
+        {emTeste.map((d) => (
+          <p key={d.id} className="font-medium text-amber-600">
+            {apelido(d)} em modo teste — compras não contam como conversão
+          </p>
+        ))}
+      </div>
+    </div>
+  );
 
   if (alvos.length === 0) {
     const temAlgum = loja.destinos.length > 0;
     return (
-      <div className="flex items-start gap-2 rounded-md bg-muted/60 p-2.5 text-xs">
-        <Minus className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        <span className="text-muted-foreground">
-          {temAlgum
-            ? "Nenhum destino está recebendo a compra. Confira o rótulo da compra no Google e o token no Meta."
-            : "Nenhum destino cadastrado ainda. Adicione uma conta do Google, um pixel do Meta, ou os dois."}
-        </span>
-      </div>
+      <>
+        {avisoTeste}
+        <div className="flex items-start gap-2 rounded-md bg-muted/60 p-2.5 text-xs">
+          <Minus className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span className="text-muted-foreground">
+            {temAlgum
+              ? "Nenhum destino está recebendo a compra. Confira o rótulo da compra no Google e o token no Meta."
+              : "Nenhum destino cadastrado ainda. Adicione uma conta do Google, um pixel do Meta, ou os dois."}
+          </span>
+        </div>
+      </>
     );
   }
 
   const pedidos = diag?.pedidos7d ?? null;
 
   // Cada destino e julgado sozinho: uma conta pode estar chegando e a outra nao.
-  const semCompra =
-    pedidos !== null && pedidos >= 3
-      ? alvos.filter((d) => (d.contagem.porEvento.purchase ?? 0) === 0)
-      : [];
+  const faltas = alvos
+    .map((d) => ({ destino: d, faltam: pedidosSemCompra(d, diag) ?? 0 }))
+    .filter((f) => f.faltam >= 1);
 
-  if (semCompra.length > 0) {
-    return (
-      <div className="flex items-start gap-2 rounded-md bg-destructive/10 p-2.5 text-xs">
-        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
-        <div>
-          <p className="font-medium text-destructive">
-            {pedidos} pedidos em 7 dias e nenhuma compra chegou em{" "}
-            {semCompra.map(apelido).join(", ")}.
-          </p>
-          <p className="text-muted-foreground">
-            {diag?.temWebhook === false
-              ? "O webhook de pedidos não está inscrito — é quase certo que seja isso."
-              : "Confira o rótulo da compra e, no Meta, o token do CAPI."}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // O destino que mais recebeu compra representa a loja: "quantas vendas
-  // conseguiram sair", sem somar a mesma venda uma vez por conta.
-  const melhor = alvos.reduce(
-    (a, b) =>
-      (b.contagem.porEvento.purchase ?? 0) > (a.contagem.porEvento.purchase ?? 0) ? b : a,
-    alvos[0]
-  );
-  const compras = melhor.contagem.porEvento.purchase ?? 0;
-  const sobrando = pedidos !== null && pedidos > 0 ? Math.max(0, pedidos - compras) : 0;
+  const melhorGoogle = melhorDa(alvos, "google");
+  const melhorMeta = melhorDa(alvos, "meta");
 
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md bg-muted/60 p-2.5 text-xs">
-      <span className="flex items-center gap-1.5">
-        <Check className="h-3.5 w-3.5 text-emerald-600" />
-        <span className="text-muted-foreground">
-          {pedidos !== null ? (
-            <>
-              <strong className="text-foreground">{pedidos}</strong> pedidos em 7 dias
-            </>
-          ) : (
-            "pedidos: não deu para verificar"
-          )}
-        </span>
-      </span>
-      {alvos.map((d) => (
-        <span key={d.id} className="text-muted-foreground">
-          {apelido(d)}:{" "}
-          <strong className="text-foreground">
-            {d.contagem.porEvento.purchase ?? 0}
-          </strong>{" "}
-          compras
-        </span>
-      ))}
-      {sobrando > 0 && compras > 0 && (
-        <span className="text-amber-600">
-          {sobrando} sem conversão — normal se vieram de fora do anúncio
-        </span>
+    <>
+      {avisoTeste}
+
+      {faltas.length > 0 && (
+        <div className="flex items-start gap-2 rounded-md bg-destructive/10 p-2.5 text-xs">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
+          <div>
+            {faltas.map(({ destino, faltam }) => (
+              <p key={destino.id} className="font-medium text-destructive">
+                {faltam} {faltam === 1 ? "pedido" : "pedidos"} sem compra enviada em{" "}
+                {apelido(destino)}
+              </p>
+            ))}
+            <p className="text-muted-foreground">
+              {diag?.temWebhook === false
+                ? "O webhook de pedidos não está inscrito — é quase certo que seja isso."
+                : "Todo pedido vai para todo destino: o que falta aqui é venda que a campanha não viu. Confira as falhas do destino abaixo, o rótulo da compra e, no Meta, o token do CAPI."}
+            </p>
+          </div>
+        </div>
       )}
-      <Atribuicao destino={melhor} />
-    </div>
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md bg-muted/60 p-2.5 text-xs">
+        <span className="flex items-center gap-1.5">
+          <Check className="h-3.5 w-3.5 text-emerald-600" />
+          <span className="text-muted-foreground">
+            {pedidos !== null ? (
+              <>
+                <strong className="text-foreground">{pedidos}</strong> pedidos em 7 dias
+              </>
+            ) : (
+              "pedidos: não deu para verificar"
+            )}
+          </span>
+        </span>
+        {alvos.map((d) => (
+          <span key={d.id} className="text-muted-foreground">
+            {apelido(d)}:{" "}
+            <strong className="text-foreground">
+              {d.contagem.porEvento.purchase ?? 0}
+            </strong>{" "}
+            compras
+          </span>
+        ))}
+        {melhorGoogle && <Atribuicao destino={melhorGoogle} clique="gclid" />}
+        {melhorMeta && <Atribuicao destino={melhorMeta} clique="fbc" />}
+      </div>
+    </>
   );
 }
 
 /**
- * Quantas COMPRAS foram creditadas a um anuncio.
+ * Quantas COMPRAS foram creditadas a um anuncio, por plataforma.
  *
  * E a leitura que o total de "sem click id" esconde. Trafego organico sem click
  * id e normal e enche o numero geral; venda sem click id quer dizer que aquela
@@ -231,20 +302,29 @@ function Veredito({
  * trafego nao veio de anuncio, ou a captura quebrou -- e sao conclusoes bem
  * diferentes.
  *
- * Um destino basta: a falta de click id e propriedade do EVENTO, nao da conta --
- * todas as contas recebem o mesmo pedido com os mesmos sinais.
+ * Um destino POR PLATAFORMA: dentro dela a falta de click id e propriedade do
+ * EVENTO, nao da conta -- todas recebem o mesmo pedido com os mesmos sinais.
+ * Entre plataformas nao: a venda pode ter gclid e nao ter fbc, e um so numero
+ * esconderia que o Meta esta otimizando sem saber de onde veio a venda.
  */
-function Atribuicao({ destino }: { destino: DestinoNaTela }) {
+function Atribuicao({
+  destino,
+  clique,
+}: {
+  destino: DestinoNaTela;
+  clique: "gclid" | "fbc";
+}) {
   const total = destino.contagem.porEvento.purchase ?? 0;
   if (total === 0) return null;
 
   const semClique = destino.contagem.semAtribPorEvento.purchase ?? 0;
   if (semClique === 0) return null;
 
+  const plataforma = destino.plataforma === "google" ? "Google" : "Meta";
   const todas = semClique >= total;
   return (
     <span className={todas ? "text-amber-600" : "text-muted-foreground"}>
-      {semClique} de {total} compras sem click id
+      {plataforma}: {semClique} de {total} compras sem {clique}
       {todas ? " — nenhuma venda foi creditada a um anúncio" : ""}
     </span>
   );
@@ -385,7 +465,11 @@ function CardLoja({
   const [instalando, setInstalando] = useState<string | null>(null);
 
   const temGoogle = loja.destinos.some((d) => d.plataforma === "google" && d.ativo);
-  const podeLigar = recebemCompra(loja).length > 0;
+  // aceitamCompra, nao recebemCompra: ligar so com o Meta em modo teste e o
+  // jeito de conferir no Events Manager antes de valer.
+  const podeLigar = aceitamCompra(loja).length > 0;
+  // Sem o app, a credencial nao vale: checar e instalar no tema so dariam erro.
+  const shopifyAlcancavel = ligado && !loja.desinstalada;
 
   /**
    * Instala a tag no tema pela tela.
@@ -451,6 +535,9 @@ function CardLoja({
             />
             <span className="truncate font-medium">{loja.nome}</span>
             {ligado ? <Pill tom="ok">ativo</Pill> : <Pill tom="neutro">desligado</Pill>}
+            {loja.desinstalada && (
+              <Pill tom="erro">app desinstalado — rastreamento parado</Pill>
+            )}
             {loja.destinos.length > 0 && (
               <Pill tom="neutro">
                 {loja.destinos.filter((d) => d.ativo).length} destino(s)
@@ -510,7 +597,7 @@ function CardLoja({
 
             {/* Os pre-requisitos que moram na Shopify. Sem eles a configuracao
                 pode estar perfeita e nada acontecer. */}
-            {ligado && (
+            {shopifyAlcancavel && (
               <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
                 <Checagem
                   ok={diag?.temWebhook ?? null}
@@ -542,7 +629,7 @@ function CardLoja({
             {/* Ficam sempre visiveis, nao so quando falta algo: reinstalar
                 tambem serve para atualizar uma tag antiga e para depois de
                 trocar de tema, que apaga a tag junto. */}
-            {ligado && (
+            {shopifyAlcancavel && (
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   size="sm"
@@ -636,17 +723,20 @@ export function TrackingScreen({
   // "20" para 4 vendas com cinco contas -- o mesmo erro de contagem que a tela
   // corrige la embaixo, reaparecendo no lugar mais visivel da pagina. O max
   // responde "quantas vendas sairam para pelo menos um destino".
+  //
+  // Meta em modo teste fica fora: a compra dele vai para a aba de teste do
+  // Events Manager, nao para a campanha -- nao e venda rastreada.
   const vendasRastreadas = ativas.reduce(
     (s, l) =>
       s +
-      l.destinos.reduce(
-        (m, d) => Math.max(m, d.contagem.porEvento.purchase ?? 0),
-        0
-      ),
+      l.destinos
+        .filter((d) => !emModoTeste(d))
+        .reduce((m, d) => Math.max(m, d.contagem.porEvento.purchase ?? 0), 0),
     0
   );
   const comProblema = ativas.filter(
     (l) =>
+      l.desinstalada ||
       diagnostico[l.storeId]?.temWebhook === false ||
       diagnostico[l.storeId]?.temSnippet === false
   ).length;

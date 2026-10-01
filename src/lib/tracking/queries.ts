@@ -27,6 +27,15 @@ import {
 // para cada uma. Somadas, "1 pedido" viraria "5 compras" e a comparacao com
 // pedidos -- que e o alarme -- nunca mais acusaria falta. Cada destino e julgado
 // sozinho: uma conta pode estar chegando e a outra nao.
+//
+// A CONTAGEM E FEITA NO BANCO
+//
+// Ler a fila linha a linha batia no corte de 1000 linhas do PostgREST. O funil
+// enche a janela (mil view_item num dia de trafego), e como a leitura vinha do
+// mais novo para o mais velho, as COMPRAS caiam fora do corte: a tela mostrava
+// "0 compras" com venda entrando, e o alarme nunca disparava. A funcao
+// `tracking_painel` (migration 049) devolve uma linha por (loja, destino,
+// evento, status) -- o tamanho nao depende mais do trafego.
 // ============================================================================
 
 /** Contagem de UM destino. */
@@ -34,7 +43,10 @@ export interface ContagemDestino {
   enviados: number;
   falharam: number;
   pendentes: number;
-  /** Enviados sem nenhum click id: conversao que o Google nao liga a anuncio. */
+  /**
+   * Enviados sem click id: conversao que a plataforma nao liga a anuncio.
+   * No Google e a falta de gclid/gbraid/wbraid; no Meta, a falta de fbc.
+   */
   semAtribuicao: number;
   ultimoErro: string | null;
   porEvento: Partial<Record<ChaveEvento, number>>;
@@ -47,6 +59,15 @@ export interface ContagemDestino {
    * anuncio nenhum, que e a informacao que decide se a campanha esta medindo.
    */
   semAtribPorEvento: Partial<Record<ChaveEvento, number>>;
+  /**
+   * Pedidos (id numerico da Shopify) cuja COMPRA saiu por este destino.
+   *
+   * O numero sozinho nao acusa perda parcial: "8 compras" para "10 pedidos"
+   * pode ser 8 dos 10 ou 8 repetidas. Com os ids a tela diz QUAIS faltam.
+   */
+  pedidosComCompra: string[];
+  /** Compras ainda na fila (retentativa do cron): nao sairam, mas nao se perderam. */
+  pedidosNaFila: string[];
 }
 
 /** Um destino como a tela o enxerga: configuracao + o que saiu por ele. */
@@ -68,6 +89,11 @@ export interface DestinoNaTela {
   temToken: boolean;
   /** Este destino consegue enviar algo, ou falta peca? */
   completo: boolean;
+  /**
+   * Quando o destino foi cadastrado. Pedido mais velho que isto nao tinha como
+   * ter ido para ele, e nao pode virar "pedido sem compra".
+   */
+  criadoEm: string | null;
   contagem: ContagemDestino;
 }
 
@@ -76,6 +102,15 @@ export interface LojaTracking {
   nome: string;
   dominio: string;
   ligado: boolean;
+
+  /**
+   * O app foi desinstalado com o rastreamento ainda ligado.
+   *
+   * Sem o app nao ha webhook de pedido nem credencial: a compra para de sair.
+   * Esconder a loja (como era) fazia o rastreamento sumir da tela no exato
+   * momento em que parou -- e o lojista nao tinha onde perceber.
+   */
+  desinstalada: boolean;
 
   /**
    * O Custom Pixel esta MANDANDO evento?
@@ -112,56 +147,38 @@ function contagemVazia(): ContagemDestino {
     ultimoErro: null,
     porEvento: {},
     semAtribPorEvento: {},
+    pedidosComCompra: [],
+    pedidosNaFila: [],
   };
 }
 
-export async function getPainelTracking(): Promise<PainelTracking> {
-  const [supabase, user] = await Promise.all([createClient(), getCurrentUser()]);
-  if (!user) return { lojas: [] };
+/** Uma linha de `tracking_painel` (migration 049). */
+export interface LinhaPainel {
+  store_id: string;
+  destination_id: string | null;
+  destination: string;
+  /** lower(event_name). */
+  event_key: string | null;
+  status: string;
+  n: number | string;
+  n_sem_atribuicao: number | string;
+  ultimo_envio: string | null;
+  ultimo_erro: string | null;
+  ultimo_erro_em: string | null;
+  order_ids: string[] | null;
+}
 
-  const { data: lojas } = await supabase
-    .from("stores")
-    .select("id, name, shop_domain")
-    .is("uninstalled_at", null)
-    .order("created_at", { ascending: true });
-
-  if (!lojas?.length) return { lojas: [] };
-
-  const ids = lojas.map((l) => l.id);
-  const admin = createAdminClient();
-
-  // A config e a fila sao lidas com o cliente do USUARIO (RLS limita ao dono).
-  // Os destinos vao pelo admin porque a existencia do token mora numa tabela sem
-  // policy -- de proposito: o token posta evento na conta de anuncios do
-  // lojista. As lojas acima ja foram filtradas por RLS, entao o admin aqui nao
-  // amplia o que o usuario ve.
-  const desde = new Date(Date.now() - 7 * 864e5).toISOString();
-  const [{ data: configs }, { data: eventos }, destinosPorLoja] = await Promise.all([
-    supabase
-      .from("tracking_configs")
-      .select("store_id, enabled, web_pixel_visto_em, teto_atingido_em")
-      .in("store_id", ids),
-    supabase
-      .from("tracking_events")
-      .select(
-        "store_id, destination, destination_id, event_name, status, last_error, sent_at, created_at"
-      )
-      .in("store_id", ids)
-      .gte("created_at", desde)
-      .order("created_at", { ascending: false }),
-    destinosParaTela(admin, ids),
-  ]);
-
-  const porLoja = new Map((configs || []).map((c) => [c.store_id, c]));
-
-  /**
-   * Para onde vai a linha antiga, de antes da 043.
-   *
-   * A 043 carimbou o historico ligando por plataforma, e naquele momento existia
-   * no maximo UM destino de cada -- criado a partir das colunas de config. Entao
-   * o destino mais ANTIGO de uma plataforma e de fato o dono daquelas linhas, e
-   * isto nao e chute.
-   */
+/**
+ * Para onde vai a linha antiga, de antes da 043.
+ *
+ * A 043 carimbou o historico ligando por plataforma, e naquele momento existia
+ * no maximo UM destino de cada -- criado a partir das colunas de config. Entao
+ * o destino mais ANTIGO de uma plataforma e de fato o dono daquelas linhas, e
+ * isto nao e chute. A lista de cada loja chega ordenada por created_at.
+ */
+export function mapaLegado(
+  destinosPorLoja: Map<string, { id: string; plataforma: string }[]>
+): Map<string, string> {
   const legado = new Map<string, string>();
   for (const [storeId, lista] of destinosPorLoja) {
     for (const d of lista) {
@@ -169,41 +186,189 @@ export async function getPainelTracking(): Promise<PainelTracking> {
       if (!legado.has(chave)) legado.set(chave, d.id);
     }
   }
+  return legado;
+}
 
+/** O instante mais recente entre dois, tolerando ausencia. */
+function maisRecente(a: string | null, b: string | null): string | null {
+  if (!a) return b;
+  if (!b) return a;
+  return Date.parse(b) > Date.parse(a) ? b : a;
+}
+
+/**
+ * Linhas agrupadas da fila -> contagem por destino.
+ *
+ * Pura de proposito: e aqui que mora a regra que a tela inteira usa para
+ * julgar se a venda esta saindo, e ela precisa de teste sem banco.
+ *
+ * O mesmo destino pode receber mais de uma linha do mesmo (evento, status):
+ * uma com destination_id e outra legada, sem. Por isso tudo aqui SOMA e une,
+ * nunca sobrescreve.
+ */
+export function contagensDoPainel(
+  linhas: LinhaPainel[],
+  legado: Map<string, string>
+): { contagens: Map<string, ContagemDestino>; ultimoDaLoja: Map<string, string> } {
   const contagens = new Map<string, ContagemDestino>();
   const ultimoDaLoja = new Map<string, string>();
+  const erroEm = new Map<string, string | null>();
+  const comCompra = new Map<string, Set<string>>();
+  const naFila = new Map<string, Set<string>>();
 
-  for (const e of eventos || []) {
+  const juntar = (mapa: Map<string, Set<string>>, id: string, ids: string[] | null) => {
+    if (!ids?.length) return;
+    const s = mapa.get(id) ?? new Set<string>();
+    for (const o of ids) if (o) s.add(String(o));
+    mapa.set(id, s);
+  };
+
+  for (const l of linhas) {
     const destinoId =
-      e.destination_id || legado.get(`${e.store_id}:${e.destination}`) || null;
+      l.destination_id || legado.get(`${l.store_id}:${l.destination}`) || null;
     if (!destinoId) continue;
 
     const alvo = contagens.get(destinoId) ?? contagemVazia();
+    const n = Number(l.n) || 0;
+    // chaveDoEvento normaliza a caixa: a compra foi gravada como "Purchase".
+    const chave = chaveDoEvento(l.event_key || "");
 
-    if (e.status === "enviado") {
-      alvo.enviados += 1;
-      // chaveDoEvento normaliza a caixa: a compra foi gravada como "Purchase".
-      const chave = chaveDoEvento(e.event_name || "");
-      if (chave) alvo.porEvento[chave] = (alvo.porEvento[chave] ?? 0) + 1;
-      if (!ultimoDaLoja.has(e.store_id) && e.sent_at) {
-        ultimoDaLoja.set(e.store_id, e.sent_at);
-      }
-      // O envio grava este aviso quando nao havia click id nenhum.
-      if ((e.last_error || "").includes("sem atribuicao")) {
-        alvo.semAtribuicao += 1;
+    if (l.status === "enviado") {
+      alvo.enviados += n;
+      if (chave) alvo.porEvento[chave] = (alvo.porEvento[chave] ?? 0) + n;
+      const ultimo = maisRecente(ultimoDaLoja.get(l.store_id) ?? null, l.ultimo_envio);
+      if (ultimo) ultimoDaLoja.set(l.store_id, ultimo);
+      // O envio grava o aviso "sem atribuicao" quando nao havia click id.
+      const sem = Number(l.n_sem_atribuicao) || 0;
+      if (sem > 0) {
+        alvo.semAtribuicao += sem;
         if (chave) {
-          alvo.semAtribPorEvento[chave] = (alvo.semAtribPorEvento[chave] ?? 0) + 1;
+          alvo.semAtribPorEvento[chave] = (alvo.semAtribPorEvento[chave] ?? 0) + sem;
         }
       }
-    } else if (e.status === "falhou") {
-      alvo.falharam += 1;
-      if (!alvo.ultimoErro && e.last_error) alvo.ultimoErro = e.last_error;
+      if (chave === "purchase") juntar(comCompra, destinoId, l.order_ids);
+    } else if (l.status === "falhou") {
+      alvo.falharam += n;
+      // O erro mais recente entre a linha legada e a nova: depois de trocar o
+      // token, o erro velho mandaria consertar o que ja foi consertado.
+      if (l.ultimo_erro) {
+        const antes = erroEm.get(destinoId) ?? null;
+        const vence =
+          !alvo.ultimoErro ||
+          (l.ultimo_erro_em !== null &&
+            antes !== l.ultimo_erro_em &&
+            maisRecente(antes, l.ultimo_erro_em) === l.ultimo_erro_em);
+        if (vence) {
+          alvo.ultimoErro = l.ultimo_erro;
+          erroEm.set(destinoId, l.ultimo_erro_em);
+        }
+      }
     } else {
-      alvo.pendentes += 1;
+      alvo.pendentes += n;
+      if (chave === "purchase") juntar(naFila, destinoId, l.order_ids);
     }
 
     contagens.set(destinoId, alvo);
   }
+
+  for (const [id, alvo] of contagens) {
+    const sairam = comCompra.get(id) ?? new Set<string>();
+    alvo.pedidosComCompra = [...sairam];
+    // Compra que ja saiu numa linha e tem outra na fila nao esta "na fila":
+    // ja chegou.
+    alvo.pedidosNaFila = [...(naFila.get(id) ?? [])].filter((o) => !sairam.has(o));
+  }
+
+  return { contagens, ultimoDaLoja };
+}
+
+/** Uma pagina do PostgREST. A funcao devolve pouco, mas nao ha teto garantido. */
+const PAGINA = 1000;
+
+export async function getPainelTracking(): Promise<PainelTracking> {
+  const [supabase, user] = await Promise.all([createClient(), getCurrentUser()]);
+  if (!user) return { lojas: [] };
+
+  // Sem filtrar por uninstalled_at aqui: loja desinstalada com rastreamento
+  // LIGADO precisa aparecer, porque e justamente onde a venda parou de sair.
+  const { data: todas } = await supabase
+    .from("stores")
+    .select("id, name, shop_domain, uninstalled_at")
+    .order("created_at", { ascending: true });
+
+  if (!todas?.length) return { lojas: [] };
+
+  const { data: configs } = await supabase
+    .from("tracking_configs")
+    .select("store_id, enabled, web_pixel_visto_em, teto_atingido_em")
+    .in(
+      "store_id",
+      todas.map((l) => l.id)
+    );
+  const porLoja = new Map((configs || []).map((c) => [c.store_id, c]));
+
+  // Desinstalada SEM rastreamento ligado continua escondida: nao ha nada a
+  // fazer nela por esta tela.
+  const lojas = todas.filter(
+    (l) => !l.uninstalled_at || Boolean(porLoja.get(l.id)?.enabled)
+  );
+  if (!lojas.length) return { lojas: [] };
+
+  const ids = lojas.map((l) => l.id);
+  const admin = createAdminClient();
+
+  // A fila e lida com o cliente do USUARIO: tracking_painel e SECURITY INVOKER,
+  // entao a RLS de tracking_events vale la dentro. NUNCA pelo admin -- ai o
+  // uuid de uma loja alheia em p_store_ids devolveria os numeros dela.
+  //
+  // Os destinos vao pelo admin porque a existencia do token mora numa tabela sem
+  // policy -- de proposito: o token posta evento na conta de anuncios do
+  // lojista. As lojas acima ja foram filtradas por RLS, entao o admin aqui nao
+  // amplia o que o usuario ve.
+  const desde = new Date(Date.now() - 7 * 864e5).toISOString();
+
+  async function lerPainel(): Promise<LinhaPainel[]> {
+    const saida: LinhaPainel[] = [];
+    for (let de = 0; ; de += PAGINA) {
+      // Ordem total pelas colunas do agrupamento: sem ela a paginacao do
+      // PostgREST pode repetir ou pular linha entre paginas.
+      const { data, error } = await supabase
+        .rpc("tracking_painel", { p_store_ids: ids, p_desde: desde })
+        .order("store_id")
+        .order("destination")
+        .order("destination_id", { nullsFirst: true })
+        .order("event_key")
+        .order("status")
+        .range(de, de + PAGINA - 1);
+      if (error) {
+        console.error("[tracking/painel] falha ao contar a fila", error.message);
+        break;
+      }
+      const pagina = (data || []) as LinhaPainel[];
+      saida.push(...pagina);
+      if (pagina.length < PAGINA) break;
+    }
+    return saida;
+  }
+
+  const [linhas, destinosPorLoja, { data: criados }] = await Promise.all([
+    lerPainel(),
+    destinosParaTela(admin, ids),
+    // created_at do destino: a policy do dono cobre a leitura.
+    supabase.from("tracking_destinations").select("id, created_at").in("store_id", ids),
+  ]);
+
+  const criadoEm = new Map(
+    ((criados || []) as { id: string; created_at: string | null }[]).map((c) => [
+      c.id,
+      c.created_at,
+    ])
+  );
+
+  const { contagens, ultimoDaLoja } = contagensDoPainel(
+    linhas,
+    mapaLegado(destinosPorLoja)
+  );
 
   return {
     lojas: lojas.map((l) => {
@@ -213,6 +378,7 @@ export async function getPainelTracking(): Promise<PainelTracking> {
         nome: l.name || l.shop_domain,
         dominio: l.shop_domain,
         ligado: Boolean(cfg?.enabled),
+        desinstalada: Boolean(l.uninstalled_at),
         tetoAtingidoRecente: cfg?.teto_atingido_em
           ? Date.now() - new Date(cfg.teto_atingido_em).getTime() < 864e5
           : false,
@@ -236,6 +402,7 @@ export async function getPainelTracking(): Promise<PainelTracking> {
             d.plataforma === "meta"
               ? Boolean(d.conta && d.temToken)
               : Boolean(d.conta) && Object.keys(d.labels).length > 0,
+          criadoEm: criadoEm.get(d.id) ?? null,
           contagem: contagens.get(d.id) ?? contagemVazia(),
         })),
         ultimoEnvio: ultimoDaLoja.get(l.id) ?? null,
