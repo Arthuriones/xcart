@@ -86,6 +86,8 @@ export async function enfileirar(
   entrada: {
     storeId: string;
     destination: "meta" | "google" | "ga4";
+    /** Qual conta. Entra na chave de dedupe junto com store_id e event_id. */
+    destinationId?: string | null;
     /**
      * Serve de fonte do nome e da chave de dedupe, iguais para todo destino.
      *
@@ -110,6 +112,7 @@ export async function enfileirar(
     .insert({
       store_id: entrada.storeId,
       destination: entrada.destination,
+      destination_id: entrada.destinationId ?? null,
       event_name: entrada.evento.event_name,
       event_id: entrada.evento.event_id,
       order_id: entrada.orderId ?? null,
@@ -134,131 +137,123 @@ export async function enfileirar(
  * insistir so queima chamada e esconde o problema atras de uma fila que nunca
  * esvazia. O lojista precisa ver 'falhou' com o motivo.
  */
+/**
+ * Tenta entregar uma linha da fila e grava o desfecho.
+ *
+ * Dirigido por DESTINO, nao por plataforma. A loja pode ter cinco contas Google
+ * e dois pixels Meta, e cada linha da fila sabe de qual delas e -- o
+ * `destination_id` tambem entra na chave de deduplicacao, senao dois destinos
+ * da mesma plataforma colidiriam e o segundo sumiria como "duplicado".
+ *
+ * Todo destino ativo recebe todo evento que ele aceita. No Google isso e
+ * seguro mesmo com varias contas: conversao cujo gclid nao pertence a conta e
+ * DESCARTADA por ele, nao contada sem atribuicao. Entao a conta dona do clique
+ * conta e as outras ignoram -- nao ha inflacao a evitar com roteamento.
+ *
+ * Erro permanente (token invalido, rotulo ausente) vai direto para 'falhou':
+ * insistir so queima chamada e esconde o problema atras de uma fila que nunca
+ * esvazia. O lojista precisa ver 'falhou' com o motivo.
+ */
 export async function entregar(
   admin: ReturnType<typeof createAdminClient>,
   linha: {
     id: string;
     store_id: string;
     destination: string;
+    destination_id?: string | null;
     /** Decide QUAL rotulo usar: um por conversion action no Google. */
     event_name: string;
     payload: unknown;
     attempts: number;
   }
 ): Promise<{ ok: boolean; motivo?: string }> {
-  if (linha.destination === "google") {
-    return entregarGoogle(admin, linha);
-  }
-  if (linha.destination !== "meta") {
-    return { ok: false, motivo: "destino ainda nao implementado" };
-  }
-
-  const carregado = await carregarConfig(admin, linha.store_id);
-  const pixel = carregado?.config.metaPixelId;
-  const token = carregado?.token;
-
-  if (!carregado?.config.enabled || !pixel || !token) {
-    // Desligado ou sem credencial: nao e falha de rede, nao adianta repetir.
-    await admin
-      .from("tracking_events")
-      .update({
-        status: "falhou",
-        attempts: linha.attempts + 1,
-        last_error: !carregado?.config.enabled
-          ? "rastreamento desligado para esta loja"
-          : "pixel ou token ausente",
-      })
-      .eq("id", linha.id);
-    return { ok: false, motivo: "sem configuracao" };
-  }
-
-  const r = await enviarParaMeta(pixel, token, [linha.payload as EventoCapi], {
-    testEventCode: carregado.config.metaTestEventCode,
-  });
-
   const tentativas = linha.attempts + 1;
 
-  if (r.ok) {
+  const desistir = async (motivo: string) => {
+    await admin
+      .from("tracking_events")
+      .update({ status: "falhou", attempts: tentativas, last_error: motivo })
+      .eq("id", linha.id);
+    return { ok: false, motivo };
+  };
+
+  if (!linha.destination_id) {
+    // Linha de antes da migration 043. Nao ha como saber para QUAL conta ela
+    // ia; reentregar chutando mandaria conversao para a conta errada.
+    return desistir("linha sem destino: anterior aos destinos por conta");
+  }
+
+  const { destinoPorId, destinoAceita, porQueRecusa } = await import(
+    "@/lib/tracking/destinos"
+  );
+  const destino = await destinoPorId(admin, linha.destination_id);
+  if (!destino) return desistir("destino removido");
+
+  // O interruptor da loja continua valendo por cima dos destinos.
+  const carregado = await carregarConfig(admin, linha.store_id);
+  if (!carregado?.config.enabled) {
+    return desistir("rastreamento desligado para esta loja");
+  }
+
+  if (!destinoAceita(destino, linha.event_name)) {
+    return desistir(porQueRecusa(destino, linha.event_name) || "destino nao aceita");
+  }
+
+  const gravarSucesso = async (
+    resposta: Record<string, unknown> | null,
+    aviso?: string | null
+  ) => {
     await admin
       .from("tracking_events")
       .update({
         status: "enviado",
         attempts: tentativas,
         sent_at: new Date().toISOString(),
-        last_error: null,
-        response: (r.corpo ?? null) as Record<string, unknown> | null,
+        last_error: aviso ?? null,
+        response: resposta,
       })
       .eq("id", linha.id);
     return { ok: true };
-  }
+  };
 
-  const desistir = !r.podeTentarDeNovo || tentativas >= MAX_TENTATIVAS;
-  await admin
-    .from("tracking_events")
-    .update({
-      status: desistir ? "falhou" : "pendente",
-      attempts: tentativas,
-      next_attempt_at: proximaTentativaEm(tentativas).toISOString(),
-      last_error: r.erro?.slice(0, 500) ?? "falha desconhecida",
-      response: (r.corpo ?? null) as Record<string, unknown> | null,
-    })
-    .eq("id", linha.id);
-
-  return { ok: false, motivo: r.erro };
-}
-
-/**
- * Entrega no Google Ads.
- *
- * O payload guardado na fila e o mesmo evento Purchase do CAPI -- reaproveitar
- * evita montar a venda duas vezes e garante que os dois destinos contam o
- * MESMO valor. Daqui saem so os campos que o endpoint do Google entende.
- *
- * `gclid` e o unico sinal que importa: sem ele a conversao chega mas nao se
- * liga a nenhum anuncio, e o Google Ads nao tem o que otimizar. Por isso a
- * ausencia dele vira aviso na linha, nao falha silenciosa.
- */
-async function entregarGoogle(
-  admin: ReturnType<typeof createAdminClient>,
-  linha: {
-    id: string;
-    store_id: string;
-    event_name: string;
-    payload: unknown;
-    attempts: number;
-  }
-): Promise<{ ok: boolean; motivo?: string }> {
-  const { enviarParaGoogleAds } = await import("@/lib/tracking/google-ads");
-  const carregado = await carregarConfig(admin, linha.store_id);
-  const cfg = carregado?.config;
-
-  // Cada evento e uma conversion action propria no Google, com rotulo proprio.
-  // Mandar tudo com o rotulo da compra faria o Google contar carrinho como
-  // venda.
-  const rotulo = cfg
-    ? rotuloDoEvento(
-        cfg.googleLabels,
-        linha.event_name as ChaveEvento,
-        cfg.googleConversionLabel
-      )
-    : null;
-
-  if (!cfg?.enabled || !cfg.googleConversionId || !rotulo) {
+  const gravarFalha = async (
+    erro: string,
+    podeTentarDeNovo: boolean,
+    resposta: Record<string, unknown> | null
+  ) => {
+    const acabou = !podeTentarDeNovo || tentativas >= MAX_TENTATIVAS;
     await admin
       .from("tracking_events")
       .update({
-        status: "falhou",
-        attempts: linha.attempts + 1,
-        last_error: !cfg?.enabled
-          ? "rastreamento desligado para esta loja"
-          : !cfg.googleConversionId
-            ? "id de conversao do Google ausente"
-            : `sem rotulo configurado para o evento "${linha.event_name}"`,
+        status: acabou ? "falhou" : "pendente",
+        attempts: tentativas,
+        next_attempt_at: proximaTentativaEm(tentativas).toISOString(),
+        last_error: erro.slice(0, 500),
+        response: resposta,
       })
       .eq("id", linha.id);
-    return { ok: false, motivo: "sem configuracao" };
+    return { ok: false, motivo: erro };
+  };
+
+  // ---- Meta ---------------------------------------------------------------
+  if (destino.plataforma === "meta") {
+    const r = await enviarParaMeta(
+      destino.conta,
+      destino.token!,
+      [linha.payload as EventoCapi],
+      { testEventCode: destino.testEventCode }
+    );
+    return r.ok
+      ? gravarSucesso((r.corpo ?? null) as Record<string, unknown> | null)
+      : gravarFalha(
+          r.erro ?? "falha desconhecida",
+          r.podeTentarDeNovo,
+          (r.corpo ?? null) as Record<string, unknown> | null
+        );
   }
 
+  // ---- Google -------------------------------------------------------------
+  const { enviarParaGoogleAds } = await import("@/lib/tracking/google-ads");
   const conv = linha.payload as {
     gclid?: string | null;
     gbraid?: string | null;
@@ -269,13 +264,14 @@ async function entregarGoogle(
     value?: number;
     currency?: string;
   };
-  // Qualquer um dos tres serve de atribuicao; nenhum significa conversao
-  // orfa, que o Google conta mas nao liga a anuncio nenhum.
+
+  // Qualquer um dos tres serve de atribuicao; nenhum significa conversao que o
+  // Google nao tem como ligar a anuncio.
   const temClique = conv.gclid || conv.gbraid || conv.wbraid || null;
 
   const r = await enviarParaGoogleAds({
-    conversionId: cfg.googleConversionId,
-    label: rotulo,
+    conversionId: destino.conta,
+    label: rotuloDoEvento(destino.labels, linha.event_name)!,
     gclid: conv.gclid,
     gbraid: conv.gbraid,
     wbraid: conv.wbraid,
@@ -286,40 +282,17 @@ async function entregarGoogle(
     currency: conv.currency,
   });
 
-  const tentativas = linha.attempts + 1;
+  const resposta = { url: r.url, status: r.status } as Record<string, unknown>;
 
-  if (r.ok) {
-    await admin
-      .from("tracking_events")
-      .update({
-        status: "enviado",
-        attempts: tentativas,
-        sent_at: new Date().toISOString(),
-        // "enviado" aqui e "o Google aceitou a requisicao". O endpoint
-        // responde 200 mesmo ignorando o conteudo -- a confirmacao de verdade
-        // so existe na tela do Google Ads. Guardar a URL permite repetir a
-        // chamada na mao para investigar.
-        last_error: temClique
-          ? null
-          : "sem gclid/gbraid/wbraid: conversao sem atribuicao a anuncio",
-        response: { url: r.url, status: r.status } as Record<string, unknown>,
-      })
-      .eq("id", linha.id);
-    return { ok: true };
-  }
-
-  const desistir = !r.podeTentarDeNovo || tentativas >= MAX_TENTATIVAS;
-  await admin
-    .from("tracking_events")
-    .update({
-      status: desistir ? "falhou" : "pendente",
-      attempts: tentativas,
-      next_attempt_at: proximaTentativaEm(tentativas).toISOString(),
-      last_error: r.erro?.slice(0, 500) ?? "falha desconhecida",
-      response: { url: r.url, status: r.status } as Record<string, unknown>,
-    })
-    .eq("id", linha.id);
-  return { ok: false, motivo: r.erro };
+  // "enviado" aqui e "o Google aceitou a requisicao". O endpoint responde 200
+  // mesmo ignorando -- a confirmacao de verdade so existe na tela do Google
+  // Ads. Guardar a URL permite repetir a chamada na mao para investigar.
+  return r.ok
+    ? gravarSucesso(
+        resposta,
+        temClique ? null : "sem gclid/gbraid/wbraid: conversao sem atribuicao a anuncio"
+      )
+    : gravarFalha(r.erro ?? "falha desconhecida", r.podeTentarDeNovo, resposta);
 }
 
 /** Uma passada da fila. Chamado pelo cron. */
@@ -331,7 +304,7 @@ export async function drenarFila(limite = 50): Promise<{
   const admin = createAdminClient();
   const { data: linhas } = await admin
     .from("tracking_events")
-    .select("id, store_id, destination, event_name, payload, attempts")
+    .select("id, store_id, destination, destination_id, event_name, payload, attempts")
     .eq("status", "pendente")
     .lte("next_attempt_at", new Date().toISOString())
     .order("next_attempt_at", { ascending: true })

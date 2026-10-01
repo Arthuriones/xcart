@@ -246,21 +246,21 @@ export async function POST(request: NextRequest) {
     return ok({ ignorado: "checkout coberto pelo Web Pixel" });
   }
 
-  const rotulo = cfg.google_conversion_id
-    ? rotuloDoEvento(
-        cfg.google_labels as MapaDeRotulos | null,
-        evento as ChaveEvento,
-        cfg.google_conversion_label
-      )
-    : null;
+  // Os destinos sao LINHAS: a loja pode ter cinco contas Google e dois pixels
+  // Meta. Todo destino ativo que aceita este evento recebe uma copia.
+  //
+  // Mandar para todas as contas Google e seguro: conversao cujo gclid nao
+  // pertence a conta e DESCARTADA pelo Google, nao contada sem atribuicao --
+  // a conta dona do clique conta e as outras ignoram.
+  const { destinosDaLoja, destinoAceita } = await import("@/lib/tracking/destinos");
+  const todos = await destinosDaLoja(admin, registro.id, { comToken: true });
+  const querem = todos.filter((d) => destinoAceita(d, evento));
 
-  // No Meta um pixel cobre todos os eventos -- nao existe rotulo por evento.
-  // Entao "configurado" ja basta, e o que decide por evento e so o nome.
-  const temMeta = Boolean(cfg.meta_pixel_id && seg?.meta_access_token);
-
-  // Nenhum dos dois quer este evento. Silencio, nao erro: o snippet dispara
+  // Nenhum destino quer este evento. Silencio, nao erro: o snippet dispara
   // todos os que sabe e e aqui que se decide o que interessa.
-  if (!rotulo && !temMeta) return ok({ ignorado: "evento nao configurado" });
+  if (querem.length === 0) return ok({ ignorado: "evento nao configurado" });
+
+  const temMeta = querem.some((d) => d.plataforma === "meta");
 
   // ---- tetos ---------------------------------------------------------------
   const umDiaAtras = new Date(Date.now() - 864e5).toISOString();
@@ -347,11 +347,17 @@ export async function POST(request: NextRequest) {
   // ---- fila ---------------------------------------------------------------
   const { enfileirar, entregar } = await import("@/lib/tracking/fila");
 
-  const destinos: { destination: "google" | "meta"; payload: unknown }[] = [];
+  const destinos: {
+    destination: "google" | "meta";
+    destinationId: string;
+    payload: unknown;
+  }[] = [];
 
-  if (rotulo) {
+  const paraGoogle = querem.filter((d) => d.plataforma === "google");
+  for (const d of paraGoogle) {
     destinos.push({
       destination: "google",
+      destinationId: d.id,
       payload: {
         ...clique,
         pageUrl: (corpo.pageUrl || "").trim().slice(0, 500) || null,
@@ -433,8 +439,10 @@ export async function POST(request: NextRequest) {
       (corpo.produto?.produto || "").trim(),
     ].filter((v, i, todos) => v && todos.indexOf(v) === i);
 
+    for (const d of querem.filter((x) => x.plataforma === "meta"))
     destinos.push({
       destination: "meta",
+      destinationId: d.id,
       payload: {
         // O nome do Meta, nao a nossa chave: "AddToCart", nao "add_to_cart".
         // Nome fora da lista dele vira evento personalizado, que chega e nao
@@ -473,6 +481,7 @@ export async function POST(request: NextRequest) {
       const { id, duplicado } = await enfileirar(admin, {
         storeId: registro.id,
         destination: alvo.destination,
+        destinationId: alvo.destinationId,
         evento: { event_name: evento, event_id: eventId },
         orderId: eventId,
         visitorId,
@@ -499,11 +508,16 @@ export async function POST(request: NextRequest) {
         id,
         store_id: registro.id,
         destination: alvo.destination,
+        destination_id: alvo.destinationId,
         event_name: evento,
         payload: alvo.payload,
         attempts: 0,
       });
-      saida[alvo.destination] = r.ok ? "enviado" : "na fila";
+      // Chave por DESTINO, nao por plataforma: com duas contas Google a
+      // segunda sobrescreveria o resultado da primeira na resposta.
+      saida[`${alvo.destination}:${alvo.destinationId.slice(0, 8)}`] = r.ok
+        ? "enviado"
+        : "na fila";
     }
     return ok({ destinos: saida });
   } catch (e) {

@@ -38,8 +38,6 @@ const PERMITIDOS: Record<string, string> = {
   "src/lib/aliexpress/scraper.ts":
     "endpoint fixo da API do Bright Data (api.brightdata.com), sem entrada do usuario",
   "src/lib/billing/pagou.ts": "BASE e a URL da API do Pagou, vinda de env",
-  "src/lib/tracking/pixel-checkout.ts":
-    "nao executa fetch: EMITE codigo do Web Pixel como string, para rodar no navegador do comprador. O destino e o nosso proprio coletor, constante no arquivo",
 };
 
 const RAIZ = path.resolve(__dirname, "..", "src");
