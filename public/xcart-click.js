@@ -246,7 +246,25 @@
   // clique em "finalizar" chega pelo listener de clique E pelo submit do
   // formulario do carrinho.
   var ultimo = {};
-  var JANELA_MS = 1500;
+
+  /**
+   * Janela anti-duplicata, por tipo de evento.
+   *
+   * Era 1500ms e nao bastava. Medido em producao: o tema faz DUAS chamadas a
+   * `/cart/add` por clique (mecanica de "leve 4 pague 3" acrescenta o item
+   * brinde numa segunda requisicao), com 3 a 4 segundos entre elas -- e as duas
+   * viravam conversao. Quatro visitantes, oito carrinhos no Google Ads.
+   *
+   * 8s cobre isso com folga. Nao suprime acao legitima repetida, porque o mapa e
+   * POR EVENTO: ver produto e adicionar ao carrinho em sequencia continuam
+   * passando. O que ele junta e o mesmo evento repetido em segundos, que para
+   * contagem de conversao e sempre a mesma acao do comprador.
+   *
+   * Entre contar a mais e contar a menos, aqui o certo e contar a menos: numero
+   * inflado estraga o lance automatico, que passa a mirar um passo que acontece
+   * o dobro do que parece.
+   */
+  var JANELA_MS = 8000;
 
   function repetido(evento) {
     var agora = Date.now();
