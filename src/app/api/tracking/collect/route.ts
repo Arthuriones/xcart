@@ -405,6 +405,27 @@ export async function POST(request: NextRequest) {
       null;
     const userAgent = request.headers.get("user-agent");
 
+    // O pais, pela geolocalizacao do IP na borda.
+    //
+    // E o ULTIMO parametro de casamento que da para obter de visitante
+    // anonimo: numa pagina de produto nao ha e-mail, telefone nem endereco, e
+    // sem isto o evento de funil chega com IP, user agent, _fbp e external_id
+    // e mais nada. O Meta pontua pela quantidade de sinais que conferem.
+    //
+    // Nao e dado novo que estejamos coletando: o Meta ja recebe o IP e
+    // geolocaliza por conta propria. Mandar o pais resolvido so poupa ele de
+    // adivinhar, e e um campo que ele pontua.
+    //
+    // Nunca sobrepoe o endereco de verdade: o evento do Web Pixel traz o pais
+    // do checkout, que e o que o comprador digitou. Geolocalizacao de IP erra
+    // com VPN; endereco preenchido, nao.
+    const paisDaBorda =
+      request.headers.get("x-vercel-ip-country") ||
+      // Em Docker atras de Cloudflare. Fora desses dois nao vem nada, e o
+      // evento sai sem o campo -- que e o comportamento de antes.
+      request.headers.get("cf-ipcountry") ||
+      null;
+
     const userData = montarUserData(
       {
         // PII, quando existe.
@@ -421,7 +442,8 @@ export async function POST(request: NextRequest) {
         cidade: corpo.cidade,
         estado: corpo.estado,
         cep: corpo.cep,
-        pais: corpo.pais,
+        // O do checkout primeiro; a borda e so quando nao ha endereco.
+        pais: corpo.pais || paisDaBorda,
         // Os dois ids estaveis. O do nosso cookie costura o funil com a compra;
         // o da Shopify e o unico que o checkout conhece, e sem ele o evento do
         // pixel seria uma pessoa diferente das outras do mesmo funil.
