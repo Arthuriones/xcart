@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   Check,
@@ -15,11 +15,16 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { EVENTOS, type ChaveEvento } from "@/lib/tracking/eventos";
-import type { ContagemDestino, LojaTracking } from "@/lib/tracking/queries";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { DestinoNaTela, LojaTracking } from "@/lib/tracking/queries";
 import type { DiagnosticoLoja } from "@/lib/tracking/diagnostico";
+import { PainelPlataforma } from "./destinos-ui";
 
 // ============================================================================
 // Tela de rastreamento.
@@ -30,8 +35,15 @@ import type { DiagnosticoLoja } from "@/lib/tracking/diagnostico";
 // convivem com zero conversao contada do outro lado.
 //
 // Por isso o desenho poe o VEREDITO no topo de cada loja, com a comparacao que
-// de fato denuncia ("3 pedidos, 0 compras enviadas"), e empurra os campos para
-// baixo. Configuracao e o que se mexe uma vez; saude e o que se olha sempre.
+// de fato denuncia ("3 pedidos, 0 compras enviadas"), e empurra a configuracao
+// para baixo. Configuracao e o que se mexe uma vez; saude e o que se olha sempre.
+//
+// O DESTINO E UMA LISTA
+//
+// Cinco contas de Google anunciando produtos diferentes do mesmo catalogo e o
+// caso real do Arthur. Cada conta e uma linha em `tracking_destinations`, com o
+// seu proprio conjunto de rotulos, e cada uma e julgada sozinha aqui: uma pode
+// estar chegando e a outra nao.
 // ============================================================================
 
 function Pill({
@@ -93,13 +105,29 @@ function Checagem({
   );
 }
 
+/** Como chamar um destino numa frase. */
+function apelido(d: DestinoNaTela): string {
+  const plataforma = d.plataforma === "google" ? "Google" : "Meta";
+  return d.nome ? `${plataforma} "${d.nome}"` : `${plataforma} ${d.conta}`;
+}
+
+/** Os destinos que deveriam estar recebendo a COMPRA. */
+function recebemCompra(loja: LojaTracking): DestinoNaTela[] {
+  return loja.destinos.filter(
+    (d) =>
+      d.ativo &&
+      d.completo &&
+      (d.plataforma === "meta" || Boolean(d.labels.purchase))
+  );
+}
+
 /**
  * O veredito da loja.
  *
  * Compara a COMPRA com os pedidos, nao o total de eventos: carrinho e checkout
  * acontecem muito mais que venda, e somados dariam "300 de 4 pedidos", que nao
- * diz nada. A contagem ja vem separada por destino, senao uma venda com Google e
- * Meta ligados apareceria como duas compras.
+ * diz nada. E compara POR DESTINO -- a mesma venda rende uma linha para cada
+ * conta configurada, e somar transformaria 1 pedido em 5 compras.
  */
 function Veredito({
   loja,
@@ -108,39 +136,38 @@ function Veredito({
   loja: LojaTracking;
   diag: DiagnosticoLoja | null;
 }) {
-  const temGoogle = Boolean(loja.googleConversionId && loja.googleLabels.purchase);
-  const temMeta = Boolean(loja.metaPixelId && loja.temTokenMeta);
+  const alvos = recebemCompra(loja);
 
-  if (!temGoogle && !temMeta) {
+  if (alvos.length === 0) {
+    const temAlgum = loja.destinos.length > 0;
     return (
       <div className="flex items-start gap-2 rounded-md bg-muted/60 p-2.5 text-xs">
         <Minus className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span className="text-muted-foreground">
-          Nenhum destino recebe a compra ainda. Preencha o Google, o Meta, ou os dois.
+          {temAlgum
+            ? "Nenhum destino está recebendo a compra. Confira o rótulo da compra no Google e o token no Meta."
+            : "Nenhum destino cadastrado ainda. Adicione uma conta do Google, um pixel do Meta, ou os dois."}
         </span>
       </div>
     );
   }
 
   const pedidos = diag?.pedidos7d ?? null;
-  const comprasGoogle = loja.google.porEvento.purchase ?? 0;
-  const comprasMeta = loja.meta.porEvento.purchase ?? 0;
 
-  // Cada destino e julgado sozinho: o Google pode estar chegando e o Meta nao.
-  const faltando: string[] = [];
-  if (pedidos !== null && pedidos >= 3) {
-    if (temGoogle && comprasGoogle === 0) faltando.push("Google");
-    if (temMeta && comprasMeta === 0) faltando.push("Meta");
-  }
+  // Cada destino e julgado sozinho: uma conta pode estar chegando e a outra nao.
+  const semCompra =
+    pedidos !== null && pedidos >= 3
+      ? alvos.filter((d) => (d.contagem.porEvento.purchase ?? 0) === 0)
+      : [];
 
-  if (faltando.length > 0) {
+  if (semCompra.length > 0) {
     return (
       <div className="flex items-start gap-2 rounded-md bg-destructive/10 p-2.5 text-xs">
         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
         <div>
           <p className="font-medium text-destructive">
-            {pedidos} pedidos em 7 dias e nenhuma compra chegou no{" "}
-            {faltando.join(" nem no ")}.
+            {pedidos} pedidos em 7 dias e nenhuma compra chegou em{" "}
+            {semCompra.map(apelido).join(", ")}.
           </p>
           <p className="text-muted-foreground">
             {diag?.temWebhook === false
@@ -152,11 +179,15 @@ function Veredito({
     );
   }
 
-  const total = comprasGoogle + comprasMeta;
-  const sobrando =
-    pedidos !== null && pedidos > 0
-      ? Math.max(0, pedidos - Math.max(comprasGoogle, comprasMeta))
-      : 0;
+  // O destino que mais recebeu compra representa a loja: "quantas vendas
+  // conseguiram sair", sem somar a mesma venda uma vez por conta.
+  const melhor = alvos.reduce(
+    (a, b) =>
+      (b.contagem.porEvento.purchase ?? 0) > (a.contagem.porEvento.purchase ?? 0) ? b : a,
+    alvos[0]
+  );
+  const compras = melhor.contagem.porEvento.purchase ?? 0;
+  const sobrando = pedidos !== null && pedidos > 0 ? Math.max(0, pedidos - compras) : 0;
 
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md bg-muted/60 p-2.5 text-xs">
@@ -172,22 +203,21 @@ function Veredito({
           )}
         </span>
       </span>
-      {temGoogle && (
-        <span className="text-muted-foreground">
-          Google: <strong className="text-foreground">{comprasGoogle}</strong> compras
+      {alvos.map((d) => (
+        <span key={d.id} className="text-muted-foreground">
+          {apelido(d)}:{" "}
+          <strong className="text-foreground">
+            {d.contagem.porEvento.purchase ?? 0}
+          </strong>{" "}
+          compras
         </span>
-      )}
-      {temMeta && (
-        <span className="text-muted-foreground">
-          Meta: <strong className="text-foreground">{comprasMeta}</strong> compras
-        </span>
-      )}
-      {sobrando > 0 && total > 0 && (
+      ))}
+      {sobrando > 0 && compras > 0 && (
         <span className="text-amber-600">
           {sobrando} sem conversão — normal se vieram de fora do anúncio
         </span>
       )}
-      <Atribuicao loja={loja} />
+      <Atribuicao destino={melhor} />
     </div>
   );
 }
@@ -200,15 +230,15 @@ function Veredito({
  * venda nao foi creditada a campanha nenhuma. Se TODAS estiverem assim, ou o
  * trafego nao veio de anuncio, ou a captura quebrou -- e sao conclusoes bem
  * diferentes.
+ *
+ * Um destino basta: a falta de click id e propriedade do EVENTO, nao da conta --
+ * todas as contas recebem o mesmo pedido com os mesmos sinais.
  */
-function Atribuicao({ loja }: { loja: LojaTracking }) {
-  const total =
-    (loja.google.porEvento.purchase ?? 0) + (loja.meta.porEvento.purchase ?? 0);
+function Atribuicao({ destino }: { destino: DestinoNaTela }) {
+  const total = destino.contagem.porEvento.purchase ?? 0;
   if (total === 0) return null;
 
-  const semClique =
-    (loja.google.semAtribPorEvento.purchase ?? 0) +
-    (loja.meta.semAtribPorEvento.purchase ?? 0);
+  const semClique = destino.contagem.semAtribPorEvento.purchase ?? 0;
   if (semClique === 0) return null;
 
   const todas = semClique >= total;
@@ -217,76 +247,6 @@ function Atribuicao({ loja }: { loja: LojaTracking }) {
       {semClique} de {total} compras sem click id
       {todas ? " — nenhuma venda foi creditada a um anúncio" : ""}
     </span>
-  );
-}
-
-/** Uma linha de evento: nome, quanto saiu, e o campo do rotulo quando ha um. */
-function LinhaEvento({
-  chave,
-  nome,
-  descricao,
-  enviados,
-  mostrarCampo,
-  valor,
-  onChange,
-}: {
-  chave: ChaveEvento;
-  nome: string;
-  descricao: string;
-  enviados: number;
-  mostrarCampo: boolean;
-  valor?: string;
-  onChange?: (v: string) => void;
-}) {
-  return (
-    <div className="grid gap-1.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,14rem)] sm:items-center">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="text-sm">{nome}</span>
-          {enviados > 0 && (
-            <span className="font-mono text-[11px] text-muted-foreground">
-              {enviados} em 7d
-            </span>
-          )}
-        </div>
-        <p className="text-[11px] text-muted-foreground">{descricao}</p>
-      </div>
-      {mostrarCampo ? (
-        <Input
-          value={valor ?? ""}
-          onChange={(e) => onChange?.(e.target.value)}
-          placeholder="rótulo — vazio não rastreia"
-          className="h-8 font-mono text-xs"
-          aria-label={`Rótulo de ${nome}`}
-        />
-      ) : (
-        <span className="text-[11px] text-muted-foreground sm:text-right">
-          coberto pelo pixel
-        </span>
-      )}
-      <input type="hidden" value={chave} readOnly />
-    </div>
-  );
-}
-
-function Erros({ c, nome }: { c: ContagemDestino; nome: string }) {
-  if (c.falharam === 0 && c.pendentes === 0 && c.semAtribuicao === 0) return null;
-  return (
-    <div className="space-y-0.5 text-[11px]">
-      {c.pendentes > 0 && (
-        <p className="text-amber-600">{c.pendentes} na fila, aguardando reenvio</p>
-      )}
-      {c.falharam > 0 && (
-        <p className="text-destructive" title={c.ultimoErro ?? undefined}>
-          {c.falharam} falharam{c.ultimoErro ? ` — ${c.ultimoErro.slice(0, 90)}` : ""}
-        </p>
-      )}
-      {c.semAtribuicao > 0 && (
-        <p className="text-muted-foreground">
-          {c.semAtribuicao} sem click id: chegam no {nome}, sem ligação com anúncio
-        </p>
-      )}
-    </div>
   );
 }
 
@@ -380,11 +340,14 @@ function PixelDoCheckout({ loja }: { loja: LojaTracking }) {
                 <Copy className="mr-1.5 h-3.5 w-3.5" />
                 Copiar
               </Button>
+              {/* Uma linha so, e a mesma para toda loja: a loja se identifica
+                  sozinha por init.data.shop.myshopifyDomain. Por isso o campo e
+                  baixo -- antes era um bloco de 60 linhas gerado por loja. */}
               <textarea
                 readOnly
                 value={codigo}
                 onFocus={(e) => e.currentTarget.select()}
-                className="h-40 w-full rounded-md border bg-muted/40 p-2 font-mono text-[10px] leading-relaxed"
+                className="h-20 w-full rounded-md border bg-muted/40 p-2 font-mono text-[10px] leading-relaxed"
                 aria-label="Código do pixel do checkout"
               />
               <p className="text-[11px] text-muted-foreground">
@@ -417,23 +380,12 @@ function CardLoja({
   comecarAberto: boolean;
 }) {
   const [aberto, setAberto] = useState(comecarAberto);
-  const [id, setId] = useState(loja.googleConversionId ?? "");
-  const [rotulos, setRotulos] = useState<Record<string, string>>(() => {
-    const inicial: Record<string, string> = {};
-    for (const e of EVENTOS) inicial[e.chave] = loja.googleLabels[e.chave] ?? "";
-    return inicial;
-  });
-  const [pixel, setPixel] = useState(loja.metaPixelId ?? "");
-  // Comeca vazio SEMPRE, mesmo com token gravado: o valor nunca sai do servidor.
-  const [tokenMeta, setTokenMeta] = useState("");
   const [ligado, setLigado] = useState(loja.ligado);
   const [salvando, setSalvando] = useState(false);
   const [instalando, setInstalando] = useState<string | null>(null);
 
-  const quantosRotulos = Object.values(rotulos).filter((v) => v.trim()).length;
-  const googlePronto = Boolean(id.trim()) && quantosRotulos > 0;
-  const metaPronto =
-    Boolean(pixel.trim()) && (loja.temTokenMeta || Boolean(tokenMeta.trim()));
+  const temGoogle = loja.destinos.some((d) => d.plataforma === "google" && d.ativo);
+  const podeLigar = recebemCompra(loja).length > 0;
 
   /**
    * Instala a tag no tema pela tela.
@@ -454,9 +406,7 @@ function CardLoja({
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Falha ao gravar o tema.");
       toast.success(
-        j.mudou
-          ? `Tag gravada no tema "${j.temaNome}".`
-          : "O tema já estava assim."
+        j.mudou ? `Tag gravada no tema "${j.temaNome}".` : "O tema já estava assim."
       );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Falha ao gravar o tema.");
@@ -465,27 +415,19 @@ function CardLoja({
     }
   }
 
-  async function salvar(novoLigado: boolean) {
+  /** O interruptor da loja: vale por cima de todos os destinos. */
+  async function alternar(novoLigado: boolean) {
     setSalvando(true);
     try {
       const r = await fetch("/api/tracking/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          storeId: loja.storeId,
-          enabled: novoLigado,
-          googleConversionId: id,
-          googleLabels: rotulos,
-          metaPixelId: pixel,
-          // Vazio = nao mexer no que esta gravado.
-          metaAccessToken: tokenMeta,
-        }),
+        body: JSON.stringify({ storeId: loja.storeId, enabled: novoLigado }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Falha ao salvar.");
       setLigado(novoLigado);
-      if (tokenMeta.trim()) setTokenMeta("");
-      toast.success(novoLigado ? "Rastreamento ligado." : "Salvo.");
+      toast.success(novoLigado ? "Rastreamento ligado." : "Rastreamento desligado.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Falha ao salvar.");
     } finally {
@@ -496,35 +438,58 @@ function CardLoja({
   return (
     <Card className={ligado ? "" : "border-dashed"}>
       <CardContent className="space-y-3 p-4">
-        <button
-          type="button"
-          onClick={() => setAberto((v) => !v)}
-          className="flex w-full items-center justify-between gap-3 text-left"
-        >
-          <span className="flex min-w-0 items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setAberto((v) => !v)}
+            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          >
+            <ChevronDown
+              className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
+                aberto ? "rotate-180" : ""
+              }`}
+            />
             <span className="truncate font-medium">{loja.nome}</span>
-            {ligado ? (
-              <Pill tom="ok">ativo</Pill>
-            ) : (
-              <Pill tom="neutro">desligado</Pill>
+            {ligado ? <Pill tom="ok">ativo</Pill> : <Pill tom="neutro">desligado</Pill>}
+            {loja.destinos.length > 0 && (
+              <Pill tom="neutro">
+                {loja.destinos.filter((d) => d.ativo).length} destino(s)
+              </Pill>
             )}
             {ligado && diag?.temWebhook === false && <Pill tom="erro">sem webhook</Pill>}
             {ligado && diag?.temSnippet === false && <Pill tom="erro">sem snippet</Pill>}
-          </span>
-          <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-            {loja.dominio}
-            <ChevronDown
-              className={`h-4 w-4 transition-transform ${aberto ? "rotate-180" : ""}`}
-            />
-          </span>
-        </button>
+            <span className="ml-auto hidden shrink-0 pl-2 text-xs text-muted-foreground sm:block">
+              {loja.dominio}
+            </span>
+          </button>
+
+          <Button
+            onClick={() => alternar(!ligado)}
+            disabled={salvando || (!ligado && !podeLigar)}
+            variant={ligado ? "outline" : "default"}
+            size="sm"
+            title={
+              !ligado && !podeLigar
+                ? "Cadastre um destino que receba a compra para poder ligar"
+                : undefined
+            }
+          >
+            {salvando ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : ligado ? (
+              "Desligar"
+            ) : (
+              "Ligar"
+            )}
+          </Button>
+        </div>
 
         {aberto && (
           <div className="space-y-4 border-t pt-3">
             {ligado && <Veredito loja={loja} diag={diag} />}
 
-            {/* Os dois pre-requisitos que moram na Shopify. Sem eles a
-                configuracao pode estar perfeita e nada acontecer. */}
+            {/* Os pre-requisitos que moram na Shopify. Sem eles a configuracao
+                pode estar perfeita e nada acontecer. */}
             {ligado && (
               <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
                 <Checagem
@@ -535,12 +500,12 @@ function CardLoja({
                 <Checagem
                   ok={diag?.temSnippet ?? null}
                   rotulo="Snippet no tema"
-                  conserto="npm run op -- scripts/instalar-snippet-click.ts <dominio> --aplicar"
+                  conserto="Use o botão “Instalar snippet” abaixo."
                 />
                 <Checagem
                   ok={diag?.temRemarketing ?? null}
                   rotulo="Tag de remarketing"
-                  conserto="npm run op -- scripts/instalar-snippet-click.ts <dominio> --aplicar --remarketing"
+                  conserto="Use o botão “Ligar remarketing” abaixo."
                 />
                 <a
                   href={`https://${loja.dominio}`}
@@ -554,10 +519,9 @@ function CardLoja({
               </div>
             )}
 
-            {/* Os dois botoes que antes so existiam como script. Ficam sempre
-                visiveis, nao so quando falta algo: reinstalar tambem serve para
-                atualizar uma tag antiga (instalacao sem data-xcart-store) e para
-                depois de trocar de tema, que apaga a tag junto. */}
+            {/* Ficam sempre visiveis, nao so quando falta algo: reinstalar
+                tambem serve para atualizar uma tag antiga e para depois de
+                trocar de tema, que apaga a tag junto. */}
             {ligado && (
               <div className="flex flex-wrap items-center gap-2">
                 <Button
@@ -578,10 +542,10 @@ function CardLoja({
                   size="sm"
                   variant="outline"
                   onClick={() => instalarTag(true)}
-                  disabled={instalando !== null || !id.trim()}
+                  disabled={instalando !== null || !temGoogle}
                   title={
-                    !id.trim()
-                      ? "Preencha o ID de conversão do Google e salve antes"
+                    !temGoogle
+                      ? "Cadastre uma conta do Google Ads nesta loja antes"
                       : undefined
                   }
                 >
@@ -602,167 +566,23 @@ function CardLoja({
 
             <PixelDoCheckout loja={loja} />
 
-            {/* ---------------- Google ---------------- */}
-            <section className="space-y-2.5 rounded-md border p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs font-semibold">Google Ads</span>
-                <Pill tom={googlePronto ? "ok" : "neutro"}>
-                  {googlePronto ? "configurado" : "não configurado"}
-                </Pill>
-              </div>
+            <PainelPlataforma
+              storeId={loja.storeId}
+              plataforma="meta"
+              destinos={loja.destinos}
+            />
+            <PainelPlataforma
+              storeId={loja.storeId}
+              plataforma="google"
+              destinos={loja.destinos}
+            />
 
-              <div className="space-y-1">
-                <Label className="text-[11px]">ID de conversão da conta</Label>
-                <Input
-                  value={id}
-                  onChange={(e) => setId(e.target.value)}
-                  placeholder="AW-123456789"
-                  className="h-8 max-w-[16rem] font-mono text-xs"
-                />
-              </div>
-
-              {/* Um rotulo por evento porque no Google cada evento e uma
-                  conversion action propria. Deixar vazio e como dizer "nao quero
-                  este evento" -- nao existe um interruptor separado que possa
-                  ficar fora de sincronia com o rotulo. */}
-              <div className="space-y-2">
-                {EVENTOS.map((ev) => (
-                  <LinhaEvento
-                    key={ev.chave}
-                    chave={ev.chave}
-                    nome={ev.nome}
-                    descricao={ev.descricao}
-                    enviados={loja.google.porEvento[ev.chave] ?? 0}
-                    mostrarCampo
-                    valor={rotulos[ev.chave]}
-                    onChange={(v) =>
-                      setRotulos((atual) => ({ ...atual, [ev.chave]: v }))
-                    }
-                  />
-                ))}
-              </div>
-
+            {!ligado && loja.destinos.length > 0 && !podeLigar && (
               <p className="text-[11px] text-muted-foreground">
-                Google Ads → Objetivos → Conversões. Uma ação por evento; copie o rótulo
-                de cada uma. Deixe <strong>compra</strong> como principal e as outras
-                como <strong>secundárias</strong>, senão o lance passa a otimizar para
-                carrinho em vez de venda.
+                Para ligar, um destino precisa receber a compra: no Google o rótulo da
+                compra, no Meta o token do CAPI.
               </p>
-
-              {/* Isto confunde todo mundo uma vez, entao esta escrito: publico de
-                  remarketing nao vem daqui. */}
-              <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
-                <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <span>
-                  Estes rótulos são <strong>conversão</strong>, não remarketing. Público
-                  de remarketing o Google só monta com a tag no navegador — o envio do
-                  servidor não coloca ninguém em lista. É a checagem
-                  &quot;Tag de remarketing&quot; acima.
-                </span>
-              </p>
-
-              <Erros c={loja.google} nome="Google" />
-            </section>
-
-            {/* ---------------- Meta ---------------- */}
-            <section className="space-y-2.5 rounded-md border p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs font-semibold">Meta (Facebook / Instagram)</span>
-                <Pill tom={metaPronto ? "ok" : "neutro"}>
-                  {metaPronto ? "configurado" : "não configurado"}
-                </Pill>
-              </div>
-
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label className="text-[11px]">ID do pixel</Label>
-                  <Input
-                    value={pixel}
-                    onChange={(e) => setPixel(e.target.value)}
-                    placeholder="1234567890123456"
-                    className="h-8 font-mono text-xs"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[11px]">Token do CAPI</Label>
-                  <Input
-                    type="password"
-                    value={tokenMeta}
-                    onChange={(e) => setTokenMeta(e.target.value)}
-                    placeholder={
-                      loja.temTokenMeta ? "gravado — vazio mantém" : "EAA..."
-                    }
-                    className="h-8 font-mono text-xs"
-                    autoComplete="off"
-                  />
-                </div>
-              </div>
-
-              {/* No Meta um pixel cobre TODOS os eventos -- nao ha rotulo por
-                  evento. Entao aqui nao ha formulario, so o que saiu.
-                  Compacto de proposito: a lista longa com descricao ja aparece
-                  no painel do Google logo acima, e repetir os mesmos quatro
-                  textos dobrava a altura do card sem dizer nada novo. */}
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
-                {EVENTOS.map((ev) => {
-                  const n = loja.meta.porEvento[ev.chave] ?? 0;
-                  return (
-                    <span
-                      key={ev.chave}
-                      className={n > 0 ? "text-foreground" : "text-muted-foreground"}
-                      title={`enviado como ${ev.nomeNoMeta}`}
-                    >
-                      {ev.nome} <strong className="font-mono">{n}</strong>
-                    </span>
-                  );
-                })}
-                <span className="text-muted-foreground">em 7 dias</span>
-              </div>
-
-              <p className="text-[11px] text-muted-foreground">
-                {/* Derivado do catalogo, nao cravado: era "quatro" e virou mentira
-                    assim que o evento de pagamento entrou. */}
-                O pixel cobre os {EVENTOS.length} eventos — não precisa rótulo por
-                evento. Um token novo substitui o anterior; vazio mantém o que está
-                gravado.
-              </p>
-
-              {metaPronto && (
-                /* O Meta deduplica por event_id, e um pixel de navegador nao
-                   conhece o id que o nosso servidor gera. Os dois contam dobrado. */
-                <p className="flex items-start gap-1.5 text-[11px] text-amber-600">
-                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  Desligue o pixel do Meta no tema e o canal Facebook &amp; Instagram da
-                  Shopify: junto com este, a mesma ação conta duas vezes.
-                </p>
-              )}
-
-              <Erros c={loja.meta} nome="Meta" />
-            </section>
-
-            <div className="flex items-center gap-2">
-              <Button
-                onClick={() => salvar(ligado)}
-                disabled={salvando}
-                variant="outline"
-                size="sm"
-              >
-                {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar"}
-              </Button>
-              <Button
-                onClick={() => salvar(!ligado)}
-                disabled={salvando || (!ligado && !googlePronto && !metaPronto)}
-                variant={ligado ? "outline" : "default"}
-                size="sm"
-              >
-                {ligado ? "Desligar" : "Ligar"}
-              </Button>
-              {!ligado && !googlePronto && !metaPronto && (
-                <span className="text-[11px] text-muted-foreground">
-                  preencha o Google ou o Meta para poder ligar
-                </span>
-              )}
-            </div>
+            )}
           </div>
         )}
       </CardContent>
@@ -778,20 +598,31 @@ export function TrackingScreen({
   diagnostico: Record<string, DiagnosticoLoja>;
 }) {
   const [mostrarTodas, setMostrarTodas] = useState(false);
+  /** "" = todas. O Select nao aceita valor vazio em item, daí o sentinela. */
+  const [filtro, setFiltro] = useState("todas");
 
-  const ativas = lojas.filter((l) => l.ligado);
-  const inativas = lojas.filter((l) => !l.ligado);
+  const ativas = useMemo(() => lojas.filter((l) => l.ligado), [lojas]);
+  const inativas = useMemo(() => lojas.filter((l) => !l.ligado), [lojas]);
+
+  const escolhida = filtro === "todas" ? null : lojas.find((l) => l.storeId === filtro);
+
+  const rotuloDoFiltro = escolhida
+    ? `${escolhida.nome} — ${escolhida.dominio}`
+    : `Todas (${ativas.length} ativa(s), ${inativas.length} sem rastreamento)`;
 
   // MAX entre os destinos, nao soma.
   //
-  // A mesma venda rende uma linha no Google e outra no Meta. Somar mostraria "8"
-  // para 4 vendas -- o mesmo erro de contagem que a tela corrige la embaixo, so
-  // que reaparecendo no lugar mais visivel da pagina. O max responde "quantas
-  // vendas sairam para pelo menos um destino", que e a pergunta util.
+  // A mesma venda rende uma linha para CADA conta configurada. Somar mostraria
+  // "20" para 4 vendas com cinco contas -- o mesmo erro de contagem que a tela
+  // corrige la embaixo, reaparecendo no lugar mais visivel da pagina. O max
+  // responde "quantas vendas sairam para pelo menos um destino".
   const vendasRastreadas = ativas.reduce(
     (s, l) =>
       s +
-      Math.max(l.google.porEvento.purchase ?? 0, l.meta.porEvento.purchase ?? 0),
+      l.destinos.reduce(
+        (m, d) => Math.max(m, d.contagem.porEvento.purchase ?? 0),
+        0
+      ),
     0
   );
   const comProblema = ativas.filter(
@@ -805,7 +636,7 @@ export function TrackingScreen({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Rastreamento</h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="max-w-3xl text-sm text-muted-foreground">
             A conversão sai do servidor. O que muda é de onde cada evento é observado:
             a compra pelo webhook do pedido, carrinho e produto pelo snippet do tema, e
             o checkout pelo Web Pixel — o único que entra no checkout da Shopify.
@@ -814,7 +645,8 @@ export function TrackingScreen({
         {ativas.length > 0 && (
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <span>
-              <strong className="text-foreground">{ativas.length}</strong> loja(s) ativa(s)
+              <strong className="text-foreground">{ativas.length}</strong> loja(s)
+              ativa(s)
             </span>
             <span>
               <strong className="text-foreground">{vendasRastreadas}</strong> venda(s)
@@ -827,68 +659,105 @@ export function TrackingScreen({
         )}
       </div>
 
-      {ativas.length === 0 && (
-        <Card className="border-amber-500/40 bg-amber-500/5">
-          <CardContent className="flex items-start gap-2 p-4 text-sm">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-            <div>
-              <p className="font-medium">Nenhuma loja com rastreamento ligado.</p>
-              <p className="text-muted-foreground">
-                Abra uma loja abaixo e preencha o Google, o Meta, ou os dois.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Filtro por loja.
+          Com dezenas de lojas cadastradas, a que importa fica perdida -- e o
+          caso normal aqui e trabalhar numa loja de cada vez. */}
+      {lojas.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">Loja</span>
+          <Select value={filtro} onValueChange={(v) => setFiltro(v ?? "todas")}>
+            <SelectTrigger className="h-8 w-[22rem] max-w-full text-xs">
+              {/* O rotulo tem que ser escrito aqui: sem isto o gatilho mostra o
+                  VALOR do item, e o valor e o uuid da loja. */}
+              <SelectValue>{() => rotuloDoFiltro}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todas">
+                Todas ({ativas.length} ativa(s), {inativas.length} sem rastreamento)
+              </SelectItem>
+              {lojas.map((l) => (
+                <SelectItem key={l.storeId} value={l.storeId}>
+                  {l.nome} — {l.dominio}
+                  {l.ligado ? "" : " (desligado)"}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       )}
 
-      {/* O que a tela NAO consegue afirmar: que o Google contou. O endpoint
-          responde 200 mesmo ignorando. Dizer isso e melhor que deixar o lojista
-          concluir sozinho que "ativo" significa "funcionando". */}
-      {ativas.length > 0 && (
-        <p className="flex items-start gap-2 text-xs text-muted-foreground">
-          <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
-          &quot;Enviadas&quot; significa que a plataforma aceitou a requisição — não que
-          contou a conversão. A confirmação é no painel do Google Ads e no Events
-          Manager. Se entrarem pedidos e as compras pararem, o aviso aparece aqui.
-        </p>
-      )}
+      {escolhida ? (
+        <CardLoja
+          loja={escolhida}
+          diag={diagnostico[escolhida.storeId] ?? null}
+          comecarAberto
+        />
+      ) : (
+        <>
+          {ativas.length === 0 && (
+            <Card className="border-amber-500/40 bg-amber-500/5">
+              <CardContent className="flex items-start gap-2 p-4 text-sm">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <div>
+                  <p className="font-medium">Nenhuma loja com rastreamento ligado.</p>
+                  <p className="text-muted-foreground">
+                    Abra uma loja abaixo, cadastre um destino e ligue.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-      <div className="space-y-2.5">
-        {ativas.map((l) => (
-          <CardLoja
-            key={l.storeId}
-            loja={l}
-            diag={diagnostico[l.storeId] ?? null}
-            comecarAberto
-          />
-        ))}
-      </div>
+          {/* O que a tela NAO consegue afirmar: que o Google contou. O endpoint
+              responde 200 mesmo ignorando. Dizer isso e melhor que deixar o
+              lojista concluir que "ativo" significa "funcionando". */}
+          {ativas.length > 0 && (
+            <p className="flex items-start gap-2 text-xs text-muted-foreground">
+              <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+              &quot;Enviadas&quot; significa que a plataforma aceitou a requisição — não
+              que contou a conversão. A confirmação é no painel do Google Ads e no Events
+              Manager. Se entrarem pedidos e as compras pararem, o aviso aparece aqui.
+            </p>
+          )}
 
-      {/* Sem isto a pagina renderiza dezenas de lojas que ninguem rastreia, e a
-          que importa fica perdida no meio. */}
-      {inativas.length > 0 && (
-        <div className="space-y-2.5">
-          <button
-            type="button"
-            onClick={() => setMostrarTodas((v) => !v)}
-            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            {mostrarTodas
-              ? "esconder lojas sem rastreamento"
-              : `ligar em outra loja (${inativas.length} sem rastreamento)`}
-          </button>
-
-          {mostrarTodas &&
-            inativas.map((l) => (
+          <div className="space-y-2.5">
+            {ativas.map((l) => (
               <CardLoja
                 key={l.storeId}
                 loja={l}
                 diag={diagnostico[l.storeId] ?? null}
-                comecarAberto={false}
+                comecarAberto
               />
             ))}
-        </div>
+          </div>
+
+          {/* Sem isto a pagina renderiza dezenas de lojas que ninguem rastreia,
+              e a que importa fica perdida no meio. */}
+          {inativas.length > 0 && (
+            <div className="space-y-2.5">
+              <button
+                type="button"
+                onClick={() => setMostrarTodas((v) => !v)}
+                className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                {mostrarTodas
+                  ? "esconder lojas sem rastreamento"
+                  : `ligar em outra loja (${inativas.length} sem rastreamento)`}
+              </button>
+
+              {mostrarTodas &&
+                inativas.map((l) => (
+                  <CardLoja
+                    key={l.storeId}
+                    loja={l}
+                    diag={diagnostico[l.storeId] ?? null}
+                    comecarAberto={false}
+                  />
+                ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

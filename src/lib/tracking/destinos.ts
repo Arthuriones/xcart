@@ -76,6 +76,91 @@ export async function destinosDaLoja(
   return destinos;
 }
 
+/**
+ * Todos os destinos de varias lojas, para a TELA.
+ *
+ * Difere de `destinosDaLoja` em duas coisas, e as duas sao de proposito:
+ *
+ *   - traz o DESATIVADO tambem. Destino desligado que desaparece da tela nao da
+ *     para religar, e o lojista refaz do zero achando que perdeu.
+ *   - nunca traz o token, so `temToken`. Esta funcao alimenta uma resposta que
+ *     chega ao navegador.
+ */
+export async function destinosParaTela(
+  admin: Admin,
+  storeIds: string[]
+): Promise<Map<string, (Omit<Destino, "token"> & { temToken: boolean })[]>> {
+  const porLoja = new Map<string, (Omit<Destino, "token"> & { temToken: boolean })[]>();
+  if (storeIds.length === 0) return porLoja;
+
+  const { data } = await admin
+    .from("tracking_destinations")
+    .select("id, store_id, plataforma, nome, conta, labels, test_event_code, ativo")
+    .in("store_id", storeIds)
+    .order("created_at", { ascending: true });
+
+  const linhas = data || [];
+  if (linhas.length === 0) return porLoja;
+
+  // So a EXISTENCIA do token. A tabela de segredo nao tem policy nenhuma, e o
+  // valor nunca atravessa para o cliente.
+  const { data: segredos } = await admin
+    .from("tracking_destination_secrets")
+    .select("destination_id, access_token")
+    .in(
+      "destination_id",
+      linhas.map((l) => l.id)
+    );
+  const comToken = new Set(
+    (segredos || []).filter((s) => s.access_token).map((s) => s.destination_id)
+  );
+
+  for (const d of linhas) {
+    const lista = porLoja.get(d.store_id) || [];
+    lista.push({
+      id: d.id,
+      storeId: d.store_id,
+      plataforma: d.plataforma as "google" | "meta",
+      nome: d.nome,
+      conta: d.conta,
+      labels: (d.labels as MapaDeRotulos | null) ?? {},
+      testEventCode: d.test_event_code,
+      ativo: d.ativo,
+      temToken: comToken.has(d.id),
+    });
+    porLoja.set(d.store_id, lista);
+  }
+  return porLoja;
+}
+
+/**
+ * As contas do Google ATIVAS de uma loja, para a tag do tema.
+ *
+ * O remarketing e a unica parte do rastreamento que roda no navegador, e cada
+ * conta de anuncio monta a SUA lista -- publico criado na conta A nao serve na
+ * conta B. Com cinco contas anunciando a mesma loja, mandar so a primeira
+ * deixaria quatro sem publico nenhum.
+ */
+export async function contasGoogleDaLoja(
+  admin: Admin,
+  storeId: string
+): Promise<string[]> {
+  const { data } = await admin
+    .from("tracking_destinations")
+    .select("conta")
+    .eq("store_id", storeId)
+    .eq("plataforma", "google")
+    .eq("ativo", true)
+    .order("created_at", { ascending: true });
+
+  const vistas = new Set<string>();
+  for (const d of data || []) {
+    const conta = (d.conta || "").trim();
+    if (conta) vistas.add(conta);
+  }
+  return [...vistas];
+}
+
 /** Um destino pelo id, com token. Usado pela fila ao entregar. */
 export async function destinoPorId(
   admin: Admin,

@@ -644,33 +644,62 @@
     };
   }
 
+  /**
+   * As contas do atributo. Uma ou varias, separadas por virgula.
+   *
+   * Varias porque cada conta de anuncio monta a SUA lista: publico criado na
+   * conta A nao serve na conta B. Com cinco contas anunciando a mesma loja,
+   * configurar so a primeira deixa quatro sem publico nenhum -- e o lojista nao
+   * tem como notar, porque a lista simplesmente nunca enche.
+   */
+  function contasDeRemarketing() {
+    if (!REMARKETING) return [];
+    var fora = [];
+    var partes = String(REMARKETING).split(",");
+    for (var i = 0; i < partes.length; i++) {
+      var c = partes[i].trim();
+      // Vai para a URL do gtag e para `send_to`. Caractere estranho aqui so
+      // pode ser erro de configuracao, e deixar passar quebraria a tag inteira.
+      if (c && /^[A-Za-z0-9_-]+$/.test(c) && fora.indexOf(c) === -1) fora.push(c);
+    }
+    return fora;
+  }
+
   function ligarRemarketing() {
-    if (!REMARKETING) return;
+    var contas = contasDeRemarketing();
+    if (contas.length === 0) return;
 
     window.dataLayer = window.dataLayer || [];
     function gtag() {
       window.dataLayer.push(arguments);
     }
 
+    // UM carregamento de gtag.js, nao um por conta: o arquivo e o mesmo e a
+    // biblioteca atende varias contas pelo dataLayer. Carregar de novo so
+    // duplicaria o download.
     var s = document.createElement("script");
     s.async = true;
     s.src =
-      "https://www.googletagmanager.com/gtag/js?id=" +
-      encodeURIComponent(REMARKETING);
+      "https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(contas[0]);
     document.head.appendChild(s);
 
     gtag("js", new Date());
-    gtag("config", REMARKETING);
 
-    var params = { send_to: REMARKETING, ecomm_pagetype: tipoDaPagina() };
+    var pagina = tipoDaPagina();
     var prod = dadosDoProduto();
-    if (prod && prod.id) {
-      params.ecomm_prodid = prod.id;
-      if (prod.valor !== null) params.ecomm_totalvalue = prod.valor;
+
+    for (var i = 0; i < contas.length; i++) {
+      gtag("config", contas[i]);
+
+      var params = { send_to: contas[i], ecomm_pagetype: pagina };
+      if (prod && prod.id) {
+        params.ecomm_prodid = prod.id;
+        if (prod.valor !== null) params.ecomm_totalvalue = prod.valor;
+      }
+      // `page_view` com send_to e o hit de remarketing. NAO e conversao -- o
+      // Google so conta conversao no evento com nome `conversion` e um rotulo.
+      gtag("event", "page_view", params);
     }
-    // `page_view` com send_to e o hit de remarketing. NAO e conversao -- o
-    // Google so conta conversao no evento com nome `conversion` e um rotulo.
-    gtag("event", "page_view", params);
   }
 
   if (document.readyState === "loading") {

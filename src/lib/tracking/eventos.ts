@@ -81,7 +81,7 @@ export const EVENTOS: DefinicaoEvento[] = [
   {
     chave: "view_item",
     nome: "Ver produto",
-    descricao: "O visitante abriu uma pagina de produto.",
+    descricao: "O visitante abriu uma página de produto.",
     origem: "navegador",
     nomeNoMeta: "ViewContent",
     temValor: false,
@@ -106,7 +106,7 @@ export const EVENTOS: DefinicaoEvento[] = [
     chave: "payment_info",
     nome: "Dados de pagamento",
     descricao:
-      "O comprador preencheu o pagamento. So o Web Pixel ve: o checkout da Shopify nao e tema.",
+      "O comprador preencheu o pagamento. Só o Web Pixel vê: o checkout da Shopify não é tema.",
     // So o Web Pixel alcanca o checkout. O snippet do tema nunca dispara este.
     origem: "pixel",
     nomeNoMeta: "AddPaymentInfo",
@@ -115,7 +115,7 @@ export const EVENTOS: DefinicaoEvento[] = [
   {
     chave: "purchase",
     nome: "Compra",
-    descricao: "O pedido entrou. Vem do webhook, nao do navegador.",
+    descricao: "O pedido entrou. Vem do webhook, não do navegador.",
     origem: "webhook",
     nomeNoMeta: "Purchase",
     temValor: true,

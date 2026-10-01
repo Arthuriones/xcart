@@ -6,7 +6,7 @@ import {
   MAX_TENTATIVAS,
   type EventoCapi,
 } from "@/lib/tracking/meta-capi";
-import { rotuloDoEvento, type MapaDeRotulos } from "@/lib/tracking/eventos";
+import { rotuloDoEvento } from "@/lib/tracking/eventos";
 
 // ============================================================================
 // Fila de saida do rastreamento.
@@ -17,57 +17,27 @@ import { rotuloDoEvento, type MapaDeRotulos } from "@/lib/tracking/eventos";
 // exatamente nos momentos em que mais se vende, que e quando o Meta limita.
 // ============================================================================
 
-export interface ConfigTracking {
-  storeId: string;
-  enabled: boolean;
-  metaPixelId: string | null;
-  metaTestEventCode: string | null;
-  googleConversionId: string | null;
-  /** LEGADO: rotulo da compra de antes do mapa. Lido so como fallback. */
-  googleConversionLabel: string | null;
-  /** Rotulo por evento. Evento ausente = o lojista nao pediu esse evento. */
-  googleLabels: MapaDeRotulos | null;
-}
-
 /**
- * Configuracao + token da loja.
+ * O interruptor da loja.
  *
- * O token mora em outra tabela, so acessivel pelo service role: RLS e por
- * LINHA, entao deixar o token na linha que o lojista le entregaria o token
- * junto. Ele compra midia -- vazar e prejuizo direto.
+ * Isto e tudo o que sobrou de `tracking_configs` para o caminho de envio: pixel,
+ * conta, rotulo e token viraram LINHA em `tracking_destinations` na migration
+ * 043, porque a loja pode ter cinco contas de Google e dois pixels Meta. Quem
+ * resolve destino e `src/lib/tracking/destinos.ts`.
+ *
+ * O interruptor continua valendo por cima de todos eles: desligar a loja para o
+ * envio sem precisar desativar destino por destino.
  */
-export async function carregarConfig(
+export async function rastreamentoLigado(
   admin: ReturnType<typeof createAdminClient>,
   storeId: string
-): Promise<{ config: ConfigTracking; token: string | null } | null> {
-  const [{ data: cfg }, { data: seg }] = await Promise.all([
-    admin
-      .from("tracking_configs")
-      .select(
-        "store_id, enabled, meta_pixel_id, meta_test_event_code, google_conversion_id, google_conversion_label, google_labels"
-      )
-      .eq("store_id", storeId)
-      .maybeSingle(),
-    admin
-      .from("tracking_secrets")
-      .select("meta_access_token")
-      .eq("store_id", storeId)
-      .maybeSingle(),
-  ]);
-
-  if (!cfg) return null;
-  return {
-    config: {
-      storeId: cfg.store_id,
-      enabled: Boolean(cfg.enabled),
-      metaPixelId: cfg.meta_pixel_id,
-      metaTestEventCode: cfg.meta_test_event_code,
-      googleConversionId: cfg.google_conversion_id,
-      googleConversionLabel: cfg.google_conversion_label,
-      googleLabels: (cfg.google_labels as MapaDeRotulos | null) ?? null,
-    },
-    token: seg?.meta_access_token ?? null,
-  };
+): Promise<boolean> {
+  const { data } = await admin
+    .from("tracking_configs")
+    .select("enabled")
+    .eq("store_id", storeId)
+    .maybeSingle();
+  return Boolean(data?.enabled);
 }
 
 /**
@@ -186,8 +156,7 @@ export async function entregar(
   if (!destino) return desistir("destino removido");
 
   // O interruptor da loja continua valendo por cima dos destinos.
-  const carregado = await carregarConfig(admin, linha.store_id);
-  if (!carregado?.config.enabled) {
+  if (!(await rastreamentoLigado(admin, linha.store_id))) {
     return desistir("rastreamento desligado para esta loja");
   }
 

@@ -1,10 +1,18 @@
 /**
- * Define o rotulo de cada evento rastreado de uma loja.
+ * Define o rotulo de cada evento rastreado de UMA conta do Google.
  *
  * No Google Ads cada evento e uma conversion action propria, com rotulo
  * proprio. O `AW-XXXXXXXXX` e da conta e nao muda; o rotulo muda por evento.
  * Entao configurar "adicionar ao carrinho" e colar o rotulo DAQUELA action --
  * usar o rotulo da compra faria o Google contar carrinho como venda.
+ *
+ * POR QUE PRECISA DIZER QUAL CONTA
+ *
+ * Desde a migration 043 a loja pode ter varias contas do Google, cada uma com o
+ * seu conjunto de rotulos -- cinco contas anunciando produtos diferentes do
+ * mesmo catalogo e o caso real. Com uma so, o script acha sozinha; com mais de
+ * uma, `--conta` e obrigatorio, porque escrever o rotulo na conta errada manda a
+ * conversao para a action errada e nao da erro nenhum.
  *
  * No painel do Google Ads: Objetivos -> Conversoes -> criar uma acao por evento.
  * Deixe a compra como PRINCIPAL e as outras como SECUNDARIAS (observacao),
@@ -14,10 +22,11 @@
  *   npm run op -- scripts/configurar-eventos.ts --loja <dominio> --ver
  *   npm run op -- scripts/configurar-eventos.ts --loja <dominio> \
  *     --rotulo purchase=AbC-D_efGh --rotulo add_to_cart=XyZ-1_23
+ *   npm run op -- scripts/configurar-eventos.ts --loja <dominio> \
+ *     --conta AW-123456789 --rotulo purchase=AbC-D_efGh
  *   npm run op -- scripts/configurar-eventos.ts --loja <dominio> --limpar view_item
  *
- * Eventos: view_item, add_to_cart, begin_checkout, purchase.
- * Evento sem rotulo simplesmente nao e rastreado.
+ * Evento sem rotulo simplesmente nao e rastreado naquela conta.
  */
 import "dotenv/config";
 import { config } from "dotenv";
@@ -41,6 +50,7 @@ function todos(nome: string): string[] {
 }
 
 const dominio = arg("loja");
+const contaPedida = arg("conta");
 const apenasVer = process.argv.includes("--ver");
 const paraLimpar = todos("limpar");
 const pares = todos("rotulo");
@@ -55,6 +65,7 @@ async function main() {
   const { EVENTOS, eventoValido, limparMapaDeRotulos } = await import(
     "../src/lib/tracking/eventos"
   );
+  const { destinosParaTela } = await import("../src/lib/tracking/destinos");
 
   const admin = createAdminClient();
 
@@ -72,11 +83,13 @@ async function main() {
 
   const { data: cfg } = await admin
     .from("tracking_configs")
-    .select("enabled, google_conversion_id, google_conversion_label, google_labels")
+    .select("enabled")
     .eq("store_id", loja.id)
     .maybeSingle();
 
-  const atual = limparMapaDeRotulos(cfg?.google_labels);
+  const doGoogle = ((await destinosParaTela(admin, [loja.id])).get(loja.id) || []).filter(
+    (d) => d.plataforma === "google"
+  );
 
   function mostrar(mapa: Record<string, string | undefined>) {
     console.log("\n--- eventos ---");
@@ -90,16 +103,57 @@ async function main() {
   }
 
   if (apenasVer) {
-    console.log(`\nligado          : ${cfg?.enabled ? "sim" : "NAO"}`);
-    console.log(`id de conversao : ${cfg?.google_conversion_id || "(vazio)"}`);
-    mostrar(atual);
-    if (!cfg?.google_conversion_id) {
+    console.log(`\nligado: ${cfg?.enabled ? "sim" : "NAO"}`);
+    if (doGoogle.length === 0) {
       console.log(
-        "\nSem id de conversao nada sai. Use configurar-tracking.ts --aw AW-XXXXXXXXX."
+        "\nNenhuma conta do Google nesta loja. Cadastre na tela de Rastreamento, ou\n" +
+          "com configurar-tracking.ts --aw AW-XXXXXXXXX --rotulo <rotulo>."
       );
+      return;
+    }
+    for (const d of doGoogle) {
+      console.log(
+        `\nconta ${d.conta} "${d.nome || "-"}" ${d.ativo ? "" : "(DESATIVADA)"}`
+      );
+      mostrar(d.labels);
     }
     return;
   }
+
+  if (doGoogle.length === 0) {
+    console.error(
+      "\nnenhuma conta do Google nesta loja -- nao ha onde gravar rotulo.\n" +
+        "Cadastre a conta primeiro (tela de Rastreamento, ou configurar-tracking.ts --aw)."
+    );
+    process.exit(1);
+  }
+
+  // Com mais de uma conta, nao da para adivinhar: gravar o rotulo na conta
+  // errada manda a conversao para a action errada e nao produz erro nenhum.
+  let destino = doGoogle[0];
+  if (contaPedida) {
+    const achado = doGoogle.find(
+      (d) => d.conta === contaPedida || d.conta === `AW-${contaPedida.replace(/\D/g, "")}`
+    );
+    if (!achado) {
+      console.error(
+        `\nconta "${contaPedida}" nao esta nesta loja. Contas: ${doGoogle
+          .map((d) => d.conta)
+          .join(", ")}`
+      );
+      process.exit(1);
+    }
+    destino = achado;
+  } else if (doGoogle.length > 1) {
+    console.error(
+      `\nesta loja tem ${doGoogle.length} contas do Google. Diga qual com --conta:\n` +
+        doGoogle.map((d) => `  --conta ${d.conta}  "${d.nome || "-"}"`).join("\n")
+    );
+    process.exit(1);
+  }
+
+  console.log(`conta: ${destino.conta} "${destino.nome || "-"}"`);
+  const atual = limparMapaDeRotulos(destino.labels);
 
   if (pares.length === 0 && paraLimpar.length === 0) {
     console.log("\nnada a fazer: passe --rotulo evento=valor, --limpar evento, ou --ver");
@@ -140,30 +194,22 @@ async function main() {
 
   const limpo = limparMapaDeRotulos(novo);
 
-  // Ligar sem id de conversao e sem rotulo nenhum e recusado pelo proprio
-  // banco (tracking_configs_ligado_precisa_destino). Avisar aqui da uma
-  // mensagem legivel em vez do erro do CHECK.
-  if (cfg?.enabled && Object.keys(limpo).length === 0) {
+  // Conta do Google sem rotulo nenhum nao envia nada, e apareceria na tela como
+  // destino configurado -- armadilha silenciosa. Com varias contas isto nao
+  // desliga a loja: as outras continuam enviando.
+  if (Object.keys(limpo).length === 0) {
     console.error(
-      "\na loja esta LIGADA e isto deixaria zero eventos rastreados. Desligue primeiro\n" +
-        "(configurar-tracking.ts --desligar) ou mantenha ao menos um rotulo."
+      `\nisto deixaria a conta ${destino.conta} com zero eventos rastreados, e ela\n` +
+        "apareceria como configurada sem enviar nada. Para parar esta conta,\n" +
+        "desative o destino na tela de Rastreamento."
     );
     process.exit(1);
   }
 
-  const { error } = await admin.from("tracking_configs").upsert(
-    {
-      store_id: loja.id,
-      user_id: loja.user_id,
-      google_labels: limpo,
-      // A coluna legada e espelhada, nao esquecida: ela ainda e fallback de
-      // leitura da compra, e um valor velho ali faria a conversao de venda
-      // continuar saindo depois de o rotulo sair do mapa.
-      google_conversion_label: limpo.purchase ?? null,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "store_id" }
-  );
+  const { error } = await admin
+    .from("tracking_destinations")
+    .update({ labels: limpo, updated_at: new Date().toISOString() })
+    .eq("id", destino.id);
 
   if (error) {
     console.error("falha ao gravar:", error.message);

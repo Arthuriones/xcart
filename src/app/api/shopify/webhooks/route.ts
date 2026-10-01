@@ -172,7 +172,7 @@ async function tratarPedidoCriado(
   loja: { id: string; shop_domain: string },
   payload: Record<string, unknown>
 ) {
-  const { carregarConfig, enfileirar, entregar } = await import(
+  const { rastreamentoLigado, enfileirar, entregar } = await import(
     "@/lib/tracking/fila"
   );
   const { montarPurchase, sinaisDoPedido } = await import(
@@ -180,8 +180,7 @@ async function tratarPedidoCriado(
   );
   const { contarSinais } = await import("@/lib/tracking/normalizar");
 
-  const carregado = await carregarConfig(admin, loja.id);
-  if (!carregado?.config.enabled) {
+  if (!(await rastreamentoLigado(admin, loja.id))) {
     return ok({ ignorado: "rastreamento desligado", topic: "orders/create" });
   }
 
@@ -215,40 +214,54 @@ async function tratarPedidoCriado(
     dominioLoja: loja.shop_domain,
   });
 
-  // Uma linha de fila por destino configurado. Separadas de proposito: cada
-  // API tem o seu formato, e uma falhar nao pode impedir a outra de sair.
-  const destinos: { destination: "meta" | "google"; payload: unknown }[] = [];
-  if (carregado.config.metaPixelId) {
-    destinos.push({ destination: "meta", payload: evento });
-  }
-  if (carregado.config.googleConversionId && carregado.config.googleConversionLabel) {
-    const { montarConversaoGoogle } = await import("@/lib/tracking/purchase");
-    destinos.push({
-      destination: "google",
-      payload: montarConversaoGoogle(pedido, {
-        identidade,
-        dominioLoja: loja.shop_domain,
-      }),
-    });
-  }
+  // Uma linha de fila por DESTINO ativo que aceita a compra.
+  //
+  // Destino e linha, nao coluna, desde a 043: a loja pode ter cinco contas de
+  // Google e dois pixels Meta. Todas recebem -- conversao cujo gclid nao
+  // pertence a conta e DESCARTADA pelo Google, entao a conta dona do clique
+  // conta e as outras ignoram, e nao ha roteamento a adivinhar.
+  //
+  // As linhas ficam separadas de proposito: cada API tem o seu formato, e uma
+  // falhar nao pode impedir as outras de sair.
+  const { destinosDaLoja, destinoAceita } = await import("@/lib/tracking/destinos");
+  const querem = (await destinosDaLoja(admin, loja.id, { comToken: true })).filter(
+    (d) => destinoAceita(d, evento.event_name)
+  );
 
-  if (destinos.length === 0) {
+  if (querem.length === 0) {
     return ok({ ignorado: "nenhum destino configurado", topic: "orders/create" });
   }
+
+  const { montarConversaoGoogle } = await import("@/lib/tracking/purchase");
+  const conversaoGoogle = querem.some((d) => d.plataforma === "google")
+    ? montarConversaoGoogle(pedido, { identidade, dominioLoja: loja.shop_domain })
+    : null;
+
+  const destinos = querem.map((d) => ({
+    destination: d.plataforma,
+    destinationId: d.id,
+    payload: d.plataforma === "google" ? conversaoGoogle : evento,
+  }));
 
   try {
     const saida: Record<string, string> = {};
     for (const alvo of destinos) {
+      // A chave do mapa carrega o id do destino: com duas contas do Google, uma
+      // chave "google" sozinha faria a segunda sobrescrever a primeira e o log
+      // mentiria sobre o que saiu.
+      const chave = `${alvo.destination}:${alvo.destinationId.slice(0, 8)}`;
+
       const { id, duplicado } = await enfileirar(admin, {
         storeId: loja.id,
         destination: alvo.destination,
+        destinationId: alvo.destinationId,
         evento,
         orderId: String(pedido.id ?? ""),
         payload: alvo.payload,
       });
 
       if (duplicado) {
-        saida[alvo.destination] = "duplicado";
+        saida[chave] = "duplicado";
         continue;
       }
 
@@ -258,13 +271,14 @@ async function tratarPedidoCriado(
           id,
           store_id: loja.id,
           destination: alvo.destination,
+          destination_id: alvo.destinationId,
           // "Purchase" do Meta; o catalogo normaliza a caixa para achar o
           // rotulo da conversion action de compra no Google.
           event_name: evento.event_name,
           payload: alvo.payload,
           attempts: 0,
         });
-        saida[alvo.destination] = r.ok ? "enviado" : "na fila";
+        saida[chave] = r.ok ? "enviado" : "na fila";
       }
     }
 

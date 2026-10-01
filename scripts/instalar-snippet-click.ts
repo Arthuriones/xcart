@@ -34,28 +34,34 @@ if (!dominio || dominio.startsWith("--")) {
 const MARCA = "xcart-click";
 const RE_TAG = /<script\b[^>]*data-xcart-click[^>]*>\s*<\/script>\s*/g;
 
-/** O AW-XXXXXXXXX ja configurado em tracking_configs. */
-async function idDeRemarketing(
-  admin: { from: (t: string) => any },
+/**
+ * TODAS as contas do Google cadastradas na loja.
+ *
+ * Nao a primeira: cada conta de anuncio monta a sua propria lista de
+ * remarketing, e publico criado na conta A nao serve na conta B. Com varias
+ * contas anunciando a mesma loja, ligar so uma deixa as outras sem publico --
+ * e sem jeito de notar, porque a lista simplesmente nunca enche.
+ */
+async function contasDeRemarketing(
+  admin: Parameters<
+    typeof import("../src/lib/tracking/destinos").contasGoogleDaLoja
+  >[0],
   storeId: string
-): Promise<string | null> {
-  const { data } = await admin
-    .from("tracking_configs")
-    .select("google_conversion_id")
-    .eq("store_id", storeId)
-    .maybeSingle();
-  const aw = (data?.google_conversion_id || "").trim();
-  if (!aw) {
+): Promise<string[]> {
+  const { contasGoogleDaLoja } = await import("../src/lib/tracking/destinos");
+  const contas = await contasGoogleDaLoja(admin, storeId);
+  if (contas.length === 0) {
     console.error(
       [
-        "--remarketing pedido, mas a loja nao tem ID de conversao configurado.",
-        "Configure com: npm run op -- scripts/configurar-tracking.ts \\",
-        "  --loja <dominio> --aw AW-XXXXXXXXX --rotulo <rotulo>",
+        "--remarketing pedido, mas a loja nao tem conta do Google cadastrada.",
+        "Cadastre na tela de Rastreamento, ou com:",
+        "  npm run op -- scripts/configurar-tracking.ts \\",
+        "    --loja <dominio> --aw AW-XXXXXXXXX --rotulo <rotulo>",
       ].join("\n")
     );
     process.exit(1);
   }
-  return aw;
+  return contas;
 }
 
 async function main() {
@@ -129,7 +135,9 @@ async function main() {
   // entre contas que cadastraram o mesmo dominio.
   const { aplicarSnippet } = await import("../src/lib/tracking/snippet-tema");
 
-  const remarketing = comRemarketing ? await idDeRemarketing(admin, loja.id) : null;
+  const remarketing = comRemarketing
+    ? await contasDeRemarketing(admin, loja.id)
+    : null;
 
   const r = await aplicarSnippet(creds, {
     storeId: loja.id,
@@ -155,7 +163,9 @@ async function main() {
   }
 
   console.log(remover ? "  snippet REMOVIDO." : "  snippet instalado.");
-  if (r.comRemarketing) console.log(`  remarketing ligado: ${remarketing}`);
+  if (r.comRemarketing) {
+    console.log(`  remarketing ligado: ${(remarketing || []).join(", ")}`);
+  }
 }
 
 main().catch((e) => {

@@ -64,19 +64,21 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let remarketing: string | null = null;
+  // TODAS as contas de Google da loja, nao a primeira.
+  //
+  // Cada conta de anuncio monta a sua propria lista: publico criado na conta A
+  // nao serve na conta B. Com cinco contas anunciando a mesma loja, mandar so
+  // uma deixaria quatro sem publico -- e sem jeito de notar, porque a lista
+  // simplesmente nunca enche.
+  let remarketing: string[] = [];
   if (corpo.remarketing) {
-    const { data: cfg } = await admin
-      .from("tracking_configs")
-      .select("google_conversion_id")
-      .eq("store_id", loja.id)
-      .maybeSingle();
-    remarketing = (cfg?.google_conversion_id || "").trim() || null;
-    if (!remarketing) {
+    const { contasGoogleDaLoja } = await import("@/lib/tracking/destinos");
+    remarketing = await contasGoogleDaLoja(admin, loja.id);
+    if (remarketing.length === 0) {
       return NextResponse.json(
         {
           error:
-            "Para o remarketing, preencha antes o ID de conversão do Google e salve.",
+            "Para o remarketing, cadastre antes uma conta do Google Ads nesta loja.",
         },
         { status: 400 }
       );

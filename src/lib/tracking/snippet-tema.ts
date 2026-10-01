@@ -95,12 +95,27 @@ export async function lerEstado(creds: CredsLoja): Promise<EstadoDoSnippet> {
  * forma de montar publico -- o ping de conversao sai do servidor e nao coloca
  * ninguem em lista. Ela NAO dispara conversao; se passasse a disparar, a venda
  * contaria duas vezes e o Google nao deduplica entre os dois caminhos.
+ *
+ * O remarketing aceita VARIAS contas, separadas por virgula, porque cada conta
+ * de anuncio monta a sua propria lista: publico criado na conta A nao serve na
+ * conta B. Com cinco contas anunciando a mesma loja -- o caso do Arthur --
+ * mandar so a primeira deixaria quatro sem publico nenhum.
  */
-export function montarTag(storeId: string, remarketing?: string | null): string {
+export function montarTag(
+  storeId: string,
+  remarketing?: string | string[] | null
+): string {
+  // Vai para dentro de um atributo HTML. Os ids ja sao validados na API, mas a
+  // mesma funcao e chamada por script de operacao -- filtrar aqui e o que
+  // garante que nenhum valor fecha a aspa.
+  const contas = (Array.isArray(remarketing) ? remarketing : [remarketing])
+    .map((c) => (c || "").trim().replace(/[^A-Za-z0-9_-]/g, ""))
+    .filter(Boolean);
+
   return (
     `<script src="${getPublicAppUrl()}/${MARCA}.js" data-xcart-click` +
     ` data-xcart-store="${storeId}"` +
-    (remarketing ? ` data-xcart-remarketing="${remarketing}"` : "") +
+    (contas.length ? ` data-xcart-remarketing="${contas.join(",")}"` : "") +
     ` defer></script>`
   );
 }
@@ -119,8 +134,8 @@ export async function aplicarSnippet(
   creds: CredsLoja,
   opcoes: {
     storeId: string;
-    /** AW-XXXXXXXXX para ligar o remarketing; null/ausente deixa sem. */
-    remarketing?: string | null;
+    /** AW-XXXXXXXXX para ligar o remarketing; varios ligam um por conta. */
+    remarketing?: string | string[] | null;
     /** Tira a tag em vez de por. */
     remover?: boolean;
     /** Calcula e nao grava. */
@@ -145,7 +160,11 @@ export async function aplicarSnippet(
   const resultado: ResultadoAplicar = {
     mudou,
     instalado: !opcoes.remover && mudou ? true : estado.instalado && !opcoes.remover,
-    comRemarketing: !opcoes.remover && Boolean(opcoes.remarketing),
+    comRemarketing:
+      !opcoes.remover &&
+      (Array.isArray(opcoes.remarketing)
+        ? opcoes.remarketing.length > 0
+        : Boolean(opcoes.remarketing)),
     temaNome: estado.temaNome,
     conteudo: novo,
   };
