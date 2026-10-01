@@ -233,7 +233,7 @@ export async function POST(request: NextRequest) {
   // moram em tracking_destinations, uma linha por conta.
   const { data: cfgs } = await admin
     .from("tracking_configs")
-    .select("store_id, enabled, web_pixel_visto_em, teto_atingido_em")
+    .select("store_id, enabled, web_pixel_visto_em, web_pixel_com_id_em, teto_atingido_em")
     .in("store_id", ids);
 
   const porStore = new Map((cfgs || []).map((c) => [c.store_id, c]));
@@ -364,13 +364,25 @@ export async function POST(request: NextRequest) {
   const vistoEm = cfg.web_pixel_visto_em
     ? new Date(cfg.web_pixel_visto_em).getTime()
     : 0;
-  if (doPixel && Date.now() - vistoEm > 36e5) {
+  // E carimba SEPARADO se o trecho colado e o novo, com o id da loja. Sem
+  // isso a tela nao tinha como saber que o pixel instalado era o antigo -- e
+  // escondia o codigo justamente nas lojas que precisavam trocar.
+  const comIdEm = cfg.web_pixel_com_id_em
+    ? new Date(cfg.web_pixel_com_id_em).getTime()
+    : 0;
+  const carimbarVisto = doPixel && Date.now() - vistoEm > 36e5;
+  const carimbarComId = doPixel && Boolean(idDaTag) && Date.now() - comIdEm > 36e5;
+  if (carimbarVisto || carimbarComId) {
     const agora = new Date().toISOString();
     await admin
       .from("tracking_configs")
-      .update({ web_pixel_visto_em: agora, updated_at: agora })
+      .update({
+        ...(carimbarVisto ? { web_pixel_visto_em: agora } : {}),
+        ...(carimbarComId ? { web_pixel_com_id_em: agora } : {}),
+        updated_at: agora,
+      })
       .eq("store_id", registro.id);
-    cfg.web_pixel_visto_em = agora;
+    if (carimbarVisto) cfg.web_pixel_visto_em = agora;
   }
 
   // Com o Web Pixel cobrindo o checkout, o clique no botao (tema) e o

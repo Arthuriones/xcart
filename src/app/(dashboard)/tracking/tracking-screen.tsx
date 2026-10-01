@@ -363,6 +363,11 @@ function Atribuicao({
  * que mente.
  */
 function PixelDoCheckout({ loja }: { loja: LojaTracking }) {
+  const estado: "falta" | "antigo" | "atual" = !loja.pixelCheckoutAtivo
+    ? "falta"
+    : loja.pixelCheckoutDesatualizado
+      ? "antigo"
+      : "atual";
   const [codigo, setCodigo] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [aberto, setAberto] = useState(false);
@@ -398,8 +403,12 @@ function PixelDoCheckout({ loja }: { loja: LojaTracking }) {
     <section className="space-y-2.5 rounded-md border p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs font-semibold">Checkout (Web Pixel)</span>
-        <Pill tom={loja.pixelCheckoutAtivo ? "ok" : "alerta"}>
-          {loja.pixelCheckoutAtivo ? "instalado" : "falta instalar"}
+        <Pill tom={estado === "atual" ? "ok" : "alerta"}>
+          {estado === "atual"
+            ? "instalado"
+            : estado === "antigo"
+              ? "atualizar código"
+              : "falta instalar"}
         </Pill>
       </div>
 
@@ -411,54 +420,87 @@ function PixelDoCheckout({ loja }: { loja: LojaTracking }) {
         xcart, e o envio continua saindo do servidor.
       </p>
 
-      {!loja.pixelCheckoutAtivo && (
-        <>
-          <ol className="list-decimal space-y-0.5 pl-4 text-[11px] text-muted-foreground">
+      {/* Tres estados, e o do meio e o que faltava. O codigo so aparecia com o
+          pixel AUSENTE -- e a loja que tinha o trecho antigo colado, sem o id
+          da loja, nao tinha onde pegar o novo. */}
+      {estado === "falta" && (
+        <ol className="list-decimal space-y-0.5 pl-4 text-[11px] text-muted-foreground">
+          <li>
+            No admin da Shopify: <strong>Configurações → Eventos de cliente</strong>
+          </li>
+          <li>
+            <strong>Adicionar pixel personalizado</strong>, dê um nome (ex.: xcart)
+          </li>
+          <li>Cole o código abaixo, <strong>Salvar</strong> e <strong>Conectar</strong></li>
+        </ol>
+      )}
+
+      {estado === "antigo" && (
+        <div className="space-y-1.5 rounded-md bg-amber-500/10 p-2.5 text-[11px]">
+          <p className="font-medium text-amber-600">
+            O pixel está funcionando, mas é o código antigo.
+          </p>
+          <p className="text-muted-foreground">
+            O novo leva o id da loja, o que impede que outra conta desvie os eventos do
+            teu checkout. Troque o código do pixel que já existe —{" "}
+            <strong>não crie um segundo</strong>:
+          </p>
+          <ol className="list-decimal space-y-0.5 pl-4 text-muted-foreground">
             <li>
               No admin da Shopify: <strong>Configurações → Eventos de cliente</strong>
             </li>
             <li>
-              <strong>Adicionar pixel personalizado</strong>, dê um nome (ex.: xcart)
+              Abra o pixel do xcart, <strong>apague o código</strong> que está lá
             </li>
-            <li>Cole o código abaixo, <strong>Salvar</strong> e <strong>Conectar</strong></li>
+            <li>
+              Cole o código abaixo e clique em <strong>Salvar</strong>
+            </li>
           </ol>
-
-          <Button size="sm" variant="outline" onClick={buscar} disabled={carregando}>
-            {carregando ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : aberto ? (
-              "esconder código"
-            ) : (
-              "mostrar código para colar"
-            )}
-          </Button>
-
-          {aberto && codigo && (
-            <div className="space-y-1.5">
-              <Button size="sm" variant="outline" onClick={copiar}>
-                <Copy className="mr-1.5 h-3.5 w-3.5" />
-                Copiar
-              </Button>
-              {/* Uma linha so, com o id da loja: a logica mora em
-                  /xcart-pixel.js. Por isso o campo e baixo -- antes era um
-                  bloco de 60 linhas. */}
-              <textarea
-                readOnly
-                value={codigo}
-                onFocus={(e) => e.currentTarget.select()}
-                className="h-20 w-full rounded-md border bg-muted/40 p-2 font-mono text-[10px] leading-relaxed"
-                aria-label="Código do pixel do checkout"
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Depois de conectar, não precisa fazer mais nada aqui — o pixel se anuncia
-                no primeiro checkout e esta seção passa a &quot;instalado&quot; sozinha.
-              </p>
-            </div>
-          )}
-        </>
+        </div>
       )}
 
-      {loja.pixelCheckoutAtivo && (
+      <Button
+        size="sm"
+        variant={estado === "atual" ? "ghost" : "outline"}
+        onClick={buscar}
+        disabled={carregando}
+        className={estado === "atual" ? "h-7 px-2 text-[11px]" : undefined}
+      >
+        {carregando ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : aberto ? (
+          "esconder código"
+        ) : estado === "atual" ? (
+          "ver código"
+        ) : (
+          "mostrar código para colar"
+        )}
+      </Button>
+
+      {aberto && codigo && (
+        <div className="space-y-1.5">
+          <Button size="sm" variant="outline" onClick={copiar}>
+            <Copy className="mr-1.5 h-3.5 w-3.5" />
+            Copiar
+          </Button>
+          {/* Uma linha so, com o id da loja: a logica mora em
+              /xcart-pixel.js. Por isso o campo e baixo -- antes era um
+              bloco de 60 linhas. */}
+          <textarea
+            readOnly
+            value={codigo}
+            onFocus={(e) => e.currentTarget.select()}
+            className="h-20 w-full rounded-md border bg-muted/40 p-2 font-mono text-[10px] leading-relaxed"
+            aria-label="Código do pixel do checkout"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Depois de salvar, não precisa fazer mais nada aqui — o pixel se anuncia no
+            próximo checkout, e esta seção passa sozinha para &quot;instalado&quot;.
+          </p>
+        </div>
+      )}
+
+      {estado !== "falta" && (
         <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
           <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
           O &quot;iniciar checkout&quot; vindo do tema passou a ser ignorado: o do pixel é

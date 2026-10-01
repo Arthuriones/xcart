@@ -122,6 +122,14 @@ export interface LojaTracking {
   pixelCheckoutAtivo: boolean;
 
   /**
+   * O pixel esta mandando, mas e o trecho ANTIGO, sem o id da loja.
+   *
+   * Funciona, mas sem a protecao contra outra conta cadastrar o mesmo dominio
+   * e desviar os eventos do checkout. A tela pede para trocar o codigo.
+   */
+  pixelCheckoutDesatualizado: boolean;
+
+  /**
    * O teto por hora do coletor descartou evento recentemente?
    *
    * Loja que cresce bate nele e para de medir parte do funil. Sem isto a tela
@@ -310,7 +318,7 @@ export async function getPainelTracking(): Promise<PainelTracking> {
 
   const { data: configs } = await supabase
     .from("tracking_configs")
-    .select("store_id, enabled, web_pixel_visto_em, teto_atingido_em")
+    .select("store_id, enabled, web_pixel_visto_em, web_pixel_com_id_em, teto_atingido_em")
     .in(
       "store_id",
       todas.map((l) => l.id)
@@ -397,6 +405,15 @@ export async function getPainelTracking(): Promise<PainelTracking> {
         tetoAtingidoRecente: cfg?.teto_atingido_em
           ? Date.now() - new Date(cfg.teto_atingido_em).getTime() < 864e5
           : false,
+        // Ativo, mas sem evento COM o id da loja nas ultimas 24 h: e o trecho
+        // antigo que esta colado.
+        pixelCheckoutDesatualizado:
+          Boolean(cfg?.web_pixel_visto_em) &&
+          Date.now() - new Date(cfg!.web_pixel_visto_em!).getTime() < 864e5 &&
+          !(
+            cfg?.web_pixel_com_id_em &&
+            Date.now() - new Date(cfg.web_pixel_com_id_em).getTime() < 864e5
+          ),
         pixelCheckoutAtivo: cfg?.web_pixel_visto_em
           ? Date.now() - new Date(cfg.web_pixel_visto_em).getTime() < 864e5
           : false,
