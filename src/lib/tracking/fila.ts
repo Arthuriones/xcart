@@ -97,6 +97,8 @@ export async function enfileirar(
     orderId?: string | null;
     /** Só nos eventos de navegador. Alimenta o teto de abuso do coletor. */
     visitorId?: string | null;
+    /** De onde a sessao veio. So diagnostico -- nao vai para destino nenhum. */
+    referrer?: string | null;
     /** O que vai para a API do destino. Omitido = o proprio evento (Meta). */
     payload?: unknown;
   }
@@ -110,6 +112,7 @@ export async function enfileirar(
       event_id: entrada.evento.event_id,
       order_id: entrada.orderId ?? null,
       visitor_id: entrada.visitorId ?? null,
+      referrer: entrada.referrer ?? null,
       payload: (entrada.payload ?? entrada.evento) as Record<string, unknown>,
     })
     .select("id")

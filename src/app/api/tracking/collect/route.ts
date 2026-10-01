@@ -101,6 +101,8 @@ export async function POST(request: NextRequest) {
     fbp?: string | null;
     fbc?: string | null;
     fbclid?: string | null;
+    /** De onde a sessao veio, para diagnosticar trafego sem click id. */
+    referrer?: string | null;
   };
   try {
     corpo = await request.json();
@@ -312,6 +314,9 @@ export async function POST(request: NextRequest) {
         evento: { event_name: evento, event_id: eventId },
         orderId: eventId,
         visitorId,
+        // Fica na LINHA, nao no payload: o payload do Meta vai cru para a API
+        // deles, e campo desconhecido ali pode derrubar o evento inteiro.
+        referrer: (corpo.referrer || "").trim().slice(0, 500) || null,
         payload: alvo.payload,
       });
 

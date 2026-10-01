@@ -193,6 +193,41 @@
   var LOJA = (window.Shopify && window.Shopify.shop) || null;
 
   /**
+   * De onde este visitante chegou.
+   *
+   * Guardado na PRIMEIRA pagina da sessao e reusado depois. Sem isso, a partir
+   * do segundo clique o referrer vira a propria loja e a origem some -- que e
+   * exatamente o buraco que fez "o Google mandou trafego" e "era busca
+   * organica do google.com" ficarem indistinguiveis daqui.
+   *
+   * sessionStorage, nao cookie: interessa a sessao, nao os 90 dias.
+   */
+  function origemDaSessao() {
+    var chave = PREFIXO + "ref";
+    try {
+      var guardado = sessionStorage.getItem(chave);
+      if (guardado !== null) return guardado;
+    } catch (e) {
+      /* navegacao privada: cai no referrer atual, que na 1a pagina esta certo */
+    }
+    var atual = document.referrer || "";
+    // Navegacao interna nao e origem.
+    try {
+      if (atual && new URL(atual).hostname === location.hostname) atual = "";
+    } catch (e) {
+      /* referrer estranho: guarda como veio */
+    }
+    try {
+      sessionStorage.setItem(chave, atual);
+    } catch (e) {
+      /* sem storage: so nao persiste */
+    }
+    return atual;
+  }
+
+  var ORIGEM = origemDaSessao();
+
+  /**
    * Qual LINHA de loja do xcart e esta.
    *
    * O mesmo dominio da Shopify pode estar cadastrado por mais de uma conta
@@ -244,6 +279,7 @@
       fbp: achados._fbp || null,
       fbc: achados._fbc || null,
       fbclid: achados.fbclid || null,
+      referrer: ORIGEM || null,
     });
 
     // text/plain de proposito: mantem a requisicao "simples" para o CORS, sem
