@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   CircleAlert,
   Loader2,
+  MoreHorizontal,
   Pencil,
   Plus,
   Power,
@@ -21,6 +22,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EVENTOS } from "@/lib/tracking/eventos";
@@ -30,6 +38,9 @@ import {
   validarTemplate,
 } from "@/lib/tracking/id-produto";
 import type { DestinoNaTela } from "@/lib/tracking/queries";
+import { cn } from "@/lib/utils";
+import { NOME_DA_PLATAFORMA, oQueFalta, type Plataforma } from "./saude";
+import { Ponto, Selo } from "./selo";
 
 // ============================================================================
 // Os destinos de conversao de uma loja, na tela.
@@ -46,49 +57,25 @@ import type { DestinoNaTela } from "@/lib/tracking/queries";
 // que a tela nao pede um.
 // ============================================================================
 
-type Plataforma = "google" | "meta";
-
-const NOME_DA_PLATAFORMA: Record<Plataforma, string> = {
-  google: "Google Ads",
-  meta: "Meta Ads",
+/**
+ * Cabecalho curto de cada coluna do funil. O nome inteiro do evento ("Adicionar
+ * ao carrinho") nao cabe em 60px; a chave vem de EVENTOS, entao evento novo sem
+ * entrada aqui cai no nome completo em vez de sumir.
+ */
+const ROTULO_CURTO: Record<string, string> = {
+  view_item: "Produto",
+  add_to_cart: "Carrinho",
+  begin_checkout: "Checkout",
+  payment_info: "Pagamento",
+  purchase: "Compra",
 };
 
-function Pill({
-  tom,
-  children,
-  title,
-}: {
-  tom: "ok" | "alerta" | "erro" | "neutro";
-  children: React.ReactNode;
-  title?: string;
-}) {
-  const cor =
-    tom === "ok"
-      ? "bg-emerald-500/15 text-emerald-600"
-      : tom === "alerta"
-        ? "bg-amber-500/15 text-amber-600"
-        : tom === "erro"
-          ? "bg-destructive/15 text-destructive"
-          : "bg-muted text-muted-foreground";
-  return (
-    <span
-      title={title}
-      className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium ${cor}`}
-    >
-      {children}
-    </span>
-  );
-}
+// Uma grade so para o cabecalho e as linhas: as colunas do funil alinham como
+// tabela no desktop. No celular a linha empilha e a grade nao vale.
+const GRADE = "sm:grid-cols-[minmax(0,1fr)_repeat(5,60px)_32px]";
 
-/** O que falta para este destino enviar algo. Vazio = esta pronto. */
-function oQueFalta(d: DestinoNaTela): string | null {
-  if (d.plataforma === "meta") {
-    return d.temToken ? null : "falta o token do CAPI — sem ele nenhum evento sai";
-  }
-  return Object.keys(d.labels).length > 0
-    ? null
-    : "falta o rótulo de ao menos um evento — sem rótulo não há o que enviar";
-}
+const FOCO =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40";
 
 /**
  * O formulario de um destino: cadastro e edicao no mesmo lugar.
@@ -221,7 +208,7 @@ function FormularioDestino({
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
-              <Label className="text-[11px]">Apelido</Label>
+              <Label className="text-[11px] text-t2">Apelido</Label>
               <Input
                 value={nome}
                 onChange={(e) => setNome(e.target.value)}
@@ -230,12 +217,10 @@ function FormularioDestino({
               />
               {/* Com duas contas da mesma plataforma, o numero sozinho nao diz
                   qual e qual quando chega a hora de desativar uma. */}
-              <p className="text-[10px] text-muted-foreground">
-                só para você reconhecer na lista
-              </p>
+              <p className="text-[10.5px] text-t3">só para você reconhecer na lista</p>
             </div>
             <div className="space-y-1">
-              <Label className="text-[11px]">
+              <Label className="text-[11px] text-t2">
                 {plataforma === "google" ? "ID de conversão" : "ID do pixel"}
               </Label>
               <Input
@@ -250,12 +235,13 @@ function FormularioDestino({
           {plataforma === "google" && (
             <div className="space-y-2.5">
               <div>
-                <Label className="text-[11px]">Rótulo por evento</Label>
-                <p className="text-[11px] text-muted-foreground">
+                <Label className="text-[11px] text-t2">Rótulo por evento</Label>
+                <p className="text-[11px] text-t3">
                   Google Ads → Objetivos → Conversões. Uma ação por evento; copie o
-                  rótulo de cada uma. Deixe <strong>compra</strong> como principal e as
-                  outras como <strong>secundárias</strong>, senão o lance passa a
-                  otimizar para carrinho em vez de venda.
+                  rótulo de cada uma. Deixe <strong className="text-t1">compra</strong>{" "}
+                  como principal e as outras como{" "}
+                  <strong className="text-t1">secundárias</strong>, senão o lance passa
+                  a otimizar para carrinho em vez de venda.
                 </p>
               </div>
 
@@ -265,8 +251,8 @@ function FormularioDestino({
                   className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,13rem)] sm:items-center"
                 >
                   <div className="min-w-0">
-                    <span className="text-sm">{ev.nome}</span>
-                    <p className="text-[11px] text-muted-foreground">{ev.descricao}</p>
+                    <span className="text-[12.5px] text-ink">{ev.nome}</span>
+                    <p className="text-[11px] text-t3">{ev.descricao}</p>
                   </div>
                   <Input
                     value={rotulos[ev.chave] ?? ""}
@@ -281,12 +267,12 @@ function FormularioDestino({
               ))}
 
               {/* Isto confunde todo mundo uma vez, entao esta escrito. */}
-              <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
-                <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <p className="flex items-start gap-1.5 text-[11px] text-t3">
+                <CircleAlert aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>
-                  Estes rótulos são <strong>conversão</strong>, não remarketing. Público
-                  o Google só monta com a tag no navegador — é a checagem
-                  &quot;Tag de remarketing&quot; no card da loja.
+                  Estes rótulos são <strong className="text-t1">conversão</strong>, não
+                  remarketing. Público o Google só monta com a tag no navegador — é a
+                  checagem &quot;Tag de remarketing&quot; no card da loja.
                 </span>
               </p>
             </div>
@@ -294,10 +280,10 @@ function FormularioDestino({
 
 
           {/* ---- id do produto ---- */}
-          <div className="space-y-1.5 rounded-md border border-dashed p-2.5">
-            <Label className="text-[11px]">Formato do ID de produto</Label>
-            <p className="text-[11px] text-muted-foreground">
-              Tem que ser <strong>idêntico</strong> ao ID do{" "}
+          <div className="space-y-1.5 rounded-md border border-dashed border-[var(--border-strong)] p-2.5">
+            <Label className="text-[11px] text-t2">Formato do ID de produto</Label>
+            <p className="text-[11px] text-t3">
+              Tem que ser <strong className="text-t1">idêntico</strong> ao ID do{" "}
               {plataforma === "google"
                 ? "seu feed no Merchant Center"
                 : "seu catálogo no Commerce Manager"}
@@ -314,27 +300,33 @@ function FormularioDestino({
             />
 
             <div className="flex flex-wrap gap-1">
-              {TEMPLATES_SUGERIDOS.map((t) => (
-                <button
-                  key={t.template}
-                  type="button"
-                  title={t.dica}
-                  onClick={() => setIdTemplate(t.template)}
-                  className={`rounded-md border px-1.5 py-0.5 text-[10px] transition-colors ${
-                    idTemplate.trim() === t.template
-                      ? "border-primary bg-primary/10 text-foreground"
-                      : "text-muted-foreground hover:bg-muted"
-                  }`}
-                >
-                  {t.rotulo}
-                </button>
-              ))}
+              {TEMPLATES_SUGERIDOS.map((t) => {
+                const ativo = idTemplate.trim() === t.template;
+                return (
+                  <button
+                    key={t.template}
+                    type="button"
+                    title={t.dica}
+                    aria-pressed={ativo}
+                    onClick={() => setIdTemplate(t.template)}
+                    className={cn(
+                      "h-6 rounded-md border px-2 text-[11px] font-medium transition-colors",
+                      FOCO,
+                      ativo
+                        ? "border-[var(--solid)] bg-[var(--solid)] text-[var(--on-solid)]"
+                        : "border-border bg-surface text-t2 hover:border-[var(--border-strong)]"
+                    )}
+                  >
+                    {t.rotulo}
+                  </button>
+                );
+              })}
             </div>
 
             {erroDoTemplate ? (
-              <p className="text-[11px] text-destructive">{erroDoTemplate}</p>
+              <p className="text-[11px] text-[var(--err)]">{erroDoTemplate}</p>
             ) : (
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-[10.5px] text-t3">
                 Marcadores: <code>{"{variant_id}"}</code> <code>{"{product_id}"}</code>{" "}
                 <code>{"{sku}"}</code>
               </p>
@@ -343,8 +335,8 @@ function FormularioDestino({
             {plataforma === "google" && (
               /* O remarketing monta o id no NAVEGADOR, a partir da tag do tema --
                  trocar aqui nao alcanca quem ja tem a tag antiga instalada. */
-              <p className="flex items-start gap-1.5 text-[11px] text-amber-600">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <p className="flex items-start gap-1.5 rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] p-2.5 text-[11px] text-[var(--warn)]">
+                <AlertTriangle aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 {/* O texto vai dentro de um span: sem ele, cada trecho vira um
                     item do flex e a frase quebra em colunas. */}
                 <span>
@@ -360,7 +352,7 @@ function FormularioDestino({
           {plataforma === "meta" && (
             <div className="space-y-3">
               <div className="space-y-1">
-                <Label className="text-[11px]">Token do CAPI</Label>
+                <Label className="text-[11px] text-t2">Token do CAPI</Label>
                 <Input
                   type="password"
                   value={token}
@@ -371,7 +363,7 @@ function FormularioDestino({
                   className="h-8 font-mono text-xs"
                   autoComplete="off"
                 />
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-[10.5px] text-t3">
                   Events Manager → Configurações → API de Conversões → gerar token.
                   {destino?.temToken
                     ? " Um token novo substitui o anterior; vazio mantém o que está gravado."
@@ -380,20 +372,20 @@ function FormularioDestino({
               </div>
 
               <div className="space-y-1">
-                <Label className="text-[11px]">Código de teste (opcional)</Label>
+                <Label className="text-[11px] text-t2">Código de teste (opcional)</Label>
                 <Input
                   value={codigoTeste}
                   onChange={(e) => setCodigoTeste(e.target.value)}
                   placeholder="TEST12345"
                   className="h-8 max-w-[12rem] font-mono text-xs"
                 />
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-[10.5px] text-t3">
                   Joga os eventos para a aba de teste do Events Manager. Preenchido, eles
                   param de contar como conversão de verdade — tire quando terminar.
                 </p>
               </div>
 
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[11px] text-t3">
                 O pixel cobre os {EVENTOS.length} eventos — não precisa rótulo por
                 evento.
               </p>
@@ -473,17 +465,17 @@ function ConfirmarRemocao({
 
         <div className="space-y-2 text-xs">
           {enviados > 0 && (
-            <p className="flex items-start gap-1.5 text-amber-600">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <p className="flex items-start gap-1.5 rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] p-2.5 text-[var(--warn)]">
+              <AlertTriangle aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>
                 O histórico vai junto: <strong>{enviados}</strong> envio(s) dos últimos 7
                 dias saem da contagem desta tela.
               </span>
             </p>
           )}
-          <p className="text-muted-foreground">
-            Se a intenção é só parar de enviar, <strong>desative</strong> em vez de
-            remover — assim o que já saiu continua aparecendo aqui.
+          <p className="text-t2">
+            Se a intenção é só parar de enviar, <strong className="text-ink">desative</strong>{" "}
+            em vez de remover — assim o que já saiu continua aparecendo aqui.
           </p>
         </div>
 
@@ -506,13 +498,24 @@ function ConfirmarRemocao({
 }
 
 /** Uma linha da lista: a conta, o que saiu por ela, e o que fazer com ela. */
-function LinhaDestino({ storeId, destino }: { storeId: string; destino: DestinoNaTela }) {
+function LinhaDestino({
+  storeId,
+  destino,
+  faltam,
+}: {
+  storeId: string;
+  destino: DestinoNaTela;
+  /** Pedidos sem compra enviada por este destino (so com a loja ligada). */
+  faltam?: number;
+}) {
   const router = useRouter();
   const [editando, setEditando] = useState(false);
   const [removendo, setRemovendo] = useState(false);
   const [alternando, setAlternando] = useState(false);
 
   const falta = oQueFalta(destino);
+  const nome = destino.nome || NOME_DA_PLATAFORMA[destino.plataforma];
+  const c = destino.contagem;
 
   async function alternar() {
     setAlternando(true);
@@ -532,130 +535,185 @@ function LinhaDestino({ storeId, destino }: { storeId: string; destino: DestinoN
     }
   }
 
+  const perdendo = faltam !== undefined && faltam >= 1;
+  const temSubLinha =
+    perdendo ||
+    (falta && destino.ativo) ||
+    Boolean(destino.testEventCode) ||
+    c.pendentes > 0 ||
+    c.falharam > 0 ||
+    c.semAtribuicao > 0;
+
   return (
     <div
-      className={`rounded-md border p-2.5 ${destino.ativo ? "" : "border-dashed opacity-70"}`}
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="truncate text-sm font-medium">
-            {destino.nome || NOME_DA_PLATAFORMA[destino.plataforma]}
-          </span>
-          <span className="font-mono text-[11px] text-muted-foreground">
-            {destino.conta}
-          </span>
-          {!destino.ativo && <Pill tom="neutro">desativado</Pill>}
-          {destino.ativo && falta && (
-            <Pill tom="erro" title={falta}>
-              incompleto
-            </Pill>
-          )}
-          {destino.ativo && !falta && <Pill tom="ok">enviando</Pill>}
-          {destino.testEventCode && (
-            <Pill tom="alerta" title="Os eventos vão para a aba de teste do Events Manager e não contam como conversão.">
-              modo teste
-            </Pill>
-          )}
-        </div>
-
-        <div className="flex shrink-0 items-center gap-1">
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 px-2"
-            onClick={alternar}
-            disabled={alternando}
-            title={destino.ativo ? "Desativar (para de enviar)" : "Ativar"}
-          >
-            {alternando ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Power className="h-3.5 w-3.5" />
-            )}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 px-2"
-            onClick={() => setEditando(true)}
-            title="Editar"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 px-2 text-destructive hover:text-destructive"
-            onClick={() => setRemovendo(true)}
-            title="Remover"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      </div>
-
-      {falta && destino.ativo && (
-        <p className="mt-1 text-[11px] text-destructive">{falta}</p>
+      id={`destino-${destino.id}`}
+      className={cn(
+        "relative scroll-mt-20 border-t border-[var(--border-subtle)] px-3.5 py-2.5 first:border-t-0",
+        !destino.ativo && "opacity-70"
       )}
-
-      {/* O que saiu por ESTA conta, em 7 dias.
-          Por conta, nao por plataforma: com cinco contas de Google, a mesma venda
-          gera cinco linhas, e somadas dariam "5 compras" para 1 pedido -- a
-          comparacao com pedidos, que e o alarme, nunca mais acusaria falta. */}
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px]">
-        {EVENTOS.map((ev) => {
-          const n = destino.contagem.porEvento[ev.chave] ?? 0;
-          const rotulado =
-            destino.plataforma === "meta" || Boolean(destino.labels[ev.chave]);
-          return (
-            <span
-              key={ev.chave}
-              className={
-                n > 0
-                  ? "text-foreground"
-                  : rotulado
-                    ? "text-muted-foreground"
-                    : "text-muted-foreground/50 line-through"
-              }
-              title={
-                rotulado
-                  ? `enviado ao ${NOME_DA_PLATAFORMA[destino.plataforma]} como ${
-                      destino.plataforma === "meta" ? ev.nomeNoMeta : "conversion"
-                    }`
-                  : "sem rótulo: este evento não é rastreado nesta conta"
-              }
+    >
+      <div className={`grid gap-y-2 sm:items-center sm:gap-x-2 ${GRADE}`}>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 pr-9 sm:pr-0">
+          <span className="truncate text-[12.5px] font-semibold text-ink">{nome}</span>
+          <span className="font-mono text-[11px] text-t3">{destino.conta}</span>
+          {!destino.ativo ? (
+            <Selo tom="neutro">Desativado</Selo>
+          ) : falta ? (
+            <Selo tom="err" title={falta}>
+              Incompleto
+            </Selo>
+          ) : (
+            <Selo tom="ok">Enviando</Selo>
+          )}
+          {destino.testEventCode && (
+            <Selo
+              tom="warn"
+              title="Os eventos vão para a aba de teste do Events Manager e não contam como conversão."
             >
-              {ev.nome} <strong className="font-mono">{n}</strong>
-            </span>
-          );
-        })}
-        <span className="text-muted-foreground">em 7 dias</span>
+              Modo teste
+            </Selo>
+          )}
+        </div>
+
+        {/* O que saiu por ESTA conta, em 7 dias.
+            Por conta, nao por plataforma: com cinco contas de Google, a mesma venda
+            gera cinco linhas, e somadas dariam "5 compras" para 1 pedido -- a
+            comparacao com pedidos, que e o alarme, nunca mais acusaria falta. */}
+        <div className="grid grid-cols-5 gap-0.5 sm:contents">
+          {EVENTOS.map((ev) => {
+            const n = c.porEvento[ev.chave] ?? 0;
+            const rotulado =
+              destino.plataforma === "meta" || Boolean(destino.labels[ev.chave]);
+            const rotulo = ROTULO_CURTO[ev.chave] ?? ev.nome;
+            return (
+              <div
+                key={ev.chave}
+                className="min-w-0 rounded bg-surface-2 px-0.5 py-1 text-center sm:bg-transparent sm:p-0 sm:text-right"
+                title={
+                  rotulado
+                    ? `enviado ao ${NOME_DA_PLATAFORMA[destino.plataforma]} como ${
+                        destino.plataforma === "meta" ? ev.nomeNoMeta : "conversion"
+                      }`
+                    : "sem rótulo: este evento não é rastreado nesta conta"
+                }
+              >
+                <span
+                  className={cn(
+                    "block truncate text-[10px] tracking-tight sm:hidden",
+                    rotulado ? "text-t3" : "text-[var(--t4)]"
+                  )}
+                >
+                  {rotulo}
+                </span>
+                {rotulado ? (
+                  <span
+                    className={cn(
+                      "font-mono text-[13px] tabular-nums",
+                      n > 0 ? "text-ink" : "text-t3"
+                    )}
+                  >
+                    {n}
+                  </span>
+                ) : (
+                  <span className="font-mono text-[13px] tabular-nums text-[var(--t4)]">
+                    —<span className="sr-only"> (não rastreado)</span>
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="absolute right-2.5 top-2 sm:static sm:flex sm:justify-end">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              disabled={alternando}
+              aria-label={`Ações de ${nome}`}
+              className={cn(
+                "inline-flex h-8 w-8 items-center justify-center rounded-[5px] text-[var(--t4)] hover:bg-hover hover:text-ink disabled:opacity-50 sm:h-7 sm:w-7",
+                FOCO
+              )}
+            >
+              {alternando ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <MoreHorizontal aria-hidden className="h-4 w-4" />
+              )}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onClick={alternar}>
+                <Power aria-hidden />
+                {destino.ativo ? "Desativar (para de enviar)" : "Ativar"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setEditando(true)}>
+                <Pencil aria-hidden />
+                Editar
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onClick={() => setRemovendo(true)}>
+                <Trash2 aria-hidden />
+                Remover
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
-      {(destino.contagem.pendentes > 0 ||
-        destino.contagem.falharam > 0 ||
-        destino.contagem.semAtribuicao > 0) && (
-        <div className="mt-1 space-y-0.5 text-[11px]">
-          {destino.contagem.pendentes > 0 && (
-            <p className="text-amber-600">
-              {destino.contagem.pendentes} na fila, aguardando reenvio
+      {temSubLinha && (
+        <div className="mt-2 flex flex-col gap-0.5 text-[11.5px]">
+          {perdendo && (
+            <p className="flex items-start gap-1.5 text-[var(--err)]">
+              <Ponto tom="err" tamanho={5} className="mt-[5px]" />
+              <span>
+                {faltam === 1
+                  ? "1 pedido sem compra enviada nos últimos 7 dias"
+                  : `${faltam} pedidos sem compra enviada nos últimos 7 dias`}
+              </span>
             </p>
           )}
-          {destino.contagem.falharam > 0 && (
+          {falta && destino.ativo && (
+            <p className="flex items-start gap-1.5 text-[var(--err)]">
+              <Ponto tom="err" tamanho={5} className="mt-[5px]" />
+              <span>{falta}</span>
+            </p>
+          )}
+          {destino.testEventCode && (
+            <p className="flex items-start gap-1.5 text-t3">
+              <Ponto tom="neutro" tamanho={5} className="mt-[5px]" />
+              <span>
+                Os eventos vão para a aba de teste do Events Manager e não contam como
+                conversão.
+              </span>
+            </p>
+          )}
+          {c.pendentes > 0 && (
+            <p className="flex items-start gap-1.5 text-t2">
+              <Ponto tom="warn" tamanho={5} className="mt-[5px]" />
+              <span>
+                {c.pendentes === 1
+                  ? "1 na fila, aguardando reenvio"
+                  : `${c.pendentes} na fila, aguardando reenvio`}
+              </span>
+            </p>
+          )}
+          {c.falharam > 0 && (
             <p
-              className="text-destructive"
-              title={destino.contagem.ultimoErro ?? undefined}
+              className="flex items-start gap-1.5 text-ink"
+              title={c.ultimoErro ?? undefined}
             >
-              {destino.contagem.falharam} falharam
-              {destino.contagem.ultimoErro
-                ? ` — ${destino.contagem.ultimoErro.slice(0, 90)}`
-                : ""}
+              <Ponto tom="err" tamanho={5} className="mt-[5px]" />
+              <span className="line-clamp-2 min-w-0">
+                {c.falharam} falharam
+                {c.ultimoErro ? ` — ${c.ultimoErro.slice(0, 90)}` : ""}
+              </span>
             </p>
           )}
-          {destino.contagem.semAtribuicao > 0 && (
-            <p className="text-muted-foreground">
-              {destino.contagem.semAtribuicao} sem click id: chegam, sem ligação com
-              anúncio
+          {c.semAtribuicao > 0 && (
+            <p className="flex items-start gap-1.5 text-t3">
+              <Ponto tom="neutro" tamanho={5} className="mt-[5px]" />
+              <span>
+                {c.semAtribuicao} sem click id: chegam, sem ligação com anúncio
+              </span>
             </p>
           )}
         </div>
@@ -691,57 +749,86 @@ export function PainelPlataforma({
   storeId,
   plataforma,
   destinos,
+  faltasPorDestino,
 }: {
   storeId: string;
   plataforma: Plataforma;
   destinos: DestinoNaTela[];
+  /** id do destino -> pedidos sem compra. So vem com a loja ligada. */
+  faltasPorDestino?: Record<string, number>;
 }) {
   const [adicionando, setAdicionando] = useState(false);
   const meus = destinos.filter((d) => d.plataforma === plataforma);
   const enviando = meus.filter((d) => d.ativo && !oQueFalta(d)).length;
+  // So o Google tem evento sem rotulo; a legenda do traco so aparece se houver.
+  const temSemRotulo = meus.some(
+    (d) => d.plataforma === "google" && EVENTOS.some((ev) => !d.labels[ev.chave])
+  );
 
   return (
-    <section className="space-y-2.5 rounded-md border p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold">
-            {NOME_DA_PLATAFORMA[plataforma]}
-          </span>
-          {meus.length > 0 && (
-            <Pill tom={enviando > 0 ? "ok" : "alerta"}>
-              {enviando} de {meus.length} enviando
-            </Pill>
-          )}
-        </div>
+    <div id={`destinos-${plataforma}-${storeId}`} className="scroll-mt-20">
+      <div className="mb-2 flex items-center gap-2.5">
+        <h3 className="shrink-0 whitespace-nowrap text-[12.5px] font-semibold text-ink">
+          {NOME_DA_PLATAFORMA[plataforma]}
+        </h3>
+        {meus.length > 0 && (
+          <Selo tom={enviando > 0 ? "ok" : "warn"}>
+            {enviando} de {meus.length} enviando
+          </Selo>
+        )}
+        <span aria-hidden className="h-px flex-1 bg-border" />
         <Button
-          size="sm"
+          size="xs"
           variant="outline"
-          className="h-7"
+          className="h-8 px-[9px] text-[12px] font-semibold sm:h-[26px]"
           onClick={() => setAdicionando(true)}
         >
-          <Plus className="mr-1 h-3.5 w-3.5" />
+          <Plus className="h-3.5 w-3.5" />
           Adicionar {plataforma === "google" ? "conta" : "pixel"}
         </Button>
       </div>
 
       {meus.length === 0 ? (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="rounded-lg border border-dashed border-[var(--border-strong)] bg-surface px-4 py-4 text-center text-[12px] text-t2">
           {plataforma === "google"
             ? "Nenhuma conta do Google. Cada conta tem o seu ID de conversão e os seus rótulos."
             : "Nenhum pixel do Meta. Cada pixel precisa do próprio token do CAPI."}
         </p>
       ) : (
-        <div className="space-y-2">
-          {meus.map((d) => (
-            <LinhaDestino key={d.id} storeId={storeId} destino={d} />
-          ))}
-        </div>
+        <>
+          <p className="mb-1 text-right text-[10.5px] text-[var(--t4)]">
+            últimos 7 dias{temSemRotulo ? " · — = sem rótulo, não rastreado" : ""}
+          </p>
+          <div className="overflow-hidden rounded-lg border border-border bg-surface">
+            <div
+              className={`hidden sm:grid ${GRADE} items-center gap-x-2 border-b border-border bg-surface-2 px-3.5 py-2 text-[11px] font-semibold text-t3`}
+            >
+              <span>Conta</span>
+              {EVENTOS.map((ev) => (
+                <span key={ev.chave} className="truncate text-right">
+                  {ROTULO_CURTO[ev.chave] ?? ev.nome}
+                </span>
+              ))}
+              <span />
+            </div>
+            <div>
+              {meus.map((d) => (
+                <LinhaDestino
+                  key={d.id}
+                  storeId={storeId}
+                  destino={d}
+                  faltam={faltasPorDestino?.[d.id]}
+                />
+              ))}
+            </div>
+          </div>
+        </>
       )}
 
       {/* Varias contas da mesma plataforma e seguro, e o motivo nao e obvio --
           sem isto escrito, a pergunta "nao vai contar 5 vezes?" aparece. */}
       {meus.length > 1 && plataforma === "google" && (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="mt-2 text-[11.5px] text-t3">
           Todas as contas recebem todos os eventos. Não infla nada: conversão cujo
           gclid não pertence à conta é descartada pelo Google — a conta dona do clique
           conta, as outras ignoram.
@@ -749,7 +836,7 @@ export function PainelPlataforma({
       )}
 
       {meus.length > 1 && plataforma === "meta" && (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="mt-2 text-[11.5px] text-t3">
           Todos os pixels recebem todos os eventos, cada um com o seu token.
         </p>
       )}
@@ -762,6 +849,6 @@ export function PainelPlataforma({
           onFechar={() => setAdicionando(false)}
         />
       )}
-    </section>
+    </div>
   );
 }

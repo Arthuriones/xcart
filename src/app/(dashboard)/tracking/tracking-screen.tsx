@@ -1,20 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useState, type ReactNode } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   Check,
   ChevronDown,
+  ChevronRight,
   CircleAlert,
   Copy,
   ExternalLink,
   Loader2,
   Minus,
-  Plus,
+  Power,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -24,7 +26,25 @@ import {
 } from "@/components/ui/select";
 import type { DestinoNaTela, LojaTracking } from "@/lib/tracking/queries";
 import type { DiagnosticoLoja } from "@/lib/tracking/diagnostico";
+import { cn } from "@/lib/utils";
 import { PainelPlataforma } from "./destinos-ui";
+import {
+  ORDEM_SAUDE,
+  aceitamCompra,
+  apelido,
+  emModoTeste,
+  melhorDa,
+  oQueFalta,
+  plural,
+  quando,
+  recebemCompra,
+  saudeDaLoja,
+  textoProblema,
+  vereditoDoDestino,
+  type Saude,
+  type Tom,
+} from "./saude";
+import { Aviso, Ponto, Selo, TagPlataforma } from "./selo";
 
 // ============================================================================
 // Tela de rastreamento.
@@ -36,7 +56,8 @@ import { PainelPlataforma } from "./destinos-ui";
 //
 // Por isso o desenho poe o VEREDITO no topo de cada loja, com a comparacao que
 // de fato denuncia ("3 pedidos, 0 compras enviadas"), e empurra a configuracao
-// para baixo. Configuracao e o que se mexe uma vez; saude e o que se olha sempre.
+// para baixo, fechada. Configuracao e o que se mexe uma vez; saude e o que se
+// olha sempre.
 //
 // O DESTINO E UMA LISTA
 //
@@ -46,271 +67,21 @@ import { PainelPlataforma } from "./destinos-ui";
 // estar chegando e a outra nao.
 // ============================================================================
 
-function Pill({
-  tom,
-  children,
-}: {
-  tom: "ok" | "alerta" | "erro" | "neutro";
-  children: React.ReactNode;
-}) {
-  const cor =
-    tom === "ok"
-      ? "bg-emerald-500/15 text-emerald-600"
-      : tom === "alerta"
-        ? "bg-amber-500/15 text-amber-600"
-        : tom === "erro"
-          ? "bg-destructive/15 text-destructive"
-          : "bg-muted text-muted-foreground";
-  return (
-    <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium ${cor}`}>
-      {children}
-    </span>
-  );
-}
+const FOCO =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40";
 
-/** Um pre-requisito que mora na Shopify, com o comando que conserta. */
-function Checagem({
-  ok,
-  rotulo,
-  conserto,
-}: {
-  ok: boolean | null;
-  rotulo: string;
-  conserto: string;
-}) {
-  if (ok === null) {
-    return (
-      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Minus className="h-3.5 w-3.5" />
-        {rotulo}: não deu para verificar
-      </span>
-    );
-  }
-  if (ok) {
-    return (
-      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Check className="h-3.5 w-3.5 text-emerald-600" />
-        {rotulo}
-      </span>
-    );
-  }
-  return (
-    <span
-      className="flex items-center gap-1.5 text-xs font-medium text-destructive"
-      title={conserto}
-    >
-      <CircleAlert className="h-3.5 w-3.5" />
-      {rotulo}: faltando
-    </span>
-  );
-}
+/** Botao pequeno de linha (checklist e "O que fazer"). */
+const BOTAO_LINHA = cn(
+  "inline-flex h-8 shrink-0 items-center gap-1 rounded-[5px] border border-border bg-surface px-2 text-[11.5px] font-semibold text-t2 hover:border-[var(--border-strong)] hover:text-ink disabled:opacity-50 sm:h-6",
+  FOCO
+);
 
-/** Como chamar um destino numa frase. */
-function apelido(d: DestinoNaTela): string {
-  const plataforma = d.plataforma === "google" ? "Google" : "Meta";
-  return d.nome ? `${plataforma} "${d.nome}"` : `${plataforma} ${d.conta}`;
-}
-
-/**
- * Meta com test_event_code: o evento cai na aba de TESTE do Events Manager e
- * nao conta como conversao. Contar essas compras como "rastreadas" diria que a
- * campanha esta medindo quando nao esta.
- */
-function emModoTeste(d: DestinoNaTela): boolean {
-  return d.plataforma === "meta" && Boolean(d.testEventCode);
-}
-
-/** Os destinos para onde a compra SAI -- inclusive o Meta em modo teste. */
-function aceitamCompra(loja: LojaTracking): DestinoNaTela[] {
-  return loja.destinos.filter(
-    (d) =>
-      d.ativo &&
-      d.completo &&
-      (d.plataforma === "meta" || Boolean(d.labels.purchase))
-  );
-}
-
-/** Os destinos que deveriam estar recebendo a compra COMO CONVERSAO. */
-function recebemCompra(loja: LojaTracking): DestinoNaTela[] {
-  return aceitamCompra(loja).filter((d) => !emModoTeste(d));
-}
-
-/**
- * Quantos pedidos esperados NAO tiveram a compra enviada por este destino.
- *
- * Todo pedido vai para todo destino que aceita a compra, entao nao ha pedido
- * que "veio de fora do anuncio" e pode faltar: faltou, perdeu. Fica fora so o
- * que nao tinha como ter ido -- pedido anterior ao cadastro do destino -- e o
- * que ainda esta na fila do cron, que nao saiu mas nao se perdeu.
- *
- * Null = o diagnostico nao trouxe a lista de pedidos.
- */
-function pedidosSemCompra(d: DestinoNaTela, diag: DiagnosticoLoja | null): number | null {
-  if (!diag?.pedidoIds) return null;
-  const desde = d.criadoEm ? Date.parse(d.criadoEm) : NaN;
-  const chegou = new Set([...d.contagem.pedidosComCompra, ...d.contagem.pedidosNaFila]);
-  let faltam = 0;
-  for (const id of diag.pedidoIds) {
-    if (chegou.has(id)) continue;
-    const criado = Date.parse(diag.pedidoCriadoEm?.[id] ?? "");
-    if (Number.isFinite(desde) && Number.isFinite(criado) && criado < desde) continue;
-    faltam += 1;
-  }
-  return faltam;
-}
-
-/** O destino da plataforma que mais recebeu compra. */
-function melhorDa(
-  alvos: DestinoNaTela[],
-  plataforma: DestinoNaTela["plataforma"]
-): DestinoNaTela | null {
-  let melhor: DestinoNaTela | null = null;
-  for (const d of alvos) {
-    if (d.plataforma !== plataforma) continue;
-    if (
-      !melhor ||
-      (d.contagem.porEvento.purchase ?? 0) > (melhor.contagem.porEvento.purchase ?? 0)
-    ) {
-      melhor = d;
-    }
-  }
-  return melhor;
-}
-
-/**
- * O veredito da loja.
- *
- * Compara a COMPRA com os pedidos, nao o total de eventos: carrinho e checkout
- * acontecem muito mais que venda, e somados dariam "300 de 4 pedidos", que nao
- * diz nada. E compara POR DESTINO -- a mesma venda rende uma linha para cada
- * conta configurada, e somar transformaria 1 pedido em 5 compras.
- *
- * E compara PEDIDO A PEDIDO: todo pedido vai para todo destino, entao 8 compras
- * para 10 pedidos sao 2 vendas perdidas, nao "2 que vieram de fora do anuncio".
- * So o "nenhuma compra" acusava antes, e perda parcial passava calada.
- */
-function Veredito({
-  loja,
-  diag,
-}: {
-  loja: LojaTracking;
-  diag: DiagnosticoLoja | null;
-}) {
-  const alvos = recebemCompra(loja);
-  const emTeste = aceitamCompra(loja).filter(emModoTeste);
-
-  // Fica acima de tudo: muda como ler o resto. A compra sai, aparece no
-  // Events Manager, e a campanha nao recebe conversao nenhuma.
-  const avisoTeste = emTeste.length > 0 && (
-    <div className="flex items-start gap-2 rounded-md bg-amber-500/10 p-2.5 text-xs">
-      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
-      <div className="space-y-0.5">
-        {emTeste.map((d) => (
-          <p key={d.id} className="font-medium text-amber-600">
-            {apelido(d)} em modo teste — compras não contam como conversão
-          </p>
-        ))}
-      </div>
-    </div>
-  );
-
-  if (alvos.length === 0) {
-    const temAlgum = loja.destinos.length > 0;
-    return (
-      <>
-        {avisoTeste}
-        <div className="flex items-start gap-2 rounded-md bg-muted/60 p-2.5 text-xs">
-          <Minus className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <span className="text-muted-foreground">
-            {temAlgum
-              ? "Nenhum destino está recebendo a compra. Confira o rótulo da compra no Google e o token no Meta."
-              : "Nenhum destino cadastrado ainda. Adicione uma conta do Google, um pixel do Meta, ou os dois."}
-          </span>
-        </div>
-      </>
-    );
-  }
-
-  const pedidos = diag?.pedidos7d ?? null;
-
-  // Cada destino e julgado sozinho: uma conta pode estar chegando e a outra nao.
-  //
-  // Com a contagem da fila indisponivel, NAO ha comparacao: "zero compras
-  // enviadas" seria a falha da leitura, nao das compras, e acusaria cada
-  // pedido como perdido. Antes o null virava 0 e ia direto para o alarme.
-  const faltas = loja.contagemIndisponivel
-    ? []
-    : alvos
-        .map((d) => ({ destino: d, faltam: pedidosSemCompra(d, diag) }))
-        .filter(
-          (f): f is { destino: DestinoNaTela; faltam: number } =>
-            f.faltam !== null && f.faltam >= 1
-        );
-
-  const melhorGoogle = melhorDa(alvos, "google");
-  const melhorMeta = melhorDa(alvos, "meta");
-
-  return (
-    <>
-      {avisoTeste}
-
-      {loja.contagemIndisponivel && (
-        <div className="flex items-start gap-2 rounded-md bg-amber-500/10 p-2.5 text-xs">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
-          <span className="text-muted-foreground">
-            Não deu para contar os envios agora, então a comparação com os pedidos
-            ficou de fora. Recarregue a página em instantes.
-          </span>
-        </div>
-      )}
-
-      {faltas.length > 0 && (
-        <div className="flex items-start gap-2 rounded-md bg-destructive/10 p-2.5 text-xs">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
-          <div>
-            {faltas.map(({ destino, faltam }) => (
-              <p key={destino.id} className="font-medium text-destructive">
-                {faltam} {faltam === 1 ? "pedido" : "pedidos"} sem compra enviada em{" "}
-                {apelido(destino)}
-              </p>
-            ))}
-            <p className="text-muted-foreground">
-              {diag?.temWebhook === false
-                ? "O webhook de pedidos não está inscrito — é quase certo que seja isso."
-                : "Todo pedido vai para todo destino: o que falta aqui é venda que a campanha não viu. Confira as falhas do destino abaixo, o rótulo da compra e, no Meta, o token do CAPI."}
-            </p>
-          </div>
-        </div>
-      )}
-
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md bg-muted/60 p-2.5 text-xs">
-        <span className="flex items-center gap-1.5">
-          <Check className="h-3.5 w-3.5 text-emerald-600" />
-          <span className="text-muted-foreground">
-            {pedidos !== null ? (
-              <>
-                <strong className="text-foreground">{pedidos}</strong> pedidos em 7 dias
-              </>
-            ) : (
-              "pedidos: não deu para verificar"
-            )}
-          </span>
-        </span>
-        {alvos.map((d) => (
-          <span key={d.id} className="text-muted-foreground">
-            {apelido(d)}:{" "}
-            <strong className="text-foreground">
-              {d.contagem.porEvento.purchase ?? 0}
-            </strong>{" "}
-            compras
-          </span>
-        ))}
-        {melhorGoogle && <Atribuicao destino={melhorGoogle} clique="gclid" />}
-        {melhorMeta && <Atribuicao destino={melhorMeta} clique="fbc" />}
-      </div>
-    </>
-  );
-}
+const TOM_DA_SAUDE: Record<Saude, Tom> = {
+  parado: "err",
+  atencao: "warn",
+  ok: "ok",
+  desligado: "neutro",
+};
 
 /**
  * Quantas COMPRAS foram creditadas a um anuncio, por plataforma.
@@ -325,6 +96,8 @@ function Veredito({
  * EVENTO, nao da conta -- todas recebem o mesmo pedido com os mesmos sinais.
  * Entre plataformas nao: a venda pode ter gclid e nao ter fbc, e um so numero
  * esconderia que o Meta esta otimizando sem saber de onde veio a venda.
+ *
+ * Sem o prefixo da plataforma: a linha onde isto aparece ja leva a etiqueta.
  */
 function Atribuicao({
   destino,
@@ -339,14 +112,178 @@ function Atribuicao({
   const semClique = destino.contagem.semAtribPorEvento.purchase ?? 0;
   if (semClique === 0) return null;
 
-  const plataforma = destino.plataforma === "google" ? "Google" : "Meta";
   const todas = semClique >= total;
   return (
-    <span className={todas ? "text-amber-600" : "text-muted-foreground"}>
-      {plataforma}: {semClique} de {total} compras sem {clique}
-      {todas ? " — nenhuma venda foi creditada a um anúncio" : ""}
-    </span>
+    <p
+      className={cn(
+        "flex items-center gap-1.5 text-[11.5px]",
+        todas ? "text-ink" : "text-t3"
+      )}
+    >
+      <Ponto tom={todas ? "warn" : "neutro"} tamanho={5} />
+      {todas
+        ? `Nenhuma venda creditada a um anúncio — ${semClique} de ${total} sem ${clique}`
+        : total === 1
+          ? `${semClique} de 1 compra sem ${clique}`
+          : `${semClique} de ${total} compras sem ${clique}`}
+    </p>
   );
+}
+
+/**
+ * O veredito da loja.
+ *
+ * Compara a COMPRA com os pedidos, nao o total de eventos: carrinho e checkout
+ * acontecem muito mais que venda, e somados dariam "300 de 4 pedidos", que nao
+ * diz nada. E compara POR DESTINO -- a mesma venda rende uma linha para cada
+ * conta configurada, e somar transformaria 1 pedido em 5 compras.
+ *
+ * E compara PEDIDO A PEDIDO: todo pedido vai para todo destino, entao 8 compras
+ * para 10 pedidos sao 2 vendas perdidas, nao "2 que vieram de fora do anuncio".
+ * So o "nenhuma compra" acusava antes, e perda parcial passava calada.
+ */
+function ComprasChegando({
+  loja,
+  diag,
+  alvos,
+}: {
+  loja: LojaTracking;
+  diag: DiagnosticoLoja | null;
+  alvos: DestinoNaTela[];
+}) {
+  const pedidos = diag?.pedidos7d ?? null;
+  const melhorGoogle = melhorDa(alvos, "google");
+  const melhorMeta = melhorDa(alvos, "meta");
+
+  return (
+    <div className="border-t border-[var(--border-subtle)]">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 px-4 pb-1.5 pt-3">
+        <h3 className="text-[12.5px] font-semibold text-ink">Compras chegando</h3>
+        <span className="font-mono text-[11px] text-t3">
+          {pedidos === null
+            ? "7 dias · pedidos: não deu para verificar"
+            : `7 dias · ${plural(pedidos, "pedido", "pedidos")} na loja`}
+        </span>
+      </div>
+
+      {alvos.map((d) => {
+        const v = vereditoDoDestino(d, loja, diag);
+        const melhor = d.plataforma === "google" ? melhorGoogle : melhorMeta;
+        return (
+          <div
+            key={d.id}
+            className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t border-[var(--border-subtle)] px-4 py-2.5"
+          >
+            <TagPlataforma plataforma={d.plataforma} />
+            <p className="min-w-0 truncate text-[12.5px] font-medium text-ink">
+              {d.nome || d.conta}
+              {d.nome && (
+                <span className="ml-1 font-mono text-[11px] font-normal text-t3">
+                  {d.conta}
+                </span>
+              )}
+            </p>
+            <div className="text-right">
+              {v.tipo === "razao" ? (
+                <>
+                  <p
+                    className={cn(
+                      "font-mono text-[18px] font-medium leading-none tabular-nums",
+                      v.faltam === 0 ? "text-ink" : "text-[var(--err)]"
+                    )}
+                  >
+                    {v.chegaram}/{v.esperados}
+                  </p>
+                  <p className="mt-1 flex items-center justify-end gap-1 text-[11px]">
+                    {v.esperados === 0 ? (
+                      <span className="text-t3">nenhum pedido ainda</span>
+                    ) : v.faltam === 0 ? (
+                      <span className="text-t3">pedidos com compra</span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-[var(--err)]">
+                        <Ponto tom="err" tamanho={5} />
+                        {v.faltam === 1 ? "falta 1" : `faltam ${v.faltam}`}
+                      </span>
+                    )}
+                  </p>
+                </>
+              ) : v.tipo === "sem-pedidos" ? (
+                <>
+                  <p className="font-mono text-[18px] font-medium leading-none tabular-nums text-ink">
+                    {v.compras}
+                  </p>
+                  <p className="mt-1 text-[11px] text-t3">
+                    {v.compras === 1 ? "compra enviada" : "compras enviadas"}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-mono text-[18px] font-medium leading-none tabular-nums text-[var(--t4)]">
+                    —
+                  </p>
+                  <p className="mt-1 text-[11px] text-t3">sem contagem</p>
+                </>
+              )}
+            </div>
+            {melhor?.id === d.id && (
+              <div className="col-span-2 col-start-2 empty:hidden">
+                <Atribuicao
+                  destino={d}
+                  clique={d.plataforma === "google" ? "gclid" : "fbc"}
+                />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+const ICONE_DO_TOM: Record<Tom, { Icone: typeof Check; cor: string }> = {
+  ok: { Icone: Check, cor: "var(--ok)" },
+  err: { Icone: CircleAlert, cor: "var(--err)" },
+  warn: { Icone: AlertTriangle, cor: "var(--warn)" },
+  neutro: { Icone: Minus, cor: "var(--t4)" },
+};
+
+/** Uma linha de "Pre-requisitos": icone, nome, estado em palavra e o conserto. */
+function LinhaChecagem({
+  id,
+  tom,
+  rotulo,
+  estado,
+  acao,
+  children,
+}: {
+  id?: string;
+  tom: Tom;
+  rotulo: ReactNode;
+  estado: { tom: Tom; texto: string };
+  acao?: ReactNode;
+  children?: ReactNode;
+}) {
+  const { Icone, cor } = ICONE_DO_TOM[tom];
+  return (
+    <div
+      id={id}
+      className="flex scroll-mt-20 flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--border-subtle)] px-3.5 py-2.5 first:border-t-0"
+    >
+      <Icone aria-hidden className="h-3.5 w-3.5 shrink-0" style={{ color: cor }} />
+      {/* Nome e selo quebram juntos: no celular o selo desce para baixo do
+          nome, alinhado com ele, e nao para baixo do icone. */}
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="text-[12.5px] font-medium text-ink">{rotulo}</span>
+        <Selo tom={estado.tom}>{estado.texto}</Selo>
+      </div>
+      {acao && <span className="ml-auto flex shrink-0">{acao}</span>}
+      {children}
+    </div>
+  );
+}
+
+function Dica({ children }: { children: ReactNode }) {
+  return <p className="w-full pl-[26px] text-[11.5px] text-t3">{children}</p>;
 }
 
 /**
@@ -362,7 +299,15 @@ function Atribuicao({
  * instalei" -- passo manual que o lojista pode esquecer de marcar e um estado
  * que mente.
  */
-function PixelDoCheckout({ loja }: { loja: LojaTracking }) {
+function PixelDoCheckout({
+  loja,
+  abrirSinal,
+  onSinalAtendido,
+}: {
+  loja: LojaTracking;
+  abrirSinal: number;
+  onSinalAtendido: () => void;
+}) {
   const estado: "falta" | "antigo" | "atual" = !loja.pixelCheckoutAtivo
     ? "falta"
     : loja.pixelCheckoutDesatualizado
@@ -399,117 +344,181 @@ function PixelDoCheckout({ loja }: { loja: LojaTracking }) {
     }
   }
 
+  // O CTA do "O que fazer" abre o codigo daqui; sem estado global. O sinal e
+  // zerado ao ser atendido: sem isso, fechar e reabrir a configuracao
+  // remontaria este bloco e abriria o codigo de novo sozinho.
+  const atender = useEffectEvent(() => {
+    onSinalAtendido();
+    if (!aberto) void buscar();
+  });
+  useEffect(() => {
+    if (abrirSinal <= 0) return;
+    // Na proxima volta do loop: o bloco acabou de montar (a configuracao abriu
+    // agora) e o efeito nao deve mexer em estado de forma sincrona. setTimeout
+    // e nao requestAnimationFrame: este dispara o fetch, e rAF nao roda em aba
+    // em segundo plano.
+    const id = setTimeout(() => atender(), 0);
+    return () => clearTimeout(id);
+  }, [abrirSinal]);
+
+  const tom: Tom = estado === "atual" ? "ok" : estado === "antigo" ? "warn" : "err";
+  const areaId = `pixel-codigo-${loja.storeId}`;
+
   return (
-    <section className="space-y-2.5 rounded-md border p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs font-semibold">Checkout (Web Pixel)</span>
-        <Pill tom={estado === "atual" ? "ok" : "alerta"}>
-          {estado === "atual"
-            ? "instalado"
+    <LinhaChecagem
+      id={`pixel-${loja.storeId}`}
+      tom={tom}
+      rotulo="Pixel do checkout"
+      estado={{
+        tom,
+        texto:
+          estado === "atual"
+            ? "Instalado"
             : estado === "antigo"
-              ? "atualizar código"
-              : "falta instalar"}
-        </Pill>
-      </div>
-
-      <p className="text-[11px] text-muted-foreground">
-        O checkout da Shopify não é tema, então o nosso script não entra lá. Sem este
-        pixel, &quot;iniciar checkout&quot; é o <strong>clique no botão</strong> e não
-        existe &quot;dados de pagamento&quot; — o passo que separa desistência no frete
-        de cartão recusado. Ele não envia nada para o Meta nem para o Google: avisa o
-        xcart, e o envio continua saindo do servidor.
-      </p>
-
-      {/* Tres estados, e o do meio e o que faltava. O codigo so aparecia com o
-          pixel AUSENTE -- e a loja que tinha o trecho antigo colado, sem o id
-          da loja, nao tinha onde pegar o novo. */}
-      {estado === "falta" && (
-        <ol className="list-decimal space-y-0.5 pl-4 text-[11px] text-muted-foreground">
-          <li>
-            No admin da Shopify: <strong>Configurações → Eventos de cliente</strong>
-          </li>
-          <li>
-            <strong>Adicionar pixel personalizado</strong>, dê um nome (ex.: xcart)
-          </li>
-          <li>Cole o código abaixo, <strong>Salvar</strong> e <strong>Conectar</strong></li>
-        </ol>
+              ? "Atualizar código"
+              : "Falta instalar",
+      }}
+      acao={
+        <button
+          type="button"
+          onClick={buscar}
+          disabled={carregando}
+          aria-expanded={aberto}
+          aria-controls={areaId}
+          className={BOTAO_LINHA}
+        >
+          {carregando ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : aberto ? (
+            "Esconder código"
+          ) : estado === "atual" ? (
+            "Ver código"
+          ) : (
+            "Mostrar código para colar"
+          )}
+        </button>
+      }
+    >
+      {!aberto && estado === "falta" && (
+        <Dica>Sem ele o checkout e os dados de pagamento não são medidos.</Dica>
+      )}
+      {!aberto && estado === "antigo" && (
+        <Dica>Troque o código do pixel que já existe — não crie um segundo.</Dica>
       )}
 
-      {estado === "antigo" && (
-        <div className="space-y-1.5 rounded-md bg-amber-500/10 p-2.5 text-[11px]">
-          <p className="font-medium text-amber-600">
-            O pixel está funcionando, mas é o código antigo.
-          </p>
-          <p className="text-muted-foreground">
-            O novo leva o id da loja, o que impede que outra conta desvie os eventos do
-            teu checkout. Troque o código do pixel que já existe —{" "}
-            <strong>não crie um segundo</strong>:
-          </p>
-          <ol className="list-decimal space-y-0.5 pl-4 text-muted-foreground">
-            <li>
-              No admin da Shopify: <strong>Configurações → Eventos de cliente</strong>
-            </li>
-            <li>
-              Abra o pixel do xcart, <strong>apague o código</strong> que está lá
-            </li>
-            <li>
-              Cole o código abaixo e clique em <strong>Salvar</strong>
-            </li>
-          </ol>
+      {aberto && (
+        <div id={areaId} className="mt-2 w-full space-y-2 pl-[26px]">
+          {/* Tres estados, e o do meio e o que faltava. O codigo so aparecia com o
+              pixel AUSENTE -- e a loja que tinha o trecho antigo colado, sem o id
+              da loja, nao tinha onde pegar o novo. */}
+          {estado === "falta" && (
+            <ol className="list-decimal space-y-0.5 pl-4 text-[11.5px] text-t2">
+              <li>
+                No admin da Shopify:{" "}
+                <strong className="font-medium text-ink">
+                  Configurações → Eventos de cliente
+                </strong>
+              </li>
+              <li>
+                <strong className="font-medium text-ink">
+                  Adicionar pixel personalizado
+                </strong>
+                , dê um nome (ex.: xcart)
+              </li>
+              <li>
+                Cole o código abaixo,{" "}
+                <strong className="font-medium text-ink">Salvar</strong> e{" "}
+                <strong className="font-medium text-ink">Conectar</strong>
+              </li>
+            </ol>
+          )}
+
+          {estado === "antigo" && (
+            <div className="space-y-1.5 rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] p-2.5 text-[11.5px] text-t2">
+              <p className="font-medium text-ink">
+                O pixel está funcionando, mas é o código antigo.
+              </p>
+              <p>
+                O novo leva o id da loja, o que impede que outra conta desvie os eventos do
+                teu checkout. Troque o código do pixel que já existe —{" "}
+                <strong className="font-medium text-ink">não crie um segundo</strong>:
+              </p>
+              <ol className="list-decimal space-y-0.5 pl-4">
+                <li>
+                  No admin da Shopify:{" "}
+                  <strong className="font-medium text-ink">
+                    Configurações → Eventos de cliente
+                  </strong>
+                </li>
+                <li>
+                  Abra o pixel do xcart,{" "}
+                  <strong className="font-medium text-ink">apague o código</strong> que
+                  está lá
+                </li>
+                <li>
+                  Cole o código abaixo e clique em{" "}
+                  <strong className="font-medium text-ink">Salvar</strong>
+                </li>
+              </ol>
+            </div>
+          )}
+
+          {codigo && (
+            <>
+              <Button size="xs" variant="outline" onClick={copiar}>
+                <Copy className="h-3.5 w-3.5" />
+                Copiar
+              </Button>
+              {/* Uma linha so, com o id da loja: a logica mora em
+                  /xcart-pixel.js. Por isso o campo e baixo -- antes era um
+                  bloco de 60 linhas. */}
+              <textarea
+                readOnly
+                value={codigo}
+                onFocus={(e) => e.currentTarget.select()}
+                className="h-20 w-full rounded-md border border-border bg-surface-2 p-2 font-mono text-[10.5px] leading-relaxed text-t1"
+                aria-label="Código do pixel do checkout"
+              />
+              <p className="text-[11.5px] text-t3">
+                Depois de salvar, não precisa fazer mais nada aqui — o pixel se anuncia no
+                próximo checkout, e esta seção passa sozinha para &quot;instalado&quot;.
+              </p>
+            </>
+          )}
+
+          {estado !== "falta" && (
+            <p className="text-[11.5px] text-t3">
+              O &quot;iniciar checkout&quot; vindo do tema passou a ser ignorado: o do pixel é
+              o checkout de verdade, e contar os dois seria a mesma ação duas vezes.
+            </p>
+          )}
+
+          <details className="group/pixel">
+            <summary className={cn("cursor-pointer text-[11.5px] text-t3 hover:text-ink", FOCO)}>
+              Para que serve este pixel
+            </summary>
+            <p className="mt-1 text-[11.5px] text-t2">
+              O checkout da Shopify não é tema, então o nosso script não entra lá. Sem este
+              pixel, &quot;iniciar checkout&quot; é o <strong>clique no botão</strong> e não
+              existe &quot;dados de pagamento&quot; — o passo que separa desistência no frete
+              de cartão recusado. Ele não envia nada para o Meta nem para o Google: avisa o
+              xcart, e o envio continua saindo do servidor.
+            </p>
+          </details>
         </div>
       )}
-
-      <Button
-        size="sm"
-        variant={estado === "atual" ? "ghost" : "outline"}
-        onClick={buscar}
-        disabled={carregando}
-        className={estado === "atual" ? "h-7 px-2 text-[11px]" : undefined}
-      >
-        {carregando ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : aberto ? (
-          "esconder código"
-        ) : estado === "atual" ? (
-          "ver código"
-        ) : (
-          "mostrar código para colar"
-        )}
-      </Button>
-
-      {aberto && codigo && (
-        <div className="space-y-1.5">
-          <Button size="sm" variant="outline" onClick={copiar}>
-            <Copy className="mr-1.5 h-3.5 w-3.5" />
-            Copiar
-          </Button>
-          {/* Uma linha so, com o id da loja: a logica mora em
-              /xcart-pixel.js. Por isso o campo e baixo -- antes era um
-              bloco de 60 linhas. */}
-          <textarea
-            readOnly
-            value={codigo}
-            onFocus={(e) => e.currentTarget.select()}
-            className="h-20 w-full rounded-md border bg-muted/40 p-2 font-mono text-[10px] leading-relaxed"
-            aria-label="Código do pixel do checkout"
-          />
-          <p className="text-[11px] text-muted-foreground">
-            Depois de salvar, não precisa fazer mais nada aqui — o pixel se anuncia no
-            próximo checkout, e esta seção passa sozinha para &quot;instalado&quot;.
-          </p>
-        </div>
-      )}
-
-      {estado !== "falta" && (
-        <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
-          <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
-          O &quot;iniciar checkout&quot; vindo do tema passou a ser ignorado: o do pixel é
-          o checkout de verdade, e contar os dois seria a mesma ação duas vezes.
-        </p>
-      )}
-    </section>
+    </LinhaChecagem>
   );
 }
+
+type ItemAFazer = {
+  chave: string;
+  tom: "err" | "warn";
+  titulo: string;
+  dica: string;
+  dicaTitulo?: string;
+  botao: { rotulo: string; onClick: () => void; disabled?: boolean; carregando?: boolean };
+};
 
 function CardLoja({
   loja,
@@ -520,10 +529,14 @@ function CardLoja({
   diag: DiagnosticoLoja | null;
   comecarAberto: boolean;
 }) {
+  const router = useRouter();
   const [aberto, setAberto] = useState(comecarAberto);
   const [ligado, setLigado] = useState(loja.ligado);
   const [salvando, setSalvando] = useState(false);
   const [instalando, setInstalando] = useState<string | null>(null);
+  // Sinal para o pixel abrir o codigo: um contador, nao um booleano, para o
+  // segundo clique tambem chegar.
+  const [pedirCodigo, setPedirCodigo] = useState(0);
 
   const temGoogle = loja.destinos.some((d) => d.plataforma === "google" && d.ativo);
   // aceitamCompra, nao recebemCompra: ligar so com o Meta em modo teste e o
@@ -531,6 +544,22 @@ function CardLoja({
   const podeLigar = aceitamCompra(loja).length > 0;
   // Sem o app, a credencial nao vale: checar e instalar no tema so dariam erro.
   const shopifyAlcancavel = ligado && !loja.desinstalada;
+
+  // `ligado` LOCAL: o card responde ao clique na hora. `temDiag` e o da carga --
+  // so loja ligada ao abrir a pagina passou pelo diagnostico.
+  const temDiag = loja.ligado;
+  const s = saudeDaLoja(loja, ligado, diag, temDiag);
+  const alvos = recebemCompra(loja);
+  const aceitam = aceitamCompra(loja);
+  const emTeste = aceitam.filter(emModoTeste);
+
+  /** So UI, nao busca nada: abre a configuracao e rola ate o alvo. */
+  function irPara(id: string) {
+    setAberto(true);
+    requestAnimationFrame(() =>
+      document.getElementById(id)?.scrollIntoView({ block: "start", behavior: "smooth" })
+    );
+  }
 
   /**
    * Instala a tag no tema pela tela.
@@ -580,183 +609,745 @@ function CardLoja({
     }
   }
 
+  // ---- faixa de estado -------------------------------------------------------
+
+  function linhaDoOk(): string {
+    if (!temDiag) return "Recarregue a página para conferir";
+    if (diag?.pedidos7d === 0) return "Nenhum pedido nos últimos 7 dias — nada para comparar ainda";
+    let pior: { chegaram: number; esperados: number } | null = null;
+    for (const d of alvos) {
+      const v = vereditoDoDestino(d, loja, diag);
+      if (v.tipo !== "razao" || v.esperados === 0) continue;
+      if (!pior || v.chegaram / v.esperados < pior.chegaram / pior.esperados) pior = v;
+    }
+    if (pior) {
+      return pior.esperados === 1
+        ? `${pior.chegaram} de 1 pedido chegou`
+        : `${pior.chegaram} de ${pior.esperados} pedidos chegaram`;
+    }
+    const n = alvos.reduce((m, d) => Math.max(m, d.contagem.porEvento.purchase ?? 0), 0);
+    return n === 1 ? "1 compra enviada em 7 dias" : `${n} compras enviadas em 7 dias`;
+  }
+
+  const faixa = {
+    ok: {
+      Icone: Check,
+      disco: "var(--ok-bg)",
+      cor: "var(--ok)",
+      titulo: "Tudo certo",
+    },
+    atencao: {
+      Icone: AlertTriangle,
+      disco: "var(--warn-bg)",
+      cor: "var(--warn)",
+      titulo: "Precisa de atenção",
+    },
+    // Disco em surface: sobre o fundo vermelho da faixa, err-bg sumiria.
+    parado: {
+      Icone: CircleAlert,
+      disco: "var(--surface)",
+      cor: "var(--err)",
+      titulo: "Parado",
+    },
+    desligado: {
+      Icone: Power,
+      disco: "var(--track)",
+      cor: "var(--t3)",
+      titulo: "Desligado",
+    },
+  }[s.saude];
+
+  let subLinha: ReactNode;
+  if (s.saude === "ok") {
+    subLinha = linhaDoOk();
+  } else if (s.saude === "desligado") {
+    subLinha = podeLigar
+      ? "Pronto para ligar"
+      : loja.destinos.length > 0
+        ? "Para ligar, um destino precisa receber a compra: no Google o rótulo da compra, no Meta o token do CAPI."
+        : "Cadastre uma conta do Google ou um pixel do Meta para poder ligar.";
+  } else {
+    subLinha = (
+      <>
+        {s.motivos[0]?.texto}
+        {s.motivos.length > 1 && (
+          <span className="text-t3"> · e mais {s.motivos.length - 1}</span>
+        )}
+      </>
+    );
+  }
+
+  // ---- "O que fazer": so o que se conserta na configuracao ------------------
+  // Os alarmes das faixas acima (desinstalado, teto, modo teste, contagem,
+  // ninguem recebendo, pedidos faltando) nao se repetem aqui.
+
+  const itens: ItemAFazer[] = [];
+  if (ligado) {
+    if (diag?.temWebhook === false && shopifyAlcancavel) {
+      itens.push({
+        chave: "webhook",
+        tom: "err",
+        titulo: "Webhook de pedidos não inscrito",
+        dica: "Sem ele os pedidos não viram compra. A inscrição acontece na instalação do app; se continuar faltando, reinscreva o webhook desta loja.",
+        botao: {
+          rotulo: "Ver como resolver",
+          onClick: () => irPara(`check-webhook-${loja.storeId}`),
+        },
+      });
+    }
+    if (shopifyAlcancavel && (diag?.temSnippet === false || diag?.snippetComId === false)) {
+      const falta = diag?.temSnippet === false;
+      itens.push({
+        chave: "snippet",
+        tom: "warn",
+        titulo: falta ? "Snippet faltando no tema" : "Snippet antigo no tema",
+        dica: falta
+          ? "Sem ele ver produto e carrinho não saem, e o clique do anúncio não chega no pedido."
+          : "A versão nova leva o id da loja e não deixa outra conta receber os seus eventos.",
+        botao: {
+          rotulo: falta ? "Instalar snippet" : "Reinstalar snippet",
+          onClick: () => void instalarTag(false),
+          disabled: instalando !== null,
+          carregando: instalando === "snippet",
+        },
+      });
+    }
+    if (!loja.pixelCheckoutAtivo || loja.pixelCheckoutDesatualizado) {
+      const falta = !loja.pixelCheckoutAtivo;
+      itens.push({
+        chave: "pixel",
+        tom: "warn",
+        titulo: falta ? "Pixel do checkout não instalado" : "Pixel do checkout com código antigo",
+        dica: falta
+          ? "Sem ele o checkout e os dados de pagamento não são medidos."
+          : "Troque o código do pixel que já existe — não crie um segundo.",
+        botao: {
+          rotulo: falta ? "Ver como instalar" : "Ver código novo",
+          onClick: () => {
+            setPedirCodigo((n) => n + 1);
+            irPara(`pixel-${loja.storeId}`);
+          },
+        },
+      });
+    }
+    for (const d of loja.destinos) {
+      const falta = d.ativo ? oQueFalta(d) : null;
+      if (!falta) continue;
+      itens.push({
+        chave: `incompleto-${d.id}`,
+        tom: "err",
+        titulo: `${apelido(d)} incompleto`,
+        dica: falta,
+        botao: { rotulo: "Ver destino", onClick: () => irPara(`destino-${d.id}`) },
+      });
+    }
+    for (const d of loja.destinos) {
+      const n = d.contagem.falharam;
+      if (n <= 0) continue;
+      itens.push({
+        chave: `falhou-${d.id}`,
+        tom: "warn",
+        titulo: `${apelido(d)}: ${n === 1 ? "1 envio falhou" : `${n} envios falharam`}`,
+        dica: d.contagem.ultimoErro?.slice(0, 90) ?? "Sem detalhe do erro.",
+        dicaTitulo: d.contagem.ultimoErro ?? undefined,
+        botao: { rotulo: "Ver destino", onClick: () => irPara(`destino-${d.id}`) },
+      });
+    }
+    if (temDiag && (diag === null || diag.pedidos7d === null)) {
+      itens.push({
+        chave: "diagnostico",
+        tom: "warn",
+        titulo: "Não deu para conferir a loja na Shopify",
+        dica: textoProblema(diag?.problema ?? null),
+        botao: { rotulo: "Recarregar", onClick: () => router.refresh() },
+      });
+    }
+  }
+
+  // ---- faixas de alarme -----------------------------------------------------
+
+  const temBanner =
+    (loja.desinstalada && ligado) ||
+    loja.tetoAtingidoRecente ||
+    (ligado &&
+      (emTeste.length > 0 ||
+        (loja.contagemIndisponivel && alvos.length > 0) ||
+        alvos.length === 0 ||
+        s.faltas.length > 0));
+
+  // "Abrir configuracao" leva ao painel onde o lojista ja tem conta; sem
+  // nenhuma, ao Google, que e o caso mais comum.
+  const plataformaDaConfig =
+    loja.destinos.length > 0 && loja.destinos.every((d) => d.plataforma === "meta")
+      ? "meta"
+      : "google";
+
+  const faltasPorDestino = ligado
+    ? Object.fromEntries(s.faltas.map((f) => [f.d.id, f.faltam]))
+    : undefined;
+
+  const estadoPixel = !loja.pixelCheckoutAtivo
+    ? "não instalado"
+    : loja.pixelCheckoutDesatualizado
+      ? "desatualizado"
+      : "instalado";
+
   return (
-    <Card className={ligado ? "" : "border-dashed"}>
-      <CardContent className="space-y-3 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={() => setAberto((v) => !v)}
-            className="flex min-w-0 flex-1 items-center gap-2 text-left"
-          >
-            <ChevronDown
-              className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
-                aberto ? "rotate-180" : ""
-              }`}
-            />
-            <span className="truncate font-medium">{loja.nome}</span>
-            {ligado ? <Pill tom="ok">ativo</Pill> : <Pill tom="neutro">desligado</Pill>}
-            {loja.desinstalada && (
-              <Pill tom="erro">app desinstalado — rastreamento parado</Pill>
-            )}
-            {loja.destinos.length > 0 && (
-              <Pill tom="neutro">
-                {loja.destinos.filter((d) => d.ativo).length} destino(s)
-              </Pill>
-            )}
-            {ligado && diag?.temWebhook === false && <Pill tom="erro">sem webhook</Pill>}
-            {ligado && diag?.temSnippet === false && <Pill tom="erro">sem snippet</Pill>}
-            <span className="ml-auto hidden shrink-0 pl-2 text-xs text-muted-foreground sm:block">
-              {loja.dominio}
-            </span>
-          </button>
-
-          <Button
-            onClick={() => alternar(!ligado)}
-            disabled={salvando || (!ligado && !podeLigar)}
-            variant={ligado ? "outline" : "default"}
-            size="sm"
-            title={
-              !ligado && !podeLigar
-                ? "Cadastre um destino que receba a compra para poder ligar"
-                : undefined
-            }
-          >
-            {salvando ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+    <section
+      className={cn(
+        "overflow-hidden rounded-xl border bg-surface",
+        !ligado
+          ? "border-dashed border-[var(--border-strong)]"
+          : s.saude === "parado"
+            ? "border-[var(--err-border)]"
+            : "border-border"
+      )}
+    >
+      {/* A. cabecalho */}
+      <div className="flex items-start gap-3 px-4 pb-3 pt-3.5">
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-[13.5px] font-semibold text-ink">{loja.nome}</h2>
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-t3">
+            <span className="min-w-0 max-w-full truncate font-mono">{loja.dominio}</span>
+            {loja.ultimoEnvio ? (
+              // O texto relativo e calculado no servidor e de novo no navegador;
+              // a virada de minuto entre os dois nao e erro de hidratacao.
+              <span suppressHydrationWarning>· último envio {quando(loja.ultimoEnvio)}</span>
             ) : ligado ? (
-              "Desligar"
-            ) : (
-              "Ligar"
-            )}
-          </Button>
+              <span>· nenhum envio em 7 dias</span>
+            ) : null}
+          </p>
         </div>
+        <Button
+          size="xs"
+          onClick={() => alternar(!ligado)}
+          disabled={salvando || (!ligado && !podeLigar)}
+          variant={ligado ? "outline" : "default"}
+          className="h-8 shrink-0 px-[11px] text-[12px] font-semibold sm:h-[26px]"
+          title={
+            !ligado && !podeLigar
+              ? "Cadastre um destino que receba a compra para poder ligar"
+              : undefined
+          }
+        >
+          {salvando ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : ligado ? (
+            "Desligar"
+          ) : (
+            "Ligar"
+          )}
+        </Button>
+      </div>
 
-        {aberto && (
-          <div className="space-y-4 border-t pt-3">
-            {/* Teto do coletor. Fica ACIMA do veredito porque muda como ler
-                todos os numeros abaixo: com evento sendo descartado, "poucas
-                conversoes" nao quer dizer que o envio quebrou. */}
-            {loja.tetoAtingidoRecente && (
-              <div className="flex items-start gap-2 rounded-md bg-amber-500/10 p-2.5 text-xs">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
-                <div>
-                  <p className="font-medium text-amber-600">
-                    Esta loja bateu no teto de eventos por hora nas últimas 24h.
-                  </p>
-                  <p className="text-muted-foreground">
-                    Parte do funil foi descartada — os números abaixo estão
-                    incompletos. O teto existe porque o coletor é público; se o
-                    tráfego é legítimo, me avise para subir o limite desta loja.
-                  </p>
-                </div>
+      {/* B. faixa de estado: forma + palavra + cor, nunca so a cor */}
+      <div
+        className={cn(
+          "flex items-start gap-3 border-t border-[var(--border-subtle)] px-4 py-3",
+          s.saude === "parado" && "bg-[var(--err-bg)]"
+        )}
+      >
+        <span
+          className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-full"
+          style={{ background: faixa.disco }}
+        >
+          <faixa.Icone aria-hidden className="h-3.5 w-3.5" style={{ color: faixa.cor }} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-semibold leading-tight text-ink">{faixa.titulo}</p>
+          <p className="mt-0.5 text-[12px] text-t2">{subLinha}</p>
+        </div>
+      </div>
+
+      {/* C. alarmes */}
+      {temBanner && (
+        <div className="flex flex-col gap-2 px-4 pb-3">
+          {loja.desinstalada && ligado && (
+            <Aviso
+              tom="err"
+              titulo="O app foi desinstalado desta loja — o rastreamento parou"
+              detalhe="Sem o app não chega pedido nem sai compra. Reinstale o xcart nesta loja para voltar."
+              acao={{ rotulo: "Abrir Lojas", href: "/stores" }}
+            />
+          )}
+
+          {/* Teto do coletor. Fica ACIMA do veredito porque muda como ler
+              todos os numeros abaixo: com evento sendo descartado, "poucas
+              conversoes" nao quer dizer que o envio quebrou. Aparece mesmo com
+              a loja desligada, como antes. */}
+          {loja.tetoAtingidoRecente && (
+            <Aviso
+              tom="warn"
+              titulo="Esta loja bateu no teto de eventos por hora nas últimas 24h."
+              detalhe="Parte do funil foi descartada — os números abaixo estão incompletos. O teto existe porque o coletor é público; se o tráfego é legítimo, me avise para subir o limite desta loja."
+            />
+          )}
+
+          {/* Fica acima do resto do veredito: muda como ler o resto. A compra
+              sai, aparece no Events Manager, e a campanha nao recebe conversao
+              nenhuma. */}
+          {ligado && emTeste.length > 0 && (
+            <Aviso
+              tom="warn"
+              titulo={emTeste.map((d) => (
+                <p key={d.id}>
+                  {apelido(d)} em modo teste — compras não contam como conversão
+                </p>
+              ))}
+              detalhe="Tire o código de teste do destino quando terminar de conferir no Events Manager."
+              acao={{ rotulo: "Ver destino", onClick: () => irPara(`destino-${emTeste[0].id}`) }}
+            />
+          )}
+
+          {ligado && loja.contagemIndisponivel && alvos.length > 0 && (
+            <Aviso
+              tom="warn"
+              titulo="Não deu para contar os envios agora"
+              detalhe="A comparação com os pedidos ficou de fora. Recarregue a página em instantes."
+              acao={{ rotulo: "Recarregar", onClick: () => router.refresh() }}
+            />
+          )}
+
+          {ligado && alvos.length === 0 && (
+            <Aviso
+              tom="err"
+              titulo={
+                loja.destinos.length > 0
+                  ? "Nenhum destino está recebendo a compra"
+                  : "Nenhum destino cadastrado ainda"
+              }
+              detalhe={
+                loja.destinos.length > 0
+                  ? "Confira o rótulo da compra no Google e o token no Meta."
+                  : "Adicione uma conta do Google, um pixel do Meta, ou os dois."
+              }
+              acao={{
+                rotulo: "Abrir configuração",
+                onClick: () => irPara(`destinos-${plataformaDaConfig}-${loja.storeId}`),
+              }}
+            />
+          )}
+
+          {ligado && s.faltas.length > 0 && (
+            <Aviso
+              tom="err"
+              titulo={s.faltas.map(({ d, faltam }) => (
+                <p key={d.id}>
+                  {plural(faltam, "pedido", "pedidos")} sem compra enviada em {apelido(d)}
+                </p>
+              ))}
+              detalhe={
+                diag?.temWebhook === false
+                  ? "O webhook de pedidos não está inscrito — é quase certo que seja isso."
+                  : "Todo pedido vai para todo destino: o que falta aqui é venda que a campanha não viu. Confira as falhas do destino, o rótulo da compra e, no Meta, o token do CAPI."
+              }
+              acao={{
+                rotulo: "Ver destinos",
+                onClick: () =>
+                  irPara(`destinos-${s.faltas[0].d.plataforma}-${loja.storeId}`),
+              }}
+            />
+          )}
+        </div>
+      )}
+
+      {/* D. compras chegando */}
+      {ligado && alvos.length > 0 && (
+        <ComprasChegando loja={loja} diag={diag} alvos={alvos} />
+      )}
+
+      {/* E. o que fazer */}
+      {ligado && itens.length > 0 && (
+        <div className="border-t border-[var(--border-subtle)]">
+          <div className="flex items-baseline gap-2 px-4 pb-1.5 pt-3">
+            <h3 className="text-[12.5px] font-semibold text-ink">O que fazer</h3>
+            <span className="font-mono text-[11px] text-[var(--t4)]">{itens.length}</span>
+          </div>
+          {itens.map((it) => (
+            <div
+              key={it.chave}
+              className="flex flex-wrap items-start gap-x-3 gap-y-1.5 border-t border-[var(--border-subtle)] px-4 py-2.5"
+            >
+              <Ponto tom={it.tom} tamanho={6} className="mt-[6px]" />
+              <div className="min-w-0 flex-1 basis-[calc(100%_-_18px)] sm:basis-0">
+                <p className="text-[12.5px] text-ink">{it.titulo}</p>
+                <p className="text-[11.5px] text-t3" title={it.dicaTitulo}>
+                  {it.dica}
+                </p>
               </div>
-            )}
+              <button
+                type="button"
+                onClick={it.botao.onClick}
+                disabled={it.botao.disabled}
+                className={cn(BOTAO_LINHA, "ml-[18px] sm:ml-auto")}
+              >
+                {it.botao.carregando ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  it.botao.rotulo
+                )}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
+      {/* F. configuracao, fechada por padrao: e o que se mexe uma vez */}
+      <button
+        type="button"
+        aria-expanded={aberto}
+        aria-controls={`config-${loja.storeId}`}
+        onClick={() => setAberto((v) => !v)}
+        className={cn(
+          "flex w-full items-center gap-2 border-t border-[var(--border-subtle)] px-4 py-2.5 text-left text-[12px] font-medium text-t2 hover:bg-surface-2 hover:text-ink",
+          FOCO
+        )}
+      >
+        <span className="min-w-0">
+          Configuração
+          <span className="font-normal text-t3">
+            {" "}
+            · {plural(loja.destinos.length, "destino", "destinos")} · pixel {estadoPixel}
+          </span>
+        </span>
+        <ChevronDown
+          aria-hidden
+          className={cn(
+            "ml-auto h-4 w-4 shrink-0 text-[var(--t4)] transition-transform",
+            aberto && "rotate-180"
+          )}
+        />
+      </button>
 
-            {ligado && <Veredito loja={loja} diag={diag} />}
+      {aberto && (
+        <div
+          id={`config-${loja.storeId}`}
+          className="space-y-5 border-t border-[var(--border-subtle)] bg-surface-2/50 px-4 py-4"
+        >
+          {/* Os pre-requisitos que moram na Shopify. Sem eles a configuracao
+              pode estar perfeita e nada acontecer. */}
+          <div>
+            <div className="mb-2 flex items-center gap-2.5">
+              <h3 className="text-[12.5px] font-semibold text-ink">Pré-requisitos</h3>
+              <span aria-hidden className="h-px flex-1 bg-border" />
+            </div>
+            <div className="overflow-hidden rounded-lg border border-border bg-surface">
+              {!ligado ? (
+                <LinhaChecagem
+                  tom="neutro"
+                  rotulo="Webhook e tema"
+                  estado={{ tom: "neutro", texto: "—" }}
+                >
+                  <Dica>Ligue o rastreamento para conferir na Shopify.</Dica>
+                </LinhaChecagem>
+              ) : loja.desinstalada ? (
+                <LinhaChecagem
+                  tom="neutro"
+                  rotulo="Webhook e tema"
+                  estado={{ tom: "neutro", texto: "—" }}
+                >
+                  <Dica>Reinstale o app para conferir.</Dica>
+                </LinhaChecagem>
+              ) : !temDiag ? (
+                <LinhaChecagem
+                  tom="neutro"
+                  rotulo="Webhook e tema"
+                  estado={{ tom: "neutro", texto: "—" }}
+                >
+                  <Dica>Recarregue a página para conferir webhook e tema.</Dica>
+                </LinhaChecagem>
+              ) : (
+                <>
+                  <ChecagemWebhook loja={loja} diag={diag} />
 
-            {/* Os pre-requisitos que moram na Shopify. Sem eles a configuracao
-                pode estar perfeita e nada acontecer. */}
-            {shopifyAlcancavel && (
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
-                <Checagem
-                  ok={diag?.temWebhook ?? null}
-                  rotulo="Webhook de pedidos"
-                  conserto="npm run op -- scripts/registrar-webhook-pedidos.ts --aplicar"
-                />
-                <Checagem
-                  ok={diag?.temSnippet ?? null}
-                  rotulo="Snippet no tema"
-                  conserto="Use o botão “Instalar snippet” abaixo."
-                />
-                <Checagem
-                  ok={diag?.temRemarketing ?? null}
-                  rotulo="Tag de remarketing"
-                  conserto="Use o botão “Ligar remarketing” abaixo."
-                />
+                  {/* Os botoes de tema ficam sempre visiveis, nao so quando
+                      falta algo: reinstalar tambem serve para atualizar uma tag
+                      antiga e para depois de trocar de tema, que apaga a tag
+                      junto. */}
+                  <LinhaChecagem
+                    tom={
+                      diag?.temSnippet == null
+                        ? "neutro"
+                        : diag.temSnippet === false
+                          ? "err"
+                          : diag.snippetComId === false
+                            ? "warn"
+                            : "ok"
+                    }
+                    rotulo="Snippet no tema"
+                    estado={
+                      diag?.temSnippet == null
+                        ? { tom: "neutro", texto: "Não deu para verificar" }
+                        : diag.temSnippet === false
+                          ? { tom: "err", texto: "Faltando" }
+                          : diag.snippetComId === false
+                            ? { tom: "warn", texto: "Versão antiga" }
+                            : { tom: "ok", texto: "Instalado" }
+                    }
+                    acao={
+                      <button
+                        type="button"
+                        onClick={() => instalarTag(false)}
+                        disabled={instalando !== null}
+                        className={BOTAO_LINHA}
+                      >
+                        {instalando === "snippet" ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : diag?.temSnippet ? (
+                          "Reinstalar snippet"
+                        ) : (
+                          "Instalar snippet"
+                        )}
+                      </button>
+                    }
+                  >
+                    {diag?.temSnippet === false ? (
+                      <Dica>
+                        Sem ele ver produto e carrinho não saem, e o clique do anúncio não
+                        chega no pedido.
+                      </Dica>
+                    ) : diag?.temSnippet && diag.snippetComId === false ? (
+                      <Dica>
+                        A versão nova leva o id da loja e não deixa outra conta receber os
+                        seus eventos.
+                      </Dica>
+                    ) : null}
+                  </LinhaChecagem>
+
+                  <LinhaChecagem
+                    tom={diag?.temRemarketing ? "ok" : "neutro"}
+                    rotulo={
+                      <>
+                        Remarketing do Google{" "}
+                        <span className="ml-1 rounded bg-[var(--track)] px-1.5 text-[10.5px] font-normal text-t3">
+                          opcional
+                        </span>
+                      </>
+                    }
+                    estado={
+                      diag?.temRemarketing == null
+                        ? { tom: "neutro", texto: "Não deu para verificar" }
+                        : diag.temRemarketing
+                          ? { tom: "ok", texto: "Ligado" }
+                          : { tom: "neutro", texto: "Desligado" }
+                    }
+                    acao={
+                      <button
+                        type="button"
+                        onClick={() => instalarTag(true)}
+                        disabled={instalando !== null || !temGoogle}
+                        title={
+                          !temGoogle
+                            ? "Cadastre uma conta do Google Ads nesta loja antes"
+                            : undefined
+                        }
+                        className={BOTAO_LINHA}
+                      >
+                        {instalando === "remarketing" ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : diag?.temRemarketing ? (
+                          "Reinstalar com remarketing"
+                        ) : (
+                          "Ligar remarketing"
+                        )}
+                      </button>
+                    }
+                  >
+                    <Dica>
+                      Monta o público de remarketing no Google. A conversão funciona sem
+                      ele.
+                    </Dica>
+                    {!temGoogle && (
+                      <Dica>Cadastre uma conta do Google Ads nesta loja antes.</Dica>
+                    )}
+                  </LinhaChecagem>
+                </>
+              )}
+
+              <PixelDoCheckout
+                loja={loja}
+                abrirSinal={pedirCodigo}
+                onSinalAtendido={() => setPedirCodigo(0)}
+              />
+
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border-subtle)] px-3.5 py-2 text-[11.5px] text-t3">
+                <span>
+                  {shopifyAlcancavel
+                    ? "Os botões gravam no tema publicado. Recarregue a página para atualizar as checagens."
+                    : ""}
+                </span>
                 <a
                   href={`https://${loja.dominio}`}
                   target="_blank"
                   rel="noreferrer noopener"
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
+                  className={cn("inline-flex items-center gap-1 hover:text-ink", FOCO)}
                 >
-                  abrir loja
-                  <ExternalLink className="h-3 w-3" />
+                  Abrir loja
+                  <ExternalLink aria-hidden className="h-3 w-3" />
                 </a>
               </div>
-            )}
-
-            {/* Ficam sempre visiveis, nao so quando falta algo: reinstalar
-                tambem serve para atualizar uma tag antiga e para depois de
-                trocar de tema, que apaga a tag junto. */}
-            {shopifyAlcancavel && (
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => instalarTag(false)}
-                  disabled={instalando !== null}
-                >
-                  {instalando === "snippet" ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : diag?.temSnippet ? (
-                    "Reinstalar snippet"
-                  ) : (
-                    "Instalar snippet"
-                  )}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => instalarTag(true)}
-                  disabled={instalando !== null || !temGoogle}
-                  title={
-                    !temGoogle
-                      ? "Cadastre uma conta do Google Ads nesta loja antes"
-                      : undefined
-                  }
-                >
-                  {instalando === "remarketing" ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : diag?.temRemarketing ? (
-                    "Reinstalar com remarketing"
-                  ) : (
-                    "Ligar remarketing"
-                  )}
-                </Button>
-                <span className="text-[11px] text-muted-foreground">
-                  grava no tema publicado — recarregue a página para atualizar as
-                  checagens
-                </span>
-              </div>
-            )}
-
-            <PixelDoCheckout loja={loja} />
-
-            <PainelPlataforma
-              storeId={loja.storeId}
-              plataforma="meta"
-              destinos={loja.destinos}
-            />
-            <PainelPlataforma
-              storeId={loja.storeId}
-              plataforma="google"
-              destinos={loja.destinos}
-            />
-
-            {!ligado && loja.destinos.length > 0 && !podeLigar && (
-              <p className="text-[11px] text-muted-foreground">
-                Para ligar, um destino precisa receber a compra: no Google o rótulo da
-                compra, no Meta o token do CAPI.
-              </p>
-            )}
+            </div>
           </div>
-        )}
-      </CardContent>
-    </Card>
+
+          <PainelPlataforma
+            storeId={loja.storeId}
+            plataforma="meta"
+            destinos={loja.destinos}
+            faltasPorDestino={faltasPorDestino}
+          />
+          <PainelPlataforma
+            storeId={loja.storeId}
+            plataforma="google"
+            destinos={loja.destinos}
+            faltasPorDestino={faltasPorDestino}
+          />
+
+          {!ligado && loja.destinos.length > 0 && !podeLigar && (
+            <p className="text-[11.5px] text-t3">
+              Para ligar, um destino precisa receber a compra: no Google o rótulo da
+              compra, no Meta o token do CAPI.
+            </p>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
+
+/** O webhook de pedidos: sem ele o pedido entra e nada sai. */
+function ChecagemWebhook({
+  loja,
+  diag,
+}: {
+  loja: LojaTracking;
+  diag: DiagnosticoLoja | null;
+}) {
+  const ok = diag?.temWebhook ?? null;
+  const id = `check-webhook-${loja.storeId}`;
+  if (ok === null) {
+    return (
+      <LinhaChecagem
+        id={id}
+        tom="neutro"
+        rotulo="Webhook de pedidos"
+        estado={{ tom: "neutro", texto: "Não deu para verificar" }}
+      >
+        <Dica>{textoProblema(diag?.problema ?? null)}</Dica>
+      </LinhaChecagem>
+    );
+  }
+  if (ok) {
+    return (
+      <LinhaChecagem
+        id={id}
+        tom="ok"
+        rotulo="Webhook de pedidos"
+        estado={{ tom: "ok", texto: "Inscrito" }}
+      />
+    );
+  }
+  return (
+    <LinhaChecagem
+      id={id}
+      tom="err"
+      rotulo="Webhook de pedidos"
+      estado={{ tom: "err", texto: "Faltando" }}
+      acao={
+        // loja.dominio e o shop_domain (myshopify), entao /admin abre o painel.
+        <a
+          href={`https://${loja.dominio}/admin`}
+          target="_blank"
+          rel="noreferrer noopener"
+          className={BOTAO_LINHA}
+        >
+          Abrir admin da Shopify
+          <ExternalLink aria-hidden className="h-3 w-3" />
+        </a>
+      }
+    >
+      <Dica>
+        Sem ele os pedidos não viram compra. A inscrição acontece quando o app é
+        instalado; se continuar faltando, a loja pode estar sem permissão de ler pedidos.
+      </Dica>
+      {/* O comando e para quem tem o repo; fica atras de um clique para nao
+          parecer a instrucao principal para o lojista. */}
+      <details className="w-full pl-[26px]">
+        <summary className={cn("cursor-pointer text-[11.5px] text-t3 hover:text-ink", FOCO)}>
+          Detalhe técnico
+        </summary>
+        <code className="mt-1 block select-all overflow-x-auto rounded bg-surface-2 p-2 font-mono text-[10.5px] text-t2">
+          npm run op -- scripts/registrar-webhook-pedidos.ts --aplicar
+        </code>
+      </details>
+    </LinhaChecagem>
+  );
+}
+
+/** Copia do Numero de overview/page.tsx, com divisoria de 1px entre os blocos. */
+function Numero({
+  rotulo,
+  valor,
+  nota,
+  alerta,
+}: {
+  rotulo: string;
+  valor: string | number;
+  nota?: string;
+  alerta?: boolean;
+}) {
+  return (
+    <div className="bg-surface px-4 py-3.5">
+      <p className="text-[11.5px] text-t3">{rotulo}</p>
+      <p className="mt-1.5 flex items-baseline">
+        <span
+          className={cn(
+            "font-mono text-[22px] font-medium leading-none tabular-nums",
+            alerta ? "text-[var(--err)]" : "text-ink"
+          )}
+        >
+          {valor}
+        </span>
+        {nota && <span className="ml-1.5 text-[11px] text-t3">{nota}</span>}
+      </p>
+    </div>
+  );
+}
+
+/** Copia do Chip de sales-screen.tsx: filtro por loja com poucas lojas. */
+function Chip({
+  ativo,
+  onClick,
+  children,
+}: {
+  ativo: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={ativo}
+      className={cn(
+        "inline-flex h-8 items-center gap-1.5 rounded-md border px-[11px] text-[12px] font-semibold transition-colors sm:h-[27px]",
+        FOCO,
+        !ativo && "hover:border-[var(--border-strong)]"
+      )}
+      style={{
+        borderColor: ativo ? "var(--solid)" : "var(--border)",
+        background: ativo ? "var(--solid)" : "var(--surface)",
+        color: ativo ? "var(--on-solid)" : "var(--t2)",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+const VAZIO_CAIXA =
+  "rounded-xl border border-dashed border-[var(--border-strong)] bg-surface px-8 py-11 text-center";
+const VAZIO_CTA =
+  "mt-4 inline-flex h-[30px] items-center rounded-md bg-[var(--solid)] px-[13px] text-[12.5px] font-semibold text-[var(--on-solid)] hover:bg-[var(--solid-hover)]";
 
 export function TrackingScreen({
   lojas,
@@ -769,8 +1360,43 @@ export function TrackingScreen({
   /** "" = todas. O Select nao aceita valor vazio em item, daí o sentinela. */
   const [filtro, setFiltro] = useState("todas");
 
-  const ativas = useMemo(() => lojas.filter((l) => l.ligado), [lojas]);
-  const inativas = useMemo(() => lojas.filter((l) => !l.ligado), [lojas]);
+  // O KPI usa o ligado das PROPS e o card usa o ligado LOCAL -- a mesma
+  // divisao de antes: o topo so muda quando a pagina recarrega.
+  const { ativas, inativas, saudes, ativasOrdenadas, vendasRastreadas } = useMemo(() => {
+    const ativas = lojas.filter((l) => l.ligado);
+    const inativas = lojas.filter((l) => !l.ligado);
+    const saudes = new Map(
+      lojas.map((l) => [
+        l.storeId,
+        saudeDaLoja(l, l.ligado, diagnostico[l.storeId] ?? null, l.ligado),
+      ])
+    );
+    // Ordena so pelas props; um toggle local nao reordena, o card nao pula
+    // enquanto e clicado. sort e estavel: empate mantem a ordem do servidor.
+    const ativasOrdenadas = [...ativas].sort(
+      (a, b) =>
+        ORDEM_SAUDE[saudes.get(a.storeId)!.saude] - ORDEM_SAUDE[saudes.get(b.storeId)!.saude]
+    );
+
+    // MAX entre os destinos, nao soma.
+    //
+    // A mesma venda rende uma linha para CADA conta configurada. Somar mostraria
+    // "20" para 4 vendas com cinco contas -- o mesmo erro de contagem que a tela
+    // corrige la embaixo, reaparecendo no lugar mais visivel da pagina. O max
+    // responde "quantas vendas sairam para pelo menos um destino".
+    //
+    // Meta em modo teste fica fora: a compra dele vai para a aba de teste do
+    // Events Manager, nao para a campanha -- nao e venda rastreada.
+    const vendasRastreadas = ativas.reduce(
+      (s, l) =>
+        s +
+        l.destinos
+          .filter((d) => !emModoTeste(d))
+          .reduce((m, d) => Math.max(m, d.contagem.porEvento.purchase ?? 0), 0),
+      0
+    );
+    return { ativas, inativas, saudes, ativasOrdenadas, vendasRastreadas };
+  }, [lojas, diagnostico]);
 
   const escolhida = filtro === "todas" ? null : lojas.find((l) => l.storeId === filtro);
 
@@ -778,157 +1404,217 @@ export function TrackingScreen({
     ? `${escolhida.nome} — ${escolhida.dominio}`
     : `Todas (${ativas.length} ativa(s), ${inativas.length} sem rastreamento)`;
 
-  // MAX entre os destinos, nao soma.
-  //
-  // A mesma venda rende uma linha para CADA conta configurada. Somar mostraria
-  // "20" para 4 vendas com cinco contas -- o mesmo erro de contagem que a tela
-  // corrige la embaixo, reaparecendo no lugar mais visivel da pagina. O max
-  // responde "quantas vendas sairam para pelo menos um destino".
-  //
-  // Meta em modo teste fica fora: a compra dele vai para a aba de teste do
-  // Events Manager, nao para a campanha -- nao e venda rastreada.
-  const vendasRastreadas = ativas.reduce(
-    (s, l) =>
-      s +
-      l.destinos
-        .filter((d) => !emModoTeste(d))
-        .reduce((m, d) => Math.max(m, d.contagem.porEvento.purchase ?? 0), 0),
-    0
-  );
-  const comProblema = ativas.filter(
-    (l) =>
-      l.desinstalada ||
-      diagnostico[l.storeId]?.temWebhook === false ||
-      diagnostico[l.storeId]?.temSnippet === false
-  ).length;
+  if (lojas.length === 0) {
+    return (
+      <div className={VAZIO_CAIXA}>
+        <p className="text-[15px] font-semibold text-ink">Nenhuma loja conectada</p>
+        <p className="mx-auto mt-1.5 max-w-[380px] text-[12.5px] text-t2">
+          Conecte uma loja para começar a rastrear as vendas.
+        </p>
+        <Link href="/stores" className={cn(VAZIO_CTA, FOCO)}>
+          Conectar loja
+        </Link>
+      </div>
+    );
+  }
+
+  // Pedidos: soma do que a Shopify respondeu. Loja sem resposta fica de fora e
+  // a nota avisa -- somar como zero esconderia que o numero e parcial.
+  const pedidosPorLoja = ativas.map((l) => diagnostico[l.storeId]?.pedidos7d ?? null);
+  const conhecidos = pedidosPorLoja.filter((n): n is number => n !== null);
+  const somaPedidos = conhecidos.reduce((a, b) => a + b, 0);
+  const pedidosParcial = conhecidos.length > 0 && conhecidos.length < pedidosPorLoja.length;
+
+  // Substitui o contador comProblema; os criterios dele (desinstalada, webhook,
+  // snippet) sao subconjunto dos motivos, e agora entra o pedido sem compra.
+  const precisam = ativas.filter((l) => {
+    const sd = saudes.get(l.storeId)!.saude;
+    return sd === "parado" || sd === "atencao";
+  });
+  const algumParado = ativas.some((l) => saudes.get(l.storeId)!.saude === "parado");
+
+  function escolherLoja() {
+    setMostrarTodas(true);
+    requestAnimationFrame(() =>
+      document
+        .getElementById("lojas-sem-rastreamento")
+        ?.scrollIntoView({ block: "start", behavior: "smooth" })
+    );
+  }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Rastreamento</h1>
-          <p className="max-w-3xl text-sm text-muted-foreground">
-            A conversão sai do servidor. O que muda é de onde cada evento é observado:
-            a compra pelo webhook do pedido, carrinho e produto pelo snippet do tema, e
-            o checkout pelo Web Pixel — o único que entra no checkout da Shopify.
-          </p>
-        </div>
-        {ativas.length > 0 && (
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <span>
-              <strong className="text-foreground">{ativas.length}</strong> loja(s)
-              ativa(s)
-            </span>
-            <span>
-              <strong className="text-foreground">{vendasRastreadas}</strong> venda(s)
-              rastreada(s) em 7d
-            </span>
-            {comProblema > 0 && (
-              <Pill tom="erro">{comProblema} com pré-requisito faltando</Pill>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Filtro por loja.
-          Com dezenas de lojas cadastradas, a que importa fica perdida -- e o
-          caso normal aqui e trabalhar numa loja de cada vez. */}
-      {lojas.length > 1 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-muted-foreground">Loja</span>
-          <Select value={filtro} onValueChange={(v) => setFiltro(v ?? "todas")}>
-            <SelectTrigger className="h-8 w-[22rem] max-w-full text-xs">
-              {/* O rotulo tem que ser escrito aqui: sem isto o gatilho mostra o
-                  VALOR do item, e o valor e o uuid da loja. */}
-              <SelectValue>{() => rotuloDoFiltro}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todas">
-                Todas ({ativas.length} ativa(s), {inativas.length} sem rastreamento)
-              </SelectItem>
-              {lojas.map((l) => (
-                <SelectItem key={l.storeId} value={l.storeId}>
-                  {l.nome} — {l.dominio}
-                  {l.ligado ? "" : " (desligado)"}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+    <div className="flex flex-col gap-[18px]">
+      {ativas.length > 0 && (
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-[var(--border-subtle)] lg:grid-cols-4">
+          <Numero rotulo="Lojas rastreando" valor={ativas.length} nota={`de ${lojas.length}`} />
+          <Numero
+            rotulo="Pedidos"
+            valor={conhecidos.length === 0 ? "—" : somaPedidos}
+            nota={pedidosParcial ? "em 7 dias · parcial" : "em 7 dias"}
+          />
+          <Numero rotulo="Vendas enviadas" valor={vendasRastreadas} nota="em 7 dias" />
+          <Numero
+            rotulo="Precisam de você"
+            valor={precisam.length}
+            nota={
+              precisam.length === 0 ? "tudo certo" : precisam.length === 1 ? "loja" : "lojas"
+            }
+            alerta={algumParado}
+          />
         </div>
       )}
 
+      {/* Filtro por loja.
+          Com dezenas de lojas cadastradas, a que importa fica perdida -- e o
+          caso normal aqui e trabalhar numa loja de cada vez. Ate 6 lojas, chips
+          (um clique); acima disso, a lista. */}
+      {lojas.length > 1 &&
+        (lojas.length <= 6 ? (
+          <div className="flex flex-wrap gap-1.5">
+            <Chip ativo={filtro === "todas"} onClick={() => setFiltro("todas")}>
+              Todas as lojas
+            </Chip>
+            {[...ativasOrdenadas, ...inativas].map((l) => (
+              <Chip
+                key={l.storeId}
+                ativo={filtro === l.storeId}
+                onClick={() => setFiltro(l.storeId)}
+              >
+                <Ponto tom={TOM_DA_SAUDE[saudes.get(l.storeId)!.saude]} />
+                <span className="max-w-[160px] truncate">{l.nome}</span>
+                {!l.ligado && <span className="font-normal opacity-70"> · desligada</span>}
+              </Chip>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[12px] text-t3">Loja</span>
+            <Select value={filtro} onValueChange={(v) => setFiltro(v ?? "todas")}>
+              <SelectTrigger className="h-[27px] w-[22rem] max-w-full text-[12px]">
+                {/* O rotulo tem que ser escrito aqui: sem isto o gatilho mostra o
+                    VALOR do item, e o valor e o uuid da loja. */}
+                <SelectValue>{() => rotuloDoFiltro}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">
+                  Todas ({ativas.length} ativa(s), {inativas.length} sem rastreamento)
+                </SelectItem>
+                {lojas.map((l) => (
+                  <SelectItem key={l.storeId} value={l.storeId}>
+                    {l.nome} — {l.dominio}
+                    {l.ligado ? "" : " (desligado)"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ))}
+
       {escolhida ? (
         <CardLoja
+          key={escolhida.storeId}
           loja={escolhida}
           diag={diagnostico[escolhida.storeId] ?? null}
           comecarAberto
         />
       ) : (
         <>
-          {ativas.length === 0 && (
-            <Card className="border-amber-500/40 bg-amber-500/5">
-              <CardContent className="flex items-start gap-2 p-4 text-sm">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                <div>
-                  <p className="font-medium">Nenhuma loja com rastreamento ligado.</p>
-                  <p className="text-muted-foreground">
-                    Abra uma loja abaixo, cadastre um destino e ligue.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+          {ativas.length === 0 ? (
+            <div className={VAZIO_CAIXA}>
+              <p className="text-[15px] font-semibold text-ink">
+                Nenhuma loja rastreando ainda
+              </p>
+              <p className="mx-auto mt-1.5 max-w-[380px] text-[12.5px] text-t2">
+                Escolha uma loja, cadastre uma conta do Google ou um pixel do Meta e ligue
+                o rastreamento.
+              </p>
+              <button type="button" onClick={escolherLoja} className={cn(VAZIO_CTA, FOCO)}>
+                Escolher loja
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {ativasOrdenadas.map((l) => (
+                <CardLoja
+                  key={l.storeId}
+                  loja={l}
+                  diag={diagnostico[l.storeId] ?? null}
+                  comecarAberto={false}
+                />
+              ))}
+            </div>
           )}
-
-          {/* O que a tela NAO consegue afirmar: que o Google contou. O endpoint
-              responde 200 mesmo ignorando. Dizer isso e melhor que deixar o
-              lojista concluir que "ativo" significa "funcionando". */}
-          {ativas.length > 0 && (
-            <p className="flex items-start gap-2 text-xs text-muted-foreground">
-              <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
-              &quot;Enviadas&quot; significa que a plataforma aceitou a requisição — não
-              que contou a conversão. A confirmação é no painel do Google Ads e no Events
-              Manager. Se entrarem pedidos e as compras pararem, o aviso aparece aqui.
-            </p>
-          )}
-
-          <div className="space-y-2.5">
-            {ativas.map((l) => (
-              <CardLoja
-                key={l.storeId}
-                loja={l}
-                diag={diagnostico[l.storeId] ?? null}
-                comecarAberto
-              />
-            ))}
-          </div>
 
           {/* Sem isto a pagina renderiza dezenas de lojas que ninguem rastreia,
               e a que importa fica perdida no meio. */}
           {inativas.length > 0 && (
-            <div className="space-y-2.5">
-              <button
-                type="button"
-                onClick={() => setMostrarTodas((v) => !v)}
-                className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                {mostrarTodas
-                  ? "esconder lojas sem rastreamento"
-                  : `ligar em outra loja (${inativas.length} sem rastreamento)`}
-              </button>
+            <section id="lojas-sem-rastreamento" className="scroll-mt-20">
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-[13px] font-semibold text-ink">Lojas sem rastreamento</h2>
+                <span className="font-mono text-[11px] text-[var(--t4)]">
+                  {inativas.length}
+                </span>
+                <span aria-hidden className="h-px flex-1 bg-border" />
+                <button
+                  type="button"
+                  aria-expanded={mostrarTodas}
+                  onClick={() => setMostrarTodas((v) => !v)}
+                  className={cn(
+                    "h-[26px] rounded-md border border-border bg-surface px-[9px] text-[12px] font-semibold text-t1 hover:border-[var(--border-strong)]",
+                    FOCO
+                  )}
+                >
+                  {mostrarTodas ? "Esconder" : "Mostrar"}
+                </button>
+              </div>
 
-              {mostrarTodas &&
-                inativas.map((l) => (
-                  <CardLoja
-                    key={l.storeId}
-                    loja={l}
-                    diag={diagnostico[l.storeId] ?? null}
-                    comecarAberto={false}
-                  />
-                ))}
-            </div>
+              {mostrarTodas && (
+                <div className="mt-2.5 flex flex-col gap-3">
+                  {inativas.map((l) => (
+                    <CardLoja
+                      key={l.storeId}
+                      loja={l}
+                      diag={diagnostico[l.storeId] ?? null}
+                      comecarAberto={false}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
           )}
         </>
+      )}
+
+      {ativas.length > 0 && (
+        <div className="flex flex-col gap-2 pt-1">
+          {/* O que a tela NAO consegue afirmar: que o Google contou. O endpoint
+              responde 200 mesmo ignorando. Dizer isso e melhor que deixar o
+              lojista concluir que "ativo" significa "funcionando". */}
+          <p className="max-w-[80ch] text-[11.5px] leading-relaxed text-t3">
+            “Enviada” quer dizer que a plataforma aceitou o envio — não que contou a
+            conversão. A confirmação é no painel do Google Ads e no Events Manager. Se
+            entrarem pedidos e as compras pararem, o aviso aparece aqui.
+          </p>
+          <details className="group">
+            <summary
+              className={cn(
+                "flex cursor-pointer list-none items-center gap-1 text-[12px] font-medium text-t2 hover:text-ink [&::-webkit-details-marker]:hidden",
+                FOCO
+              )}
+            >
+              <ChevronRight
+                aria-hidden
+                className="h-3 w-3 transition-transform group-open:rotate-90"
+              />
+              Como funciona o rastreamento
+            </summary>
+            <p className="mt-2 max-w-[75ch] rounded-lg border border-border bg-surface-2 p-3 text-[12px] leading-relaxed text-t2">
+              A conversão sai do servidor. O que muda é de onde cada evento é observado:
+              a compra pelo webhook do pedido, carrinho e produto pelo snippet do tema, e
+              o checkout pelo Web Pixel — o único que entra no checkout da Shopify.
+            </p>
+          </details>
+        </div>
       )}
     </div>
   );

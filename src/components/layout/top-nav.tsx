@@ -9,6 +9,7 @@ const TRILHA: { prefixo: string; chave: string }[] = [
   { prefixo: "/overview", chave: "overview" },
   { prefixo: "/stores", chave: "connectedStores" },
   { prefixo: "/sales", chave: "sales" },
+  { prefixo: "/tracking", chave: "tracking" },
   { prefixo: "/clone/routed-checkout", chave: "routing" },
   { prefixo: "/clone/shopify", chave: "importProducts" },
   { prefixo: "/clone", chave: "importProducts" },
