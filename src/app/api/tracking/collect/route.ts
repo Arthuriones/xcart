@@ -103,6 +103,8 @@ export async function POST(request: NextRequest) {
     fbclid?: string | null;
     /** De onde a sessao veio, para diagnosticar trafego sem click id. */
     referrer?: string | null;
+    /** A URL da pagina, mandada explicita pelo snippet. Ver abaixo. */
+    pageUrl?: string | null;
   };
   try {
     corpo = await request.json();
@@ -280,12 +282,22 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    // A URL da pagina vem do Referer que o proprio navegador manda no beacon.
-    // Aceita so http(s): o header e escolhido pelo cliente, e o Meta recusa o
-    // evento inteiro se o event_source_url nao for URL.
+    // A URL da pagina vem do CORPO, nao do header Referer.
+    //
+    // O beacon vai para outro dominio, e a politica padrao do navegador
+    // (strict-origin-when-cross-origin) manda so a ORIGEM em requisicao
+    // cross-origin -- medido: pagina de produto chegava como
+    // "https://loja.shop/", sem caminho. `event_source_url` igual em todo evento
+    // piora o casamento no Meta e inutiliza regra por URL.
+    //
+    // O header fica como reserva, para snippet antigo que ainda nao manda o
+    // campo. Nos dois casos so http(s): o valor vem do cliente, e o Meta recusa
+    // o evento inteiro se nao for URL.
     let origemDaPagina: string | undefined;
-    const referer = request.headers.get("referer") || "";
-    if (/^https?:\/\//i.test(referer)) origemDaPagina = referer.slice(0, 500);
+    const doCorpo = (corpo.pageUrl || "").trim();
+    const doHeader = request.headers.get("referer") || "";
+    const candidata = /^https?:\/\//i.test(doCorpo) ? doCorpo : doHeader;
+    if (/^https?:\/\//i.test(candidata)) origemDaPagina = candidata.slice(0, 500);
 
     destinos.push({
       destination: "meta",

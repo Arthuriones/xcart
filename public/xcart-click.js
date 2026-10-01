@@ -298,6 +298,19 @@
       fbc: achados._fbc || null,
       fbclid: achados.fbclid || null,
       referrer: ORIGEM || null,
+      // A URL da pagina, EXPLICITA.
+      //
+      // O servidor nao pode deduzir do header Referer: o beacon vai para outro
+      // dominio, e a politica padrao do navegador
+      // (strict-origin-when-cross-origin) manda so a ORIGEM em requisicao
+      // cross-origin. Medido: a pagina de produto chegava como
+      // "https://loja.shop/", sem caminho nenhum.
+      //
+      // Isso custava duas coisas. No Meta, `event_source_url` identico em todo
+      // evento piora o casamento e inutiliza regra por URL. E no diagnostico,
+      // fazia parecer que todo mundo entrava pela home -- eu cheguei a concluir
+      // isso e estava errado.
+      pageUrl: location.href.slice(0, 500),
     });
 
     // text/plain de proposito: mantem a requisicao "simples" para o CORS, sem
