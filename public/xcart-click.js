@@ -431,7 +431,13 @@
       fbc: achados._fbc || null,
       fbclid: achados.fbclid || null,
       referrer: ORIGEM || null,
-      clientId: clienteDaShopify(),
+      // Quando este evento ja leva o clientId, o aviso separado nao e preciso:
+      // o coletor grava a associacao a partir dele.
+      clientId: (function () {
+        var cid = clienteDaShopify();
+        if (cid) identidadeNoAr = true;
+        return cid;
+      })(),
       // Sem isto o Meta recebe AddToCart e ViewContent sem saber de QUAL
       // produto -- e `content_ids` e exigencia dele para publico dinamico e
       // para anuncio de catalogo. Nao e dado que o visitante possa inflar:
@@ -452,9 +458,15 @@
       pageUrl: location.href.slice(0, 500),
     });
 
-    // text/plain de proposito: mantem a requisicao "simples" para o CORS, sem
-    // o OPTIONS de preflight. Um ida e volta a menos, e sendBeacon so aceita
-    // tipo simples de qualquer forma.
+    entregar(corpo);
+  }
+
+  /**
+   * O transporte. text/plain de proposito: mantem a requisicao "simples" para
+   * o CORS, sem o OPTIONS de preflight -- um ida e volta a menos, e sendBeacon
+   * so aceita tipo simples de qualquer forma.
+   */
+  function entregar(corpo) {
     try {
       if (navigator.sendBeacon) {
         var blob = new Blob([corpo], { type: "text/plain;charset=UTF-8" });
@@ -478,6 +490,68 @@
     } catch (e) {
       /* sem rede: evento perdido, e nao ha o que fazer no navegador */
     }
+  }
+
+  // ---- 2.1 a identidade, quando o trekkie finalmente chegar ----------------
+  //
+  // PROBLEMA MEDIDO EM PRODUCAO
+  //
+  // `ShopifyAnalytics.lib` e o trekkie, que a Shopify carrega de forma assincrona
+  // -- depois do nosso script. O `view_item` dispara no DOMContentLoaded, e
+  // nessa hora `lib.user` quase nunca existe ainda: em 7 dias, 949 visitantes
+  // distintos na fila e 6 identidades gravadas.
+  //
+  // O QUE ISSO CUSTAVA
+  //
+  // O Web Pixel do checkout roda em sandbox e NAO le os cookies da loja: o
+  // `clientId` da Shopify e a unica ponte que ele tem. Sem a associacao
+  // publicada, todo `begin_checkout` e `payment_info` do checkout chegava sem
+  // gclid e sem _fbp -- sem atribuicao no Google e com casamento fraco no Meta.
+  //
+  // Nao da para so esperar antes de mandar o evento: o visitante pode sair da
+  // pagina antes. Entao o evento sai na hora e a identidade vai atras.
+  //
+  // Nao e um evento de conversao: o coletor grava a associacao e responde, sem
+  // tocar na fila. Ler o cookie nao substitui isto -- a Shopify aposentou
+  // `_shopify_y` e `_shopify_s` em 1 de janeiro de 2026, e eles nao existem
+  // mais na loja.
+  var identidadeNoAr = false;
+
+  function publicarIdentidade(clientId) {
+    if (identidadeNoAr || !clientId || !COLETOR || !LOJA) return;
+    identidadeNoAr = true;
+    entregar(
+      JSON.stringify({
+        shop: LOJA,
+        storeId: STORE_ID,
+        evento: "identidade",
+        eventId: "identidade_" + vid,
+        visitorId: vid,
+        clientId: clientId,
+        gclid: achados.gclid || null,
+        gbraid: achados.gbraid || null,
+        wbraid: achados.wbraid || null,
+        auid: achados._auid || null,
+        fbp: achados._fbp || null,
+        fbc: achados._fbc || null,
+        fbclid: achados.fbclid || null,
+      })
+    );
+  }
+
+  /** Tenta ate o trekkie aparecer. Desiste em 15s: quem nao carregou, nao vem. */
+  function esperarClienteDaShopify() {
+    var tentativas = 0;
+    var alarme = setInterval(function () {
+      tentativas++;
+      var cid = clienteDaShopify();
+      if (cid) {
+        clearInterval(alarme);
+        publicarIdentidade(cid);
+      } else if (tentativas >= 60) {
+        clearInterval(alarme);
+      }
+    }, 250);
   }
 
   // ---- 3.1 ver produto ----------------------------------------------------
@@ -721,6 +795,7 @@
     observarFetch();
     observarXhr();
     observarCheckout();
+    esperarClienteDaShopify();
 
     // Este espera: le ShopifyAnalytics.meta, que a Shopify preenche mais tarde.
     if (document.readyState === "loading") {

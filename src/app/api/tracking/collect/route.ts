@@ -136,11 +136,21 @@ export async function POST(request: NextRequest) {
   if (!loja || !eventId || !visitorId) {
     return recusado("shop, eventId e visitorId sao obrigatorios");
   }
-  if (!eventoValido(evento)) {
+  // "identidade" nao e evento de conversao: e o tema avisando "este visitante e
+  // este clientId da Shopify". Nao entra na fila e nao vira conversao nenhuma.
+  //
+  // Existe porque o `uniqToken` so aparece depois que o trekkie da Shopify
+  // carrega, e o nosso `view_item` dispara ANTES disso. Medido em producao: 949
+  // visitantes distintos em 7 dias e 6 identidades gravadas. Sem a identidade, o
+  // evento do Web Pixel -- que roda em sandbox e nao le cookie da loja -- chega
+  // ao checkout sem gclid e sem _fbp.
+  const ehIdentidade = evento === "identidade";
+
+  if (!ehIdentidade && !eventoValido(evento)) {
     return recusado("evento desconhecido");
   }
-  const definicao = definicaoDoEvento(evento as ChaveEvento);
-  if (definicao.origem === "webhook") {
+  const definicao = ehIdentidade ? null : definicaoDoEvento(evento as ChaveEvento);
+  if (definicao && definicao.origem === "webhook") {
     // `purchase` vem do webhook. Aceitar aqui deixaria qualquer um declarar
     // uma venda -- e com o oid do navegador, ainda por cima. Os demais
     // ('navegador' e 'pixel') sao acoes de funil: a exposicao e a mesma que
@@ -202,6 +212,52 @@ export async function POST(request: NextRequest) {
   if (!cfg?.enabled) return recusado("rastreamento desligado");
 
   const doPixel = (corpo.fonte || "").trim() === "pixel";
+
+  const clientId = (corpo.clientId || "").trim().slice(0, 100) || null;
+
+  const clique = {
+    gclid: (corpo.gclid || "").trim().slice(0, 200) || null,
+    gbraid: (corpo.gbraid || "").trim().slice(0, 200) || null,
+    wbraid: (corpo.wbraid || "").trim().slice(0, 200) || null,
+    auid: (corpo.auid || "").trim().slice(0, 100) || null,
+  };
+  let fbp = (corpo.fbp || "").trim().slice(0, 100) || null;
+  let fbc = (corpo.fbc || "").trim().slice(0, 300) || null;
+  const fbclid = (corpo.fbclid || "").trim().slice(0, 300) || null;
+
+  /**
+   * Grava a associacao visitante -> click ids.
+   *
+   * Uma linha por visitante (`onConflict store_id,visitor_id`), entao reenviar
+   * so atualiza: nao ha crescimento de tabela para um abusador explorar.
+   */
+  async function publicarIdentidade() {
+    await admin.from("tracking_identities").upsert(
+      {
+        store_id: registro.id,
+        visitor_id: visitorId,
+        shopify_client_id: clientId,
+        gclid: clique.gclid,
+        gbraid: clique.gbraid,
+        wbraid: clique.wbraid,
+        auid: clique.auid,
+        fbp,
+        fbc,
+        fbclid,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "store_id,visitor_id" }
+    );
+  }
+
+  // O aviso de identidade termina aqui: sem fila, sem destino, sem conversao.
+  // Por isso tambem nao passa pelos tetos abaixo -- eles contam linhas de
+  // `tracking_events`, e este caminho nao cria nenhuma.
+  if (ehIdentidade) {
+    if (!clientId) return recusado("identidade sem clientId");
+    await publicarIdentidade();
+    return ok({ identidade: "gravada" });
+  }
 
   // O pixel se ANUNCIA, carimbando a hora. Nao ha passo manual de "marcar como
   // instalado", e nao da para detectar pela API: `read_pixels` nao esta nos
@@ -287,18 +343,6 @@ export async function POST(request: NextRequest) {
   // tambem conhece.
   //
   // Entao: o tema GRAVA "este clientId tem estes click ids", e o pixel CONSULTA.
-  const clientId = (corpo.clientId || "").trim().slice(0, 100) || null;
-
-  const clique = {
-    gclid: (corpo.gclid || "").trim().slice(0, 200) || null,
-    gbraid: (corpo.gbraid || "").trim().slice(0, 200) || null,
-    wbraid: (corpo.wbraid || "").trim().slice(0, 200) || null,
-    auid: (corpo.auid || "").trim().slice(0, 100) || null,
-  };
-  let fbp = (corpo.fbp || "").trim().slice(0, 100) || null;
-  let fbc = (corpo.fbc || "").trim().slice(0, 300) || null;
-  const fbclid = (corpo.fbclid || "").trim().slice(0, 300) || null;
-
   if (doPixel && clientId) {
     // Vem do checkout: recupera o que o tema guardou para este visitante.
     const { data: id } = await admin
@@ -317,22 +361,7 @@ export async function POST(request: NextRequest) {
     }
   } else if (clientId) {
     // Vem do tema: publica a associacao para o checkout consultar depois.
-    await admin.from("tracking_identities").upsert(
-      {
-        store_id: registro.id,
-        visitor_id: visitorId,
-        shopify_client_id: clientId,
-        gclid: clique.gclid,
-        gbraid: clique.gbraid,
-        wbraid: clique.wbraid,
-        auid: clique.auid,
-        fbp,
-        fbc,
-        fbclid,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "store_id,visitor_id" }
-    );
+    await publicarIdentidade();
   }
 
   // ---- fila ---------------------------------------------------------------
@@ -438,7 +467,7 @@ export async function POST(request: NextRequest) {
         // O nome do Meta, nao a nossa chave: "AddToCart", nao "add_to_cart".
         // Nome fora da lista dele vira evento personalizado, que chega e nao
         // serve para otimizar campanha.
-        event_name: definicao.nomeNoMeta,
+        event_name: definicao!.nomeNoMeta,
         // Em segundos. Em milissegundos o Meta recusa o evento.
         event_time: Math.floor(Date.now() / 1000),
         event_id: eventId,
