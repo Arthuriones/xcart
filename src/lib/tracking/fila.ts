@@ -99,6 +99,8 @@ export async function enfileirar(
     visitorId?: string | null;
     /** De onde a sessao veio. So diagnostico -- nao vai para destino nenhum. */
     referrer?: string | null;
+    /** Token do checkout da Shopify, nos eventos que o Web Pixel manda. */
+    checkoutToken?: string | null;
     /** O que vai para a API do destino. Omitido = o proprio evento (Meta). */
     payload?: unknown;
   }
@@ -113,6 +115,7 @@ export async function enfileirar(
       order_id: entrada.orderId ?? null,
       visitor_id: entrada.visitorId ?? null,
       referrer: entrada.referrer ?? null,
+      checkout_token: entrada.checkoutToken ?? null,
       payload: (entrada.payload ?? entrada.evento) as Record<string, unknown>,
     })
     .select("id")

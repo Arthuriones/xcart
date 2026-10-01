@@ -253,6 +253,27 @@
   var LOJA = (window.Shopify && window.Shopify.shop) || null;
 
   /**
+   * O identificador de visitante da propria Shopify.
+   *
+   * E a PONTE para o checkout. O Web Pixel roda em sandbox e nao le os cookies
+   * da loja -- ele nao enxerga o nosso `_xc_vid` nem o `_xc_gclid`. O que ele
+   * conhece e este valor, que chega la como `event.clientId`.
+   *
+   * Mandando daqui, o servidor guarda "este clientId tem estes click ids", e o
+   * evento que vier do checkout recupera a atribuicao por ele. Sem isso,
+   * `begin_checkout` vindo do pixel chegaria sem gclid -- pior que o de hoje.
+   */
+  function clienteDaShopify() {
+    try {
+      var lib = window.ShopifyAnalytics && window.ShopifyAnalytics.lib;
+      var traits = lib && lib.user ? lib.user().traits() : null;
+      return (traits && traits.uniqToken) || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
    * De onde este visitante chegou.
    *
    * Guardado na PRIMEIRA pagina da sessao e reusado depois. Sem isso, a partir
@@ -410,6 +431,7 @@
       fbc: achados._fbc || null,
       fbclid: achados.fbclid || null,
       referrer: ORIGEM || null,
+      clientId: clienteDaShopify(),
       // Sem isto o Meta recebe AddToCart e ViewContent sem saber de QUAL
       // produto -- e `content_ids` e exigencia dele para publico dinamico e
       // para anuncio de catalogo. Nao e dado que o visitante possa inflar:

@@ -109,6 +109,20 @@ export async function POST(request: NextRequest) {
     pageUrl?: string | null;
     /** Produto em tela, nos eventos que tem um. Ver `custom_data` abaixo. */
     produto?: { variante?: string | null; produto?: string | null } | null;
+    /** 'pixel' quando vem do Web Pixel do checkout; ausente = snippet do tema. */
+    fonte?: string | null;
+    /** Identificador de visitante da Shopify. A unica chave que o pixel tem. */
+    clientId?: string | null;
+    checkoutToken?: string | null;
+    /** PII do checkout. So o Web Pixel ve -- o tema nao entra la. */
+    email?: string | null;
+    telefone?: string | null;
+    primeiroNome?: string | null;
+    sobrenome?: string | null;
+    cidade?: string | null;
+    estado?: string | null;
+    cep?: string | null;
+    pais?: string | null;
   };
   try {
     corpo = await request.json();
@@ -128,9 +142,11 @@ export async function POST(request: NextRequest) {
     return recusado("evento desconhecido");
   }
   const definicao = definicaoDoEvento(evento as ChaveEvento);
-  if (definicao.origem !== "navegador") {
+  if (definicao.origem === "webhook") {
     // `purchase` vem do webhook. Aceitar aqui deixaria qualquer um declarar
-    // uma venda -- e com o oid do navegador, ainda por cima.
+    // uma venda -- e com o oid do navegador, ainda por cima. Os demais
+    // ('navegador' e 'pixel') sao acoes de funil: a exposicao e a mesma que
+    // qualquer pixel de navegador tem, e os tetos abaixo e que limitam.
     return recusado("este evento nao vem do navegador");
   }
 
@@ -173,7 +189,7 @@ export async function POST(request: NextRequest) {
     admin
       .from("tracking_configs")
       .select(
-        "store_id, enabled, google_conversion_id, google_conversion_label, google_labels, meta_pixel_id, meta_test_event_code"
+        "store_id, enabled, google_conversion_id, google_conversion_label, google_labels, meta_pixel_id, meta_test_event_code, web_pixel_ativo"
       )
       .in("store_id", ids),
     admin
@@ -193,6 +209,15 @@ export async function POST(request: NextRequest) {
   const seg = (segs || []).find((x) => x.store_id === registro.id);
 
   if (!cfg?.enabled) return recusado("rastreamento desligado");
+
+  const doPixel = (corpo.fonte || "").trim() === "pixel";
+
+  // Com o Web Pixel ativo, o clique no botao (tema) e o `checkout_started`
+  // (pixel) descrevem a MESMA acao, e nao tem como compartilhar event_id -- um
+  // nasce do clique, o outro do checkout. O do pixel e o checkout de verdade.
+  if (!doPixel && evento === "begin_checkout" && cfg.web_pixel_ativo) {
+    return ok({ ignorado: "checkout coberto pelo Web Pixel" });
+  }
 
   const rotulo = cfg.google_conversion_id
     ? rotuloDoEvento(
@@ -236,8 +261,15 @@ export async function POST(request: NextRequest) {
     return ok({ ignorado: "teto da loja" });
   }
 
-  // ---- fila ---------------------------------------------------------------
-  const { enfileirar, entregar } = await import("@/lib/tracking/fila");
+  // ---- identidade ----------------------------------------------------------
+  //
+  // O Web Pixel roda em sandbox e NAO le os cookies da loja: o evento do
+  // checkout chega sabendo que aconteceu e sem saber de qual anuncio veio. A
+  // ponte e o identificador de visitante da Shopify, que o snippet do tema
+  // tambem conhece.
+  //
+  // Entao: o tema GRAVA "este clientId tem estes click ids", e o pixel CONSULTA.
+  const clientId = (corpo.clientId || "").trim().slice(0, 100) || null;
 
   const clique = {
     gclid: (corpo.gclid || "").trim().slice(0, 200) || null,
@@ -245,6 +277,48 @@ export async function POST(request: NextRequest) {
     wbraid: (corpo.wbraid || "").trim().slice(0, 200) || null,
     auid: (corpo.auid || "").trim().slice(0, 100) || null,
   };
+  let fbp = (corpo.fbp || "").trim().slice(0, 100) || null;
+  let fbc = (corpo.fbc || "").trim().slice(0, 300) || null;
+  const fbclid = (corpo.fbclid || "").trim().slice(0, 300) || null;
+
+  if (doPixel && clientId) {
+    // Vem do checkout: recupera o que o tema guardou para este visitante.
+    const { data: id } = await admin
+      .from("tracking_identities")
+      .select("gclid, gbraid, wbraid, auid, fbp, fbc")
+      .eq("store_id", registro.id)
+      .eq("shopify_client_id", clientId)
+      .maybeSingle();
+    if (id) {
+      clique.gclid = clique.gclid || id.gclid;
+      clique.gbraid = clique.gbraid || id.gbraid;
+      clique.wbraid = clique.wbraid || id.wbraid;
+      clique.auid = clique.auid || id.auid;
+      fbp = fbp || id.fbp;
+      fbc = fbc || id.fbc;
+    }
+  } else if (clientId) {
+    // Vem do tema: publica a associacao para o checkout consultar depois.
+    await admin.from("tracking_identities").upsert(
+      {
+        store_id: registro.id,
+        visitor_id: visitorId,
+        shopify_client_id: clientId,
+        gclid: clique.gclid,
+        gbraid: clique.gbraid,
+        wbraid: clique.wbraid,
+        auid: clique.auid,
+        fbp,
+        fbc,
+        fbclid,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "store_id,visitor_id" }
+    );
+  }
+
+  // ---- fila ---------------------------------------------------------------
+  const { enfileirar, entregar } = await import("@/lib/tracking/fila");
 
   const destinos: { destination: "google" | "meta"; payload: unknown }[] = [];
 
@@ -274,20 +348,34 @@ export async function POST(request: NextRequest) {
       null;
     const userAgent = request.headers.get("user-agent");
 
-    const fbclid = (corpo.fbclid || "").trim().slice(0, 300) || null;
     const userData = montarUserData(
       {
-        // O id de visitante do cookie first-party. E o unico identificador
-        // estavel que existe num evento de funil -- nao ha cliente logado --
-        // e e o mesmo que vai na compra, o que permite ao Meta ligar os dois.
-        externalIds: [visitorId],
+        // PII, quando existe.
+        //
+        // No evento de funil do TEMA nao existe: nao ha cliente identificado.
+        // No evento do WEB PIXEL existe, porque o checkout da Shopify ja tem
+        // e-mail, telefone e endereco -- e e por isso que o pixel melhora o
+        // casamento, nao so a cobertura. Tudo hasheado aqui dentro; nada em
+        // claro sai daqui.
+        email: corpo.email,
+        telefone: corpo.telefone,
+        primeiroNome: corpo.primeiroNome,
+        sobrenome: corpo.sobrenome,
+        cidade: corpo.cidade,
+        estado: corpo.estado,
+        cep: corpo.cep,
+        pais: corpo.pais,
+        // Os dois ids estaveis. O do nosso cookie costura o funil com a compra;
+        // o da Shopify e o unico que o checkout conhece, e sem ele o evento do
+        // pixel seria uma pessoa diferente das outras do mesmo funil.
+        externalIds: [visitorId, clientId],
       },
       {
-        fbp: (corpo.fbp || "").trim().slice(0, 100) || null,
+        fbp,
         // Sem o cookie _fbc, reconstruir a partir do fbclid e o que mantem a
         // ligacao com o anuncio -- e o caso de quem chega pelo anuncio numa loja
         // que nao tem pixel no tema.
-        fbc: (corpo.fbc || "").trim().slice(0, 300) || montarFbc(fbclid, Date.now()),
+        fbc: fbc || montarFbc(fbclid, Date.now()),
         clientIp: ip,
         userAgent,
       }
@@ -361,9 +449,12 @@ export async function POST(request: NextRequest) {
         evento: { event_name: evento, event_id: eventId },
         orderId: eventId,
         visitorId,
-        // Fica na LINHA, nao no payload: o payload do Meta vai cru para a API
+        // Ficam na LINHA, nao no payload: o payload do Meta vai cru para a API
         // deles, e campo desconhecido ali pode derrubar o evento inteiro.
         referrer: (corpo.referrer || "").trim().slice(0, 500) || null,
+        // Liga o evento de checkout ao pedido sem depender de cart attribute,
+        // que se perde quando a sessao comeca no proprio checkout.
+        checkoutToken: (corpo.checkoutToken || "").trim().slice(0, 120) || null,
         payload: alvo.payload,
       });
 

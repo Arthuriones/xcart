@@ -99,9 +99,19 @@ describe("limpeza do mapa antes de gravar", () => {
 });
 
 describe("catalogo", () => {
-  it("so a compra vem de webhook; o resto vem do navegador", () => {
+  it("so a compra vem de webhook", () => {
     const deWebhook = EVENTOS.filter((e) => e.origem === "webhook").map((e) => e.chave);
     expect(deWebhook).toEqual(["purchase"]);
+  });
+
+  /**
+   * `payment_info` so existe dentro do checkout da Shopify, que NAO e tema --
+   * o snippet nunca alcanca. Marcar como 'navegador' faria a tela pedir ao
+   * lojista um evento que o tema nao tem como disparar.
+   */
+  it("dados de pagamento so vem do Web Pixel", () => {
+    const doPixel = EVENTOS.filter((e) => e.origem === "pixel").map((e) => e.chave);
+    expect(doPixel).toEqual(["payment_info"]);
   });
 
   /**
@@ -124,6 +134,7 @@ describe("catalogo", () => {
       view_item: "ViewContent",
       add_to_cart: "AddToCart",
       begin_checkout: "InitiateCheckout",
+      payment_info: "AddPaymentInfo",
       purchase: "Purchase",
     };
     for (const e of EVENTOS) {

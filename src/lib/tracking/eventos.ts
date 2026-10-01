@@ -27,7 +27,12 @@
 // quatro lugares ia divergir.
 // ============================================================================
 
-export type ChaveEvento = "view_item" | "add_to_cart" | "begin_checkout" | "purchase";
+export type ChaveEvento =
+  | "view_item"
+  | "add_to_cart"
+  | "begin_checkout"
+  | "payment_info"
+  | "purchase";
 
 export interface DefinicaoEvento {
   chave: ChaveEvento;
@@ -38,7 +43,13 @@ export interface DefinicaoEvento {
    * 'webhook' = a Shopify avisa o servidor sozinha.
    * 'navegador' = o snippet do tema avisa o nosso coletor.
    */
-  origem: "webhook" | "navegador";
+  /**
+   * 'webhook'   = a Shopify avisa o servidor sozinha.
+   * 'navegador' = o snippet do tema avisa o nosso coletor.
+   * 'pixel'     = o Web Pixel avisa. E o unico que entra no checkout da
+   *               Shopify, que nao e tema e por isso o snippet nao alcanca.
+   */
+  origem: "webhook" | "navegador" | "pixel";
   /**
    * Nome do evento no Meta.
    *
@@ -50,7 +61,12 @@ export interface DefinicaoEvento {
    * O Google nao precisa de nome nenhum -- la o evento e identificado pelo
    * rotulo da conversion action.
    */
-  nomeNoMeta: "ViewContent" | "AddToCart" | "InitiateCheckout" | "Purchase";
+  nomeNoMeta:
+    | "ViewContent"
+    | "AddToCart"
+    | "InitiateCheckout"
+    | "AddPaymentInfo"
+    | "Purchase";
   /**
    * Manda valor e moeda junto?
    *
@@ -84,6 +100,16 @@ export const EVENTOS: DefinicaoEvento[] = [
     descricao: "O visitante saiu do carrinho para o checkout.",
     origem: "navegador",
     nomeNoMeta: "InitiateCheckout",
+    temValor: false,
+  },
+  {
+    chave: "payment_info",
+    nome: "Dados de pagamento",
+    descricao:
+      "O comprador preencheu o pagamento. So o Web Pixel ve: o checkout da Shopify nao e tema.",
+    // So o Web Pixel alcanca o checkout. O snippet do tema nunca dispara este.
+    origem: "pixel",
+    nomeNoMeta: "AddPaymentInfo",
     temValor: false,
   },
   {
