@@ -270,7 +270,12 @@ export async function POST(request: NextRequest) {
 
     const fbclid = (corpo.fbclid || "").trim().slice(0, 300) || null;
     const userData = montarUserData(
-      {},
+      {
+        // O id de visitante do cookie first-party. E o unico identificador
+        // estavel que existe num evento de funil -- nao ha cliente logado --
+        // e e o mesmo que vai na compra, o que permite ao Meta ligar os dois.
+        externalIds: [visitorId],
+      },
       {
         fbp: (corpo.fbp || "").trim().slice(0, 100) || null,
         // Sem o cookie _fbc, reconstruir a partir do fbclid e o que mantem a

@@ -196,7 +196,13 @@ export function montarPurchase(
       estado: endereco?.province_code || endereco?.province,
       cep: endereco?.zip,
       pais,
-      externalId: pedido.customer?.id ? String(pedido.customer.id) : null,
+      // Os DOIS: o customer id liga pedidos do mesmo comprador ao longo do
+      // tempo; o id de visitante e o unico que o carrinho e o checkout tambem
+      // conhecem, e e ele que costura o funil inteiro na mesma pessoa.
+      externalIds: [
+        pedido.customer?.id ? String(pedido.customer.id) : null,
+        sinais.visitorId,
+      ],
     },
     {
       fbp: sinais.fbp || identidade.fbp,

@@ -91,3 +91,37 @@ describe("a ponte preserva o que a pagina ja definiu", () => {
     expect(ponte).toMatch(/!u\.searchParams\.has\(m\)/);
   });
 });
+
+/**
+ * _fbp e o id de navegador do Meta e um dos sinais mais fortes dele. Com o pixel
+ * do tema desligado -- que e o nosso caso, para a mesma acao nao contar duas
+ * vezes -- ninguem grava esse cookie, e todo evento iria sem.
+ *
+ * O snippet gera quando falta. O que NAO pode acontecer, e o que estes testes
+ * travam: gerar um valor novo a cada evento (descreveria uma pessoa diferente a
+ * cada vez, piorando o casamento) ou inventar um _fbc sem clique real.
+ */
+describe("o snippet cuida do _fbp sem inventar _fbc", () => {
+  const snippet = readFileSync(
+    path.resolve(__dirname, "..", "public", "xcart-click.js"),
+    "utf8"
+  );
+
+  it("gera o _fbp no formato do Meta quando o cookie nao existe", () => {
+    expect(snippet).toMatch(/"fb\.1\." \+ Date\.now\(\)/);
+  });
+
+  it("so gera quando falta, e grava em cookie para reusar", () => {
+    // Sem o `if (!fbp)` e sem gravar, cada carregamento criaria outro id.
+    expect(snippet).toMatch(/if \(!fbp\) \{[\s\S]{0,200}gravarCookie\("_fbp", fbp\)/);
+  });
+
+  it("NUNCA fabrica _fbc", () => {
+    // _fbc afirma um clique em anuncio. Sem fbclid real, inventar e mentir
+    // sobre a origem da visita.
+    const trecho = snippet.slice(snippet.indexOf("var fbc = lerCookie"));
+    const ateOFim = trecho.slice(0, 400);
+    expect(ateOFim).not.toMatch(/gravarCookie\("_fbc"/);
+    expect(ateOFim).not.toMatch(/"fb\.1\.[^"]*" \+ Date\.now\(\)[\s\S]{0,60}_fbc/);
+  });
+});

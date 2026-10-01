@@ -91,9 +91,34 @@
     }
   }
 
-  // O _fbp/_fbc do pixel do Meta, quando existir, vai junto de graca.
+  // ---- 1b. _fbp e _fbc ----------------------------------------------------
+  //
+  // _fbp e o id de navegador do Meta e um dos sinais mais fortes que ele tem.
+  // Normalmente quem grava e o pixel do navegador -- que aqui esta DESLIGADO de
+  // proposito, para a mesma acao nao contar duas vezes. Sem ninguem gravando,
+  // todo evento nosso ia sem ele.
+  //
+  // Entao geramos quando falta. O formato e o do proprio Meta:
+  // fb.1.<timestamp em ms>.<numero aleatorio>. Uma vez gerado, fica no cookie
+  // por 90 dias e todos os eventos daquele visitante levam o MESMO valor --
+  // que e o ponto: um _fbp novo a cada evento descreveria uma pessoa diferente
+  // a cada vez e pioraria o casamento em vez de melhorar.
+  //
+  // Se o pixel do tema voltar a existir, ele le e reusa este cookie; o formato e
+  // o mesmo e nao ha conflito.
   var fbp = lerCookie("_fbp");
-  if (fbp) achados._fbp = fbp;
+  if (!fbp) {
+    fbp =
+      "fb.1." + Date.now() + "." +
+      Math.floor(1000000000 + Math.random() * 8999999999);
+    gravarCookie("_fbp", fbp);
+  }
+  achados._fbp = fbp;
+
+  // _fbc e diferente: ele representa um CLIQUE real em anuncio, e inventar um
+  // sem fbclid na URL seria afirmar uma origem que nao aconteceu. So lemos o
+  // cookie; quando ele nao existe, o servidor reconstroi a partir do fbclid --
+  // e se nao houver fbclid, o evento vai sem, que e o correto.
   var fbc = lerCookie("_fbc");
   if (fbc) achados._fbc = fbc;
 

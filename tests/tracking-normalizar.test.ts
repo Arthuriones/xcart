@@ -103,7 +103,7 @@ describe("user_data do CAPI", () => {
     estado: "Tokyo",
     cep: "150-0001",
     pais: "JP",
-    externalId: "cliente-99",
+    externalIds: ["cliente-99"],
   };
 
   it("hasheia toda PII e deixa IP e user agent em claro", () => {
@@ -145,5 +145,37 @@ describe("user_data do CAPI", () => {
     });
     expect(contarSinais(soCookies)).toBe(2);
     expect(contarSinais(completo)).toBeGreaterThanOrEqual(11);
+  });
+});
+
+/**
+ * external_id e LISTA no Meta, e ele tenta casar por qualquer um dos valores.
+ *
+ * Isso existe porque o funil e a compra conhecem identificadores diferentes: no
+ * carrinho so ha o id de visitante do cookie; no pedido ha tambem o customer id
+ * da Shopify. Mandar um so de cada lado faz o Meta tratar carrinho e venda como
+ * pessoas diferentes -- e a ligacao entre eles e justamente o que ele usa para
+ * atribuir e para montar publico semelhante.
+ */
+describe("external_id costura o funil com a compra", () => {
+  it("aceita varios ids e hasheia cada um", () => {
+    const u = montarUserData({ externalIds: ["cliente-99", "vid-abc"] }, {});
+    expect(u.external_id).toEqual([sha256("cliente-99"), sha256("vid-abc")]);
+  });
+
+  it("descarta vazio e nulo sem deixar buraco na lista", () => {
+    const u = montarUserData({ externalIds: [null, "vid-abc", "", undefined] }, {});
+    expect(u.external_id).toEqual([sha256("vid-abc")]);
+  });
+
+  it("nao repete o mesmo id", () => {
+    // O pedido pode trazer customer id igual ao visitante em loja sem login.
+    const u = montarUserData({ externalIds: ["x", "x"] }, {});
+    expect(u.external_id).toEqual([sha256("x")]);
+  });
+
+  it("omite o campo quando nao ha id nenhum", () => {
+    expect(montarUserData({ externalIds: [] }, {}).external_id).toBeUndefined();
+    expect(montarUserData({}, {}).external_id).toBeUndefined();
   });
 });

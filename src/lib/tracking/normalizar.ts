@@ -145,8 +145,17 @@ export interface DadosPessoais {
   estado?: string | null;
   cep?: string | null;
   pais?: string | null;
-  /** Id estavel do comprador na loja (customer id da Shopify). */
-  externalId?: string | null;
+  /**
+   * Ids estaveis desta pessoa. Varios de proposito.
+   *
+   * O Meta aceita `external_id` como LISTA e tenta casar por qualquer um. Isso
+   * importa porque o funil e a compra conhecem identificadores diferentes: no
+   * carrinho so existe o id de visitante do nosso cookie; no pedido existe
+   * tambem o customer id da Shopify. Mandando so um de cada lado, o Meta nao
+   * liga o carrinho a venda da MESMA pessoa -- e a ligacao e justamente o que
+   * ele usa para atribuir e para montar publico semelhante.
+   */
+  externalIds?: (string | null | undefined)[];
 }
 
 /** O bloco `user_data` do CAPI, com todo campo de PII ja em SHA-256. */
@@ -212,10 +221,15 @@ export function montarUserData(
   const pa = normalizarPais(pais);
   if (pa) saida.country = [sha256(pa)];
 
-  // external_id nao tem formato definido pelo Meta: e um id nosso, estavel.
-  // Hasheamos porque identifica pessoa.
-  const ext = hashOuNulo(dados.externalId);
-  if (ext) saida.external_id = [ext];
+  // external_id nao tem formato definido pelo Meta: sao ids nossos, estaveis.
+  // Hasheados porque identificam pessoa.
+  const exts: string[] = [];
+  for (const bruto of dados.externalIds || []) {
+    const h = hashOuNulo(bruto);
+    // Repetido nao ajuda e gasta espaco do payload.
+    if (h && !exts.includes(h)) exts.push(h);
+  }
+  if (exts.length) saida.external_id = exts;
 
   if (sinais.fbp) saida.fbp = sinais.fbp;
   if (sinais.fbc) saida.fbc = sinais.fbc;
