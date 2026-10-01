@@ -38,6 +38,7 @@ async function upsertStore(
     access_token?: string | null;
     name: string;
     theme_id?: string | null;
+    uninstalled_at?: string | null;
   },
   select = "*"
 ) {
@@ -120,6 +121,12 @@ export async function POST(request: NextRequest) {
       access_token: null,
       name: shopData.shop.name,
       theme_id: activeTheme?.id || null,
+      // getShopInfo e getThemes acabaram de responder com estas credenciais:
+      // o app ESTA instalado. Se a loja tinha passado por app/uninstalled, a
+      // marca ficava para sempre (nada a limpava) e o coletor, o painel e o
+      // registro de webhook a tratavam como morta. O ramo needsInstall abaixo
+      // nao mexe nela -- la o app ainda nao esta na loja.
+      uninstalled_at: null,
     });
 
     if (error) {

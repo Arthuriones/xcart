@@ -310,7 +310,20 @@ async function main() {
   }
 
   console.log("\n  rastreamento LIGADO.");
-  console.log("  conferir com: npx tsx scripts/testar-webhook-pedido.ts " + loja.shop_domain);
+  // O teste de pedido gera um Purchase de verdade a partir de um pedido falso.
+  // Ele recusa sozinho quando ha Google ativo ou Meta sem codigo de teste, mas
+  // a dica precisa dizer isso: logo depois de ligar um destino real, rodar o
+  // teste "para conferir" e exatamente o caso em que ele vai recusar.
+  console.log(
+    "  conferir com: npm run op -- scripts/testar-webhook-pedido.ts " +
+      loja.shop_domain +
+      " [--producao]"
+  );
+  console.log("    (alvo padrao e localhost:3000; --producao manda para o app no ar)");
+  console.log(
+    "    recusa se a loja tiver destino Google ativo (sem modo de teste) ou Meta ativo sem --teste:"
+  );
+  console.log("    o pedido e falso, mas o Purchase sairia para a conta real.");
 }
 
 main().catch((e) => {

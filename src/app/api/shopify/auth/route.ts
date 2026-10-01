@@ -266,9 +266,16 @@ export async function GET(request: NextRequest) {
       }
 
       accessToken = tokenPayload.access_token;
+      // uninstalled_at volta a null AQUI: o webhook app/uninstalled grava a
+      // data e nada mais a limpava. Reinstalar (o que acontece toda vez que o
+      // escopo muda) deixava a loja marcada como morta -- o coletor respondia
+      // "loja desconhecida" para todo evento, a loja sumia do painel e o
+      // registrar-webhook-pedidos a pulava. Token novo = app instalado de novo.
+      // As rotas que a desinstalacao pausou continuam pausadas de proposito:
+      // religar rota manda comprador para checkout, e isso e decisao do dono.
       await supabase
         .from("stores")
-        .update({ access_token: accessToken })
+        .update({ access_token: accessToken, uninstalled_at: null })
         .eq("id", store.id);
 
       // Code exchange succeeded — app is now installed

@@ -1,17 +1,36 @@
 /**
- * Manda um `orders/create` ASSINADO para o endpoint de producao.
+ * Manda um `orders/create` ASSINADO e FALSO para o webhook do app.
  *
  * Prova o caminho inteiro sem esperar uma venda de verdade: HMAC, janela de
- * replay, dedupe por entrega, o case novo no switch e a montagem do Purchase.
+ * replay, dedupe por entrega, o case no switch e a montagem do Purchase.
  *
- * Nao inventa venda no Meta: se a loja nao tiver tracking_configs ligado, o
- * handler responde "rastreamento desligado" e nada sai. Para exercitar o envio
- * de verdade, ligue a loja com test_event_code -- ai o evento cai na aba de
- * teste do Events Manager, nao na producao.
+ * O PEDIDO E FALSO, MAS O PURCHASE QUE ELE GERA SAI DE VERDADE. O handler
+ * enfileira uma linha por destino ativo da loja e tenta entregar na hora, e o
+ * cron da producao reentrega o que ficar pendente. Entao:
+ *
+ *   - Google: nao existe modo de teste no endpoint /pagead/conversion. Destino
+ *     Google ativo recebe uma compra de 12800 JPY que nunca aconteceu, soma no
+ *     valor de conversao da conta e ensina o lance automatico com venda
+ *     inventada. Nao ha como desfazer pelo app.
+ *   - Meta: so cai na aba de teste do Events Manager se o destino tiver
+ *     test_event_code. Sem ele, e uma compra (fbclid TESTE123) no pixel real.
+ *
+ * O modelo antigo ("ligue com test_event_code e o evento cai na aba de teste")
+ * era de quando so havia Meta. Por isso o script agora RECUSA rodar quando a
+ * loja tem destino Google ativo ou destino Meta ativo sem test_event_code, e
+ * diz qual e. Nao ha flag para passar por cima: quem quer testar desliga o
+ * destino (ou poe o codigo de teste no Meta) e liga de novo depois.
+ *
+ * A trava vale para QUALQUER alvo, inclusive localhost: o servidor local le o
+ * mesmo .env.local deste script, logo o mesmo banco e os mesmos destinos -- e
+ * a linha que ele deixar pendente na fila o cron da producao entrega.
+ *
+ * Alvo padrao: http://localhost:3000. Producao so com --producao explicito,
+ * porque o teste de rotina nao deve bater no app que atende as lojas.
  *
  * Uso:
- *   npx tsx scripts/testar-webhook-pedido.ts <dominio-da-loja>
- *   npx tsx scripts/testar-webhook-pedido.ts gy5pr8-5h.myshopify.com --local
+ *   npm run op -- scripts/testar-webhook-pedido.ts <dominio-da-loja>
+ *   npm run op -- scripts/testar-webhook-pedido.ts <dominio-da-loja> --producao
  */
 import "dotenv/config";
 import { config } from "dotenv";
@@ -19,11 +38,40 @@ import { createHmac, randomUUID } from "node:crypto";
 
 config({ path: ".env.local", override: true });
 
-const alvo = process.argv[2];
-const local = process.argv.includes("--local");
+// O dominio e o primeiro argumento que nao e flag: `--producao` antes do
+// dominio nao pode virar o nome da loja.
+const alvo = process.argv.slice(2).find((a) => !a.startsWith("--"));
+const producao = process.argv.includes("--producao");
 if (!alvo) {
-  console.error("uso: npx tsx scripts/testar-webhook-pedido.ts <dominio> [--local]");
+  console.error("uso: npm run op -- scripts/testar-webhook-pedido.ts <dominio> [--producao]");
   process.exit(1);
+}
+
+type DestinoAtivo = {
+  plataforma: string;
+  nome: string | null;
+  conta: string;
+  test_event_code: string | null;
+};
+
+/**
+ * Destinos que receberiam o Purchase falso como compra de verdade. Lista vazia
+ * = seguro mandar.
+ */
+function destinosPerigosos(destinos: DestinoAtivo[]): string[] {
+  const motivos: string[] = [];
+  for (const d of destinos) {
+    const rotulo = `${d.plataforma} ${d.conta}${d.nome ? ` (${d.nome})` : ""}`;
+    if (d.plataforma === "google") {
+      motivos.push(`${rotulo}: Google nao tem modo de teste -- a compra falsa entra na conta`);
+    } else if (d.plataforma === "meta" && !d.test_event_code?.trim()) {
+      motivos.push(`${rotulo}: Meta sem test_event_code -- a compra falsa entra no pixel real`);
+    } else if (d.plataforma !== "meta") {
+      // Plataforma nova que este script ainda nao conhece: na duvida, recusa.
+      motivos.push(`${rotulo}: plataforma sem regra de teste neste script`);
+    }
+  }
+  return motivos;
 }
 
 /** Pedido no formato que a Shopify manda, com os campos que o Purchase usa. */
@@ -81,7 +129,31 @@ async function main() {
     process.exit(1);
   }
 
-  const base = local ? "http://localhost:3000" : getPublicAppUrl();
+  // Le os destinos ANTES de mandar qualquer coisa. Falha de leitura tambem
+  // recusa: sem saber o que esta ligado, nao da para afirmar que e seguro.
+  const { data: destinos, error: erroDestinos } = await admin
+    .from("tracking_destinations")
+    .select("plataforma, nome, conta, test_event_code")
+    .eq("store_id", data.id)
+    .eq("ativo", true);
+  if (erroDestinos) {
+    console.error(`nao consegui ler os destinos da loja: ${erroDestinos.message}`);
+    console.error("recusado: sem a lista de destinos nao da para garantir que nada sai de verdade.");
+    process.exit(1);
+  }
+  const perigos = destinosPerigosos((destinos || []) as DestinoAtivo[]);
+  if (perigos.length > 0) {
+    console.error(`recusado: ${data.name} (${data.shop_domain}) mandaria um Purchase FALSO para contas reais:`);
+    for (const p of perigos) console.error(`  - ${p}`);
+    console.error(
+      "\ndesative esses destinos (ou ponha test_event_code no Meta) e rode de novo." +
+        "\nvale tambem para localhost: o servidor local usa o mesmo banco, e o cron da producao" +
+        "\nentrega o que ele deixar pendente na fila."
+    );
+    process.exit(1);
+  }
+
+  const base = producao ? getPublicAppUrl() : "http://localhost:3000";
   const url = `${base}/api/shopify/webhooks`;
   const numero = Math.floor(Math.random() * 100000);
   const corpo = JSON.stringify(pedidoDeTeste(numero));
