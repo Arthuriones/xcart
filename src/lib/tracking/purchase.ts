@@ -27,6 +27,16 @@ export interface PedidoShopify {
   created_at?: string | null;
   browser_ip?: string | null;
   landing_site?: string | null;
+  /**
+   * O token do checkout que virou este pedido. E o MESMO `checkout.token` que o
+   * Web Pixel ve (documentado pela Shopify) -- a ponte para recuperar o clique
+   * quando o cart attribute nao chega ao pedido.
+   */
+  checkout_token?: string | null;
+  /** URL da pagina de status, no dominio PUBLICO da loja. */
+  order_status_url?: string | null;
+  test?: boolean | null;
+  source_name?: string | null;
   customer?: {
     id?: number | string | null;
     email?: string | null;
@@ -114,8 +124,91 @@ export interface IdentidadeGuardada {
   fbc?: string | null;
   fbclid?: string | null;
   gclid?: string | null;
+  /**
+   * gbraid, wbraid e auid FALTAVAM aqui, embora a tabela tenha as colunas e o
+   * coletor grave as tres. Clique de iOS chega so com gbraid/wbraid: sem eles
+   * no fallback, a compra de quem clicou num anuncio no iPhone saia sem
+   * atribuicao nenhuma para o Google.
+   */
+  gbraid?: string | null;
+  wbraid?: string | null;
+  auid?: string | null;
+  /** O nosso id de visitante e o da Shopify: casam com o external_id do funil. */
+  visitorId?: string | null;
+  clientId?: string | null;
   clientIp?: string | null;
   userAgent?: string | null;
+}
+
+/**
+ * Click ids que vieram na URL de CHEGADA da sessao que virou o pedido.
+ *
+ * Ultima reserva, quando nem o cart attribute nem a identidade trouxeram o
+ * clique. O `landing_site` do pedido e a URL onde a sessao comecou, e quem
+ * chega de anuncio chega com `?gclid=` ou `?fbclid=` nela -- medido: uma das
+ * compras reais trazia o fbclid no proprio landing_site e ele era ignorado.
+ *
+ * A Shopify corta o landing_site em 255 caracteres. Perto do limite, o ultimo
+ * parametro pode estar truncado, e um gclid pela metade e pior que nenhum: o
+ * Google descarta e ainda parece que foi enviado. Entao, perto do limite, o
+ * ultimo parametro e descartado.
+ */
+export function cliquesDaLanding(landingSite: string | null | undefined): {
+  gclid: string | null;
+  gbraid: string | null;
+  wbraid: string | null;
+  fbclid: string | null;
+} {
+  const vazio = { gclid: null, gbraid: null, wbraid: null, fbclid: null };
+  const bruto = (landingSite || "").trim();
+  if (!bruto || !bruto.includes("?")) return vazio;
+
+  let parametros: URLSearchParams;
+  try {
+    parametros = new URL(bruto, "https://x.invalid").searchParams;
+  } catch {
+    return vazio;
+  }
+
+  if (bruto.length >= 250) {
+    const chaves = [...parametros.keys()];
+    const ultima = chaves[chaves.length - 1];
+    if (ultima) parametros.delete(ultima);
+  }
+
+  const ler = (k: string) => (parametros.get(k) || "").trim() || null;
+  return {
+    gclid: ler("gclid"),
+    gbraid: ler("gbraid"),
+    wbraid: ler("wbraid"),
+    fbclid: ler("fbclid"),
+  };
+}
+
+type CliqueGoogle = {
+  gclid?: string | null;
+  gbraid?: string | null;
+  wbraid?: string | null;
+};
+
+/**
+ * O clique do Google, vindo de UMA fonte so.
+ *
+ * As fontes nao se misturam: cada uma descreve um clique. Juntar o gclid do
+ * atributo com o gbraid da identidade criaria uma combinacao que nunca
+ * aconteceu. Vale a primeira fonte que tiver qualquer um dos tres, na ordem do
+ * mais especifico para o pedido ao mais generico: o carrinho, o visitante, a
+ * URL de chegada.
+ */
+export function cliqueDoGoogle(
+  ...fontes: (CliqueGoogle | null | undefined)[]
+): { gclid: string | null; gbraid: string | null; wbraid: string | null } {
+  for (const f of fontes) {
+    if (f && (f.gclid || f.gbraid || f.wbraid)) {
+      return { gclid: f.gclid || null, gbraid: f.gbraid || null, wbraid: f.wbraid || null };
+    }
+  }
+  return { gclid: null, gbraid: null, wbraid: null };
 }
 
 /** O que o endpoint do Google Ads precisa. Formato proprio, nao o do CAPI. */
@@ -147,11 +240,14 @@ export function montarConversaoGoogle(
 ): ConversaoGoogleDoPedido {
   const sinais = sinaisDoPedido(pedido);
   const valor = Number(pedido.total_price ?? 0);
+  const clique = cliqueDoGoogle(
+    sinais,
+    contexto.identidade,
+    cliquesDaLanding(pedido.landing_site)
+  );
   return {
-    gclid: sinais.gclid || contexto.identidade?.gclid || null,
-    gbraid: sinais.gbraid,
-    wbraid: sinais.wbraid,
-    auid: sinais.auid,
+    ...clique,
+    auid: sinais.auid || contexto.identidade?.auid || null,
     // A pagina de chegada da sessao que virou a venda. O gtag manda a URL em
     // toda conversao; e contexto, nao identificacao.
     pageUrl:
@@ -189,6 +285,22 @@ export interface PurchaseMontado {
 }
 
 /**
+ * A origem PUBLICA da loja, tirada da URL de status do pedido.
+ *
+ * O `shop_domain` cadastrado e o .myshopify.com. A `order_status_url` vem no
+ * dominio que o comprador usou -- o mesmo onde o funil aconteceu.
+ */
+function origemPublica(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" ? u.origin : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Monta o Purchase.
  *
  * Tira identificacao de tudo que o pedido oferece -- cliente, cobranca,
@@ -221,7 +333,10 @@ export function montarPurchase(
   const fbc =
     sinais.fbc ||
     identidade.fbc ||
-    montarFbc(sinais.fbclid || identidade.fbclid, quandoMs);
+    montarFbc(
+      sinais.fbclid || identidade.fbclid || cliquesDaLanding(pedido.landing_site).fbclid,
+      quandoMs
+    );
 
   const userData = montarUserData(
     {
@@ -236,9 +351,14 @@ export function montarPurchase(
       // Os DOIS: o customer id liga pedidos do mesmo comprador ao longo do
       // tempo; o id de visitante e o unico que o carrinho e o checkout tambem
       // conhecem, e e ele que costura o funil inteiro na mesma pessoa.
+      //
+      // O visitante tambem pode vir da identidade recuperada pelo checkout, e o
+      // clientId da Shopify junto: os eventos do funil mandam [visitorId,
+      // clientId], e sem eles aqui a compra nao casava com o proprio funil.
       externalIds: [
         pedido.customer?.id ? String(pedido.customer.id) : null,
-        sinais.visitorId,
+        sinais.visitorId || identidade.visitorId,
+        identidade.clientId,
       ],
     },
     {
@@ -301,24 +421,39 @@ export function montarPurchase(
 
   // Cliente novo ou recorrente.
   //
-  // E o que alimenta a otimizacao de AQUISICAO DE CLIENTE NOVO do Meta: sem
-  // este sinal ele nao tem como distinguir uma venda para quem ja comprava de
-  // uma conquista, e a campanha de aquisicao otimiza para a base antiga.
+  // E o que alimenta a otimizacao de AQUISICAO DE CLIENTE NOVO do Meta.
+  //
+  // DENTRO de custom_data, com o enum dele. A primeira versao disto punha o
+  // campo no topo do evento com "new_customer"/"existing_customer" -- valores
+  // que o Meta nao aceita. So nao quebrou porque a Shopify nao manda mais
+  // `orders_count` no pedido e o bloco nunca rodava. Se viesse, o Meta podia
+  // responder erro 100, que a fila trata como permanente: toda compra de toda
+  // loja iria para 'falhou'.
   //
   // `orders_count` ja inclui este pedido, entao 1 e a primeira compra. Ausente
   // fica ausente de proposito -- chutar "novo" inflaria a conquista.
   const quantos = pedido.customer?.orders_count;
-  if (typeof quantos === "number" && quantos > 0) {
-    evento.customer_segmentation =
-      quantos <= 1 ? "new_customer" : "existing_customer";
+  if (typeof quantos === "number" && Number.isFinite(quantos) && quantos > 0) {
+    evento.custom_data = {
+      ...evento.custom_data,
+      customer_segmentation:
+        quantos <= 1 ? "new_customer_to_business" : "existing_customer_to_business",
+    };
   }
 
-  if (contexto.dominioLoja) {
+  const origem =
+    origemPublica(pedido.order_status_url) ||
+    (contexto.dominioLoja ? `https://${contexto.dominioLoja}` : null);
+  if (origem) {
     // O caminho de chegada ajuda o Meta a casar com a sessao do navegador.
+    //
+    // No dominio PUBLICO, nao no .myshopify.com: o funil inteiro sai no
+    // dominio publico, e o Purchase em outro dominio quebra regra de dominio
+    // verificado e conversao personalizada por URL.
     const caminho = (pedido.landing_site || "/").startsWith("/")
       ? pedido.landing_site || "/"
       : "/";
-    evento.event_source_url = `https://${contexto.dominioLoja}${caminho}`;
+    evento.event_source_url = `${origem}${caminho}`;
   }
 
   return { evento, userData };

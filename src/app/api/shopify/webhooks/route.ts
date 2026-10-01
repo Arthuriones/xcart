@@ -50,10 +50,17 @@ export async function POST(request: NextRequest) {
 
   // O header so escolhe QUAL segredo testar -- ele nao autoriza nada sozinho.
   // Sem o client_secret da loja, a assinatura nao fecha.
-  const { data: lojas } = await admin
+  const { data: lojas, error: erroLojas } = await admin
     .from("stores")
     .select("id, user_id, shop_domain, client_secret, uninstalled_at")
     .eq("shop_domain", shopDomain);
+
+  // Soluco do banco nao e "loja desconhecida": com 200 a Shopify desiste, e a
+  // venda daquele pedido nunca mais seria enviada.
+  if (erroLojas) {
+    console.error("[shopify/webhook] falha ao ler lojas", erroLojas.message);
+    return NextResponse.json({ error: "Tente de novo." }, { status: 503 });
+  }
 
   if (!lojas || lojas.length === 0) {
     // Loja que nao conhecemos: nao ha segredo para verificar. 200 para a
@@ -78,6 +85,15 @@ export async function POST(request: NextRequest) {
   // --- daqui para baixo a entrega e autentica ---
 
   if (!dentroDaJanela(cab.triggeredAt)) {
+    // Fica no log de proposito. Antes a recusa nao deixava rastro nenhum --
+    // nem marcador, nem linha, nem log --, e por isso ninguem soube que a
+    // janela de 5 min descartava toda reentrega da Shopify.
+    console.warn("[shopify/webhook] fora da janela de replay", {
+      topic: cab.topic,
+      shopDomain,
+      webhookId: cab.webhookId,
+      triggeredAt: cab.triggeredAt,
+    });
     return ok({ ignorado: "fora da janela de replay" });
   }
 
@@ -111,7 +127,9 @@ export async function POST(request: NextRequest) {
 
   switch (cab.topic) {
     case "app/uninstalled": {
-      const resposta = await tratarDesinstalacao(admin, loja);
+      const resposta = await executarComRetentativa(cab.topic, () =>
+        tratarDesinstalacao(admin, loja)
+      );
       // ==================================================================
       // O marcador de idempotencia foi gravado ANTES do processamento (e
       // tem que ser: e ele que impede duas entregas simultaneas do mesmo
@@ -136,7 +154,9 @@ export async function POST(request: NextRequest) {
       return resposta;
     }
     case "orders/create": {
-      const resposta = await tratarPedidoCriado(admin, loja, payload);
+      const resposta = await executarComRetentativa(cab.topic, () =>
+        tratarPedidoCriado(admin, loja, payload)
+      );
       // Mesmo cuidado do uninstalled: o marcador de idempotencia foi gravado
       // ANTES do processamento, entao pedir retry sem apaga-lo faria a
       // entrega seguinte bater em "duplicado" e a conversao nunca sairia.
@@ -152,6 +172,27 @@ export async function POST(request: NextRequest) {
       // Topico assinado que ainda nao tratamos: registrado (para idempotencia)
       // e aceito, sem retry.
       return ok({ ignorado: "topico sem tratamento", topic: cab.topic });
+  }
+}
+
+/**
+ * Excecao vira 503, nao 500 cru.
+ *
+ * O marcador de idempotencia ja foi gravado quando o tratador roda. Uma
+ * excecao que escapasse dele subia como 500 do Next -- e o bloco que apaga o
+ * marcador so olha a RESPOSTA, que nunca existia. A reentrega da Shopify caia
+ * em "duplicado" e a compra nao saia nunca. Convertida em 503, ela passa pelo
+ * mesmo caminho de qualquer falha: marcador apagado, Shopify reentrega.
+ */
+async function executarComRetentativa(
+  topico: string,
+  tratar: () => Promise<NextResponse>
+): Promise<NextResponse> {
+  try {
+    return await tratar();
+  } catch (e) {
+    console.error(`[shopify/webhook] falha ao tratar ${topico}`, e);
+    return NextResponse.json({ error: "Tente de novo." }, { status: 503 });
   }
 }
 
@@ -186,28 +227,31 @@ async function tratarPedidoCriado(
 
   const pedido = payload as Parameters<typeof montarPurchase>[0];
 
-  // Quando o cart attribute nao trouxe o click id, ainda pode haver identidade
-  // guardada pelo coletor para este visitante.
-  const sinais = sinaisDoPedido(pedido);
-  let identidade = null;
-  if (sinais.visitorId) {
-    const { data } = await admin
-      .from("tracking_identities")
-      .select("fbp, fbc, fbclid, gclid, client_ip_address, client_user_agent")
-      .eq("store_id", loja.id)
-      .eq("visitor_id", sinais.visitorId)
-      .maybeSingle();
-    if (data) {
-      identidade = {
-        fbp: data.fbp,
-        fbc: data.fbc,
-        fbclid: data.fbclid,
-        gclid: data.gclid,
-        clientIp: data.client_ip_address,
-        userAgent: data.client_user_agent,
-      };
-    }
+  // Pedido de teste, valor zero, PDV e draft order nao viram conversao. O
+  // draft de reenvio e o pior: carrega a PII do cliente real, e o Meta contaria
+  // uma segunda compra com valor. Ver filtro-pedido.ts.
+  const { motivoParaIgnorarPedido } = await import("@/lib/tracking/filtro-pedido");
+  const motivo = motivoParaIgnorarPedido(pedido);
+  if (motivo) {
+    return ok({ ignorado: motivo, topic: "orders/create", pedido: pedido.id ?? null });
   }
+
+  // O clique, em cascata: cart attribute -> visitante -> checkout -> URL de
+  // chegada. Os tres primeiros aqui; a URL de chegada em purchase.ts.
+  //
+  // Antes so existia o primeiro passo, e ele dependia do MESMO cart attribute
+  // que ja trazia os click ids: compra por "Comprar agora" ou checkout
+  // expresso perdia tudo de uma vez. Ver identidade-do-pedido.ts.
+  const sinais = sinaisDoPedido(pedido);
+  const { recuperarIdentidadeDoPedido } = await import(
+    "@/lib/tracking/identidade-do-pedido"
+  );
+  const { identidade, origem } = await recuperarIdentidadeDoPedido(
+    admin,
+    loja.id,
+    pedido,
+    sinais.visitorId
+  );
 
   const { evento, userData } = montarPurchase(pedido, {
     identidade,
@@ -321,6 +365,9 @@ async function tratarPedidoCriado(
       topic: "orders/create",
       eventId: evento.event_id,
       destinos: saida,
+      // De onde veio a identidade. "nenhuma" com o carrinho tambem vazio e a
+      // compra que sai sem clique -- o numero que importa acompanhar.
+      identidade: origem,
       // Quantos sinais foram junto: e o que vira Event Match Quality.
       sinais: contarSinais(userData),
     });

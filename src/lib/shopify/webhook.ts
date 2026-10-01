@@ -69,9 +69,23 @@ export function assinaturaConfere(
   return timingSafeEqual(recebido, esperado);
 }
 
-/** Janela de replay. A Shopify tenta reentregar por 48 h; 5 min cobre o retry
- *  legitimo e corta o reenvio de uma captura antiga. */
-export const JANELA_REPLAY_MS = 5 * 60 * 1000;
+/**
+ * Janela de replay: 72 horas.
+ *
+ * ERA 5 MINUTOS, E ISSO DESCARTAVA VENDA.
+ *
+ * A Shopify reentrega webhook que falhou 8 vezes ao longo de 4 horas, e o
+ * `X-Shopify-Triggered-At` guarda a hora ORIGINAL do evento. Com 5 minutos, o
+ * 503 que o proprio handler devolve para pedir reentrega nunca era aproveitado:
+ * a reentrega chegava fora da janela e era recusada com 200, sem rastro. Atraso
+ * da fila da Shopify em pico derrubava a compra ja na primeira entrega.
+ *
+ * Isto nao abre replay. A defesa real nunca foi a janela: e a tabela
+ * shopify_webhook_events, cuja PK e o webhook_id e que nao e expurgada, e o
+ * indice unico `purchase_<order_id>` da fila. Um webhook capturado e reenviado
+ * cai num dos dois. A janela so corta o lixo muito velho antes de chegar la.
+ */
+export const JANELA_REPLAY_MS = 72 * 60 * 60 * 1000;
 
 /**
  * Recusa entrega velha demais.
@@ -90,8 +104,17 @@ export function dentroDaJanela(
   if (!triggeredAt) return true;
   const quando = Date.parse(triggeredAt);
   if (Number.isNaN(quando)) return true;
-  return Math.abs(agora - quando) <= JANELA_REPLAY_MS;
+
+  const atraso = agora - quando;
+  // Assimetrica de proposito. Para TRAS, 72 h: reentrega legitima chega com a
+  // hora original. Para a FRENTE, so o desvio de relogio: evento que diz ter
+  // acontecido no futuro nao e reentrega de nada.
+  if (atraso < -FOLGA_DE_RELOGIO_MS) return false;
+  return atraso <= JANELA_REPLAY_MS;
 }
+
+/** Desvio de relogio tolerado entre a Shopify e o nosso servidor. */
+export const FOLGA_DE_RELOGIO_MS = 5 * 60 * 1000;
 
 /**
  * JSON do corpo cru, ou null se vier malformado. Nunca lanca.

@@ -34,14 +34,6 @@ export interface EventoCapi {
   action_source: "website" | "app" | "phone_call" | "chat" | "email" | "other";
   user_data: UserData;
   custom_data?: Record<string, unknown>;
-  /**
-   * Cliente novo ou recorrente.
-   *
-   * E o que alimenta a otimizacao de AQUISICAO DE CLIENTE NOVO: sem este sinal
-   * o Meta nao distingue uma venda para quem ja comprava de uma conquista, e a
-   * campanha de aquisicao acaba otimizando para a base antiga.
-   */
-  customer_segmentation?: "new_customer" | "existing_customer";
 }
 
 export interface ResultadoCapi {

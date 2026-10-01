@@ -33,11 +33,15 @@ export async function rastreamentoLigado(
   admin: ReturnType<typeof createAdminClient>,
   storeId: string
 ): Promise<boolean> {
-  const { data } = await admin
+  const { data, error } = await admin
     .from("tracking_configs")
     .select("enabled")
     .eq("store_id", storeId)
     .maybeSingle();
+  // Erro de banco NAO e "desligado". Tratar como desligado fazia o webhook
+  // responder 200 'rastreamento desligado' num soluco do Supabase -- e com 200
+  // a Shopify nao reentrega, entao a compra sumia de vez.
+  if (error) throw new Error(`falha ao ler o interruptor da loja: ${error.message}`);
   return Boolean(data?.enabled);
 }
 
@@ -229,8 +233,15 @@ export async function entregar(
       [linha.payload as EventoCapi],
       { testEventCode: destino.testEventCode }
     );
+    // Mesmo aviso que o Google ja gravava sem gclid. Sem ele, a tela so
+    // conseguia dizer "compra sem atribuicao" para o Google: no Meta uma
+    // venda sem fbc parecia identica a uma com.
+    const semClique = !(linha.payload as EventoCapi)?.user_data?.fbc;
     return r.ok
-      ? gravarSucesso((r.corpo ?? null) as Record<string, unknown> | null)
+      ? gravarSucesso(
+          (r.corpo ?? null) as Record<string, unknown> | null,
+          semClique ? "sem fbc: conversao sem atribuicao a anuncio" : null
+        )
       : gravarFalha(
           r.erro ?? "falha desconhecida",
           r.podeTentarDeNovo,
@@ -299,9 +310,16 @@ export async function drenarFila(limite = 50): Promise<{
   let enviados = 0;
   let falharam = 0;
   for (const linha of linhas || []) {
-    const r = await entregar(admin, linha);
-    if (r.ok) enviados += 1;
-    else falharam += 1;
+    // Uma linha com erro de banco nao pode abortar a rodada: as outras 49 nao
+    // tem nada a ver com ela. A linha continua 'pendente' e volta na proxima.
+    try {
+      const r = await entregar(admin, linha);
+      if (r.ok) enviados += 1;
+      else falharam += 1;
+    } catch (e) {
+      console.error("[tracking/drain] falha ao entregar linha", linha.id, e);
+      falharam += 1;
+    }
   }
   return { pegos: (linhas || []).length, enviados, falharam };
 }

@@ -78,18 +78,29 @@
       var checkout = (event.data && event.data.checkout) || {};
       var endereco = checkout.shippingAddress || checkout.billingAddress || {};
 
+      // O clientId zerado que a Shopify usa sem consentimento nao e identidade:
+      // e o mesmo valor para pessoas diferentes. Sem ele, o checkout vira o
+      // visitante -- unico por compra, e nunca compartilhado.
+      var clientId = event.clientId || null;
+      if (clientId && /^0{8}-0{4}-0{4}-[0-9a-f]0{3}-0{12}$/i.test(clientId)) {
+        clientId = null;
+      }
+
       var corpo = {
         shop: LOJA,
         evento: nome,
         fonte: "pixel",
-        // O id que a Shopify ja gerou. Usar o dela faz o reenvio do mesmo
-        // evento cair no indice unico da fila em vez de virar conversao nova.
-        eventId: nome + "_" + (event.id || Date.now()),
+        // UM evento por checkout. O `event.id` da Shopify e novo a cada
+        // disparo: recarregar o checkout, ou reenviar o cartao depois de uma
+        // recusa, virava InitiateCheckout/AddPaymentInfo novo. O token do
+        // checkout repete, e o indice unico da fila responde "duplicado". O
+        // servidor faz o mesmo, para valer tambem com este arquivo em cache.
+        eventId: nome + "_" + (checkout.token || event.id || Date.now()),
         // A unica chave de identidade que o sandbox conhece: ele nao le os
         // cookies da loja. O snippet do tema publica a associacao deste
         // clientId com os click ids, e o servidor recupera por ela.
-        clientId: event.clientId || null,
-        visitorId: event.clientId || null,
+        clientId: clientId,
+        visitorId: clientId || checkout.token || null,
         checkoutToken: checkout.token || null,
         pageUrl: (doc.location && doc.location.href) || null,
         referrer: doc.referrer || null,

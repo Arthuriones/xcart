@@ -88,8 +88,16 @@ describe("dentroDaJanela (replay)", () => {
     expect(dentroDaJanela("2026-09-09T11:58:00Z", agora)).toBe(true);
   });
 
+  it("aceita a reentrega da Shopify, que chega com a hora ORIGINAL", () => {
+    // A Shopify reentrega 8 vezes ao longo de 4 h, e o triggered_at e o do
+    // evento original. Com a janela antiga de 5 min, toda reentrega era
+    // recusada com 200 e a compra sumia sem rastro.
+    expect(dentroDaJanela("2026-09-09T11:00:00Z", agora)).toBe(true);
+    expect(dentroDaJanela("2026-09-09T08:00:00Z", agora)).toBe(true);
+  });
+
   it("recusa captura antiga reenviada", () => {
-    expect(dentroDaJanela("2026-09-09T11:00:00Z", agora)).toBe(false);
+    expect(dentroDaJanela("2026-09-05T12:00:00Z", agora)).toBe(false);
   });
 
   it("recusa data no futuro alem da janela (relogio adiantado ou forjado)", () => {

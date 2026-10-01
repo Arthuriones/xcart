@@ -53,12 +53,16 @@ export async function destinosDaLoja(
   storeId: string,
   opcoes: { comToken?: boolean } = {}
 ): Promise<Destino[]> {
-  const { data } = await admin
+  const { data, error } = await admin
     .from("tracking_destinations")
     .select("id, store_id, plataforma, nome, conta, labels, test_event_code, id_template, ativo")
     .eq("store_id", storeId)
     .eq("ativo", true)
     .order("created_at", { ascending: true });
+
+  // Erro de banco nao e "loja sem destino". Devolver lista vazia fazia o
+  // webhook responder 200 'nenhum destino', e com 200 a Shopify nao reentrega.
+  if (error) throw new Error(`falha ao ler os destinos da loja: ${error.message}`);
 
   const destinos: Destino[] = (data || []).map((d) => ({
     id: d.id,
@@ -75,10 +79,16 @@ export async function destinosDaLoja(
   if (!opcoes.comToken || destinos.length === 0) return destinos;
 
   const ids = destinos.map((d) => d.id);
-  const { data: segredos } = await admin
+  const { data: segredos, error: erroSegredo } = await admin
     .from("tracking_destination_secrets")
     .select("destination_id, access_token")
     .in("destination_id", ids);
+
+  // Sem isto, um erro aqui deixava todo destino Meta "sem token", e
+  // `destinoAceita` recusava a compra como se a loja nao tivesse Meta.
+  if (erroSegredo) {
+    throw new Error(`falha ao ler os tokens dos destinos: ${erroSegredo.message}`);
+  }
 
   const porId = new Map((segredos || []).map((s) => [s.destination_id, s.access_token]));
   for (const d of destinos) d.token = porId.get(d.id) ?? null;

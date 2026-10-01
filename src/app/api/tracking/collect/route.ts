@@ -137,8 +137,15 @@ export async function POST(request: NextRequest) {
     cep?: string | null;
     pais?: string | null;
   };
+  // Teto de tamanho ANTES do parse. O endpoint e publico, o payload vira
+  // linha de banco, e linha 'falhou' fica 30 dias: um POST de MBs repetido
+  // enche o disco do Supabase, e disco cheio poe o Postgres em somente
+  // leitura -- o que para o webhook, o coletor e o roteamento juntos. O maior
+  // evento legitimo (checkout com endereco) fica abaixo de 2 KB.
+  const textoDoCorpo = await request.text();
+  if (textoDoCorpo.length > 16 * 1024) return recusado("corpo grande demais");
   try {
-    corpo = await request.json();
+    corpo = JSON.parse(textoDoCorpo);
   } catch {
     return recusado("corpo invalido");
   }
@@ -146,7 +153,7 @@ export async function POST(request: NextRequest) {
   const loja = (corpo.shop || "").trim().toLowerCase();
   const evento = (corpo.evento || "").trim();
   const visitorId = (corpo.visitorId || "").trim().slice(0, 64);
-  const eventId = (corpo.eventId || "").trim().slice(0, 200);
+  let eventId = (corpo.eventId || "").trim().slice(0, 200);
 
   if (!loja || !eventId || !visitorId) {
     return recusado("shop, eventId e visitorId sao obrigatorios");
@@ -228,7 +235,49 @@ export async function POST(request: NextRequest) {
 
   const doPixel = (corpo.fonte || "").trim() === "pixel";
 
-  const clientId = (corpo.clientId || "").trim().slice(0, 100) || null;
+  const { ehClientIdSentinela, identidadePorCliente } = await import(
+    "@/lib/tracking/identidade-do-pedido"
+  );
+
+  // O clientId zerado que a Shopify usa sem consentimento NAO e identidade:
+  // e o mesmo valor para pessoas diferentes. Tratado como real, virava um
+  // external_id compartilhado e uma linha de identidade que creditava o clique
+  // de um visitante a outro.
+  const clientIdBruto = (corpo.clientId || "").trim().slice(0, 100) || null;
+  const clientId = ehClientIdSentinela(clientIdBruto) ? null : clientIdBruto;
+
+  const checkoutToken = (corpo.checkoutToken || "").trim().slice(0, 120) || null;
+
+  // Um begin_checkout e um payment_info POR CHECKOUT.
+  //
+  // O pixel montava o eventId com o `event.id` da Shopify, que e novo a cada
+  // disparo: recarregar o checkout disparava checkout_started de novo, e cada
+  // cartao recusado e reenviado disparava payment_info de novo. O indice unico
+  // nao segurava, o Meta nao deduplicava e o Google contava outra conversao.
+  // Recusa de cartao e alta em dropshipping. Feito aqui, e nao so no pixel,
+  // para valer tambem para a versao do pixel que esteja em cache.
+  if (doPixel && checkoutToken) {
+    eventId = `${evento}_ck_${checkoutToken}`.slice(0, 200);
+  }
+
+  // A ponte checkout -> clientId, gravada ANTES de qualquer saida antecipada.
+  //
+  // E o que o webhook usa para achar o clique quando o pedido chega sem cart
+  // attribute ("Comprar agora", checkout expresso). Depois daqui ha retorno
+  // por "nenhum destino quer o evento" e pelos tetos -- se a gravacao ficasse
+  // depois deles, loja sem rotulo de begin_checkout nunca teria a ponte.
+  if (doPixel && checkoutToken && clientId) {
+    const { error } = await admin.from("tracking_checkouts").upsert(
+      {
+        store_id: registro.id,
+        checkout_token: checkoutToken,
+        shopify_client_id: clientId,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "store_id,checkout_token" }
+    );
+    if (error) console.error("[tracking/collect] falha ao gravar a ponte do checkout", error.message);
+  }
 
   const clique = {
     gclid: (corpo.gclid || "").trim().slice(0, 200) || null,
@@ -272,6 +321,14 @@ export async function POST(request: NextRequest) {
     if (!clientId) return recusado("identidade sem clientId");
     await publicarIdentidade();
     return ok({ identidade: "gravada" });
+  }
+
+  // Evento do TEMA com clientId publica a associacao aqui, antes da supressao
+  // do checkout, do "nenhum destino" e dos tetos. Antes ficava depois deles, e
+  // ai a identidade que o checkout e a compra iam consultar simplesmente nao
+  // existia quando um desses retornos acontecia.
+  if (!doPixel && clientId) {
+    await publicarIdentidade();
   }
 
   // O pixel se ANUNCIA, carimbando a hora. Nao ha passo manual de "marcar como
@@ -375,25 +432,37 @@ export async function POST(request: NextRequest) {
   // tambem conhece.
   //
   // Entao: o tema GRAVA "este clientId tem estes click ids", e o pixel CONSULTA.
+  // O visitante do TEMA por tras deste clientId. Vira o external_id do evento
+  // do checkout, para casar com o funil e com a compra.
+  let visitanteDoTema: string | null = null;
+
   if (doPixel && clientId) {
     // Vem do checkout: recupera o que o tema guardou para este visitante.
-    const { data: id } = await admin
-      .from("tracking_identities")
-      .select("gclid, gbraid, wbraid, auid, fbp, fbc")
-      .eq("store_id", registro.id)
-      .eq("shopify_client_id", clientId)
-      .maybeSingle();
-    if (id) {
-      clique.gclid = clique.gclid || id.gclid;
-      clique.gbraid = clique.gbraid || id.gbraid;
-      clique.wbraid = clique.wbraid || id.wbraid;
-      clique.auid = clique.auid || id.auid;
-      fbp = fbp || id.fbp;
-      fbc = fbc || id.fbc;
+    //
+    // Varias linhas, nao maybeSingle(): a unicidade da tabela e por
+    // visitor_id. No Safari o ITP gera um visitor_id novo e o clientId fica
+    // com duas linhas -- e com duas, maybeSingle() devolvia ERRO e o evento
+    // saia sem gclid e sem fbc. Ver consolidarIdentidades.
+    let id = null;
+    try {
+      id = await identidadePorCliente(admin, registro.id, clientId);
+    } catch (e) {
+      // Melhor esforco: sem a identidade o evento sai mais pobre, mas sai.
+      console.error("[tracking/collect] falha ao ler identidade do checkout", e);
     }
-  } else if (clientId) {
-    // Vem do tema: publica a associacao para o checkout consultar depois.
-    await publicarIdentidade();
+    if (id) {
+      // O clique do Google vem inteiro de uma fonte: o que o evento trouxe, ou
+      // o que a identidade tem. Misturar criaria um clique que nao existiu.
+      if (!clique.gclid && !clique.gbraid && !clique.wbraid) {
+        clique.gclid = id.gclid ?? null;
+        clique.gbraid = id.gbraid ?? null;
+        clique.wbraid = id.wbraid ?? null;
+      }
+      clique.auid = clique.auid || id.auid || null;
+      fbp = fbp || id.fbp || null;
+      fbc = fbc || id.fbc || null;
+      visitanteDoTema = id.visitorId || null;
+    }
   }
 
   // ---- fila ---------------------------------------------------------------
@@ -478,7 +547,7 @@ export async function POST(request: NextRequest) {
         // Os dois ids estaveis. O do nosso cookie costura o funil com a compra;
         // o da Shopify e o unico que o checkout conhece, e sem ele o evento do
         // pixel seria uma pessoa diferente das outras do mesmo funil.
-        externalIds: [visitorId, clientId],
+        externalIds: [visitanteDoTema || visitorId, clientId],
       },
       {
         fbp,
@@ -521,9 +590,10 @@ export async function POST(request: NextRequest) {
     // dois catalogos, montados por caminhos diferentes na mesma loja.
     const { montarIdsDeProdutos } = await import("@/lib/tracking/id-produto");
     const doProduto = {
-      variantId: corpo.produto?.variante,
-      productId: corpo.produto?.produto,
-      sku: corpo.produto?.sku,
+      // Cortados: o valor vai cru para o payload e para o catalogo.
+      variantId: (corpo.produto?.variante || "").trim().slice(0, 64) || null,
+      productId: (corpo.produto?.produto || "").trim().slice(0, 64) || null,
+      sku: (corpo.produto?.sku || "").trim().slice(0, 128) || null,
     };
 
     for (const d of querem.filter((x) => x.plataforma === "meta")) {
@@ -597,7 +667,7 @@ export async function POST(request: NextRequest) {
           referrer: (corpo.referrer || "").trim().slice(0, 500) || null,
           // Liga o evento de checkout ao pedido sem depender de cart attribute,
           // que se perde quando a sessao comeca no proprio checkout.
-          checkoutToken: (corpo.checkoutToken || "").trim().slice(0, 120) || null,
+          checkoutToken,
           payload: alvo.payload,
         });
 
