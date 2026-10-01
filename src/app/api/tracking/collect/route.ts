@@ -3,9 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   eventoValido,
   definicaoDoEvento,
-  rotuloDoEvento,
   type ChaveEvento,
-  type MapaDeRotulos,
 } from "@/lib/tracking/eventos";
 import { montarFbc, montarUserData } from "@/lib/tracking/normalizar";
 
@@ -185,18 +183,12 @@ export async function POST(request: NextRequest) {
   if (!candidatas?.length) return recusado("loja desconhecida");
 
   const ids = candidatas.map((c) => c.id);
-  const [{ data: cfgs }, { data: segs }] = await Promise.all([
-    admin
-      .from("tracking_configs")
-      .select(
-        "store_id, enabled, google_conversion_id, google_conversion_label, google_labels, meta_pixel_id, meta_test_event_code, web_pixel_visto_em"
-      )
-      .in("store_id", ids),
-    admin
-      .from("tracking_secrets")
-      .select("store_id, meta_access_token")
-      .in("store_id", ids),
-  ]);
+  // So o interruptor da loja e o estado do Web Pixel: as credenciais agora
+  // moram em tracking_destinations, uma linha por conta.
+  const { data: cfgs } = await admin
+    .from("tracking_configs")
+    .select("store_id, enabled, web_pixel_visto_em")
+    .in("store_id", ids);
 
   const porStore = new Map((cfgs || []).map((c) => [c.store_id, c]));
   // Com id da tag ha uma candidata so. Sem ele (tag antiga), `candidatas` vem da
@@ -206,7 +198,6 @@ export async function POST(request: NextRequest) {
 
   const registro = escolhida;
   const cfg = porStore.get(registro.id);
-  const seg = (segs || []).find((x) => x.store_id === registro.id);
 
   if (!cfg?.enabled) return recusado("rastreamento desligado");
 

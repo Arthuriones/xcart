@@ -6,11 +6,7 @@ import {
   MAX_TENTATIVAS,
   type EventoCapi,
 } from "@/lib/tracking/meta-capi";
-import {
-  rotuloDoEvento,
-  type ChaveEvento,
-  type MapaDeRotulos,
-} from "@/lib/tracking/eventos";
+import { rotuloDoEvento, type MapaDeRotulos } from "@/lib/tracking/eventos";
 
 // ============================================================================
 // Fila de saida do rastreamento.
