@@ -68,6 +68,13 @@ export function oQueFalta(d: DestinoNaTela): string | null {
  * "3 de 4 chegaram" sem nenhum pedido faltando.
  */
 function foraDaJanela(d: DestinoNaTela, diag: DiagnosticoLoja, id: string): boolean {
+  // Se a compra saiu (ou esta na fila) por este destino, o pedido era dele,
+  // seja qual for a data de cadastro. A data pode nem ser a real: os destinos
+  // que nasceram da migration 043 tem todos a hora da migration, e a tela
+  // mostrava "1/1" numa loja com 3 pedidos e 3 compras enviadas.
+  if (d.contagem.pedidosComCompra.includes(id) || d.contagem.pedidosNaFila.includes(id)) {
+    return false;
+  }
   const desde = d.criadoEm ? Date.parse(d.criadoEm) : NaN;
   const criado = Date.parse(diag.pedidoCriadoEm?.[id] ?? "");
   return Number.isFinite(desde) && Number.isFinite(criado) && criado < desde;

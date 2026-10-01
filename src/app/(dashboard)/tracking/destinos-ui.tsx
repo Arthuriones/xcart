@@ -715,9 +715,9 @@ function LinhaDestino({
                   organico, direto, ou o anuncio da outra. Normal. O alarme
                   de verdade -- venda sem clique -- e o aviso de compra. */}
               <span>
-                {c.semAtribuicao} sem clique de anúncio do{" "}
-                {NOME_DA_PLATAFORMA[destino.plataforma]} — visita orgânica, direta
-                ou de outro canal
+                {c.semAtribuicao} eventos sem clique de anúncio do{" "}
+                {NOME_DA_PLATAFORMA[destino.plataforma]} — de visita orgânica,
+                direta ou de outro canal
               </span>
             </p>
           )}

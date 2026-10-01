@@ -233,9 +233,9 @@ export async function entregar(
       [linha.payload as EventoCapi],
       { testEventCode: destino.testEventCode }
     );
-    // Mesmo aviso que o Google ja gravava sem gclid. Sem ele, a tela so
-    // conseguia dizer "compra sem atribuicao" para o Google: no Meta uma
-    // venda sem fbc parecia identica a uma com.
+    // Aviso para quem le a linha. A TELA nao depende dele: a RPC conta o sem
+    // clique pelo payload (migration 051), entao reescrever esta frase nao
+    // muda contagem nenhuma.
     const semClique = !(linha.payload as EventoCapi)?.user_data?.fbc;
     return r.ok
       ? gravarSucesso(

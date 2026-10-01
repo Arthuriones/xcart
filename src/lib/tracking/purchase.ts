@@ -56,7 +56,10 @@ export interface PedidoShopify {
     /** Precisa para o template de id que usa {sku}. */
     sku?: string | null;
     quantity?: number | null;
+    /** Preco de TABELA, por unidade. O que foi pago sai dos descontos abaixo. */
     price?: string | number | null;
+    /** Desconto alocado a esta linha, no total (nao por unidade). */
+    discount_allocations?: { amount?: string | number | null }[] | null;
   }[] | null;
 }
 
@@ -152,7 +155,15 @@ export interface IdentidadeGuardada {
  * parametro pode estar truncado, e um gclid pela metade e pior que nenhum: o
  * Google descarta e ainda parece que foi enviado. Entao, perto do limite, o
  * ultimo parametro e descartado.
+ *
+ * Exceto o fbclid que PROVA estar inteiro. O fbclid atual termina em
+ * `_aem_` + 22 caracteres; cortado, o sufixo nao fecha. E o caso comum, nao o
+ * raro: path de produto + fbclid de ~200 caracteres ja encosta no limite --
+ * medido na #NM100599, landing de 255 com o fbclid intacto, que a regra antiga
+ * jogava fora.
  */
+const FBCLID_COMPLETO = /_aem_[A-Za-z0-9_-]{22}$/;
+
 export function cliquesDaLanding(landingSite: string | null | undefined): {
   gclid: string | null;
   gbraid: string | null;
@@ -173,7 +184,9 @@ export function cliquesDaLanding(landingSite: string | null | undefined): {
   if (bruto.length >= 250) {
     const chaves = [...parametros.keys()];
     const ultima = chaves[chaves.length - 1];
-    if (ultima) parametros.delete(ultima);
+    const fbclidInteiro =
+      ultima === "fbclid" && FBCLID_COMPLETO.test(parametros.get("fbclid") || "");
+    if (ultima && !fbclidInteiro) parametros.delete(ultima);
   }
 
   const ler = (k: string) => (parametros.get(k) || "").trim() || null;
@@ -250,12 +263,17 @@ export function montarConversaoGoogle(
     auid: sinais.auid || contexto.identidade?.auid || null,
     // A pagina de chegada da sessao que virou a venda. O gtag manda a URL em
     // toda conversao; e contexto, nao identificacao.
-    pageUrl:
-      contexto.dominioLoja && pedido.landing_site
-        ? `https://${contexto.dominioLoja}${
-            pedido.landing_site.startsWith("/") ? pedido.landing_site : "/"
-          }`
-        : null,
+    //
+    // No dominio PUBLICO, como o Purchase do Meta. Montada com o
+    // `shop_domain` cadastrado, saia em .myshopify.com enquanto o carrinho e o
+    // checkout do mesmo comprador saiam em lashbestie.shop (#NM100599).
+    pageUrl: (() => {
+      const origem =
+        origemPublica(pedido.order_status_url) ||
+        (contexto.dominioLoja ? `https://${contexto.dominioLoja}` : null);
+      if (!origem || !pedido.landing_site) return null;
+      return `${origem}${pedido.landing_site.startsWith("/") ? pedido.landing_site : "/"}`;
+    })(),
     // O numero do pedido vira `oid`: mesma conversion action com o mesmo oid
     // o Google descarta, que e a protecao contra reentrega de webhook.
     orderId: String(pedido.id ?? ""),
@@ -300,6 +318,61 @@ function origemPublica(url: string | null | undefined): string | null {
   }
 }
 
+type LinhaDoPedido = NonNullable<PedidoShopify["line_items"]>[number];
+
+/**
+ * `contents` do Purchase: uma entrada por id, com o preco PAGO por unidade.
+ *
+ * A versao anterior errava duas vezes, as duas medidas na #NM100599:
+ * - uma entrada por LINHA do pedido. A oferta "compre 2 leve 4" da Shopify poe
+ *   as unidades gratis numa linha propria do mesmo produto, e o Meta recebia o
+ *   mesmo id duas vezes.
+ * - `item_price` era o preco de TABELA. As duas unidades gratis iam a 39.39 e a
+ *   soma de contents dava o dobro do `value`.
+ *
+ * Agora agrupa por id e divide o que foi pago (preco x quantidade, menos os
+ * descontos alocados a linha) pela quantidade. Pago zero -- brinde -- sai sem
+ * item_price, como ja saia o item sem preco.
+ */
+function conteudoDoPedido(
+  idTemplate: string | null,
+  itens: LinhaDoPedido[]
+): { id: string; quantity: number; item_price?: number }[] {
+  const porId = new Map<string, { quantidade: number; pago: number; temPreco: boolean }>();
+  for (const i of itens) {
+    const id = montarIdDeProduto(idTemplate, {
+      variantId: i.variant_id,
+      productId: i.product_id,
+      sku: i.sku,
+    });
+    // Item sem id sai da lista. `contents: [{id: ""}]` e id invalido para o
+    // Meta e pode derrubar o evento inteiro.
+    if (!id) continue;
+    const quantidade = Number(i.quantity) || 1;
+    const preco = Number(i.price ?? 0);
+    const temPreco = Number.isFinite(preco) && preco > 0;
+    const desconto = (i.discount_allocations || []).reduce((soma, d) => {
+      const v = Number(d?.amount ?? 0);
+      return soma + (Number.isFinite(v) ? v : 0);
+    }, 0);
+    const pago = temPreco ? Math.max(0, preco * quantidade - desconto) : 0;
+    const atual = porId.get(id) ?? { quantidade: 0, pago: 0, temPreco: false };
+    porId.set(id, {
+      quantidade: atual.quantidade + quantidade,
+      pago: atual.pago + pago,
+      temPreco: atual.temPreco || temPreco,
+    });
+  }
+  return [...porId].map(([id, c]) => {
+    const unitario = Math.round((c.pago / c.quantidade) * 100) / 100;
+    return {
+      id,
+      quantity: c.quantidade,
+      ...(c.temPreco && unitario > 0 ? { item_price: unitario } : {}),
+    };
+  });
+}
+
 /**
  * Monta o Purchase.
  *
@@ -321,9 +394,19 @@ export function montarPurchase(
 
   const pais = endereco?.country_code || null;
 
-  // O telefone pode estar em tres lugares e faltar em dois deles.
-  const telefone =
-    pedido.customer?.phone || pedido.phone || endereco?.phone || null;
+  // O telefone pode estar em quatro lugares e faltar em tres deles. A entrega
+  // vai por ultimo, mas vai: com cobranca presente, `endereco` e a cobranca, e
+  // o telefone que so o endereco de entrega trazia se perdia.
+  //
+  // O numero anda com o PAIS do lugar de onde veio. Sem "+", o normalizador
+  // cola o DDI do pais recebido: o telefone espanhol da entrega com o pais da
+  // cobranca francesa virava um celular frances valido -- de outra pessoa.
+  const fonteDoTelefone = [
+    { numero: pedido.customer?.phone, pais },
+    { numero: pedido.phone, pais },
+    { numero: pedido.billing_address?.phone, pais: pedido.billing_address?.country_code || pais },
+    { numero: pedido.shipping_address?.phone, pais: pedido.shipping_address?.country_code || pais },
+  ].find((t) => t.numero);
 
   // O fbc de verdade e o cookie. Sem ele, reconstruimos a partir do fbclid --
   // senao a venda perde a ligacao com o anuncio que a gerou.
@@ -341,7 +424,8 @@ export function montarPurchase(
   const userData = montarUserData(
     {
       email: pedido.customer?.email || pedido.email,
-      telefone,
+      telefone: fonteDoTelefone?.numero ?? null,
+      paisDoTelefone: fonteDoTelefone?.pais ?? null,
       primeiroNome: pedido.customer?.first_name || endereco?.first_name,
       sobrenome: pedido.customer?.last_name || endereco?.last_name,
       cidade: endereco?.city,
@@ -396,24 +480,7 @@ export function montarPurchase(
       // item, que e o formato que o Meta pede para anuncio de catalogo. Com
       // apenas os ids, uma compra de 3 unidades e indistinguivel de 1, e o
       // catalogo nao sabe por quanto cada item saiu.
-      contents: itens
-        .map((i) => {
-          const id = montarIdDeProduto(idTemplate, {
-            variantId: i.variant_id,
-            productId: i.product_id,
-            sku: i.sku,
-          });
-          // Item sem id sai da lista. `contents: [{id: ""}]` e id invalido para
-          // o Meta e pode derrubar o evento inteiro.
-          if (!id) return null;
-          const preco = Number(i.price ?? 0);
-          return {
-            id,
-            quantity: Number(i.quantity) || 1,
-            ...(Number.isFinite(preco) && preco > 0 ? { item_price: preco } : {}),
-          };
-        })
-        .filter((c): c is { id: string; quantity: number } => c !== null),
+      contents: conteudoDoPedido(idTemplate, itens),
       num_items: itens.reduce((s, i) => s + (Number(i.quantity) || 0), 0),
       order_id: String(pedido.id ?? ""),
     },

@@ -69,6 +69,12 @@ export function normalizarTelefone(
 
   if (jaInternacional) return digitos;
 
+  // "00" e o prefixo de discagem internacional da Europa e da maior parte do
+  // mundo: "0033 6 12..." e o "+33 6 12..." escrito de outro jeito. Tratado
+  // como nacional, perdia os zeros e ganhava o DDI do pedido de novo --
+  // "3333612345678". O SDK oficial do Meta tira o "00" do mesmo jeito.
+  if (digitos.startsWith("00")) return digitos.slice(2) || null;
+
   const ddi = pais ? DDI[pais.trim().toUpperCase()] : undefined;
   if (!ddi) return digitos;
 
@@ -99,6 +105,46 @@ export function normalizarCidade(cidade: string | null | undefined): string | nu
     .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9]/g, "");
   return limpo || null;
+}
+
+// Fora de literal de regex: `\p{...}` e ES2018 e o tsconfig mira ES2017. O Node
+// do runtime suporta.
+//
+// \p{M} (marcas combinantes) fica. Em devanagari, tailandes e tamil as vogais
+// sao marcas que o NFC nao compoe: sem \p{M}, "सुनील" (Sunil) virava "सनल"
+// (Sanal, outro nome). Nas escritas latinas o NFC ja juntou o acento a letra,
+// entao nada muda ali.
+const NAO_LETRA = new RegExp("[^\\p{L}\\p{M}]", "gu");
+const NAO_LETRA_NEM_DIGITO = new RegExp("[^\\p{L}\\p{M}\\p{N}]", "gu");
+
+/**
+ * As formas de um nome que valem hashear: com acento e sem.
+ *
+ * A documentacao do Meta manda nome acentuado em UTF-8 ("Valéry" -> "valéry",
+ * com o hash publicado), e o SDK oficial so faz trim e minusculo. A forma sem
+ * acento ("valery") casa quando o cadastro do lado do Meta tambem nao tem
+ * acento -- comum, porque muita gente digita sem. Mandar uma so perde o outro
+ * grupo. O campo aceita LISTA e o Meta casa por qualquer item, entao vao as
+ * duas quando diferem; nome sem acento continua um hash so.
+ *
+ * Escrita nao latina ("田中") nao tem forma sem acento: a de UTF-8 e a unica,
+ * e antes o campo nem saia.
+ */
+export function variantesDoNome(nome: string | null | undefined): string[] {
+  const utf8 = (nome || "").trim().toLowerCase().normalize("NFC").replace(NAO_LETRA, "");
+  return [...new Set([utf8, normalizarNome(nome)])].filter((v): v is string => Boolean(v));
+}
+
+/** Mesma ideia de variantesDoNome, para a cidade ("Orléans": "orléans" e "orleans"). */
+export function variantesDaCidade(cidade: string | null | undefined): string[] {
+  const utf8 = (cidade || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFC")
+    .replace(NAO_LETRA_NEM_DIGITO, "");
+  return [...new Set([utf8, normalizarCidade(cidade)])].filter((v): v is string =>
+    Boolean(v)
+  );
 }
 
 /**
@@ -139,6 +185,12 @@ export function normalizarPais(pais: string | null | undefined): string | null {
 export interface DadosPessoais {
   email?: string | null;
   telefone?: string | null;
+  /**
+   * O pais do lugar de onde o telefone veio, quando difere de `pais`. Ausente =
+   * `pais`. Existe porque o telefone pode vir do endereco de entrega e o pais
+   * do pedido, da cobranca -- e o DDI tem que ser o do telefone.
+   */
+  paisDoTelefone?: string | null;
   primeiroNome?: string | null;
   sobrenome?: string | null;
   cidade?: string | null;
@@ -200,17 +252,18 @@ export function montarUserData(
   const email = normalizarEmail(dados.email);
   if (email) saida.em = [sha256(email)];
 
-  const telefone = normalizarTelefone(dados.telefone, pais);
+  const telefone = normalizarTelefone(dados.telefone, dados.paisDoTelefone || pais);
   if (telefone) saida.ph = [sha256(telefone)];
 
-  const fn = normalizarNome(dados.primeiroNome);
-  if (fn) saida.fn = [sha256(fn)];
+  // Com acento e sem, quando diferem: ver variantesDoNome.
+  const fn = variantesDoNome(dados.primeiroNome);
+  if (fn.length) saida.fn = fn.map(sha256);
 
-  const ln = normalizarNome(dados.sobrenome);
-  if (ln) saida.ln = [sha256(ln)];
+  const ln = variantesDoNome(dados.sobrenome);
+  if (ln.length) saida.ln = ln.map(sha256);
 
-  const ct = normalizarCidade(dados.cidade);
-  if (ct) saida.ct = [sha256(ct)];
+  const ct = variantesDaCidade(dados.cidade);
+  if (ct.length) saida.ct = ct.map(sha256);
 
   const st = normalizarEstado(dados.estado);
   if (st) saida.st = [sha256(st)];

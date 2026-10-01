@@ -256,7 +256,8 @@ export function contagensDoPainel(
       if (chave) alvo.porEvento[chave] = (alvo.porEvento[chave] ?? 0) + n;
       const ultimo = maisRecente(ultimoDaLoja.get(l.store_id) ?? null, l.ultimo_envio);
       if (ultimo) ultimoDaLoja.set(l.store_id, ultimo);
-      // O envio grava o aviso "sem atribuicao" quando nao havia click id.
+      // Sem click id, lido do PAYLOAD pela RPC (migration 051) -- nao do
+      // texto do aviso, que ja mudou uma vez e desligou o alarme do Meta.
       const sem = Number(l.n_sem_atribuicao) || 0;
       if (sem > 0) {
         alvo.semAtribuicao += sem;
