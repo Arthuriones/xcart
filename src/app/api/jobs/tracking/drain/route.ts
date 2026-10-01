@@ -64,7 +64,26 @@ async function executar(request: NextRequest) {
 
   try {
     const r = await drenarFila(limite);
-    return NextResponse.json({ ok: true, ...r });
+
+    // ---- expurgo ----------------------------------------------------------
+    //
+    // `purge_tracking()` existe desde a migration 035, com comentario dizendo
+    // "Chamado pelo cron". Nunca foi: nada no codigo chamava. A fila e a tabela
+    // de identidades cresciam para sempre.
+    //
+    // Isso nao aparece com uma loja. Com muitas, e a primeira parede: cada
+    // pageview rende uma linha POR DESTINO, e a linha pesa ~2,3 KB com indice.
+    // Cem lojas de porte modesto passam de 10 GB por mes.
+    //
+    // Uma vez por hora, nao a cada 10 minutos: sao dois DELETE indexados e
+    // repetir seis vezes por hora nao apaga nada a mais.
+    let expurgo: string | null = null;
+    if (new Date().getUTCMinutes() < 10) {
+      const { error } = await createAdminClient().rpc("purge_tracking");
+      expurgo = error ? `falhou: ${error.message}` : "ok";
+    }
+
+    return NextResponse.json({ ok: true, ...r, expurgo });
   } catch (e) {
     const mensagem = e instanceof Error ? e.message : "falha ao drenar a fila";
     return NextResponse.json({ error: mensagem }, { status: 500 });

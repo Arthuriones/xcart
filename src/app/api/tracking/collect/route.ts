@@ -53,8 +53,19 @@ export const runtime = "nodejs";
  */
 const TETO_POR_VISITANTE = 120;
 
-/** Teto por loja por hora: se estourar, e abuso ou laco no snippet. */
-const TETO_POR_LOJA_HORA = 2000;
+/**
+ * Teto por loja por hora.
+ *
+ * Era 2000, e isso e pouco para loja que deu certo: 20 mil pageviews por dia
+ * com tres eventos por visita passa de 2000/h so na media, antes de qualquer
+ * pico. O teto virava um limite de CRESCIMENTO, nao de abuso -- e descartava
+ * evento real em silencio.
+ *
+ * 20 mil/h e folgado para trafego legitimo e continua barrando laco no snippet
+ * ou chamada em massa. E quando estoura, agora carimba: ser visivel importa
+ * mais que o numero exato, porque nenhum numero serve para toda loja.
+ */
+const TETO_POR_LOJA_HORA = 20000;
 
 function comCors(resposta: NextResponse, origem: string | null): NextResponse {
   // `*` de proposito, e sem Allow-Credentials: o dominio publico da loja nao
@@ -201,7 +212,7 @@ export async function POST(request: NextRequest) {
   // moram em tracking_destinations, uma linha por conta.
   const { data: cfgs } = await admin
     .from("tracking_configs")
-    .select("store_id, enabled, web_pixel_visto_em")
+    .select("store_id, enabled, web_pixel_visto_em, teto_atingido_em")
     .in("store_id", ids);
 
   const porStore = new Map((cfgs || []).map((c) => [c.store_id, c]));
@@ -336,6 +347,23 @@ export async function POST(request: NextRequest) {
     return ok({ ignorado: "teto do visitante" });
   }
   if ((daLoja ?? 0) >= TETO_POR_LOJA_HORA) {
+    // Carimba, para a tela poder avisar. Descartar em silencio faria uma loja
+    // parar de medir metade do funil sem ninguem notar -- e o primeiro sintoma
+    // seria o Meta deixando de otimizar, semanas depois.
+    //
+    // No maximo uma vez por hora: estourando o teto, sao milhares de eventos
+    // caindo aqui, e uma escrita em cada um transformaria o teto num problema
+    // maior que o que ele evita.
+    const tetoEm = cfg.teto_atingido_em
+      ? new Date(cfg.teto_atingido_em).getTime()
+      : 0;
+    if (Date.now() - tetoEm > 36e5) {
+      const agora = new Date().toISOString();
+      await admin
+        .from("tracking_configs")
+        .update({ teto_atingido_em: agora, updated_at: agora })
+        .eq("store_id", registro.id);
+    }
     return ok({ ignorado: "teto da loja" });
   }
 
@@ -375,6 +403,8 @@ export async function POST(request: NextRequest) {
     destination: "google" | "meta";
     destinationId: string;
     payload: unknown;
+    /** Ja carregado aqui: evita `entregar` reler destino, token e config. */
+    destino: (typeof querem)[number];
   }[] = [];
 
   const paraGoogle = querem.filter((d) => d.plataforma === "google");
@@ -382,6 +412,7 @@ export async function POST(request: NextRequest) {
     destinos.push({
       destination: "google",
       destinationId: d.id,
+      destino: d,
       payload: {
         ...clique,
         pageUrl: (corpo.pageUrl || "").trim().slice(0, 500) || null,
@@ -501,6 +532,7 @@ export async function POST(request: NextRequest) {
       destinos.push({
         destination: "meta",
         destinationId: d.id,
+        destino: d,
         payload: {
           // O nome do Meta, nao a nossa chave: "AddToCart", nao "add_to_cart".
           // Nome fora da lista dele vira evento personalizado, que chega e nao
@@ -564,15 +596,21 @@ export async function POST(request: NextRequest) {
       }
 
       // Melhor esforco: se falhar, a linha segue pendente e o cron tenta.
-      const r = await entregar(admin, {
-        id,
-        store_id: registro.id,
-        destination: alvo.destination,
-        destination_id: alvo.destinationId,
-        event_name: evento,
-        payload: alvo.payload,
-        attempts: 0,
-      });
+      const r = await entregar(
+        admin,
+        {
+          id,
+          store_id: registro.id,
+          destination: alvo.destination,
+          destination_id: alvo.destinationId,
+          event_name: evento,
+          payload: alvo.payload,
+          attempts: 0,
+        },
+        // O destino e o interruptor ja foram lidos la em cima. Sem isto, cada
+        // destino custava mais tres idas ao banco por pageview.
+        { destino: alvo.destino, lojaLigada: true }
+      );
       // Chave por DESTINO, nao por plataforma: com duas contas Google a
       // segunda sobrescreveria o resultado da primeira na resposta.
       saida[`${alvo.destination}:${alvo.destinationId.slice(0, 8)}`] = r.ok

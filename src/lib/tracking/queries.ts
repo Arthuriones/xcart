@@ -86,6 +86,15 @@ export interface LojaTracking {
    */
   pixelCheckoutAtivo: boolean;
 
+  /**
+   * O teto por hora do coletor descartou evento recentemente?
+   *
+   * Loja que cresce bate nele e para de medir parte do funil. Sem isto a tela
+   * continuaria dizendo que esta tudo bem, e o primeiro sintoma seria o Meta
+   * deixando de otimizar semanas depois.
+   */
+  tetoAtingidoRecente: boolean;
+
   destinos: DestinoNaTela[];
   ultimoEnvio: string | null;
 }
@@ -130,7 +139,7 @@ export async function getPainelTracking(): Promise<PainelTracking> {
   const [{ data: configs }, { data: eventos }, destinosPorLoja] = await Promise.all([
     supabase
       .from("tracking_configs")
-      .select("store_id, enabled, web_pixel_visto_em")
+      .select("store_id, enabled, web_pixel_visto_em, teto_atingido_em")
       .in("store_id", ids),
     supabase
       .from("tracking_events")
@@ -204,6 +213,9 @@ export async function getPainelTracking(): Promise<PainelTracking> {
         nome: l.name || l.shop_domain,
         dominio: l.shop_domain,
         ligado: Boolean(cfg?.enabled),
+        tetoAtingidoRecente: cfg?.teto_atingido_em
+          ? Date.now() - new Date(cfg.teto_atingido_em).getTime() < 864e5
+          : false,
         pixelCheckoutAtivo: cfg?.web_pixel_visto_em
           ? Date.now() - new Date(cfg.web_pixel_visto_em).getTime() < 864e5
           : false,

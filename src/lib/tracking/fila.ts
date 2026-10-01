@@ -7,6 +7,7 @@ import {
   type EventoCapi,
 } from "@/lib/tracking/meta-capi";
 import { rotuloDoEvento } from "@/lib/tracking/eventos";
+import type { Destino } from "@/lib/tracking/destinos";
 
 // ============================================================================
 // Fila de saida do rastreamento.
@@ -131,6 +132,23 @@ export async function entregar(
     event_name: string;
     payload: unknown;
     attempts: number;
+  },
+  /**
+   * O que o chamador JA carregou.
+   *
+   * Existe por escala, nao por elegancia. O caminho quente -- o coletor, que
+   * roda em todo pageview de toda loja -- ja leu o destino (com token) e o
+   * interruptor da loja antes de chegar aqui. Sem isto, `entregar` relia os
+   * dois: mais TRES idas ao banco por destino, em cima de um pageview que ja
+   * fazia dezessete.
+   *
+   * O cron continua chamando sem nada: la so existe o id da linha, e reler e
+   * justamente o certo -- a configuracao pode ter mudado desde que o evento
+   * entrou na fila.
+   */
+  jaCarregado?: {
+    destino?: Destino | null;
+    lojaLigada?: boolean;
   }
 ): Promise<{ ok: boolean; motivo?: string }> {
   const tentativas = linha.attempts + 1;
@@ -152,11 +170,14 @@ export async function entregar(
   const { destinoPorId, destinoAceita, porQueRecusa } = await import(
     "@/lib/tracking/destinos"
   );
-  const destino = await destinoPorId(admin, linha.destination_id);
+  const destino =
+    jaCarregado?.destino ?? (await destinoPorId(admin, linha.destination_id));
   if (!destino) return desistir("destino removido");
 
   // O interruptor da loja continua valendo por cima dos destinos.
-  if (!(await rastreamentoLigado(admin, linha.store_id))) {
+  const ligada =
+    jaCarregado?.lojaLigada ?? (await rastreamentoLigado(admin, linha.store_id));
+  if (!ligada) {
     return desistir("rastreamento desligado para esta loja");
   }
 

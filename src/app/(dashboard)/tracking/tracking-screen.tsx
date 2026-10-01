@@ -486,6 +486,26 @@ function CardLoja({
 
         {aberto && (
           <div className="space-y-4 border-t pt-3">
+            {/* Teto do coletor. Fica ACIMA do veredito porque muda como ler
+                todos os numeros abaixo: com evento sendo descartado, "poucas
+                conversoes" nao quer dizer que o envio quebrou. */}
+            {loja.tetoAtingidoRecente && (
+              <div className="flex items-start gap-2 rounded-md bg-amber-500/10 p-2.5 text-xs">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+                <div>
+                  <p className="font-medium text-amber-600">
+                    Esta loja bateu no teto de eventos por hora nas últimas 24h.
+                  </p>
+                  <p className="text-muted-foreground">
+                    Parte do funil foi descartada — os números abaixo estão
+                    incompletos. O teto existe porque o coletor é público; se o
+                    tráfego é legítimo, me avise para subir o limite desta loja.
+                  </p>
+                </div>
+              </div>
+            )}
+
+
             {ligado && <Veredito loja={loja} diag={diag} />}
 
             {/* Os pre-requisitos que moram na Shopify. Sem eles a configuracao

@@ -240,6 +240,7 @@ async function tratarPedidoCriado(
   const destinos = querem.map((d) => ({
     destination: d.plataforma,
     destinationId: d.id,
+    destino: d,
     payload:
       d.plataforma === "google"
         ? conversaoGoogle
@@ -280,17 +281,23 @@ async function tratarPedidoCriado(
 
       if (id) {
         // Melhor esforco: falhou, a linha segue pendente para o cron.
-        const r = await entregar(admin, {
-          id,
-          store_id: loja.id,
-          destination: alvo.destination,
-          destination_id: alvo.destinationId,
-          // "Purchase" do Meta; o catalogo normaliza a caixa para achar o
-          // rotulo da conversion action de compra no Google.
-          event_name: evento.event_name,
-          payload: alvo.payload,
-          attempts: 0,
-        });
+        const r = await entregar(
+          admin,
+          {
+            id,
+            store_id: loja.id,
+            destination: alvo.destination,
+            destination_id: alvo.destinationId,
+            // "Purchase" do Meta; o catalogo normaliza a caixa para achar o
+            // rotulo da conversion action de compra no Google.
+            event_name: evento.event_name,
+            payload: alvo.payload,
+            attempts: 0,
+          },
+          // `destinosDaLoja` ja trouxe destino e token, e o interruptor foi
+          // checado no inicio. Reler seria tres consultas por destino, por venda.
+          { destino: alvo.destino, lojaLigada: true }
+        );
         saida[chave] = r.ok ? "enviado" : "na fila";
       }
     }
