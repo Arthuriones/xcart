@@ -145,7 +145,13 @@ export function StoreProfileDialog({
               onValueChange={(value) => setProfileTargetLanguage(value ?? "pt-BR")}
             >
               <SelectTrigger className="h-10 bg-background/60 border-border/50 text-sm">
-                <SelectValue placeholder="Escolha o idioma" />
+                {/* O rotulo tem que ser escrito aqui: sem isto o gatilho mostra
+                    o VALOR do item ("en-US"), nao o nome do idioma. */}
+                <SelectValue placeholder="Escolha o idioma">
+                  {(valor: string | null) =>
+                    LANGUAGE_OPTIONS.find((l) => l.value === valor)?.label ?? valor
+                  }
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {LANGUAGE_OPTIONS.map((language) => (
@@ -327,7 +333,7 @@ export function StoreProfileDialog({
                     {t("add_materials_btn")}
                   </Button>
                   <span className="text-[11px] text-muted-foreground/60">
-                    Up to 12 images (PNG, JPG, WEBP)
+                    Até 12 imagens (PNG, JPG, WEBP)
                   </span>
                   <input
                     ref={assetsInputRef}
@@ -342,7 +348,7 @@ export function StoreProfileDialog({
                 {assetFiles.length > 0 && (
                   <div className="rounded-lg border border-border/30 bg-background/50 p-2.5">
                     <p className="text-[11px] font-medium text-muted-foreground mb-1.5">
-                      {`New files (${assetFiles.length})`}
+                      {`Arquivos novos (${assetFiles.length})`}
                     </p>
                     <div className="flex flex-wrap gap-1.5">
                       {assetFiles.map((file, index) => (
@@ -380,7 +386,7 @@ export function StoreProfileDialog({
                   </div>
                 ) : (
                   <p className="text-[11px] text-muted-foreground/50">
-                    No extra materials yet. These files will be used as visual references for image recreation.
+                    Nenhum material ainda. Estas imagens servem de referência visual para a IA recriar as fotos.
                   </p>
                 )}
               </div>
