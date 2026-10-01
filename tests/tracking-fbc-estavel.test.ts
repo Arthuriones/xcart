@@ -44,6 +44,18 @@ describe("o snippet guarda o _fbc em vez de remontar", () => {
     // anuncio errado.
     expect(snippet).toContain("fbclidDoFbc(fbc) !== achados.fbclid");
   });
+
+  it("fbclid novo na URL vence ate o cookie do Meta", () => {
+    // Com o pixel desligado, o `_fbc` do Meta que sobrou e fossil do clique
+    // anterior. Antes, a existencia dele bloqueava o refazer e o clique novo
+    // era creditado ao anuncio velho. Comportamento coberto de ponta a ponta
+    // em tests/tracking-snippet-carrinho.test.ts.
+    expect(snippet).toMatch(/frescos\.fbclid \|\| !fbcDoMeta/);
+  });
+
+  it("reusa o _fbc ja montado para o mesmo clique, sem carimbo novo", () => {
+    expect(snippet).toContain("fbclidDoFbc(fbcNosso) === achados.fbclid");
+  });
 });
 
 describe("o pedido le o _fbc que veio do carrinho", () => {

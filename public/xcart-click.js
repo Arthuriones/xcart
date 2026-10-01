@@ -32,12 +32,20 @@
 (function () {
   "use strict";
 
+  // Uma execucao por pagina. O navegador embutido do Instagram e do Facebook
+  // pre-carrega a pagina e pode rodar este arquivo duas vezes: seriam dois
+  // wrappers no fetch (cada add_to_cart contado em dobro ate a janela segurar)
+  // e duas leituras/escritas do carrinho disputando o mesmo atributo.
+  if (window.__xcartClick) return;
+  window.__xcartClick = true;
+
   // gclid   = clique normal
   // gbraid  = campanha de app em iOS, web-to-app
   // wbraid  = campanha de app em iOS, app-to-web
   // Os dois ultimos existem porque o iOS 14 quebrou o gclid em parte do
   // trafego; o Google manda um OU outro, nunca os tres.
   var CHAVES = ["gclid", "gbraid", "wbraid", "fbclid", "ttclid"];
+  var DO_GOOGLE = ["gclid", "gbraid", "wbraid"];
   var DIAS = 90;
   var PREFIXO = "_xc_";
 
@@ -58,6 +66,14 @@
       (location.protocol === "https:" ? "; Secure" : "");
   }
 
+  // Mesmo path e mesmos atributos da gravacao: cookie apagado com path
+  // diferente nao e o mesmo cookie, e o velho continuaria la.
+  function apagarCookie(nome) {
+    document.cookie =
+      nome + "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax" +
+      (location.protocol === "https:" ? "; Secure" : "");
+  }
+
   function daUrl(chave) {
     try {
       return new URLSearchParams(location.search).get(chave);
@@ -66,6 +82,17 @@
     }
   }
 
+  // O que vai para o carrinho e para os eventos.
+  var achados = {};
+  // Chaves que um clique novo tornou velhas: vao VAZIAS ao carrinho, porque o
+  // `/cart/update.js` mescla -- quem nao e mandado continua la, e o pedido
+  // sairia com o gclid de um clique e o gbraid de outro.
+  var limpar = {};
+  // Valores inventados NESTA carga porque o cookie faltava. O carrinho pode ter
+  // o valor do dia do clique (ver 2a); enquanto ele nao for lido, estes sao
+  // provisorios.
+  var gerados = {};
+
   /** Id proprio do visitante, para casar com a identidade guardada no servidor. */
   function visitante() {
     var atual = lerCookie(PREFIXO + "vid");
@@ -73,18 +100,32 @@
     var novo =
       Date.now().toString(36) + "." + Math.random().toString(36).slice(2, 10);
     gravarCookie(PREFIXO + "vid", novo);
+    gerados._xc_vid = true;
     return novo;
   }
 
   // ---- 1. o que este visitante tem de click id ----------------------------
-  var achados = {};
+  var frescos = {};
   for (var i = 0; i < CHAVES.length; i++) {
-    var chave = CHAVES[i];
-    var daQuery = daUrl(chave);
-    if (daQuery) {
+    var daQuery = daUrl(CHAVES[i]);
+    if (daQuery) frescos[CHAVES[i]] = daQuery;
+  }
+
+  // Um clique novo no Google SUBSTITUI o conjunto anterior, nao soma a ele. O
+  // Google manda um so dos tres por clique; se o gbraid de hoje convivesse com
+  // o gclid da semana passada, o servidor escolheria o gclid e creditaria o
+  // anuncio antigo pela venda do novo.
+  var googleNaUrl = !!(frescos.gclid || frescos.gbraid || frescos.wbraid);
+
+  for (var j = 0; j < CHAVES.length; j++) {
+    var chave = CHAVES[j];
+    if (frescos[chave]) {
       // Clique novo sempre vence o cookie antigo: e a atribuicao mais recente.
-      gravarCookie(PREFIXO + chave, daQuery);
-      achados[chave] = daQuery;
+      gravarCookie(PREFIXO + chave, frescos[chave]);
+      achados[chave] = frescos[chave];
+    } else if (googleNaUrl && DO_GOOGLE.indexOf(chave) !== -1) {
+      apagarCookie(PREFIXO + chave);
+      limpar[chave] = true;
     } else {
       var doCookie = lerCookie(PREFIXO + chave);
       if (doCookie) achados[chave] = doCookie;
@@ -112,6 +153,7 @@
       "fb.1." + Date.now() + "." +
       Math.floor(1000000000 + Math.random() * 8999999999);
     gravarCookie("_fbp", fbp);
+    gerados._fbp = true;
   }
   achados._fbp = fbp;
 
@@ -136,18 +178,34 @@
     return p.length > 3 ? p.slice(3).join(".") : null;
   }
 
-  // O cookie do PROPRIO Meta vence, quando existe: se o pixel do navegador
-  // estiver instalado, o valor dele e a verdade e nao ha o que montar.
+  // O cookie do PROPRIO Meta vence, quando existe e descreve o clique atual: se
+  // o pixel do navegador estiver instalado, o valor dele e a verdade e nao ha o
+  // que montar.
+  var fbcDoMeta = lerCookie("_fbc");
   var fbc = lerCookie("_fbc") || lerCookie(PREFIXO + "fbc");
+  var fbcMontado = false;
 
   // Clique NOVO refaz: o fbclid da URL e uma atribuicao mais recente que a
-  // guardada, e manter a antiga creditaria o anuncio errado.
-  if (achados.fbclid && fbclidDoFbc(fbc) !== achados.fbclid && !lerCookie("_fbc")) {
-    fbc = "fb.1." + Date.now() + "." + achados.fbclid;
-    gravarCookie(PREFIXO + "fbc", fbc);
+  // guardada, e manter a antiga creditaria o anuncio errado. Vale tambem contra
+  // o cookie do Meta -- que aqui costuma ser fossil do pixel que foi desligado,
+  // vivo por 90 dias e preso ao clique de antes.
+  if (achados.fbclid && fbclidDoFbc(fbc) !== achados.fbclid) {
+    var fbcNosso = lerCookie(PREFIXO + "fbc");
+    if (fbclidDoFbc(fbcNosso) === achados.fbclid) {
+      // Ja montamos para ESTE clique numa pagina anterior: reusar mantem o
+      // carimbo do instante do clique, que e o que faz os eventos casarem.
+      fbc = fbcNosso;
+    } else if (frescos.fbclid || !fbcDoMeta) {
+      fbc = "fb.1." + Date.now() + "." + achados.fbclid;
+      gravarCookie(PREFIXO + "fbc", fbc);
+      fbcMontado = true;
+    }
   }
 
   if (fbc) achados._fbc = fbc;
+  // Montado com um fbclid que veio do cookie, e nao da URL, o carimbo e o de
+  // agora -- o carrinho pode guardar o do clique de verdade (ver 2a).
+  if (fbcMontado && !frescos.fbclid) gerados._fbc = true;
 
   // ---- 1c. os cookies que o proprio Google escreve ------------------------
   //
@@ -174,8 +232,18 @@
     if (a && b) achados._auid = a + "." + b;
   }
 
-  var gclAw = lerCookie("_gcl_aw");
-  if (gclAw && !achados.gclid) {
+  function temCliqueDoGoogle() {
+    return !!(achados.gclid || achados.gbraid || achados.wbraid);
+  }
+
+  // So quando NAO ha nenhum dos tres. Com um gbraid de clique novo na mao, o
+  // _gcl_aw ainda guarda o gclid do clique anterior; usa-lo misturaria os dois
+  // cliques no mesmo pedido. Roda depois da leitura do carrinho (2a), que e
+  // fonte melhor: foi o que nos mesmos vimos chegar na URL.
+  function completarComGclAw() {
+    if (temCliqueDoGoogle()) return;
+    var gclAw = lerCookie("_gcl_aw");
+    if (!gclAw) return;
     // Terceiro pedaco; o gclid pode conter ponto, entao junta o resto.
     var partesAw = String(gclAw).split(".");
     if (partesAw.length > 2) {
@@ -192,20 +260,42 @@
   // `/cart/update.js` com attributes faz o valor viajar ate o pedido. So
   // escrevemos o que mudou: cada chamada e uma requisicao, e o tema re-renderiza
   // o carrinho quando ele muda.
+  //
+  // A marca do que ja foi gravado diz TAMBEM em qual carrinho. Sem o token, a
+  // marca sobrevivia ao carrinho: quem comprava, voltava da pagina de obrigado
+  // e comprava de novo na mesma aba ganhava um carrinho novo, a marca dizia "ja
+  // gravado" e o segundo pedido saia sem gclid, sem _fbc e sem _xc_vid -- venda
+  // paga pelo anuncio contada como "direto".
   function jaGravado() {
     try {
-      return JSON.parse(sessionStorage.getItem(PREFIXO + "enviado") || "{}");
+      var m = JSON.parse(sessionStorage.getItem(PREFIXO + "enviado") || "null");
+      // Formato antigo (o mapa solto, sem token) vale como nada gravado: custa
+      // uma escrita, e adivinhar o carrinho dele poderia custar o clique.
+      if (m && typeof m === "object" && m.mapa && typeof m.mapa === "object") {
+        return { token: m.token || null, mapa: m.mapa };
+      }
     } catch (e) {
-      return {};
+      /* storage ilegivel: trata como nada gravado */
     }
+    return { token: null, mapa: {} };
   }
 
-  function marcarGravado(mapa) {
+  function marcarGravado(token, mapa) {
     try {
-      sessionStorage.setItem(PREFIXO + "enviado", JSON.stringify(mapa));
+      sessionStorage.setItem(
+        PREFIXO + "enviado",
+        JSON.stringify({ token: token, mapa: mapa })
+      );
     } catch (e) {
       /* navegacao privada: reenviar nao machuca */
     }
+  }
+
+  // O token da Shopify pode vir como `abc123?key=...`. A chave muda sem o
+  // carrinho mudar; so o que vem antes do `?` identifica o carrinho.
+  function tokenDe(carrinho) {
+    var t = carrinho && carrinho.token;
+    return t ? String(t).split("?")[0] : null;
   }
 
   // O raiz precisa do prefixo de idioma quando a loja usa Markets com
@@ -216,35 +306,235 @@
     return t.charAt(t.length - 1) === "/" ? t : t + "/";
   }
 
-  function gravarNoCarrinho() {
+  /**
+   * Escreve `achados` no carrinho, se ele ainda nao tiver.
+   *
+   * `carrinho` e o JSON de `/cart.js`, ou null quando nao deu para ler. Com o
+   * carrinho em maos a comparacao e com os atributos de verdade -- o que pega
+   * carrinho novo, carrinho limpo e atributo apagado por outro script. Sem ele,
+   * sobra a marca da sessao.
+   */
+  function gravarNoCarrinho(carrinho) {
     var anterior = jaGravado();
+    var token = tokenDe(carrinho);
+    var atributos =
+      carrinho && carrinho.attributes && typeof carrinho.attributes === "object"
+        ? carrinho.attributes
+        : null;
     var novos = {};
-    var mudou = false;
+    // Carrinho outro que o da marca: o que foi gravado la nao vale aqui.
+    var mudou = !!(token && token !== anterior.token);
+
     for (var k in achados) {
       if (!Object.prototype.hasOwnProperty.call(achados, k)) continue;
+      // Inventado agora sem ter conseguido ler o carrinho: la pode estar o
+      // valor do dia do clique, e escrever este por cima e exatamente a perda
+      // que a leitura existe para evitar. Fica para a proxima pagina.
+      if (!carrinho && gerados[k]) continue;
       novos[k] = achados[k];
-      if (anterior[k] !== achados[k]) mudou = true;
+      if (atributos ? atributos[k] !== achados[k] : anterior.mapa[k] !== achados[k]) {
+        mudou = true;
+      }
     }
+    for (var z in limpar) {
+      if (!Object.prototype.hasOwnProperty.call(limpar, z)) continue;
+      // Vazio e como a Shopify apaga um atributo.
+      novos[z] = "";
+      if (atributos ? !!atributos[z] : anterior.mapa[z] !== "") mudou = true;
+    }
+
     // Ja esta gravado neste carrinho: pular a requisicao. Isto e um `return` de
     // funcao, nao do arquivo -- antes era do arquivo, e quando o click id nao
     // mudava nada abaixo rodava.
     if (!mudou) return;
 
-    fetch(raiz() + "cart/update.js", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ attributes: novos }),
-    })
-      .then(function (r) {
-        if (r.ok) marcarGravado(novos);
+    try {
+      fetch(raiz() + "cart/update.js", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ attributes: novos }),
       })
-      .catch(function () {
-        /* carrinho indisponivel agora; a proxima pagina tenta de novo */
-      });
+        .then(function (r) {
+          return r && r.ok ? r.json() : null;
+        })
+        .then(function (atualizado) {
+          // O token vem da RESPOSTA: quando nao havia carrinho, e o update que
+          // cria um, e o token lido antes nao existia.
+          if (atualizado) marcarGravado(tokenDe(atualizado) || token, novos);
+        })
+        .catch(function () {
+          /* carrinho indisponivel agora; a proxima pagina tenta de novo */
+        });
+    } catch (e) {
+      /* navegador sem fetch: o resto do snippet (eventos) segue de pe */
+    }
   }
 
-  gravarNoCarrinho();
+  // ---- 2a. o carrinho guarda o que o ITP apagou ---------------------------
+  //
+  // O Safari apaga cookie gravado por JavaScript em 7 dias (24h quando a
+  // pessoa chega por link decorado, que e o caso de todo anuncio). Todos os
+  // nossos sao assim. No oitavo dia a pessoa volta, o snippet nao acha nada,
+  // gera _xc_vid e _fbp NOVOS -- e escrevia esses por cima dos atributos do
+  // carrinho, que ainda guardavam os do dia do clique. O carrinho e cookie do
+  // servidor da Shopify e sobrevive; o clique morria por nossa propria mao, e
+  // a venda ia sem atribuicao.
+  //
+  // Entao, antes de escrever, LEMOS o carrinho. O que falta no cookie e esta
+  // la, volta para o cookie e para `achados`. Valor da URL continua vencendo:
+  // e clique mais novo que qualquer coisa guardada.
+  //
+  // Teto de espera, porque o primeiro evento espera por isto: carrinho lento
+  // nao pode segurar o funil. Estourou, segue com o que tem.
+  var LIMITE_CARRINHO_MS = 1500;
+
+  /** Le `/cart.js`. Chama `pronto` UMA vez: com o carrinho, ou null. */
+  function lerCarrinho(pronto) {
+    var feito = false;
+    var controle = null;
+    try {
+      controle = typeof AbortController === "function" ? new AbortController() : null;
+    } catch (e) {
+      controle = null;
+    }
+    var alarme = setTimeout(function () {
+      if (controle) {
+        try {
+          controle.abort();
+        } catch (e) {
+          /* abortar e so economia */
+        }
+      }
+      fim(null);
+    }, LIMITE_CARRINHO_MS);
+
+    function fim(carrinho) {
+      if (feito) return;
+      feito = true;
+      clearTimeout(alarme);
+      pronto(carrinho && typeof carrinho === "object" ? carrinho : null);
+    }
+
+    try {
+      var opcoes = {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      };
+      if (controle) opcoes.signal = controle.signal;
+      fetch(raiz() + "cart.js", opcoes)
+        .then(function (r) {
+          return r && r.ok ? r.json() : null;
+        })
+        .then(fim)
+        .catch(function () {
+          fim(null);
+        });
+    } catch (e) {
+      fim(null);
+    }
+  }
+
+  // Onde cada atributo mora como cookie. A ordem importa: o _fbc e conferido
+  // contra o fbclid, que precisa ter sido restaurado antes.
+  var RESTAURAVEIS = CHAVES.concat(["_fbc", "_fbp", "_xc_vid"]);
+
+  function cookieDoAtributo(k) {
+    if (k === "_fbp") return "_fbp";
+    if (k === "_fbc") return PREFIXO + "fbc";
+    if (k === "_xc_vid") return PREFIXO + "vid";
+    return PREFIXO + k;
+  }
+
+  function restaurarDoCarrinho(atributos) {
+    // Calculado ANTES do laco: o conjunto do Google volta inteiro ou nao volta.
+    // Ja havendo um (da URL ou de cookie vivo), juntar outro do carrinho
+    // misturaria dois cliques.
+    var googleVivo = temCliqueDoGoogle();
+
+    for (var i = 0; i < RESTAURAVEIS.length; i++) {
+      var k = RESTAURAVEIS[i];
+      var guardado = atributos[k];
+      if (typeof guardado !== "string" || !guardado || guardado.length > 500) continue;
+      // Cookie vivo ou valor da URL: vence o carrinho.
+      if (achados[k] && !gerados[k]) continue;
+      if (DO_GOOGLE.indexOf(k) !== -1 && (googleVivo || googleNaUrl)) continue;
+      // _fbc de outro clique que nao o atual nao serve.
+      if (k === "_fbc" && achados.fbclid && fbclidDoFbc(guardado) !== achados.fbclid) {
+        continue;
+      }
+      achados[k] = guardado;
+      delete gerados[k];
+      gravarCookie(cookieDoAtributo(k), guardado);
+    }
+    vid = achados._xc_vid;
+
+    // O _auid nao e cookie nosso: vem do _gcl_au do Google. Se a tag dele ainda
+    // nao recriou o cookie, devolvemos o mesmo valor no formato dele
+    // (`1.1.<a>.<b>`), para o remarketing e a conversao falarem do mesmo
+    // visitante.
+    var auid = atributos._auid;
+    if (!achados._auid && typeof auid === "string" && /^\d+\.\d+$/.test(auid)) {
+      achados._auid = auid;
+      if (!lerCookie("_gcl_au")) gravarCookie("_gcl_au", "1.1." + auid);
+    }
+  }
+
+  // Quem precisa de `achados` completo espera aqui: o primeiro evento, a
+  // identidade e a escrita no carrinho. Nunca para sempre -- a leitura tem
+  // teto, e a saida da pagina solta a fila (ver `pagehide` no fim).
+  var reidratado = false;
+  var naFila = [];
+
+  function quandoPronto(fn) {
+    if (reidratado) {
+      fn();
+      return;
+    }
+    naFila.push(fn);
+  }
+
+  function concluirReidratacao(carrinho, saindo) {
+    if (reidratado) return;
+    if (carrinho && carrinho.attributes && typeof carrinho.attributes === "object") {
+      restaurarDoCarrinho(carrinho.attributes);
+    }
+    completarComGclAw();
+    reidratado = true;
+    // Saindo da pagina nao se escreve: o update seria cancelado no meio, e
+    // sem o carrinho lido arriscaria gravar o provisorio.
+    if (!saindo) gravarNoCarrinho(carrinho);
+    var fila = naFila;
+    naFila = [];
+    for (var i = 0; i < fila.length; i++) {
+      try {
+        fila[i]();
+      } catch (e) {
+        /* um evento com problema nao segura os outros */
+      }
+    }
+  }
+
+  // ---- 2b. carrinho criado depois da carga --------------------------------
+  //
+  // Quem chega sem carrinho tem o atributo escrito num carrinho que pode nem
+  // existir ainda; o primeiro "adicionar" e que cria o de verdade, com outro
+  // token e sem os nossos atributos. Depois de cada adicionar confirmado,
+  // conferimos o carrinho e escrevemos se faltar.
+  var conferindo = false;
+
+  function conferirCarrinho() {
+    quandoPronto(function () {
+      // O tema faz duas chamadas a /cart/add por clique as vezes; a leitura em
+      // voo ja enxerga o carrinho criado pela primeira.
+      if (conferindo) return;
+      conferindo = true;
+      lerCarrinho(function (carrinho) {
+        conferindo = false;
+        if (carrinho) gravarNoCarrinho(carrinho);
+      });
+    });
+  }
 
   // =========================================================================
   // 3. EVENTOS DE FUNIL
@@ -455,14 +745,26 @@
     if (!COLETOR || !LOJA) return;
     if (repetido(evento)) return;
 
-    var corpo = JSON.stringify({
+    // O que descreve a ACAO e lido agora; o que descreve o VISITANTE, depois
+    // da leitura do carrinho (2a). O primeiro evento da pagina sairia, senao,
+    // com o _xc_vid recem-inventado e sem o gclid que o carrinho guardava.
+    var instante = Date.now();
+    var produto = COM_PRODUTO[evento] ? produtoAtual() : null;
+    var pagina = location.href.slice(0, 500);
+    quandoPronto(function () {
+      entregar(corpoDoEvento(evento, instante, produto, pagina));
+    });
+  }
+
+  function corpoDoEvento(evento, instante, produto, pagina) {
+    return JSON.stringify({
       shop: LOJA,
       storeId: STORE_ID,
       evento: evento,
       // Instante no id: protege contra reenvio da MESMA acao (o nosso retry, o
       // tema disparando duas vezes), sem impedir a acao repetida de verdade --
       // adicionar dois produtos ao carrinho sao dois eventos.
-      eventId: evento + "_" + vid + "_" + Date.now(),
+      eventId: evento + "_" + vid + "_" + instante,
       visitorId: vid,
       gclid: achados.gclid || null,
       gbraid: achados.gbraid || null,
@@ -488,7 +790,7 @@
       // produto -- e `content_ids` e exigencia dele para publico dinamico e
       // para anuncio de catalogo. Nao e dado que o visitante possa inflar:
       // valor continua de fora.
-      produto: COM_PRODUTO[evento] ? produtoAtual() : null,
+      produto: produto,
       // A URL da pagina, EXPLICITA.
       //
       // O servidor nao pode deduzir do header Referer: o beacon vai para outro
@@ -501,10 +803,8 @@
       // evento piora o casamento e inutiliza regra por URL. E no diagnostico,
       // fazia parecer que todo mundo entrava pela home -- eu cheguei a concluir
       // isso e estava errado.
-      pageUrl: location.href.slice(0, 500),
+      pageUrl: pagina,
     });
-
-    entregar(corpo);
   }
 
   /**
@@ -566,23 +866,30 @@
   function publicarIdentidade(clientId) {
     if (identidadeNoAr || !clientId || !COLETOR || !LOJA) return;
     identidadeNoAr = true;
-    entregar(
-      JSON.stringify({
-        shop: LOJA,
-        storeId: STORE_ID,
-        evento: "identidade",
-        eventId: "identidade_" + vid,
-        visitorId: vid,
-        clientId: clientId,
-        gclid: achados.gclid || null,
-        gbraid: achados.gbraid || null,
-        wbraid: achados.wbraid || null,
-        auid: achados._auid || null,
-        fbp: achados._fbp || null,
-        fbc: achados._fbc || null,
-        fbclid: achados.fbclid || null,
-      })
-    );
+    // Espera o carrinho pelo mesmo motivo do evento: associar o clientId a um
+    // _xc_vid recem-inventado, e sem o gclid restaurado, ensinaria ao servidor
+    // a identidade errada para o checkout inteiro.
+    quandoPronto(function () {
+      entregar(identidadeDe(clientId));
+    });
+  }
+
+  function identidadeDe(clientId) {
+    return JSON.stringify({
+      shop: LOJA,
+      storeId: STORE_ID,
+      evento: "identidade",
+      eventId: "identidade_" + vid,
+      visitorId: vid,
+      clientId: clientId,
+      gclid: achados.gclid || null,
+      gbraid: achados.gbraid || null,
+      wbraid: achados.wbraid || null,
+      auid: achados._auid || null,
+      fbp: achados._fbp || null,
+      fbc: achados._fbc || null,
+      fbclid: achados.fbclid || null,
+    });
   }
 
   /** Tenta ate o trekkie aparecer. Desiste em 15s: quem nao carregou, nao vem. */
@@ -648,7 +955,7 @@
         // variante invalida) nao e evento.
         promessa
           .then(function (r) {
-            if (r && r.ok) mandar("add_to_cart");
+            if (r && r.ok) adicionou();
           })
           .catch(function () {});
       }
@@ -662,11 +969,18 @@
     XMLHttpRequest.prototype.open = function (metodo, url) {
       if (ehAdicionar(url)) {
         this.addEventListener("load", function () {
-          if (this.status >= 200 && this.status < 300) mandar("add_to_cart");
+          if (this.status >= 200 && this.status < 300) adicionou();
         });
       }
       return abrir.apply(this, arguments);
     };
+  }
+
+  // O adicionar confirmado e o evento E o momento em que o carrinho de verdade
+  // passa a existir (ver 2b).
+  function adicionou() {
+    mandar("add_to_cart");
+    conferirCarrinho();
   }
 
   // ---- 3.3 iniciar checkout ----------------------------------------------
@@ -895,16 +1209,36 @@
     ligarRemarketing();
   }
 
+  // AGORA, sincronamente, nao no DOMContentLoaded.
+  //
+  // Trocar o window.fetch depois que o tema carregou nao serve: se ele ja
+  // guardou a referencia original numa variavel dele, as chamadas dele passam
+  // por fora do nosso wrapper e o add_to_cart nunca dispara. Os listeners de
+  // clique e submit sao no document, que ja existe, e pegam elemento
+  // renderizado depois de qualquer jeito.
+  //
+  // Fetch e XHR ficam fora do `if` abaixo: alem do evento, sao eles que avisam
+  // que o carrinho nasceu (2b), e o click id precisa chegar ao pedido mesmo sem
+  // coletor. `mandar` ja se recusa sozinho quando falta coletor ou loja.
+  observarFetch();
+  observarXhr();
+
+  // Le o carrinho (2a) e so entao solta a fila. A leitura passa pelo nosso
+  // wrapper do fetch, o que e inofensivo: cart.js nao e /cart/add.
+  lerCarrinho(function (carrinho) {
+    concluirReidratacao(carrinho, false);
+  });
+
+  // Clique em "finalizar" pode sair da pagina antes de a leitura voltar. Sem
+  // isto, o begin_checkout ficaria na fila e morreria com a pagina; aqui ele sai
+  // por sendBeacon, que sobrevive a navegacao, com o que houver em maos.
+  if (window.addEventListener) {
+    window.addEventListener("pagehide", function () {
+      concluirReidratacao(null, true);
+    });
+  }
+
   if (COLETOR && LOJA) {
-    // AGORA, sincronamente, nao no DOMContentLoaded.
-    //
-    // Trocar o window.fetch depois que o tema carregou nao serve: se ele ja
-    // guardou a referencia original numa variavel dele, as chamadas dele passam
-    // por fora do nosso wrapper e o add_to_cart nunca dispara. Os listeners de
-    // clique e submit sao no document, que ja existe, e pegam elemento
-    // renderizado depois de qualquer jeito.
-    observarFetch();
-    observarXhr();
     observarCheckout();
     esperarClienteDaShopify();
 
