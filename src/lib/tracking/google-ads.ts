@@ -112,6 +112,10 @@ export async function enviarParaGoogleAds(
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         Accept: "image/avif,image/webp,*/*",
       },
+      // Mesmo motivo do Meta: o envio roda dentro da requisicao do visitante,
+      // e a concorrencia da Vercel e compartilhada entre todas as lojas.
+      // Estourar cai no catch, que trata como "vale tentar de novo".
+      timeoutMs: 5000,
     });
 
     // O endpoint devolve 200 com um pixel mesmo quando ignora o conteudo.

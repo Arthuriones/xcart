@@ -166,14 +166,37 @@ const MAX_REDIRECTS = 5;
  */
 export async function safeFetch(
   entrada: string,
-  init?: RequestInit
+  init?: RequestInit & {
+    /**
+     * Desiste depois de N ms.
+     *
+     * OPCIONAL, e sem padrao de proposito: `safeFetch` e usado para importar
+     * catalogo por proxy, que legitimamente demora. Um padrao global aqui
+     * quebraria isso.
+     *
+     * Quem chama no caminho quente passa. Sem timeout, um destino lento prende
+     * a funcao ate o limite da plataforma -- e como a concorrencia e
+     * compartilhada entre TODAS as lojas, uma plataforma de anuncio lenta
+     * viraria indisponibilidade para todo mundo.
+     */
+    timeoutMs?: number;
+  }
 ): Promise<Response> {
   let alvo = entrada;
+  const { timeoutMs, ...resto } = init || {};
 
   for (let salto = 0; salto <= MAX_REDIRECTS; salto += 1) {
     const { url } = await assertUrlPublica(alvo);
 
-    const resposta = await fetch(url, { ...init, redirect: "manual" });
+    const resposta = await fetch(url, {
+      ...resto,
+      // O relogio reinicia a cada salto de redirect, e nao ha problema: o teto
+      // de saltos ja limita o total.
+      ...(timeoutMs && !resto.signal
+        ? { signal: AbortSignal.timeout(timeoutMs) }
+        : {}),
+      redirect: "manual",
+    });
 
     const ehRedirect =
       resposta.status >= 300 && resposta.status < 400 && resposta.headers.has("location");

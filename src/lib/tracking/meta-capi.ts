@@ -11,6 +11,19 @@ import type { UserData } from "@/lib/tracking/normalizar";
 
 const VERSAO = "v21.0";
 
+/**
+ * Teto de espera por chamada.
+ *
+ * O envio acontece DENTRO da requisicao do visitante (coletor) e do webhook da
+ * Shopify. Sem teto, um destino lento prende a funcao ate o limite da
+ * plataforma -- e a concorrencia da Vercel e compartilhada entre todas as
+ * lojas, entao o Meta lento viraria indisponibilidade para todo mundo.
+ *
+ * Estourar o teto nao perde o evento: cai no catch, que ja classifica erro de
+ * rede como "vale tentar de novo", e a linha fica pendente para o cron.
+ */
+const TIMEOUT_MS = 5000;
+
 export interface EventoCapi {
   event_name: string;
   event_time: number;
@@ -88,6 +101,7 @@ export async function enviarParaMeta(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(corpo),
+        timeoutMs: TIMEOUT_MS,
       }
     );
 
@@ -161,7 +175,10 @@ export async function validarAcessoAoPixel(
   url.searchParams.set("access_token", accessToken);
 
   try {
-    const resposta = await safeFetch(url.toString(), { method: "GET" });
+    const resposta = await safeFetch(url.toString(), {
+      method: "GET",
+      timeoutMs: TIMEOUT_MS,
+    });
     const texto = await resposta.text();
     let json: unknown = null;
     try {
