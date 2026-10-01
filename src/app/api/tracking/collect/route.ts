@@ -195,9 +195,23 @@ export async function POST(request: NextRequest) {
   // justamente nas lojas reinstaladas.
   //
   // O webhook desempata pela assinatura HMAC. Aqui nao ha assinatura: o evento
-  // vem do navegador do visitante. Entao o critério e explicito -- entre as
-  // linhas ativas, vale a que TEM rastreamento ligado; havendo mais de uma ou
-  // nenhuma, a instalacao mais recente. Determinístico, e nunca 500.
+  // vem do navegador do visitante.
+  //
+  // POR QUE O DOMINIO SOZINHO NAO BASTA
+  //
+  // Qualquer conta do xcart consegue gravar uma linha em `stores` com o dominio
+  // de OUTRA loja -- o app grava `stores` pelo cliente do usuario, e o
+  // `created_at` vai junto. O desempate antigo ("a mais recente com
+  // rastreamento ligado") entregava a escolha a quem escrevesse a data mais
+  // nova: os eventos do Web Pixel da loja da vitima iam para a linha do
+  // intruso, com e-mail e telefone do checkout, e a ponte checkout -> clientId
+  // tambem -- o que desligava a recuperacao de clique da compra.
+  //
+  // Por isso: com o id da linha (tag do tema e pixel novos), casa por id E
+  // dominio, e o intruso nao tem como ser essa linha. Sem o id, so aceita
+  // quando ha UMA linha ligada para o dominio; com mais de uma, recusa em vez
+  // de adivinhar. Medido antes desta mudanca: as lojas com rastreamento ligado
+  // tem uma linha cada, e os 4 dominios duplicados tem rastreamento desligado.
   // ------------------------------------------------------------------------
   const idDaTag = (corpo.storeId || "").trim();
   const consulta = admin
@@ -210,7 +224,7 @@ export async function POST(request: NextRequest) {
   // apontar evento para a loja de outro sabendo so o uuid.
   const { data: candidatas } = idDaTag
     ? await consulta.eq("id", idDaTag).eq("shop_domain", loja)
-    : await consulta.eq("shop_domain", loja).order("created_at", { ascending: false });
+    : await consulta.eq("shop_domain", loja);
 
   if (!candidatas?.length) return recusado("loja desconhecida");
 
@@ -223,10 +237,15 @@ export async function POST(request: NextRequest) {
     .in("store_id", ids);
 
   const porStore = new Map((cfgs || []).map((c) => [c.store_id, c]));
-  // Com id da tag ha uma candidata so. Sem ele (tag antiga), `candidatas` vem da
-  // mais nova para a mais velha e vale a primeira com rastreamento ligado.
-  const escolhida =
-    candidatas.find((c) => porStore.get(c.id)?.enabled) || candidatas[0];
+  // Com o id ha uma candidata so. Sem ele, so serve se exatamente UMA linha do
+  // dominio estiver ligada. Nenhuma ligada cai no "rastreamento desligado"
+  // abaixo; mais de uma e ambiguo -- e ambiguidade aqui e exatamente o que um
+  // intruso fabrica, entao a resposta e recusar.
+  const ligadas = candidatas.filter((c) => porStore.get(c.id)?.enabled);
+  if (!idDaTag && ligadas.length > 1) {
+    return recusado("loja ambigua: reinstale a tag e o pixel com o id da loja");
+  }
+  const escolhida = ligadas[0] || candidatas[0];
 
   const registro = escolhida;
   const cfg = porStore.get(registro.id);

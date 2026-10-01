@@ -234,9 +234,18 @@ function Veredito({
   const pedidos = diag?.pedidos7d ?? null;
 
   // Cada destino e julgado sozinho: uma conta pode estar chegando e a outra nao.
-  const faltas = alvos
-    .map((d) => ({ destino: d, faltam: pedidosSemCompra(d, diag) ?? 0 }))
-    .filter((f) => f.faltam >= 1);
+  //
+  // Com a contagem da fila indisponivel, NAO ha comparacao: "zero compras
+  // enviadas" seria a falha da leitura, nao das compras, e acusaria cada
+  // pedido como perdido. Antes o null virava 0 e ia direto para o alarme.
+  const faltas = loja.contagemIndisponivel
+    ? []
+    : alvos
+        .map((d) => ({ destino: d, faltam: pedidosSemCompra(d, diag) }))
+        .filter(
+          (f): f is { destino: DestinoNaTela; faltam: number } =>
+            f.faltam !== null && f.faltam >= 1
+        );
 
   const melhorGoogle = melhorDa(alvos, "google");
   const melhorMeta = melhorDa(alvos, "meta");
@@ -244,6 +253,16 @@ function Veredito({
   return (
     <>
       {avisoTeste}
+
+      {loja.contagemIndisponivel && (
+        <div className="flex items-start gap-2 rounded-md bg-amber-500/10 p-2.5 text-xs">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+          <span className="text-muted-foreground">
+            Não deu para contar os envios agora, então a comparação com os pedidos
+            ficou de fora. Recarregue a página em instantes.
+          </span>
+        </div>
+      )}
 
       {faltas.length > 0 && (
         <div className="flex items-start gap-2 rounded-md bg-destructive/10 p-2.5 text-xs">
@@ -420,9 +439,9 @@ function PixelDoCheckout({ loja }: { loja: LojaTracking }) {
                 <Copy className="mr-1.5 h-3.5 w-3.5" />
                 Copiar
               </Button>
-              {/* Uma linha so, e a mesma para toda loja: a loja se identifica
-                  sozinha por init.data.shop.myshopifyDomain. Por isso o campo e
-                  baixo -- antes era um bloco de 60 linhas gerado por loja. */}
+              {/* Uma linha so, com o id da loja: a logica mora em
+                  /xcart-pixel.js. Por isso o campo e baixo -- antes era um
+                  bloco de 60 linhas. */}
               <textarea
                 readOnly
                 value={codigo}

@@ -130,6 +130,16 @@ export interface LojaTracking {
    */
   tetoAtingidoRecente: boolean;
 
+  /**
+   * A contagem da fila FALHOU nesta carga da tela.
+   *
+   * Sem isto, uma falha da RPC virava "zero compras" em todo destino -- e a
+   * comparacao com os pedidos acusava cada venda como perdida, com as compras
+   * saindo normalmente. Alarme falso empurra o lojista a trocar token ou
+   * rotulo que estao certos.
+   */
+  contagemIndisponivel: boolean;
+
   destinos: DestinoNaTela[];
   ultimoEnvio: string | null;
 }
@@ -327,6 +337,10 @@ export async function getPainelTracking(): Promise<PainelTracking> {
   // amplia o que o usuario ve.
   const desde = new Date(Date.now() - 7 * 864e5).toISOString();
 
+  // Qualquer erro, inclusive numa pagina depois da primeira, invalida a
+  // leitura INTEIRA: contagem parcial geraria alarme parcial, igualmente falso.
+  let painelFalhou = false;
+
   async function lerPainel(): Promise<LinhaPainel[]> {
     const saida: LinhaPainel[] = [];
     for (let de = 0; ; de += PAGINA) {
@@ -342,7 +356,8 @@ export async function getPainelTracking(): Promise<PainelTracking> {
         .range(de, de + PAGINA - 1);
       if (error) {
         console.error("[tracking/painel] falha ao contar a fila", error.message);
-        break;
+        painelFalhou = true;
+        return [];
       }
       const pagina = (data || []) as LinhaPainel[];
       saida.push(...pagina);
@@ -385,6 +400,7 @@ export async function getPainelTracking(): Promise<PainelTracking> {
         pixelCheckoutAtivo: cfg?.web_pixel_visto_em
           ? Date.now() - new Date(cfg.web_pixel_visto_em).getTime() < 864e5
           : false,
+        contagemIndisponivel: painelFalhou,
         destinos: (destinosPorLoja.get(l.id) || []).map((d) => ({
           id: d.id,
           plataforma: d.plataforma,

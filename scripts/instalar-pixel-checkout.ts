@@ -91,7 +91,7 @@ async function main() {
     return;
   }
 
-  const codigo = gerarCodigoDoPixel({ origemDoApp: getPublicAppUrl() });
+  const codigo = gerarCodigoDoPixel({ origemDoApp: getPublicAppUrl(), storeId: loja.id });
 
   console.log(`\nloja: ${loja.name} (${loja.shop_domain})`);
   console.log(

@@ -177,13 +177,26 @@ async function conferirTokenNoMeta(
 const JANELA_REENVIO_DIAS = 6;
 
 /**
- * Codigos do Meta que significam "a credencial e o problema", nao o evento.
+ * Erros do Meta que significam "a credencial e o problema", nao o evento.
  *
- * 190 = token invalido/expirado/revogado; 200 = token sem permissao no pixel.
- * Sao os unicos que um token novo conserta. Um 100 (parametro ruim) falharia
- * de novo com qualquer token, entao fica fora.
+ *   190      token invalido, expirado ou revogado
+ *   200, 10  permissao negada
+ *   100/33   "Object with ID ... does not exist, cannot be loaded due to
+ *            missing permissions" -- e assim que o Graph responde no POST de
+ *            eventos quando o system user nao tem o pixel atribuido. A primeira
+ *            versao so olhava 190/200 e deixava este, o caso mais comum de
+ *            permissao, de fora.
+ *
+ * Sao os que um token novo conserta. O 100 GENERICO (parametro ruim) continua
+ * fora: falharia de novo com qualquer token. So o par 100/33 entra, e so e
+ * seguro porque a escrita no mesmo pixel acabou de ser validada com o token
+ * novo.
+ *
+ * Sintaxe conferida contra o PostgREST do projeto antes de entrar aqui.
  */
-const CODIGOS_DE_CREDENCIAL = "(190,200)";
+const FILTRO_CREDENCIAL =
+  "response->error->>code.in.(190,200,10)," +
+  "and(response->error->>code.eq.100,response->error->>error_subcode.eq.33)";
 
 /**
  * Devolve para a fila as compras que falharam por causa do token antigo.
@@ -198,8 +211,8 @@ const CODIGOS_DE_CREDENCIAL = "(190,200)";
  * Meta deduplica -- nao ha risco de contar duas vezes.
  *
  * O codigo fica em `response.error.code` porque `gravarFalha` grava ali o corpo
- * JSON do Meta como veio. O `->>` devolve texto; o `in` do PostgREST compara
- * como texto tambem, entao "190" casa.
+ * JSON do Meta como veio. O `->>` devolve texto, e o PostgREST compara como
+ * texto tambem, entao "190" e "33" casam.
  */
 async function reenfileirarFalhasDeCredencial(
   admin: ReturnType<typeof createAdminClient>,
@@ -220,7 +233,7 @@ async function reenfileirarFalhasDeCredencial(
     .eq("destination_id", destinoId)
     .eq("status", "falhou")
     .gte("created_at", desde)
-    .filter("response->error->>code", "in", CODIGOS_DE_CREDENCIAL)
+    .or(FILTRO_CREDENCIAL)
     .select("event_name");
 
   // O token ja foi gravado; falhar aqui nao desfaz isso. As compras ficam em

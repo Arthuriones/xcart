@@ -8,10 +8,10 @@ export const runtime = "nodejs";
 // ============================================================================
 // O codigo do Custom Pixel de uma loja, para o lojista copiar.
 //
-// E UMA LINHA SO, IGUAL PARA TODA LOJA. A loja se identifica sozinha, por
-// `init.data.shop.myshopifyDomain`. Entao nao ha nada para gerar por loja, e a
-// logica do pixel mora em /xcart-pixel.js, que a gente atualiza sem ninguem
-// precisar recolar.
+// E UMA LINHA SO, com o id da loja. A logica do pixel mora em /xcart-pixel.js,
+// que a gente atualiza sem ninguem precisar recolar. O id vai junto porque, so
+// com o dominio, qualquer conta do xcart que cadastrasse o mesmo dominio
+// desviaria os eventos do checkout desta loja. Ver gerarCodigoDoPixel.
 //
 // Por que e copiar e colar, e nao um botao que instala: `webPixelCreate` pela
 // Admin API responde "No extension found" -- ela so funciona para app que
@@ -53,6 +53,6 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     ok: true,
     dominio: loja.shop_domain,
-    codigo: gerarCodigoDoPixel({ origemDoApp: getPublicAppUrl() }),
+    codigo: gerarCodigoDoPixel({ origemDoApp: getPublicAppUrl(), storeId: loja.id }),
   });
 }

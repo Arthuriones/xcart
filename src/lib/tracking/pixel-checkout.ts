@@ -43,15 +43,29 @@
 export interface DadosDoPixel {
   /** Origem do coletor, normalmente https://user.xcart.app. */
   origemDoApp: string;
+  /**
+   * O id da LINHA da loja no xcart.
+   *
+   * Sem ele o coletor so tem o dominio, e qualquer conta do xcart consegue
+   * cadastrar uma linha em `stores` com o dominio de outra loja -- os eventos
+   * do checkout, com e-mail e telefone, iriam para a linha do intruso. Com o
+   * id, o evento so casa com a linha que gerou o trecho.
+   */
+  storeId: string;
 }
 
 /**
  * O trecho que o lojista cola em Configuracoes -> Eventos de cliente.
  *
- * UMA LINHA, E A MESMA PARA TODA LOJA. Foi assim que o WeTracked faz, e o
- * desenho e melhor que o que eu tinha: a versao anterior era gerada por loja,
- * com dominio e id cravados, e qualquer mudanca de logica exigia o lojista
- * recolar em cada loja.
+ * UMA LINHA, e a logica mora em /xcart-pixel.js: mudar o pixel nao exige
+ * recolar. Foi assim que o WeTracked faz.
+ *
+ * A linha carrega o id da loja (`store=`). A primeira versao era identica para
+ * toda loja, e a revisao de seguranca mostrou o preco: identificada so pelo
+ * dominio, a loja podia ter os eventos do checkout desviados por qualquer conta
+ * que cadastrasse o mesmo dominio. O id e publico -- ja esta no
+ * `data-xcart-store` da tag do tema -- e nao precisa ser segredo: o que
+ * protege e o coletor exigir id E dominio juntos.
  *
  * Duas coisas fazem isso funcionar:
  *
@@ -68,9 +82,12 @@ export interface DadosDoPixel {
  */
 export function gerarCodigoDoPixel(dados: DadosDoPixel): string {
   const base = dados.origemDoApp.replace(/\/+$/, "");
+  // So o formato de uuid: o valor vai para dentro de uma string JS que o
+  // lojista cola no admin da Shopify.
+  const id = /^[0-9a-f-]{36}$/i.test(dados.storeId) ? dados.storeId : "";
   return (
     `document.head.appendChild(document.createElement("script")).src=` +
-    `"${base}/xcart-pixel.js?shop="+(self.ctx=this).init.data.shop.myshopifyDomain;`
+    `"${base}/xcart-pixel.js?store=${id}&shop="+(self.ctx=this).init.data.shop.myshopifyDomain;`
   );
 }
 

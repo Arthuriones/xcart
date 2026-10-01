@@ -45,25 +45,34 @@
     null;
   if (!LOJA) return;
 
-  /** De onde este arquivo veio e tambem para onde o evento vai. */
-  var COLETOR = (function () {
+  /** O src deste arquivo: dele saem o coletor e o id da loja. */
+  var SRC = (function () {
     try {
       // document.currentScript nao existe de forma confiavel aqui; o src foi
-      // montado pelo trecho colado, entao a origem e a deste proprio arquivo.
+      // montado pelo trecho colado, entao e o deste proprio arquivo.
       var marca = "/xcart-pixel.js";
       var scripts = document.getElementsByTagName("script");
       for (var i = scripts.length - 1; i >= 0; i--) {
         var src = scripts[i].src || "";
-        if (src.indexOf(marca) !== -1) {
-          return new URL(src).origin + "/api/tracking/collect";
-        }
+        if (src.indexOf(marca) !== -1) return new URL(src);
       }
     } catch (e) {
       /* cai no retorno abaixo */
     }
     return null;
   })();
-  if (!COLETOR) return;
+  if (!SRC) return;
+
+  /** De onde este arquivo veio e tambem para onde o evento vai. */
+  var COLETOR = SRC.origin + "/api/tracking/collect";
+
+  // O id da LINHA da loja no xcart, que o trecho colado carrega.
+  //
+  // Sem ele o coletor so tem o dominio, e qualquer conta do xcart consegue
+  // cadastrar uma linha com o dominio de outra loja. Com o id, o evento so
+  // casa com a linha que gerou este trecho. Trecho antigo, sem `store`,
+  // continua funcionando enquanto a loja tiver uma linha so.
+  var STORE_ID = SRC.searchParams.get("store") || null;
 
   /** O que o tema nao alcanca. Nome da Shopify -> nome do nosso catalogo. */
   var EVENTOS = [
@@ -88,6 +97,7 @@
 
       var corpo = {
         shop: LOJA,
+        storeId: STORE_ID,
         evento: nome,
         fonte: "pixel",
         // UM evento por checkout. O `event.id` da Shopify e novo a cada
