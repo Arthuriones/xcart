@@ -225,7 +225,10 @@ async function tratarPedidoCriado(
     const { montarConversaoGoogle } = await import("@/lib/tracking/purchase");
     destinos.push({
       destination: "google",
-      payload: montarConversaoGoogle(pedido, { identidade }),
+      payload: montarConversaoGoogle(pedido, {
+        identidade,
+        dominioLoja: loja.shop_domain,
+      }),
     });
   }
 

@@ -88,6 +88,9 @@ export function sinaisDoPedido(pedido: PedidoShopify) {
     wbraid: atributo(pedido, "wbraid"),
     ttclid: atributo(pedido, "ttclid"),
     visitorId: atributo(pedido, "_xc_vid") || atributo(pedido, "visitor_id"),
+    // Do cookie `_gcl_au`, que a tag do Google escreve. Viaja ate o pedido
+    // pelo mesmo caminho dos click ids. Ver google-ads.ts.
+    auid: atributo(pedido, "_auid") || atributo(pedido, "auid"),
   };
 }
 
@@ -112,6 +115,9 @@ export interface ConversaoGoogleDoPedido {
   gclid: string | null;
   gbraid: string | null;
   wbraid: string | null;
+  /** Identificador first-party do Google. Atribui mesmo sem click id. */
+  auid: string | null;
+  pageUrl: string | null;
   orderId: string;
   value: number;
   currency: string;
@@ -126,7 +132,10 @@ export interface ConversaoGoogleDoPedido {
  */
 export function montarConversaoGoogle(
   pedido: PedidoShopify,
-  contexto: { identidade?: IdentidadeGuardada | null } = {}
+  contexto: {
+    identidade?: IdentidadeGuardada | null;
+    dominioLoja?: string | null;
+  } = {}
 ): ConversaoGoogleDoPedido {
   const sinais = sinaisDoPedido(pedido);
   const valor = Number(pedido.total_price ?? 0);
@@ -134,6 +143,15 @@ export function montarConversaoGoogle(
     gclid: sinais.gclid || contexto.identidade?.gclid || null,
     gbraid: sinais.gbraid,
     wbraid: sinais.wbraid,
+    auid: sinais.auid,
+    // A pagina de chegada da sessao que virou a venda. O gtag manda a URL em
+    // toda conversao; e contexto, nao identificacao.
+    pageUrl:
+      contexto.dominioLoja && pedido.landing_site
+        ? `https://${contexto.dominioLoja}${
+            pedido.landing_site.startsWith("/") ? pedido.landing_site : "/"
+          }`
+        : null,
     // O numero do pedido vira `oid`: mesma conversion action com o mesmo oid
     // o Google descarta, que e a protecao contra reentrega de webhook.
     orderId: String(pedido.id ?? ""),

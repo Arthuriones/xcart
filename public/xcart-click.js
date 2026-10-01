@@ -122,6 +122,41 @@
   var fbc = lerCookie("_fbc");
   if (fbc) achados._fbc = fbc;
 
+  // ---- 1c. os cookies que o proprio Google escreve ------------------------
+  //
+  // A tag de remarketing grava dois, e os dois valem muito:
+  //
+  // _gcl_au = "1.1.<a>.<b>.-.-..." -> `<a>.<b>` e o `auid`, identificador
+  //   first-party do Google. E o equivalente exato do _fbp do Meta, e a
+  //   requisicao real do gtag manda ele em TODA conversao. Sem ele, o Google
+  //   perde a ligacao com o visitante quando o gclid nao esta presente.
+  //
+  // _gcl_aw = "GCL.<timestamp>.<gclid>" -> o gclid guardado pelo PROPRIO
+  //   Google. Serve de segunda fonte: se a pessoa chegou numa pagina onde o
+  //   nosso snippet nao rodou, ou o nosso cookie foi limpo, este ainda tem.
+  function pedaco(valor, indice) {
+    if (!valor) return null;
+    var partes = String(valor).split(".");
+    return partes.length > indice ? partes[indice] : null;
+  }
+
+  var gclAu = lerCookie("_gcl_au");
+  if (gclAu) {
+    var a = pedaco(gclAu, 2);
+    var b = pedaco(gclAu, 3);
+    if (a && b) achados._auid = a + "." + b;
+  }
+
+  var gclAw = lerCookie("_gcl_aw");
+  if (gclAw && !achados.gclid) {
+    // Terceiro pedaco; o gclid pode conter ponto, entao junta o resto.
+    var partesAw = String(gclAw).split(".");
+    if (partesAw.length > 2) {
+      var doGoogle = partesAw.slice(2).join(".");
+      if (doGoogle) achados.gclid = doGoogle;
+    }
+  }
+
   var vid = visitante();
   achados._xc_vid = vid;
 
@@ -365,6 +400,7 @@
       gclid: achados.gclid || null,
       gbraid: achados.gbraid || null,
       wbraid: achados.wbraid || null,
+      auid: achados._auid || null,
       // Sinais do Meta. _fbp e _fbc sao cookies que o pixel do navegador grava;
       // sem eles o Meta nao liga o evento do servidor a sessao, e o Event Match
       // Quality cai. O fbclid vai porque em quem chega pelo anuncio e nao tem

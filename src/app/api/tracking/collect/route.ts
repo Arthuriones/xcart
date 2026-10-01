@@ -98,6 +98,8 @@ export async function POST(request: NextRequest) {
     gclid?: string | null;
     gbraid?: string | null;
     wbraid?: string | null;
+    /** Do cookie `_gcl_au`, escrito pela tag do Google. Ver google-ads.ts. */
+    auid?: string | null;
     fbp?: string | null;
     fbc?: string | null;
     fbclid?: string | null;
@@ -241,6 +243,7 @@ export async function POST(request: NextRequest) {
     gclid: (corpo.gclid || "").trim().slice(0, 200) || null,
     gbraid: (corpo.gbraid || "").trim().slice(0, 200) || null,
     wbraid: (corpo.wbraid || "").trim().slice(0, 200) || null,
+    auid: (corpo.auid || "").trim().slice(0, 100) || null,
   };
 
   const destinos: { destination: "google" | "meta"; payload: unknown }[] = [];
@@ -250,6 +253,7 @@ export async function POST(request: NextRequest) {
       destination: "google",
       payload: {
         ...clique,
+        pageUrl: (corpo.pageUrl || "").trim().slice(0, 500) || null,
         // `oid` = o proprio event_id. Mesma conversion action com o mesmo oid, o
         // Google descarta -- e a segunda trava contra a mesma acao contar duas
         // vezes, junto com o indice unico da fila.

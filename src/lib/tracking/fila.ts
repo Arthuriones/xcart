@@ -260,6 +260,8 @@ async function entregarGoogle(
     gclid?: string | null;
     gbraid?: string | null;
     wbraid?: string | null;
+    auid?: string | null;
+    pageUrl?: string | null;
     orderId?: string;
     value?: number;
     currency?: string;
@@ -274,6 +276,8 @@ async function entregarGoogle(
     gclid: conv.gclid,
     gbraid: conv.gbraid,
     wbraid: conv.wbraid,
+    auid: conv.auid,
+    pageUrl: conv.pageUrl,
     orderId: conv.orderId,
     value: conv.value,
     currency: conv.currency,

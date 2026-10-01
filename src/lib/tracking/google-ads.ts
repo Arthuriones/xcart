@@ -3,6 +3,7 @@ import { safeFetch } from "@/lib/net/safe-url";
 // O helper de formato vive em normalizar.ts porque e funcao pura: aqui
 // dentro, atras do "server-only", nao daria para testar sem subir o Next.
 import { apenasNumeroDaConversao } from "@/lib/tracking/normalizar";
+import { montarUrlDeConversao } from "@/lib/tracking/google-url";
 
 export { apenasNumeroDaConversao };
 
@@ -55,6 +56,16 @@ export interface ConversaoGoogle {
   orderId?: string | null;
   value?: number | null;
   currency?: string | null;
+  /**
+   * `auid` -- o identificador first-party do Google, do cookie `_gcl_au`.
+   *
+   * Capturado observando a requisicao REAL do gtag nesta conta: ela manda
+   * `auid` em toda conversao. E o equivalente do _fbp no Meta -- sem ele, o
+   * Google perde a ligacao com o visitante quando o gclid nao esta presente.
+   */
+  auid?: string | null;
+  /** URL da pagina. O gtag manda; serve de contexto da conversao. */
+  pageUrl?: string | null;
 }
 
 export interface ResultadoGoogle {
@@ -82,25 +93,15 @@ export async function enviarParaGoogleAds(
     };
   }
 
-  const url = new URL(`https://www.googleadservices.com/pagead/conversion/${numero}/`);
-  url.searchParams.set("label", label);
-  // script=0 e o que identifica origem sem JavaScript -- o mesmo que o
-  // <noscript> do snippet classico usa.
-  url.searchParams.set("script", "0");
-
-  // Um dos tres, nesta ordem de preferencia. O Google nunca manda mais de um
-  // para o mesmo clique, e mandar dois faria a requisicao ser descartada.
-  if (conv.gclid) url.searchParams.set("gclaw", conv.gclid);
-  else if (conv.gbraid) url.searchParams.set("gbraid", conv.gbraid);
-  else if (conv.wbraid) url.searchParams.set("wbraid", conv.wbraid);
-  // `oid` e o transaction id: mesma conversion action + mesmo oid = o Google
-  // descarta a segunda. E a rede de seguranca contra reentrega de webhook e
-  // contra o canal nativo mandando a mesma venda.
-  if (conv.orderId) url.searchParams.set("oid", String(conv.orderId));
-  if (typeof conv.value === "number" && Number.isFinite(conv.value)) {
-    url.searchParams.set("value", String(conv.value));
+  const url = montarUrlDeConversao(conv);
+  if (!url) {
+    return {
+      ok: false,
+      status: 0,
+      erro: "conversion id ou label ausente",
+      podeTentarDeNovo: false,
+    };
   }
-  if (conv.currency) url.searchParams.set("currency_code", conv.currency.toUpperCase());
 
   try {
     const resposta = await safeFetch(url.toString(), {

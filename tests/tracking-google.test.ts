@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { apenasNumeroDaConversao } from "../src/lib/tracking/normalizar";
+import { montarUrlDeConversao } from "../src/lib/tracking/google-url";
 import { montarConversaoGoogle, type PedidoShopify } from "../src/lib/tracking/purchase";
 
 const PEDIDO: PedidoShopify = {
@@ -85,5 +86,54 @@ describe("click id de iOS chega ao envio", () => {
     });
     expect(c.gclid).toBeNull();
     expect(c.wbraid).toBe("WB-999");
+  });
+});
+
+/**
+ * A requisicao do nosso servidor foi espelhada numa requisicao REAL do gtag,
+ * capturada na conta do lojista. O que estes testes travam e o que fazia a
+ * nossa parecer outra coisa.
+ */
+describe("a requisicao imita o gtag de verdade", () => {
+  const base = { conversionId: "AW-18419000686", label: "RotuloX" };
+
+  function urlDe(extra: Record<string, unknown> = {}) {
+    // O modulo puro, nao google-ads.ts: aquele tem "server-only" e o vitest
+    // nao consegue importar. Foi por isso que a montagem da URL saiu de la.
+    const u = montarUrlDeConversao({ ...base, ...extra });
+    return new URL(u!);
+  }
+
+  it("declara o evento com en=conversion", () => {
+    // Antes mandavamos `script=0`, que e o caminho do <noscript> -- pixel de
+    // imagem sem JavaScript. E uma afirmacao diferente da que queremos fazer.
+    const u = urlDe();
+    expect(u.searchParams.get("en")).toBe("conversion");
+    expect(u.searchParams.get("script")).toBeNull();
+  });
+
+  it("leva o auid, que atribui mesmo sem click id", () => {
+    const u = urlDe({ auid: "1502556589.1790803952" });
+    expect(u.searchParams.get("auid")).toBe("1502556589.1790803952");
+  });
+
+  it("omite o auid quando nao ha, em vez de mandar vazio", () => {
+    const u = urlDe();
+    expect(u.searchParams.has("auid")).toBe(false);
+  });
+
+  it("NAO inventa consentimento nem dados do navegador", () => {
+    // gcd, tag_exp e os uaa..uapv descrevem coisas que so o navegador sabe.
+    // Preencher do servidor seria afirmar o que nao foi observado.
+    const u = urlDe({ auid: "1.2" });
+    for (const proibido of ["gcd", "tag_exp", "uaa", "uap", "uapv", "em", "emd"]) {
+      expect(u.searchParams.has(proibido), proibido).toBe(false);
+    }
+  });
+
+  it("continua deduplicando por oid e levando o click id", () => {
+    const u = urlDe({ gclid: "G123", orderId: "pedido-7" });
+    expect(u.searchParams.get("gclaw")).toBe("G123");
+    expect(u.searchParams.get("oid")).toBe("pedido-7");
   });
 });
