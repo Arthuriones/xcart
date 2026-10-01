@@ -52,6 +52,8 @@ export interface LojaTracking {
   /** Rotulo por evento. Evento fora do mapa = o lojista nao pediu. */
   googleLabels: MapaDeRotulos;
 
+  /** O Custom Pixel do checkout esta instalado? Ele se anuncia no 1o evento. */
+  pixelCheckoutAtivo: boolean;
   metaPixelId: string | null;
   /** O token do CAPI esta gravado? So o booleano -- o valor nunca sai do servidor. */
   temTokenMeta: boolean;
@@ -98,7 +100,7 @@ export async function getPainelTracking(): Promise<PainelTracking> {
     supabase
       .from("tracking_configs")
       .select(
-        "store_id, enabled, google_conversion_id, google_conversion_label, google_labels, meta_pixel_id"
+        "store_id, enabled, google_conversion_id, google_conversion_label, google_labels, meta_pixel_id, web_pixel_ativo"
       )
       .in("store_id", ids),
     supabase
@@ -187,6 +189,7 @@ export async function getPainelTracking(): Promise<PainelTracking> {
         ligado: Boolean(cfg?.enabled),
         googleConversionId: cfg?.google_conversion_id ?? null,
         googleLabels: (cfg?.google_labels as MapaDeRotulos | null) ?? {},
+        pixelCheckoutAtivo: Boolean(cfg?.web_pixel_ativo),
         metaPixelId: cfg?.meta_pixel_id ?? null,
         temTokenMeta: comToken.has(l.id),
         google: c?.google ?? contagemVazia(),

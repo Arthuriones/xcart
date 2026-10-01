@@ -6,6 +6,7 @@ import {
   Check,
   ChevronDown,
   CircleAlert,
+  Copy,
   ExternalLink,
   Loader2,
   Minus,
@@ -289,6 +290,123 @@ function Erros({ c, nome }: { c: ContagemDestino; nome: string }) {
   );
 }
 
+/**
+ * O Custom Pixel do checkout.
+ *
+ * E copiar e colar, nao um botao que instala: `webPixelCreate` pela Admin API
+ * responde "No extension found" -- ela so funciona para app que declara uma Web
+ * Pixel Extension e faz deploy pelo Shopify CLI. Enquanto o xcart nao tiver essa
+ * extensao, colar no admin e o unico caminho, e roda no mesmo sandbox.
+ *
+ * Depois de colar nao ha mais nada a fazer: o pixel se anuncia no primeiro
+ * evento, e o servidor liga sozinho. Por isso aqui nao existe botao de "ja
+ * instalei" -- passo manual que o lojista pode esquecer de marcar e um estado
+ * que mente.
+ */
+function PixelDoCheckout({ loja }: { loja: LojaTracking }) {
+  const [codigo, setCodigo] = useState<string | null>(null);
+  const [carregando, setCarregando] = useState(false);
+  const [aberto, setAberto] = useState(false);
+
+  async function buscar() {
+    setAberto((v) => !v);
+    if (codigo || carregando) return;
+    setCarregando(true);
+    try {
+      const r = await fetch(`/api/tracking/pixel?storeId=${loja.storeId}`);
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Falha ao gerar o código.");
+      setCodigo(j.codigo);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao gerar o código.");
+      setAberto(false);
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  async function copiar() {
+    if (!codigo) return;
+    try {
+      await navigator.clipboard.writeText(codigo);
+      toast.success("Código copiado.");
+    } catch {
+      toast.error("Não consegui copiar. Selecione o texto e copie na mão.");
+    }
+  }
+
+  return (
+    <section className="space-y-2.5 rounded-md border p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs font-semibold">Checkout (Web Pixel)</span>
+        <Pill tom={loja.pixelCheckoutAtivo ? "ok" : "alerta"}>
+          {loja.pixelCheckoutAtivo ? "instalado" : "falta instalar"}
+        </Pill>
+      </div>
+
+      <p className="text-[11px] text-muted-foreground">
+        O checkout da Shopify não é tema, então o nosso script não entra lá. Sem este
+        pixel, &quot;iniciar checkout&quot; é o <strong>clique no botão</strong> e não
+        existe &quot;dados de pagamento&quot; — o passo que separa desistência no frete
+        de cartão recusado. Ele não envia nada para o Meta nem para o Google: avisa o
+        xcart, e o envio continua saindo do servidor.
+      </p>
+
+      {!loja.pixelCheckoutAtivo && (
+        <>
+          <ol className="list-decimal space-y-0.5 pl-4 text-[11px] text-muted-foreground">
+            <li>
+              No admin da Shopify: <strong>Configurações → Eventos de cliente</strong>
+            </li>
+            <li>
+              <strong>Adicionar pixel personalizado</strong>, dê um nome (ex.: xcart)
+            </li>
+            <li>Cole o código abaixo, <strong>Salvar</strong> e <strong>Conectar</strong></li>
+          </ol>
+
+          <Button size="sm" variant="outline" onClick={buscar} disabled={carregando}>
+            {carregando ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : aberto ? (
+              "esconder código"
+            ) : (
+              "mostrar código para colar"
+            )}
+          </Button>
+
+          {aberto && codigo && (
+            <div className="space-y-1.5">
+              <Button size="sm" variant="outline" onClick={copiar}>
+                <Copy className="mr-1.5 h-3.5 w-3.5" />
+                Copiar
+              </Button>
+              <textarea
+                readOnly
+                value={codigo}
+                onFocus={(e) => e.currentTarget.select()}
+                className="h-40 w-full rounded-md border bg-muted/40 p-2 font-mono text-[10px] leading-relaxed"
+                aria-label="Código do pixel do checkout"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Depois de conectar, não precisa fazer mais nada aqui — o pixel se anuncia
+                no primeiro checkout e esta seção passa a &quot;instalado&quot; sozinha.
+              </p>
+            </div>
+          )}
+        </>
+      )}
+
+      {loja.pixelCheckoutAtivo && (
+        <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
+          <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+          O &quot;iniciar checkout&quot; vindo do tema passou a ser ignorado: o do pixel é
+          o checkout de verdade, e contar os dois seria a mesma ação duas vezes.
+        </p>
+      )}
+    </section>
+  );
+}
+
 function CardLoja({
   loja,
   diag,
@@ -482,6 +600,8 @@ function CardLoja({
               </div>
             )}
 
+            <PixelDoCheckout loja={loja} />
+
             {/* ---------------- Google ---------------- */}
             <section className="space-y-2.5 rounded-md border p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -600,8 +720,11 @@ function CardLoja({
               </div>
 
               <p className="text-[11px] text-muted-foreground">
-                O pixel cobre os quatro eventos — não precisa rótulo por evento. Um token
-                novo substitui o anterior; vazio mantém o que está gravado.
+                {/* Derivado do catalogo, nao cravado: era "quatro" e virou mentira
+                    assim que o evento de pagamento entrou. */}
+                O pixel cobre os {EVENTOS.length} eventos — não precisa rótulo por
+                evento. Um token novo substitui o anterior; vazio mantém o que está
+                gravado.
               </p>
 
               {metaPronto && (
@@ -683,8 +806,9 @@ export function TrackingScreen({
         <div>
           <h1 className="text-2xl font-semibold">Rastreamento</h1>
           <p className="text-sm text-muted-foreground">
-            A conversão sai do servidor — a compra pelo webhook do pedido, e carrinho e
-            checkout pelo snippet do tema avisando o xcart.
+            A conversão sai do servidor. O que muda é de onde cada evento é observado:
+            a compra pelo webhook do pedido, carrinho e produto pelo snippet do tema, e
+            o checkout pelo Web Pixel — o único que entra no checkout da Shopify.
           </p>
         </div>
         {ativas.length > 0 && (

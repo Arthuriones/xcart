@@ -212,6 +212,21 @@ export async function POST(request: NextRequest) {
 
   const doPixel = (corpo.fonte || "").trim() === "pixel";
 
+  // O pixel se ANUNCIA. Nao ha passo manual de "marcar como instalado", e nao
+  // da para detectar pela API: `read_pixels` nao esta nos nossos escopos, e
+  // pedir mais escopo so para isso obrigaria toda loja a reautorizar.
+  //
+  // Quando o primeiro evento com fonte=pixel chega, ele esta instalado -- e o
+  // proprio funcionamento e a prova. Um lojista que cola o codigo nao precisa
+  // fazer mais nada.
+  if (doPixel && !cfg.web_pixel_ativo) {
+    await admin
+      .from("tracking_configs")
+      .update({ web_pixel_ativo: true, updated_at: new Date().toISOString() })
+      .eq("store_id", registro.id);
+    cfg.web_pixel_ativo = true;
+  }
+
   // Com o Web Pixel ativo, o clique no botao (tema) e o `checkout_started`
   // (pixel) descrevem a MESMA acao, e nao tem como compartilhar event_id -- um
   // nasce do clique, o outro do checkout. O do pixel e o checkout de verdade.
