@@ -15,6 +15,7 @@ import {
   ListChecks,
   LogOut,
   Megaphone,
+  RadioTower,
   Store,
   TrendingUp,
   Terminal,
@@ -68,6 +69,7 @@ const NAV: NavSection[] = [
     label: "trackingGroup",
     items: [
       { href: "/tracking", label: "trackingHealth", icon: Radar },
+      { href: "/tracking/eventos", label: "liveEvents", icon: RadioTower },
       { href: "/alertas", label: "alerts", icon: Bell },
     ],
   },
