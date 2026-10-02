@@ -42,6 +42,11 @@ function dinheiro(v: number, moeda: string): string {
   return formatarDinheiro(v, moeda, Math.abs(v) >= 10000 ? 0 : 2);
 }
 
+/** KPI grande: a partir de mil ja sem centavo, para caber em meia tela de 375px. */
+function dinheiroKpi(v: number, moeda: string): string {
+  return formatarDinheiro(v, moeda, Math.abs(v) >= 1000 ? 0 : 2);
+}
+
 function vezes(v: number | null): string {
   if (v === null) return "—";
   return `${v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 2 })}×`;
@@ -160,23 +165,28 @@ function Kpi({
   variacao: ReactNode;
 }) {
   return (
-    <div className="min-w-0 bg-surface px-4 py-3">
+    <div className="min-w-0 bg-surface px-3.5 py-3 sm:px-4">
       <div className="truncate text-[11.5px] text-t3">{rotulo}</div>
-      <div className="mt-[3px] flex min-w-0 items-baseline gap-1.5">
-        <span
-          title={valor}
-          className="truncate font-mono text-[22px] font-semibold tracking-[-0.02em] tabular-nums text-ink"
-          style={cor ? { color: cor } : undefined}
-        >
-          {valor}
-        </span>
-        {palavra && (
-          <span className="shrink-0 text-[12px] font-medium" style={{ color: cor }}>
-            {palavra}
-          </span>
-        )}
+      <div
+        title={valor}
+        className="mt-[3px] truncate font-mono text-[22px] font-semibold tracking-[-0.02em] tabular-nums text-ink"
+        style={cor ? { color: cor } : undefined}
+      >
+        {valor}
       </div>
-      {dica && <div className="mt-0.5 truncate text-[11.5px] text-t3">{dica}</div>}
+      {/* A palavra fica na linha de baixo: em 375px, valor e palavra lado a
+          lado cortariam o numero. */}
+      {(palavra || dica) && (
+        <div className="mt-0.5 truncate text-[11.5px] text-t3">
+          {palavra && (
+            <span className="font-medium" style={{ color: cor }}>
+              {palavra}
+            </span>
+          )}
+          {palavra && dica && " · "}
+          {dica}
+        </div>
+      )}
       <div className="mt-1">{variacao}</div>
     </div>
   );
@@ -472,18 +482,18 @@ export function FinanceiroScreen({ dados }: { dados: Dados }) {
         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-[var(--border-subtle)] lg:grid-cols-4">
           <Kpi
             rotulo="Faturamento"
-            valor={din(a.receita)}
+            valor={dinheiroKpi(a.receita, moeda)}
             variacao={<Variacao atual={a.receita} anterior={ant.receita} bom="alta" />}
           />
           <Kpi
             rotulo="Gasto em anúncios"
-            valor={din(a.gasto)}
+            valor={dinheiroKpi(a.gasto, moeda)}
             dica={`Meta ${din(a.gastoMeta)} · Google ${din(a.gastoGoogle)}`}
             variacao={<Variacao atual={a.gasto} anterior={ant.gasto} bom="neutro" />}
           />
           <Kpi
             rotulo="Lucro estimado"
-            valor={din(a.lucro)}
+            valor={dinheiroKpi(a.lucro, moeda)}
             cor={corLucro}
             palavra={palavraLucro}
             variacao={<Variacao atual={a.lucro} anterior={ant.lucro} bom="alta" />}
