@@ -128,7 +128,9 @@ export function AlertasScreen({ dados }: { dados: AlertasDaTela }) {
         titulo="Abertos"
         direita={
           dados.abertos.length > 0 ? (
-            <Selo tom="err">{plural(dados.abertos.length, "aberto", "abertos")}</Selo>
+            <Selo tom={dados.abertos.some((a) => a.severidade === "critico") ? "err" : "warn"}>
+              {plural(dados.abertos.length, "aberto", "abertos")}
+            </Selo>
           ) : undefined
         }
       >

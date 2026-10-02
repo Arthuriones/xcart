@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { filtroResolvido } from "@/lib/filtro-global";
 import {
+  MOEDA_PADRAO,
+  PERIODO_PADRAO,
   TODAS,
   type AlertaConfigRow,
   type AlertaRow,
@@ -30,8 +32,17 @@ export interface AlertasDaTela {
 }
 
 export async function getAlertas(): Promise<AlertasDaTela> {
-  const { filtro, lojas } = await filtroResolvido();
   const user = await getCurrentUser();
+  let filtro: FiltroGlobal = { lojaId: TODAS, periodo: PERIODO_PADRAO, moeda: MOEDA_PADRAO };
+  let lojas: LojaDoSeletor[] = [];
+  let erroLojas: string | null = null;
+  try {
+    ({ filtro, lojas } = await filtroResolvido());
+  } catch (e) {
+    // Sem a lista de lojas a tela ainda mostra os alertas (todas as lojas);
+    // o erro aparece no topo em vez de derrubar a pagina.
+    erroLojas = e instanceof Error ? e.message : String(e);
+  }
   const configPadrao = {
     user_id: user?.id ?? "",
     telegram_chat_id: null,
@@ -106,7 +117,11 @@ export async function getAlertas(): Promise<AlertasDaTela> {
   const tokenDaEnv = !temTokenProprio && !!String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
 
   const erro =
-    abertos.error?.message || resolvidos.error?.message || config.error?.message || erroToken;
+    abertos.error?.message ||
+    resolvidos.error?.message ||
+    config.error?.message ||
+    erroToken ||
+    erroLojas;
 
   const cfg = (config.data as AlertaConfigRow | null) ?? null;
   return {
