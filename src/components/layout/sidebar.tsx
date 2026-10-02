@@ -159,9 +159,16 @@ export function Sidebar({ dados }: { dados: SidebarData }) {
 
         <nav className="flex-1 overflow-y-auto px-2 py-2.5">
           {NAV.map((secao, i) => (
-            <div key={secao.label ?? `s${i}`} className={i === 0 ? "" : "mt-3"}>
+            <div key={secao.label ?? `s${i}`} className={i === 0 ? "" : "mt-1.5"}>
               {secao.label && (
-                <div className="px-2 pb-[5px] pt-3.5 font-mono text-[9.5px] uppercase tracking-[0.14em] text-t4">
+                <div
+                  className={cn(
+                    "px-2 pb-[5px] font-mono text-[9.5px] uppercase tracking-[0.14em] text-t4",
+                    // Cinco grupos com cabecalho: o espaco vem do cabecalho, nao
+                    // de margem somada, senao o menu nao cabe em tela de notebook.
+                    i === 0 ? "pt-1" : "pt-3"
+                  )}
+                >
                   {t(secao.label)}
                 </div>
               )}
