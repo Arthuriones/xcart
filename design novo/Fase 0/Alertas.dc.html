@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <title>xcart · Alertas (Fase 0)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Public+Sans:wght@400;500;600;700&amp;display=swap">
+  <link rel="stylesheet" href="xcart-tokens.css">
+</helmet>
+<div style="min-height:100vh; background:#e9e8e5; display:flex; flex-direction:column;">
+  <dc-import name="Revisao" tela="Alertas" theme="{{ theme }}" width="{{ width }}" cenario="{{ cenario }}" cenarios="{{ cenarios }}" anot="{{ anot }}" onTheme="{{ setTheme }}" onWidth="{{ setWidth }}" onCenario="{{ setCenario }}" onAnot="{{ setAnot }}" hint-size="100%,48px"></dc-import>
+  <div style="flex:1; padding:24px 16px 48px; display:flex; justify-content:center;">
+    <div style="width:{{ wrapW }}; height:{{ wrapH }}; flex:none;">
+      <div data-theme="{{ theme }}" style="position:relative; width:{{ frameW }}; height:{{ frameH }}; transform:scale({{ escala }}); transform-origin:top left; overflow:hidden; border-radius:{{ frameRaio }}; box-shadow:0 0 0 1px rgba(0,0,0,.12), 0 24px 64px rgba(0,0,0,.16); background:var(--bg); display:flex; flex-direction:{{ frameDir }};">
+        <a href="#conteudo" style="position:absolute; left:-9999px; top:8px; z-index:100; background:var(--solid); color:var(--on-solid); padding:8px 12px; border-radius:var(--r-control);" style-focus="left:8px;">Pular para o conteúdo</a>
+        <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}">
+          <dc-import name="Navegacao" active="alertas" mobile="{{ false }}" theme="{{ theme }}" onTheme="{{ setTheme }}" alertas="{{ nAbertos }}" hint-size="232px,100%" style="height:100%; flex:none;"></dc-import>
+        </sc-if>
+        <div style="flex:1; min-width:0; min-height:0; display:flex; flex-direction:column;">
+          <dc-import name="Topo" mobile="{{ mobile }}" titulo="Alertas" contexto="loja" soLojaTexto="Última verificação às 14:30 · a cada 5 minutos" anot="{{ anot }}" lojas="{{ lojasTopo }}" loja="{{ loja }}" onCtx="{{ setCtx }}" hint-size="100%,60px"></dc-import>
+          <main id="conteudo" tabindex="-1" style="flex:1; min-height:0; overflow-y:auto; background:var(--bg);">
+            <div style="max-width:1080px; margin:0 auto; padding:{{ pad }}; display:flex; flex-direction:column; gap:24px;">
+              <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+                <div style="display:flex; flex-direction:column; gap:4px; max-width:640px;">
+                  <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}"><h1 style="font-size:var(--fs-page); line-height:28px; font-weight:600; letter-spacing:-0.01em;">Alertas</h1></sc-if>
+                  <p style="font-size:var(--fs-body); color:var(--t2); text-wrap:pretty;">O que está quebrado agora em vendas, rastreamento e gasto, com o atalho para resolver. Avisos chegam pelo Telegram.</p>
+                </div>
+                <a href="Integracoes.dc.html" style="display:flex; align-items:center; gap:8px; height:var(--h-md); padding:0 14px; border:1px solid var(--border-strong); background:var(--surface); color:var(--ink); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; text-decoration:none;" style-hover="border-color:var(--control-border); color:var(--ink); text-decoration:none;">Canais de aviso</a>
+              </div>
+
+              <div role="tablist" aria-label="Alertas" style="display:flex; gap:4px; border-bottom:1px solid var(--border); overflow-x:auto; scrollbar-width:none;">
+                <sc-for list="{{ abas }}" as="a" hint-placeholder-count="3">
+                  <button type="button" role="tab" aria-selected="{{ a.on }}" onClick="{{ a.pick }}" style="display:flex; align-items:center; gap:8px; height:44px; padding:0 12px; border:0; border-bottom:2px solid {{ a.borda }}; background:transparent; color:{{ a.fg }}; font-weight:{{ a.fw }}; font-size:var(--fs-dense); cursor:pointer; white-space:nowrap; margin-bottom:-1px;">{{ a.label }}<sc-if value="{{ a.n }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--fs-label); font-variant-numeric:tabular-nums; color:{{ a.nFg }}; background:{{ a.nBg }}; border-radius:10px; padding:0 6px; line-height:18px;">{{ a.n }}</span></sc-if></button>
+                </sc-for>
+              </div>
+
+              <sc-if value="{{ carregando }}" hint-placeholder-val="{{ false }}">
+                <div aria-busy="true" aria-label="Carregando alertas" style="display:flex; flex-direction:column; gap:12px;"><sc-for list="{{ tres }}" as="x" hint-placeholder-count="3"><div style="height:120px; border-radius:var(--r-card); background:var(--surface); border:1px solid var(--border); padding:16px; display:flex; flex-direction:column; gap:12px;"><span style="width:80px; height:20px; border-radius:10px; background:var(--skeleton);"></span><span style="width:50%; height:14px; border-radius:4px; background:var(--skeleton);"></span><span style="width:70%; height:12px; border-radius:4px; background:var(--skeleton);"></span></div></sc-for></div>
+              </sc-if>
+              <sc-if value="{{ erro }}" hint-placeholder-val="{{ false }}">
+                <div role="alert" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); min-height:240px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:32px 16px; text-align:center;">
+                  <strong style="font-size:var(--fs-section);">Não conseguimos carregar os alertas</strong>
+                  <span style="font-size:var(--fs-dense); color:var(--t1); max-width:440px;">A verificação continua rodando e os avisos pelo Telegram não param.</span>
+                  <button type="button" onClick="{{ tentar }}" style="height:var(--h-md); padding:0 16px; border:0; background:var(--solid); color:var(--on-solid); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;">Tentar de novo</button>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ abaAbertos }}" hint-placeholder-val="{{ true }}">
+                <sc-if value="{{ semAbertos }}" hint-placeholder-val="{{ false }}">
+                  <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:40px 24px; display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center;">
+                    <span aria-hidden="true" style="width:36px; height:36px; border-radius:50%; background:var(--ok-bg); color:var(--ok); display:grid; place-items:center; border:1px solid var(--ok-border);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg></span>
+                    <h2 style="font-size:var(--fs-section); font-weight:600;">Nada quebrado agora</h2>
+                    <p style="font-size:var(--fs-dense); color:var(--t2);">Última verificação às 14:30. Se algo parar, você recebe no Telegram.</p>
+                  </div>
+                </sc-if>
+                <ul style="list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:12px;">
+                  <sc-for list="{{ abertos }}" as="al" hint-placeholder-count="3">
+                    <li style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;">
+                      <span aria-hidden="true" style="width:32px; height:32px; flex:none; display:grid; place-items:center; border-radius:var(--r-control); background:{{ al.bg }}; color:{{ al.fg }}; border:1px solid {{ al.borda }};"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="{{ al.icone }}"></path></svg></span>
+                      <div style="flex:1; min-width:240px; display:flex; flex-direction:column; gap:4px;">
+                        <span style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;"><span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ al.borda }}; background:{{ al.bg }}; color:{{ al.fg }}; font-size:var(--fs-label); font-weight:600;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ al.sev }}</span><span style="font-size:var(--fs-label); color:var(--t2);">{{ al.loja }} · {{ al.regra }}</span></span>
+                        <h3 style="font-size:var(--fs-section); font-weight:600; margin-top:2px;">{{ al.titulo }}</h3>
+                        <p style="font-size:var(--fs-dense); color:var(--t1); text-wrap:pretty;">{{ al.detalhe }}</p>
+                        <span style="font-size:var(--fs-label); color:var(--t2); font-variant-numeric:tabular-nums;">{{ al.meta }}</span>
+                      </div>
+                      <div style="display:flex; gap:8px; align-items:center; position:relative; width:{{ acoesW }};">
+                        <a href="{{ al.href }}" style="flex:{{ acoesFlex }}; display:flex; align-items:center; justify-content:center; gap:6px; height:{{ btnH }}; padding:0 14px; border-radius:var(--r-control); background:var(--solid); color:var(--on-solid); font-size:var(--fs-dense); font-weight:500; text-decoration:none; white-space:nowrap;" style-hover="background:var(--solid-hover); color:var(--on-solid); text-decoration:none;">{{ al.cta }}</a>
+                        <button type="button" onClick="{{ al.abrirMenu }}" aria-haspopup="menu" aria-expanded="{{ al.menuOn }}" style="display:flex; align-items:center; gap:6px; height:{{ btnH }}; padding:0 12px; border:1px solid var(--border-strong); background:var(--surface); color:var(--ink); border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer; white-space:nowrap;">Silenciar<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+                        <sc-if value="{{ al.menuOn }}" hint-placeholder-val="{{ false }}">
+                          <div role="menu" aria-label="Silenciar por" style="position:absolute; right:0; top:44px; z-index:20; width:240px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-overlay); box-shadow:var(--shadow); padding:6px; display:flex; flex-direction:column;">
+                            <sc-for list="{{ al.opcoes }}" as="o" hint-placeholder-count="4">
+                              <button type="button" role="menuitem" aria-disabled="{{ o.desab }}" onClick="{{ o.pick }}" style="display:flex; align-items:center; justify-content:space-between; height:36px; padding:0 8px; border:0; background:transparent; text-align:left; border-radius:var(--r-control); font-size:var(--fs-dense); color:{{ o.fg }}; cursor:pointer;" style-hover="background:var(--hover);">{{ o.label }}<sc-if value="{{ o.desab }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--fs-label); color:var(--t2); border:1px solid var(--border); border-radius:4px; padding:0 4px;">Em breve</span></sc-if></button>
+                            </sc-for>
+                          </div>
+                        </sc-if>
+                      </div>
+                    </li>
+                  </sc-for>
+                </ul>
+                <sc-if value="{{ temSilenciados }}" hint-placeholder-val="{{ false }}">
+                  <section aria-labelledby="sil-t" style="display:flex; flex-direction:column; gap:8px;">
+                    <h2 id="sil-t" style="font-size:var(--fs-dense); font-weight:600; color:var(--t1);">Silenciados</h2>
+                    <sc-for list="{{ silenciados }}" as="s" hint-placeholder-count="1">
+                      <div style="display:flex; align-items:center; gap:12px; padding:12px 16px; background:var(--surface-2); border:1px dashed var(--border-strong); border-radius:var(--r-card); flex-wrap:wrap;">
+                        <span style="flex:1; min-width:200px; font-size:var(--fs-dense);"><strong style="font-weight:600;">{{ s.titulo }}</strong> <span style="color:var(--t2);">· {{ s.loja }} · sem aviso até amanhã, 14:31</span></span>
+                        <button type="button" onClick="{{ s.reativar }}" style="height:var(--h-sm); padding:0 12px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer;">Voltar a avisar</button>
+                      </div>
+                    </sc-for>
+                  </section>
+                </sc-if>
+              </sc-if>
+
+              <sc-if value="{{ abaResolvidos }}" hint-placeholder-val="{{ false }}">
+                <section style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); overflow:hidden;">
+                  <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}">
+                    <table style="width:100%; border-collapse:collapse; font-size:var(--fs-dense);">
+                      <caption style="position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);">Alertas resolvidos nos últimos 7 dias</caption>
+                      <thead><tr><sc-for list="{{ cabResolvidos }}" as="h" hint-placeholder-count="6"><th scope="col" style="height:40px; padding:0 12px; text-align:{{ h.align }}; font-size:var(--fs-label); font-weight:600; color:var(--t1); background:var(--surface-2); border-bottom:1px solid var(--border);">{{ h.label }}</th></sc-for></tr></thead>
+                      <tbody><sc-for list="{{ resolvidos }}" as="r" hint-placeholder-count="5"><tr>
+                        <td style="height:48px; padding:0 12px; border-bottom:1px solid var(--border-subtle);"><span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid var(--ok-border); background:var(--ok-bg); color:var(--ok); font-size:var(--fs-label); font-weight:500;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>Resolvido</span></td>
+                        <td style="padding:0 12px; border-bottom:1px solid var(--border-subtle);"><span style="display:flex; flex-direction:column;"><span style="font-weight:500;">{{ r.titulo }}</span><span style="font-size:var(--fs-label); color:var(--t2);">{{ r.sev }}</span></span></td>
+                        <td style="padding:0 12px; border-bottom:1px solid var(--border-subtle);">{{ r.loja }}</td>
+                        <td style="padding:0 12px; border-bottom:1px solid var(--border-subtle); font-variant-numeric:tabular-nums; color:var(--t1);">{{ r.aberto }}</td>
+                        <td style="padding:0 12px; border-bottom:1px solid var(--border-subtle); font-variant-numeric:tabular-nums; text-align:right;">{{ r.duracao }}</td>
+                        <td style="padding:0 12px; border-bottom:1px solid var(--border-subtle); color:var(--t1);">{{ r.como }}</td>
+                      </tr></sc-for></tbody>
+                    </table>
+                  </sc-if>
+                  <sc-if value="{{ mobile }}" hint-placeholder-val="{{ false }}">
+                    <ul style="list-style:none; margin:0; padding:0;"><sc-for list="{{ resolvidos }}" as="r" hint-placeholder-count="5"><li style="padding:12px 16px; border-bottom:1px solid var(--border-subtle); display:flex; flex-direction:column; gap:4px;"><strong style="font-size:var(--fs-body); font-weight:600;">{{ r.titulo }}</strong><span style="font-size:var(--fs-label); color:var(--t2);">{{ r.loja }} · {{ r.sev }} · durou {{ r.duracao }}</span><span style="font-size:var(--fs-label); color:var(--t1);">{{ r.como }}</span></li></sc-for></ul>
+                  </sc-if>
+                </section>
+              </sc-if>
+
+              <sc-if value="{{ abaRegras }}" hint-placeholder-val="{{ false }}">
+                <sc-if value="{{ anot }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--info);">#15 Novo · regras por loja, limites editáveis e alertas por métrica</span></sc-if>
+                <section aria-labelledby="reg-t" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); overflow:hidden;">
+                  <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding:14px 16px; border-bottom:1px solid var(--border); flex-wrap:wrap;">
+                    <div style="display:flex; flex-direction:column; gap:2px;"><h2 id="reg-t" style="font-size:var(--fs-section); font-weight:600;">Regras que já rodam</h2><span style="font-size:var(--fs-label); color:var(--t2);">Valem para todas as lojas. Alerta aberto avisa de novo a cada 6 horas.</span></div>
+                    <span style="font-size:var(--fs-label); color:var(--t2); border:1px solid var(--border); border-radius:4px; padding:1px 6px;">Editar por loja: em breve</span>
+                  </div>
+                  <ul style="list-style:none; margin:0; padding:0;">
+                    <sc-for list="{{ regras }}" as="rg" hint-placeholder-count="7">
+                      <li style="display:grid; grid-template-columns:{{ regraCols }}; gap:12px; align-items:center; padding:12px 16px; border-bottom:1px solid var(--border-subtle);">
+                        <span style="display:flex; flex-direction:column; gap:2px;"><span style="font-size:var(--fs-dense); font-weight:500;">{{ rg.t }}</span><span style="font-size:var(--fs-label); color:var(--t2);">{{ rg.d }}</span></span>
+                        <span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ rg.borda }}; background:{{ rg.bg }}; color:{{ rg.fg }}; font-size:var(--fs-label); font-weight:500; justify-self:start;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ rg.sev }}</span>
+                        <span style="font-size:var(--fs-dense); font-variant-numeric:tabular-nums; color:var(--t1);">{{ rg.limite }}</span>
+                        <span role="switch" aria-checked="true" aria-disabled="true" aria-label="{{ rg.aria }}" style="justify-self:end; width:36px; height:20px; border-radius:10px; background:var(--ok); position:relative; display:block; opacity:.75;"><span style="position:absolute; top:2px; left:18px; width:16px; height:16px; border-radius:50%; background:var(--surface);"></span></span>
+                      </li>
+                    </sc-for>
+                  </ul>
+                </section>
+                <section aria-labelledby="nova-t" style="background:var(--surface); border:1px dashed var(--border-strong); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:12px;">
+                  <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;"><h2 id="nova-t" style="font-size:var(--fs-section); font-weight:600;">Alerta por número</h2><span style="font-size:var(--fs-label); color:var(--t2); border:1px solid var(--border-strong); border-radius:11px; padding:1px 8px;">Em breve</span></div>
+                  <p style="font-size:var(--fs-dense); color:var(--t1);">Avise quando uma métrica passar do limite, por loja.</p>
+                  <div aria-disabled="true" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:var(--fs-dense); color:var(--t2);">
+                    <span>Quando</span><span style="height:var(--h-md); display:flex; align-items:center; padding:0 12px; border:1px solid var(--border); border-radius:var(--r-control); background:var(--surface-2);">Lucro de hoje</span><span style="height:var(--h-md); display:flex; align-items:center; padding:0 12px; border:1px solid var(--border); border-radius:var(--r-control); background:var(--surface-2);">ficar abaixo de</span><span style="height:var(--h-md); display:flex; align-items:center; padding:0 12px; border:1px solid var(--border); border-radius:var(--r-control); background:var(--surface-2); font-variant-numeric:tabular-nums;">R$ 0,00</span><span>em</span><span style="height:var(--h-md); display:flex; align-items:center; padding:0 12px; border:1px solid var(--border); border-radius:var(--r-control); background:var(--surface-2);">Alto Fit</span>
+                  </div>
+                  <span style="font-size:var(--fs-label); color:var(--t2);">Outros exemplos: ROAS real abaixo de 1,5× · gasto sem venda acima de R$ 300,00 · queda de pedidos fora do normal.</span>
+                </section>
+              </sc-if>
+            </div>
+          </main>
+        </div>
+        <sc-if value="{{ mobile }}" hint-placeholder-val="{{ false }}">
+          <dc-import name="Navegacao" active="alertas" mobile="{{ true }}" theme="{{ theme }}" onTheme="{{ setTheme }}" alertas="{{ nAbertos }}" hint-size="100%,64px"></dc-import>
+        </sc-if>
+        <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+          <div role="status" aria-live="polite" style="position:absolute; right:{{ toastDir }}; left:{{ toastEsq }}; bottom:{{ toastBase }}; z-index:96; max-width:400px; background:var(--solid); color:var(--on-solid); border-radius:var(--r-card); box-shadow:var(--shadow); padding:12px 14px; display:flex; gap:12px; align-items:center; animation:xc-up 180ms var(--ease);">
+            <div style="flex:1; display:flex; flex-direction:column; gap:2px; font-size:var(--fs-dense);"><strong style="font-weight:600;">{{ toastTitulo }}</strong><span style="white-space:pre-line; opacity:.9;">{{ toastTexto }}</span></div>
+            <sc-if value="{{ toastDesfazer }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ desfazer }}" style="height:var(--h-sm); padding:0 10px; border:1px solid currentColor; background:transparent; color:inherit; border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:600; cursor:pointer;">Desfazer</button></sc-if>
+            <button type="button" onClick="{{ fecharToast }}" aria-label="Fechar aviso" style="width:24px; height:24px; display:grid; place-items:center; border:0; background:transparent; color:inherit; cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18 M6 6l12 12"></path></svg></button>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { theme: 'light', width: 'desktop', cenario: 'dados', anot: false, vw: 1400, loja: 'todas', aba: 'abertos', menu: null, silenciados: [], toast: null };
+  componentDidMount() {
+    try { const t = localStorage.getItem('xcart-mock-tema'); const w = localStorage.getItem('xcart-mock-largura'); const s = { vw: window.innerWidth }; if (t) s.theme = t; if (w) s.width = w; this.setState(s); } catch (e) { this.setState({ vw: window.innerWidth }); }
+    this._rs = () => this.setState({ vw: window.innerWidth }); window.addEventListener('resize', this._rs);
+    this._k = e => { if (e.key === 'Escape') this.setState({ menu: null }); }; window.addEventListener('keydown', this._k);
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this._rs); window.removeEventListener('keydown', this._k); clearTimeout(this._tt); }
+  renderVals() {
+    const st = this.state; const mobile = st.width === 'mobile'; const set = o => this.setState(o); const cen = st.cenario;
+    const LOJAS = [{ id: 'lumen', nome: 'Lumen Casa', dominio: 'lumencasa.com' }, { id: 'orla', nome: 'Orla Wear', dominio: 'orlawear.com' }, { id: 'kova', nome: 'Kova Home', dominio: 'kovahome.eu' }, { id: 'alto', nome: 'Alto Fit', dominio: 'altofit.co' }, { id: 'tarn', nome: 'Tarn Gear', dominio: 'tarngear.com', ativa: false, motivo: 'Sem permissão para ler pedidos' }, { id: 'selva', nome: 'Selva Kids', dominio: 'selvakids.shop', ativa: false, motivo: 'App desinstalado' }, { id: 'pico', nome: 'Pico Tools', dominio: 'picotools.com', ativa: false, motivo: 'Token inválido' }];
+    const ICO = { err: 'M7.86 2h8.28L22 7.86v8.28L16.14 22H7.86L2 16.14V7.86Z M12 8v4 M12 16h.01', warn: 'M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z M12 9v4 M12 17h.01' };
+    const ABERTOS = cen === 'vazio' ? [] : [
+      { id: 'a1', lid: 'orla', tom: 'err', sev: 'Crítico', regra: 'Rastreamento', titulo: 'Token do Meta (CAPI) recusado', loja: 'Orla Wear', detalhe: 'Nenhuma compra chega ao Meta desde 12:10. O lance automático da campanha fica sem sinal até você trocar o token.', meta: 'Aberto há 2 h 22 min · avisado 3 vezes no Telegram', cta: 'Trocar token', href: 'Saude%20dos%20pixels.dc.html' },
+      { id: 'a2', lid: 'alto', tom: 'warn', sev: 'Aviso', regra: 'Gasto', titulo: 'Gastou R$ 412,00 sem vender hoje', loja: 'Alto Fit', detalhe: 'Gasto do Meta desde 00:00 sem nenhum pedido pago. O limite da regra é R$ 300,00.', meta: 'Aberto há 1 h 05 min · avisado 1 vez', cta: 'Ver lucro da loja', href: 'Lucro.dc.html' },
+      { id: 'a3', lid: 'lumen', tom: 'warn', sev: 'Aviso', regra: 'Rastreamento', titulo: '38 compras não chegaram no Google', loja: 'Lumen Casa', detalhe: 'Nos últimos 7 dias, 38 de 182 compras foram enviadas sem o clique do Google, e o Checkout está sem rótulo.', meta: 'Aberto há 5 h 40 min · avisado 1 vez', cta: 'Ver rastreamento', href: 'Saude%20dos%20pixels.dc.html' },
+    ];
+    const visiveis = ABERTOS.filter(a => st.loja === 'todas' || a.lid === st.loja);
+    const abertosAtivos = visiveis.filter(a => !st.silenciados.includes(a.id));
+    const silenciar = (a, label) => { clearTimeout(this._tt); this.setState(s => ({ silenciados: [...s.silenciados, a.id], menu: null, toast: { t: 'Alerta silenciado', d: `${a.titulo}\n${label}, sem aviso no Telegram.`, desfazer: a.id } })); this._tt = setTimeout(() => this.setState({ toast: null }), 7000); };
+    const abertos = abertosAtivos.map(a => ({ ...a, fg: `var(--${a.tom})`, bg: `var(--${a.tom}-bg)`, borda: `var(--${a.tom}-border)`, icone: ICO[a.tom], menuOn: st.menu === a.id, abrirMenu: () => set({ menu: st.menu === a.id ? null : a.id }),
+      opcoes: [['Por 1 hora', true], ['Até amanhã de manhã', true], ['Por 24 horas', false], ['Até resolver', true]].map(([label, desab]) => ({ label, desab: desab ? 'true' : undefined, fg: desab ? 'var(--t2)' : 'var(--ink)', pick: () => !desab && silenciar(a, label) })) }));
+    const silenciados = visiveis.filter(a => st.silenciados.includes(a.id)).map(a => ({ ...a, reativar: () => set({ silenciados: st.silenciados.filter(x => x !== a.id) }) }));
+    const RES = [['Pedidos da Shopify sem atualizar', 'Aviso', 'Kova Home', '01/10, 20:15', '1 h 55 min', 'A sincronização voltou sozinha'], ['Fila de envio parada', 'Crítico', 'Lumen Casa', '30/09, 03:10', '42 min', 'Voltou depois de reiniciar a fila'], ['Gasto do Google sem atualizar: Lumen · Pesquisa', 'Aviso', 'Lumen Casa', '29/09, 09:00', '4 h 10 min', 'O script voltou a enviar'], ['Gastou R$ 380,00 sem vender hoje', 'Aviso', 'Orla Wear', '28/09, 11:30', '2 h 05 min', 'Primeira venda às 13:35'], ['App desinstalado com rastreamento ligado', 'Crítico', 'Selva Kids', '27/09, 16:20', '—', 'Loja removida do rastreamento']];
+    const resolvidos = RES.map(([titulo, sev, loja, aberto, duracao, como]) => ({ titulo, sev, loja, aberto, duracao, como }));
+    const REG = [['App desinstalado com rastreamento ligado', 'A loja removeu o app e o rastreamento parou.', 'err', 'Na hora'], ['Token do Meta recusado', 'O Meta recusou o token de conversões.', 'err', 'Na primeira recusa'], ['Compras que não chegaram', 'Compra paga sem chegar ao Meta ou ao Google.', 'warn', 'Depois de 90 min'], ['Fila de envio parada', 'Eventos esperando sem sair.', 'err', 'Depois de 30 min'], ['Pedidos da Shopify sem atualizar', 'A sincronização de pedidos parou.', 'warn', 'Depois de 2 h'], ['Gasto sem atualizar', 'O gasto do Meta ou do Google parou de chegar.', 'warn', 'Depois de 3 h'], ['Gastou sem vender', 'Gasto no dia sem nenhum pedido pago.', 'warn', 'A partir de R$ 300,00']];
+    const regras = REG.map(([t, d, tom, limite]) => ({ t, d, limite, sev: tom === 'err' ? 'Crítico' : 'Aviso', fg: `var(--${tom})`, bg: `var(--${tom}-bg)`, borda: `var(--${tom}-border)`, aria: `${t}: ligada` }));
+    const ABAS = [['abertos', 'Abertos', abertosAtivos.length, 'err'], ['resolvidos', 'Resolvidos em 7 dias', resolvidos.length, null], ['regras', 'Regras', null, null]];
+    const abas = ABAS.map(([id, label, n, tom]) => { const on = st.aba === id; return { label, n: n ? String(n) : null, nFg: tom ? `var(--${tom})` : 'var(--t1)', nBg: tom ? `var(--${tom}-bg)` : 'var(--track)', on, pick: () => set({ aba: id, menu: null }), borda: on ? 'var(--ink)' : 'transparent', fg: on ? 'var(--ink)' : 'var(--t2)', fw: on ? 600 : 400 }; });
+    const carregando = cen === 'carregando', erro = cen === 'erro'; const ok = !carregando && !erro;
+    const fw = mobile ? 375 : 1440, fh = mobile ? 812 : 900;
+    const escala = mobile ? 1 : Math.min(1, Math.max(0.4, (st.vw - 32) / fw));
+    const toast = st.toast;
+    return {
+      theme: st.theme, width: st.width, cenario: cen, anot: st.anot,
+      cenarios: [{ id: 'dados', label: 'Com alertas' }, { id: 'vazio', label: 'Nada quebrado' }, { id: 'carregando', label: 'Carregando' }, { id: 'erro', label: 'Erro' }],
+      setTheme: v => { try { localStorage.setItem('xcart-mock-tema', v); } catch (e) {} set({ theme: v }); },
+      setWidth: v => { try { localStorage.setItem('xcart-mock-largura', v); } catch (e) {} set({ width: v }); },
+      setCenario: v => set({ cenario: v, silenciados: [] }), setAnot: v => set({ anot: v }),
+      desktop: !mobile, mobile, frameDir: mobile ? 'column' : 'row', frameW: `${fw}px`, frameH: `${fh}px`, escala, wrapW: `${fw * escala}px`, wrapH: `${fh * escala}px`, frameRaio: mobile ? '28px' : '10px', pad: mobile ? '16px 16px 32px' : '24px 32px 48px',
+      lojasTopo: LOJAS.map(l => ({ ...l, ativa: l.ativa !== false })), loja: st.loja, setCtx: (k, v) => set({ [k]: v }),
+      nAbertos: abertosAtivos.length, abas, carregando, erro, tres: [1, 2, 3], tentar: () => set({ cenario: 'dados' }),
+      abaAbertos: ok && st.aba === 'abertos', abaResolvidos: ok && st.aba === 'resolvidos', abaRegras: ok && st.aba === 'regras',
+      semAbertos: abertosAtivos.length === 0, abertos, temSilenciados: silenciados.length > 0, silenciados,
+      acoesW: mobile ? '100%' : 'auto', acoesFlex: mobile ? '1' : 'none', btnH: mobile ? 'var(--h-lg)' : 'var(--h-md)',
+      cabResolvidos: [['Situação', 'left'], ['Alerta', 'left'], ['Loja', 'left'], ['Aberto em', 'left'], ['Durou', 'right'], ['Como fechou', 'left']].map(([label, align]) => ({ label, align })), resolvidos,
+      regras, regraCols: mobile ? '1fr auto' : 'minmax(0,2fr) 100px minmax(0,1fr) 40px',
+      toast: !!toast, toastTitulo: toast ? toast.t : '', toastTexto: toast ? toast.d : '', toastDesfazer: !!(toast && toast.desfazer), fecharToast: () => set({ toast: null }),
+      desfazer: () => { const id = toast.desfazer; this.setState(s => ({ silenciados: s.silenciados.filter(x => x !== id), toast: null })); },
+      toastDir: mobile ? '12px' : '24px', toastEsq: mobile ? '12px' : 'auto', toastBase: mobile ? '76px' : '24px',
+    };
+  }
+}
+</script>
+</body>
+</html>

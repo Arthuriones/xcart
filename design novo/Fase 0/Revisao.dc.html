@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div data-theme="light" style="display:flex; flex-wrap:wrap; align-items:center; gap:12px 20px; padding:10px 16px; background:var(--surface); border-bottom:1px solid var(--border); font-size:var(--fs-label); color:var(--t2);">
+  <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+    <span style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--t3);">Revisão · Fase 0</span>
+    <strong style="font-size:var(--fs-dense); color:var(--ink); font-weight:600;">{{ tela }}</strong>
+    <a href="Proposta%20Fase%200.dc.html" style="font-size:var(--fs-label);">Proposta</a>
+    <a href="Fundacao.dc.html" style="font-size:var(--fs-label);">Fundação</a>
+  </div>
+  <div style="flex:1;"></div>
+  <div style="display:flex; flex-wrap:wrap; align-items:center; gap:12px 16px;">
+    <sc-for list="{{ grupos }}" as="g" hint-placeholder-count="3">
+      <div role="group" aria-label="{{ g.label }}" style="display:flex; align-items:center; gap:6px;">
+        <span style="color:var(--t3);">{{ g.label }}</span>
+        <div style="display:flex; padding:2px; gap:2px; background:var(--track); border-radius:var(--r-control);">
+          <sc-for list="{{ g.opts }}" as="o" hint-placeholder-count="2">
+            <button type="button" aria-pressed="{{ o.on }}" onClick="{{ o.pick }}" style="height:24px; padding:0 10px; border:0; border-radius:4px; cursor:pointer; font-size:var(--fs-label); background:{{ o.bg }}; color:{{ o.fg }}; font-weight:{{ o.fw }}; box-shadow:{{ o.sh }};">{{ o.label }}</button>
+          </sc-for>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;tela&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Tela&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;width&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;desktop&quot;,&quot;mobile&quot;],&quot;default&quot;:&quot;desktop&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;cenario&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;string&quot;},&quot;cenarios&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;{id:string,label:string}[]&quot;},&quot;anot&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;onTheme&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(v:string)=&gt;void&quot;},&quot;onWidth&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(v:string)=&gt;void&quot;},&quot;onCenario&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(v:string)=&gt;void&quot;},&quot;onAnot&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(v:boolean)=&gt;void&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props;
+    const mk = (list, cur, fn) => list.map(([id, label]) => {
+      const on = id === cur;
+      return { id, label, on, pick: () => fn && fn(id), bg: on ? 'var(--surface)' : 'transparent', fg: on ? 'var(--ink)' : 'var(--t2)', fw: on ? 600 : 400, sh: on ? '0 0 0 1px var(--border)' : 'none' };
+    });
+    const grupos = [
+      { label: 'Tema', opts: mk([['light', 'Claro'], ['dark', 'Escuro']], p.theme, p.onTheme) },
+      { label: 'Largura', opts: mk([['desktop', 'Desktop 1440'], ['mobile', 'Celular 375']], p.width, p.onWidth) },
+    ];
+    if (p.cenarios && p.cenarios.length) grupos.push({ label: 'Cenário', opts: mk(p.cenarios.map(c => [c.id, c.label]), p.cenario, p.onCenario) });
+    grupos.push({ label: 'Anotações', opts: mk([['off', 'Ocultar'], ['on', 'Mostrar']], p.anot ? 'on' : 'off', v => p.onAnot && p.onAnot(v === 'on')) });
+    return { tela: p.tela ?? '', grupos };
+  }
+}
+</script>
+</body>
+</html>

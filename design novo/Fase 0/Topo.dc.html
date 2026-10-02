@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}">
+  <header style="flex:none; height:60px; display:flex; align-items:center; gap:8px; padding:0 24px; background:var(--surface); border-bottom:1px solid var(--border);">
+    <div role="group" aria-label="Contexto dos números: vale para todas as telas" style="display:flex; align-items:center; gap:8px; min-width:0;">
+      <sc-if value="{{ temLoja }}" hint-placeholder-val="{{ true }}">
+        <div style="position:relative;">
+          <button type="button" onClick="{{ abrirLoja }}" aria-haspopup="listbox" aria-expanded="{{ lojaAberta }}" style="display:flex; align-items:center; gap:8px; height:var(--h-md); padding:0 10px 0 12px; border:1px solid {{ lojaBorda }}; border-radius:var(--r-control); background:{{ lojaFundo }}; color:var(--ink); font-size:var(--fs-dense); cursor:pointer; max-width:280px;" style-hover="border-color:var(--control-border);">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--t2); flex:none;"><path d="M3 9l1.5-5h15L21 9 M4 9v11h16V9 M3 9h18 M10 20v-5h4v5"></path></svg>
+            <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ lojaRotulo }}</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--t3); flex:none;"><path d="M6 9l6 6 6-6"></path></svg>
+          </button>
+          <sc-if value="{{ lojaAberta }}" hint-placeholder-val="{{ false }}">
+            <div role="dialog" aria-label="Escolher loja" style="position:absolute; top:42px; left:0; z-index:50; width:340px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-overlay); box-shadow:var(--shadow); animation:xc-in 140ms var(--ease); overflow:hidden;">
+              <div style="padding:8px; border-bottom:1px solid var(--border);">
+                <label style="display:flex; align-items:center; gap:8px; height:var(--h-md); padding:0 10px; border:1px solid var(--control-border); border-radius:var(--r-control);">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--t3);"><path d="M11 3a8 8 0 1 0 0 16a8 8 0 1 0 0-16 M21 21l-4.3-4.3"></path></svg>
+                  <span style="position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);">Buscar loja</span>
+                  <input value="{{ buscaLoja }}" onInput="{{ digitarLoja }}" placeholder="Buscar loja" style="flex:1; border:0; outline:0; background:transparent; font-size:var(--fs-dense);">
+                </label>
+              </div>
+              <div role="listbox" aria-label="Lojas" style="max-height:340px; overflow-y:auto; padding:4px;">
+                <sc-for list="{{ gruposLoja }}" as="g" hint-placeholder-count="3">
+                  <sc-if value="{{ g.titulo }}" hint-placeholder-val="{{ true }}"><div style="padding:8px 8px 4px; font-size:var(--fs-label); color:var(--t3); font-weight:500;">{{ g.titulo }}</div></sc-if>
+                  <sc-for list="{{ g.items }}" as="l" hint-placeholder-count="4">
+                    <button type="button" role="option" aria-selected="{{ l.sel }}" onClick="{{ l.pick }}" style="width:100%; display:flex; align-items:center; gap:10px; min-height:40px; padding:4px 8px; border:0; background:{{ l.bg }}; border-radius:var(--r-control); cursor:pointer; text-align:left;" style-hover="background:var(--hover);">
+                      <span aria-hidden="true" style="width:8px; height:8px; border-radius:50%; flex:none; background:{{ l.dot }};"></span>
+                      <span style="flex:1; min-width:0; display:flex; flex-direction:column;"><span style="font-size:var(--fs-dense); color:{{ l.fg }};">{{ l.nome }}</span><span style="font-size:var(--fs-label); color:var(--t3);">{{ l.sub }}</span></span>
+                      <sc-if value="{{ l.sel }}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--ink);"><path d="M20 6L9 17l-5-5"></path></svg></sc-if>
+                    </button>
+                  </sc-for>
+                </sc-for>
+                <sc-if value="{{ lojaVazia }}" hint-placeholder-val="{{ false }}"><div style="padding:16px 8px; font-size:var(--fs-dense); color:var(--t2);">Nenhuma loja com “{{ buscaLoja }}”.</div></sc-if>
+              </div>
+              <div style="padding:8px 12px; border-top:1px solid var(--border); font-size:var(--fs-label); color:var(--t2); background:var(--surface-2);">Vale para todas as telas e fica salvo neste navegador.</div>
+            </div>
+          </sc-if>
+        </div>
+        <sc-if value="{{ lojaFiltrada }}" hint-placeholder-val="{{ false }}">
+          <button type="button" onClick="{{ limparLoja }}" aria-label="Voltar para todas as lojas" style="width:var(--h-md); height:var(--h-md); margin-left:-4px; display:grid; place-items:center; border:1px solid var(--info-border); background:var(--info-bg); color:var(--info); border-radius:var(--r-control); cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18 M6 6l12 12"></path></svg></button>
+        </sc-if>
+      </sc-if>
+      <sc-if value="{{ temPeriodo }}" hint-placeholder-val="{{ true }}">
+        <div style="position:relative;">
+          <button type="button" onClick="{{ abrirPeriodo }}" aria-haspopup="dialog" aria-expanded="{{ periodoAberto }}" style="display:flex; align-items:center; gap:8px; height:var(--h-md); padding:0 10px 0 12px; border:1px solid var(--border-strong); border-radius:var(--r-control); background:var(--surface); color:var(--ink); font-size:var(--fs-dense); cursor:pointer;" style-hover="border-color:var(--control-border);">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--t2);"><path d="M3 5h18v16H3Z M3 10h18 M8 3v4 M16 3v4"></path></svg>
+            <span style="white-space:nowrap;">{{ periodoRotulo }}</span>
+            <span style="color:var(--t2); font-variant-numeric:tabular-nums; white-space:nowrap;">{{ periodoDatas }}</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--t3);"><path d="M6 9l6 6 6-6"></path></svg>
+          </button>
+          <sc-if value="{{ periodoAberto }}" hint-placeholder-val="{{ false }}">
+            <div role="dialog" aria-label="Escolher período e comparação" style="position:absolute; top:42px; left:0; z-index:50; width:660px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-overlay); box-shadow:var(--shadow); animation:xc-in 140ms var(--ease); overflow:hidden;">
+              <div style="display:grid; grid-template-columns:168px 1fr;">
+                <div role="radiogroup" aria-label="Atalhos de período" style="padding:8px; border-right:1px solid var(--border); display:flex; flex-direction:column; gap:2px;">
+                  <sc-for list="{{ presets }}" as="pr" hint-placeholder-count="8">
+                    <button type="button" role="radio" aria-checked="{{ pr.on }}" onClick="{{ pr.pick }}" style="height:32px; padding:0 10px; border:0; border-radius:var(--r-control); background:{{ pr.bg }}; color:{{ pr.fg }}; font-weight:{{ pr.fw }}; font-size:var(--fs-dense); text-align:left; cursor:pointer;" style-hover="background:var(--hover);">{{ pr.label }}</button>
+                  </sc-for>
+                </div>
+                <div style="padding:12px 16px; display:flex; flex-direction:column; gap:12px;">
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+                    <sc-for list="{{ meses }}" as="m" hint-placeholder-count="2">
+                      <div>
+                        <div style="font-size:var(--fs-dense); font-weight:600; text-align:center; margin-bottom:8px;">{{ m.titulo }}</div>
+                        <div role="grid" aria-label="{{ m.titulo }}" style="display:grid; grid-template-columns:repeat(7, 1fr); gap:2px; text-align:center;">
+                          <sc-for list="{{ semana }}" as="d" hint-placeholder-count="7"><span style="font-size:var(--fs-label); color:var(--t3); height:24px; line-height:24px;">{{ d }}</span></sc-for>
+                          <sc-for list="{{ m.dias }}" as="c" hint-placeholder-count="35">
+                            <span role="gridcell" aria-disabled="{{ c.desab }}" aria-selected="{{ c.sel }}" title="" style="height:30px; line-height:30px; font-size:var(--fs-dense); font-variant-numeric:tabular-nums; border-radius:{{ c.raio }}; background:{{ c.bg }}; color:{{ c.fg }}; text-decoration:{{ c.risco }};">{{ c.n }}</span>
+                          </sc-for>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <div style="display:flex; gap:8px; align-items:flex-start; font-size:var(--fs-label); color:var(--t2);">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none; margin-top:1px;"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20 M12 16v-4 M12 8h.01"></path></svg>
+                    <span>Histórico desde 03/08/2026, 60 dias antes da conexão da primeira loja. Datas anteriores e futuras ficam desabilitadas.</span>
+                  </div>
+                  <div role="radiogroup" aria-label="Comparar com" style="display:flex; flex-direction:column; gap:6px; padding-top:12px; border-top:1px solid var(--border);">
+                    <span style="font-size:var(--fs-label); font-weight:600; color:var(--t1);">Comparar com</span>
+                    <sc-for list="{{ comparacoes }}" as="cp" hint-placeholder-count="4">
+                      <button type="button" role="radio" aria-checked="{{ cp.on }}" aria-disabled="{{ cp.desab }}" onClick="{{ cp.pick }}" style="display:flex; align-items:center; gap:10px; min-height:28px; border:0; background:transparent; padding:0; cursor:pointer; text-align:left;">
+                        <span aria-hidden="true" style="width:16px; height:16px; flex:none; border-radius:50%; border:1px solid var(--control-border); display:grid; place-items:center;"><span style="width:8px; height:8px; border-radius:50%; background:{{ cp.dot }};"></span></span>
+                        <span style="font-size:var(--fs-dense); color:{{ cp.fg }};">{{ cp.label }}</span>
+                        <span style="font-size:var(--fs-label); color:var(--t3); font-variant-numeric:tabular-nums;">{{ cp.sub }}</span>
+                      </button>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border-top:1px solid var(--border); background:var(--surface-2);">
+                <span style="font-size:var(--fs-label); color:var(--t2);">Vale para todas as telas com número.</span>
+                <div style="display:flex; gap:8px;">
+                  <button type="button" onClick="{{ fecharTudo }}" style="height:var(--h-sm); padding:0 12px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer;">Cancelar</button>
+                  <button type="button" onClick="{{ fecharTudo }}" style="height:var(--h-sm); padding:0 12px; border:0; background:var(--solid); color:var(--on-solid); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;">Aplicar período</button>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+        <button type="button" onClick="{{ abrirPeriodo }}" style="display:flex; align-items:center; gap:6px; height:var(--h-md); padding:0 10px; border:1px solid var(--border-strong); border-radius:var(--r-control); background:var(--surface); color:var(--t1); font-size:var(--fs-dense); cursor:pointer; white-space:nowrap;" style-hover="border-color:var(--control-border);"><span style="color:var(--t2);">vs.</span>{{ compRotulo }}</button>
+        <sc-if value="{{ anot }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--info); background:var(--info-bg); border:1px solid var(--info-border); border-radius:4px; padding:1px 6px;">#2 Parcial · intervalo livre pede aprovação</span></sc-if>
+      </sc-if>
+      <sc-if value="{{ temFixo }}" hint-placeholder-val="{{ false }}">
+        <span style="display:flex; align-items:center; gap:8px; height:var(--h-md); padding:0 12px; border:1px dashed var(--border-strong); border-radius:var(--r-control); color:var(--t1); font-size:var(--fs-dense);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--t3);"><path d="M5 11h14v10H5Z M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          {{ periodoFixo }}
+        </span>
+      </sc-if>
+      <sc-if value="{{ soLoja }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--fs-label); color:var(--t2);">{{ soLojaTexto }}</span></sc-if>
+      <sc-if value="{{ temMoeda }}" hint-placeholder-val="{{ true }}">
+        <div role="radiogroup" aria-label="Moeda do relatório" style="display:flex; padding:2px; gap:2px; height:var(--h-md); align-items:center; background:var(--track); border-radius:var(--r-control);">
+          <sc-for list="{{ moedas }}" as="mo" hint-placeholder-count="3">
+            <button type="button" role="radio" aria-checked="{{ mo.on }}" onClick="{{ mo.pick }}" style="height:30px; padding:0 10px; border:0; border-radius:4px; font-size:var(--fs-label); font-weight:{{ mo.fw }}; background:{{ mo.bg }}; color:{{ mo.fg }}; box-shadow:{{ mo.sh }}; cursor:pointer;">{{ mo.id }}</button>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+    <div style="flex:1;"></div>
+    <div style="display:flex; align-items:center; gap:10px; font-size:var(--fs-label); color:var(--t2); white-space:nowrap;">
+      <span style="display:flex; flex-direction:column; align-items:flex-end; line-height:16px;"><span aria-live="polite" style="color:var(--t1);">{{ atualizadoTexto }}</span><span>horário de São Paulo</span></span>
+      <button type="button" onClick="{{ atualizar }}" aria-label="Atualizar agora" aria-busy="{{ atualizando }}" disabled="{{ atualizando }}" style="width:var(--h-md); height:var(--h-md); display:grid; place-items:center; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); color:var(--t1); cursor:pointer;" style-hover="border-color:var(--control-border); color:var(--ink);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="animation:{{ giro }};"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8 M21 3v5h-5 M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16 M8 16H3v5"></path></svg>
+      </button>
+    </div>
+    <span aria-hidden="true" style="width:1px; height:24px; background:var(--border); margin:0 4px;"></span>
+    <button type="button" onClick="{{ abrirPaleta }}" aria-label="Buscar ou ir para (Ctrl K)" style="display:flex; align-items:center; gap:8px; height:var(--h-md); padding:0 8px 0 10px; white-space:nowrap; border:1px solid var(--border-strong); border-radius:var(--r-control); background:var(--surface-2); color:var(--t2); font-size:var(--fs-dense); cursor:pointer;" style-hover="border-color:var(--control-border);">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 3a8 8 0 1 0 0 16a8 8 0 1 0 0-16 M21 21l-4.3-4.3"></path></svg>
+      <span style="text-align:left;">Buscar</span>
+      <kbd style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--t2); border:1px solid var(--border); border-radius:4px; padding:0 5px; background:var(--surface);">⌘K</kbd>
+    </button>
+    <div style="position:relative;">
+      <button type="button" onClick="{{ abrirSino }}" aria-label="{{ sinoAria }}" aria-expanded="{{ sinoAberto }}" style="width:var(--h-md); height:var(--h-md); display:grid; place-items:center; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); color:var(--t1); cursor:pointer; position:relative;" style-hover="border-color:var(--control-border); color:var(--ink);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9 M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
+        <sc-if value="{{ naoLidas }}" hint-placeholder-val="{{ true }}"><span aria-hidden="true" style="position:absolute; top:-6px; right:-6px; min-width:18px; height:18px; padding:0 5px; border-radius:9px; background:var(--err); color:var(--surface); font-size:var(--fs-label); line-height:18px; font-weight:600;">{{ naoLidas }}</span></sc-if>
+      </button>
+      <sc-if value="{{ sinoAberto }}" hint-placeholder-val="{{ false }}">
+        <div role="dialog" aria-label="Notificações" style="position:absolute; top:42px; right:0; z-index:50; width:400px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-overlay); box-shadow:var(--shadow); animation:xc-in 140ms var(--ease); overflow:hidden;">
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px 8px;">
+            <h2 style="font-size:var(--fs-section); font-weight:600;">Notificações</h2>
+            <button type="button" onClick="{{ marcarTudo }}" style="border:0; background:transparent; color:var(--brand); font-size:var(--fs-label); cursor:pointer; padding:4px;">Marcar tudo como lido</button>
+          </div>
+          <sc-if value="{{ anot }}" hint-placeholder-val="{{ false }}"><div style="margin:0 16px 8px; font-family:var(--font-mono); font-size:var(--fs-label); color:var(--info);">#13 Parcial · lê os alertas que já existem; adiar e lido são novos</div></sc-if>
+          <div role="list" style="max-height:360px; overflow-y:auto; border-top:1px solid var(--border);">
+            <sc-for list="{{ inbox }}" as="n" hint-placeholder-count="4">
+              <div role="listitem" style="display:flex; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border-subtle); background:{{ n.bg }};">
+                <span aria-hidden="true" style="width:8px; height:8px; margin-top:6px; border-radius:50%; flex:none; background:{{ n.dot }};"></span>
+                <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:4px;">
+                  <span style="font-size:var(--fs-label); color:{{ n.sevFg }}; font-weight:600;">{{ n.sev }} <span style="color:var(--t3); font-weight:400;">· {{ n.loja }} · {{ n.quando }}</span></span>
+                  <span style="font-size:var(--fs-dense); color:var(--ink); font-weight:{{ n.fw }};">{{ n.titulo }}</span>
+                  <div style="display:flex; gap:12px; margin-top:2px;">
+                    <a href="{{ n.href }}" style="font-size:var(--fs-label); font-weight:500;">Resolver</a>
+                    <button type="button" onClick="{{ n.adiar }}" style="border:0; background:transparent; padding:0; color:var(--t2); font-size:var(--fs-label); cursor:pointer;">Adiar 1 h</button>
+                  </div>
+                </div>
+                <sc-if value="{{ n.novo }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--fs-label); color:var(--info); font-weight:500;">Nova</span></sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex; justify-content:space-between; padding:10px 16px; background:var(--surface-2);">
+            <a href="Alertas.dc.html" style="font-size:var(--fs-label); font-weight:500;">Ver todos os alertas</a>
+            <a href="Integracoes.dc.html" style="font-size:var(--fs-label);">Canais de aviso</a>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </header>
+</sc-if>
+<sc-if value="{{ mobile }}" hint-placeholder-val="{{ false }}">
+  <header style="flex:none; background:var(--surface); border-bottom:1px solid var(--border);">
+    <div style="height:56px; display:flex; align-items:center; gap:4px; padding:0 4px 0 16px;">
+      <a href="Lucro.dc.html" aria-label="xcart, ir para Lucro" style="font-size:16px; font-weight:700; letter-spacing:-0.02em; color:var(--ink); text-decoration:none; margin-right:8px;">x</a>
+      <h1 style="flex:1; min-width:0; font-size:var(--fs-section); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ titulo }}</h1>
+      <button type="button" onClick="{{ abrirPaleta }}" aria-label="Buscar ou ir para" style="width:var(--h-lg); height:var(--h-lg); display:grid; place-items:center; border:0; background:transparent; color:var(--t1); border-radius:var(--r-control); cursor:pointer;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 3a8 8 0 1 0 0 16a8 8 0 1 0 0-16 M21 21l-4.3-4.3"></path></svg></button>
+      <a href="Alertas.dc.html" aria-label="{{ sinoAria }}" style="width:var(--h-lg); height:var(--h-lg); display:grid; place-items:center; color:var(--t1); position:relative;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9 M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg><sc-if value="{{ naoLidas }}" hint-placeholder-val="{{ true }}"><span aria-hidden="true" style="position:absolute; top:6px; right:4px; min-width:18px; height:18px; padding:0 5px; border-radius:9px; background:var(--err); color:var(--surface); font-size:var(--fs-label); line-height:18px; font-weight:600; text-align:center;">{{ naoLidas }}</span></sc-if></a>
+    </div>
+    <sc-if value="{{ temContexto }}" hint-placeholder-val="{{ true }}">
+      <div style="padding:0 16px 12px;">
+        <button type="button" onClick="{{ abrirSheet }}" aria-haspopup="dialog" style="width:100%; display:flex; align-items:center; gap:8px; min-height:var(--h-lg); padding:0 12px; border:1px solid {{ lojaBorda }}; background:{{ lojaFundo }}; border-radius:var(--r-control); font-size:var(--fs-dense); color:var(--ink); cursor:pointer; text-align:left;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--t2); flex:none;"><path d="M4 21v-7 M4 10V3 M12 21v-9 M12 8V3 M20 21v-5 M20 12V3 M1 14h6 M9 8h6 M17 16h6"></path></svg>
+          <span style="flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ resumoMobile }}</span>
+          <span style="font-size:var(--fs-label); color:var(--t3); white-space:nowrap;">{{ atualizadoCurto }}</span>
+        </button>
+      </div>
+    </sc-if>
+  </header>
+  <sc-if value="{{ sheetAberto }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute; inset:0; z-index:60; display:flex; flex-direction:column; justify-content:flex-end;">
+      <div onClick="{{ fecharTudo }}" style="position:absolute; inset:0; background:var(--scrim);"></div>
+      <div role="dialog" aria-modal="true" aria-label="Contexto dos números" style="position:relative; max-height:90%; display:flex; flex-direction:column; background:var(--surface); border-radius:var(--r-overlay) var(--r-overlay) 0 0; animation:xc-up 180ms var(--ease);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--border);">
+          <div><h2 style="font-size:var(--fs-section); font-weight:600;">Contexto dos números</h2><p style="font-size:var(--fs-label); color:var(--t2);">Vale para todas as telas.</p></div>
+          <button type="button" onClick="{{ fecharTudo }}" aria-label="Fechar" style="width:var(--h-lg); height:var(--h-lg); display:grid; place-items:center; border:0; background:transparent; color:var(--t1); cursor:pointer;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18 M6 6l12 12"></path></svg></button>
+        </div>
+        <div style="overflow-y:auto; padding:12px 16px; display:flex; flex-direction:column; gap:20px;">
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <span style="font-size:var(--fs-label); font-weight:600; color:var(--t1);">Loja</span>
+            <sc-for list="{{ gruposLoja }}" as="g" hint-placeholder-count="3">
+              <sc-if value="{{ g.titulo }}" hint-placeholder-val="{{ true }}"><div style="padding:8px 0 2px; font-size:var(--fs-label); color:var(--t3);">{{ g.titulo }}</div></sc-if>
+              <sc-for list="{{ g.items }}" as="l" hint-placeholder-count="4">
+                <button type="button" role="radio" aria-checked="{{ l.sel }}" onClick="{{ l.pick }}" style="display:flex; align-items:center; gap:12px; min-height:var(--h-lg); padding:0 8px; border:0; border-radius:var(--r-control); background:{{ l.bg }}; text-align:left; cursor:pointer;">
+                  <span aria-hidden="true" style="width:8px; height:8px; border-radius:50%; background:{{ l.dot }};"></span>
+                  <span style="flex:1; display:flex; flex-direction:column;"><span style="font-size:var(--fs-body); color:{{ l.fg }};">{{ l.nome }}</span><span style="font-size:var(--fs-label); color:var(--t3);">{{ l.sub }}</span></span>
+                </button>
+              </sc-for>
+            </sc-for>
+          </div>
+          <sc-if value="{{ temPeriodo }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <span style="font-size:var(--fs-label); font-weight:600; color:var(--t1);">Período</span>
+              <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                <sc-for list="{{ presets }}" as="pr" hint-placeholder-count="8">
+                  <button type="button" aria-pressed="{{ pr.on }}" onClick="{{ pr.pick }}" style="height:var(--h-lg); padding:0 14px; border:1px solid {{ pr.borda }}; border-radius:22px; background:{{ pr.bg }}; color:{{ pr.fg }}; font-size:var(--fs-dense); font-weight:{{ pr.fw }}; cursor:pointer;">{{ pr.label }}</button>
+                </sc-for>
+              </div>
+              <span style="font-size:var(--fs-label); color:var(--t2);">Histórico desde 03/08/2026.</span>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <span style="font-size:var(--fs-label); font-weight:600; color:var(--t1);">Comparar com</span>
+              <sc-for list="{{ comparacoes }}" as="cp" hint-placeholder-count="4">
+                <button type="button" role="radio" aria-checked="{{ cp.on }}" onClick="{{ cp.pick }}" style="display:flex; align-items:center; gap:12px; min-height:var(--h-lg); border:0; background:transparent; padding:0; text-align:left; cursor:pointer;">
+                  <span aria-hidden="true" style="width:20px; height:20px; border-radius:50%; border:1px solid var(--control-border); display:grid; place-items:center;"><span style="width:10px; height:10px; border-radius:50%; background:{{ cp.dot }};"></span></span>
+                  <span style="display:flex; flex-direction:column;"><span style="font-size:var(--fs-body); color:{{ cp.fg }};">{{ cp.label }}</span><span style="font-size:var(--fs-label); color:var(--t3);">{{ cp.sub }}</span></span>
+                </button>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{ temFixo }}" hint-placeholder-val="{{ false }}"><p style="font-size:var(--fs-dense); color:var(--t1);">{{ periodoFixo }}</p></sc-if>
+          <sc-if value="{{ temMoeda }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <span style="font-size:var(--fs-label); font-weight:600; color:var(--t1);">Moeda do relatório</span>
+              <div role="radiogroup" aria-label="Moeda" style="display:flex; padding:2px; gap:2px; background:var(--track); border-radius:var(--r-control);">
+                <sc-for list="{{ moedas }}" as="mo" hint-placeholder-count="3"><button type="button" role="radio" aria-checked="{{ mo.on }}" onClick="{{ mo.pick }}" style="flex:1; height:40px; border:0; border-radius:4px; background:{{ mo.bg }}; color:{{ mo.fg }}; box-shadow:{{ mo.sh }}; font-weight:{{ mo.fw }}; cursor:pointer;">{{ mo.id }}</button></sc-for>
+              </div>
+            </div>
+          </sc-if>
+          <p style="font-size:var(--fs-label); color:var(--t2);">Horário de São Paulo · {{ atualizadoTexto }}</p>
+        </div>
+        <div style="padding:12px 16px; border-top:1px solid var(--border);">
+          <button type="button" onClick="{{ fecharTudo }}" style="width:100%; height:var(--h-lg); border:0; background:var(--solid); color:var(--on-solid); border-radius:var(--r-control); font-size:var(--fs-body); font-weight:500; cursor:pointer;">Aplicar</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</sc-if>
+<sc-if value="{{ paletaAberta }}" hint-placeholder-val="{{ false }}">
+  <div style="position:absolute; inset:0; z-index:80; display:flex; justify-content:center; align-items:flex-start; padding:{{ paletaPad }};">
+    <div onClick="{{ fecharTudo }}" style="position:absolute; inset:0; background:var(--scrim);"></div>
+    <div role="dialog" aria-modal="true" aria-label="Buscar ou ir para" style="position:relative; width:100%; max-width:640px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-overlay); box-shadow:var(--shadow); overflow:hidden; animation:xc-in 140ms var(--ease);">
+      <div style="display:flex; align-items:center; gap:10px; padding:0 16px; height:52px; border-bottom:1px solid var(--border);">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--t2);"><path d="M11 3a8 8 0 1 0 0 16a8 8 0 1 0 0-16 M21 21l-4.3-4.3"></path></svg>
+        <input ref="{{ refBusca }}" value="{{ q }}" onInput="{{ digitar }}" onKeyDown="{{ teclaPaleta }}" aria-label="Buscar telas, lojas, pedidos ou ações" placeholder="Buscar telas, lojas, pedidos ou ações…" style="flex:1; border:0; outline:0; background:transparent; font-size:var(--fs-body); color:var(--ink);">
+        <kbd style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--t2); border:1px solid var(--border); border-radius:4px; padding:0 5px;">Esc</kbd>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:6px; padding:8px 16px; border-bottom:1px solid var(--border-subtle);">
+        <span style="font-size:var(--fs-label); color:var(--t3); align-self:center;">Filtros:</span>
+        <sc-for list="{{ operadores }}" as="op" hint-placeholder-count="5"><button type="button" onClick="{{ op.pick }}" style="height:24px; padding:0 8px; border:1px solid var(--border); border-radius:4px; background:var(--surface-2); font-family:var(--font-mono); font-size:var(--fs-label); color:var(--t1); cursor:pointer;">{{ op.t }}</button></sc-for>
+        <sc-if value="{{ anot }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--info);">#18 navegação e ações: Front · busca de pedido/SKU: Parcial</span></sc-if>
+      </div>
+      <div role="listbox" aria-label="Resultados" style="max-height:380px; overflow-y:auto; padding:6px;">
+        <sc-for list="{{ resultados }}" as="gr" hint-placeholder-count="3">
+          <div style="padding:8px 10px 4px; font-size:var(--fs-label); color:var(--t3); font-weight:500;">{{ gr.titulo }}</div>
+          <sc-for list="{{ gr.items }}" as="r" hint-placeholder-count="4">
+            <a href="{{ r.href }}" role="option" aria-selected="{{ r.on }}" onMouseEnter="{{ r.hover }}" onClick="{{ r.click }}" style="display:flex; align-items:center; gap:10px; height:40px; padding:0 10px; border-radius:var(--r-control); background:{{ r.bg }}; color:var(--ink); text-decoration:none; font-size:var(--fs-dense);" style-hover="text-decoration:none;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--t2);"><path d="{{ r.icon }}"></path></svg>
+              <span style="flex:1;">{{ r.label }}</span>
+              <span style="font-size:var(--fs-label); color:var(--t3);">{{ r.sub }}</span>
+              <sc-if value="{{ r.kbd }}" hint-placeholder-val="{{ false }}"><kbd style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--t2); border:1px solid var(--border); border-radius:4px; padding:0 5px;">{{ r.kbd }}</kbd></sc-if>
+            </a>
+          </sc-for>
+        </sc-for>
+        <sc-if value="{{ semResultado }}" hint-placeholder-val="{{ false }}"><div style="padding:24px 12px; text-align:center; font-size:var(--fs-dense); color:var(--t2);">Nada encontrado para “{{ q }}”. Tente sku:, loja: ou pedido:.</div></sc-if>
+      </div>
+      <div style="display:flex; gap:16px; padding:8px 16px; border-top:1px solid var(--border); background:var(--surface-2); font-size:var(--fs-label); color:var(--t2);">
+        <span>↑ ↓ navegar</span><span>Enter abrir</span><span>g + letra ir direto</span><span>? todos os atalhos</span>
+      </div>
+    </div>
+  </div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;mobile&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;titulo&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Lucro&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;contexto&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;completo&quot;,&quot;loja&quot;,&quot;fixo&quot;,&quot;nenhum&quot;],&quot;default&quot;:&quot;completo&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;periodoFixo&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Últimos 7 dias · período fixo desta tela&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;soLojaTexto&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Esta tela usa só a loja.&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;anot&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;lojas&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;object[]&quot;},&quot;loja&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;string&quot;},&quot;periodo&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;string&quot;},&quot;comparar&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;string&quot;},&quot;moeda&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;string&quot;},&quot;atualizado&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;string&quot;},&quot;onCtx&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(k:string,v:string)=&gt;void&quot;},&quot;onAtualizar&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;()=&gt;void&quot;},&quot;$preview&quot;:{&quot;width&quot;:&quot;1208px&quot;,&quot;height&quot;:&quot;640px&quot;}}">
+class Component extends DCLogic {
+  state = { pop: null, q: '', idx: 0, buscaLoja: '', atualizando: false, hora: null, lidas: [], adiadas: [] };
+  refBusca = React.createRef();
+  componentDidMount() {
+    this._g = 0;
+    this._key = (e) => {
+      const tag = (e.target && e.target.tagName) || '';
+      const digitando = tag === 'INPUT' || tag === 'TEXTAREA';
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); this.abrir('paleta'); return; }
+      if (e.key === 'Escape') { this.setState({ pop: null }); return; }
+      if (digitando) return;
+      if (e.key === '?') { this.abrir('paleta'); return; }
+      const now = Date.now();
+      if (e.key === 'g') { this._g = now; return; }
+      if (now - this._g < 900) {
+        const mapa = { l: 'Lucro.dc.html', s: 'Saude%20dos%20pixels.dc.html', e: 'Eventos%20ao%20vivo.dc.html', a: 'Alertas.dc.html', o: 'Lojas.dc.html', i: 'Integracoes.dc.html' };
+        if (mapa[e.key]) location.href = mapa[e.key];
+        this._g = 0;
+      }
+    };
+    window.addEventListener('keydown', this._key);
+  }
+  componentWillUnmount() { window.removeEventListener('keydown', this._key); clearTimeout(this._t); }
+  abrir(p) {
+    this.setState(s => ({ pop: s.pop === p ? null : p, q: p === 'paleta' ? '' : s.q, idx: 0 }), () => {
+      if (this.state.pop === 'paleta') setTimeout(() => this.refBusca.current && this.refBusca.current.focus(), 30);
+    });
+  }
+  renderVals() {
+    const p = this.props;
+    const st = this.state;
+    const ctx = p.contexto ?? 'completo';
+    const lojas = p.lojas ?? [];
+    const loja = p.loja ?? 'todas';
+    const periodo = p.periodo ?? '30d';
+    const comparar = p.comparar ?? 'anterior';
+    const moeda = p.moeda ?? 'BRL';
+    const set = (k, v) => p.onCtx && p.onCtx(k, v);
+    const lojaSel = lojas.find(l => l.id === loja);
+    const lojaFiltrada = !!lojaSel;
+    const PER = {
+      hoje: ['Hoje', '02/10', ['2026-10-02', '2026-10-02'], 'Ontem · 01/10'],
+      ontem: ['Ontem', '01/10', ['2026-10-01', '2026-10-01'], 'Anteontem · 30/09'],
+      '7d': ['Últimos 7 dias', '26/09–02/10', ['2026-09-26', '2026-10-02'], '19/09–25/09'],
+      '30d': ['Últimos 30 dias', '03/09–02/10', ['2026-09-03', '2026-10-02'], '04/08–02/09'],
+      mes: ['Este mês', '01/10–02/10', ['2026-10-01', '2026-10-02'], '01/09–02/09'],
+      mes_passado: ['Mês passado', '01/09–30/09', ['2026-09-01', '2026-09-30'], '01/08–31/08 · sem dado antes de 03/08'],
+      ano: ['Este ano', '01/01–02/10', ['2026-01-01', '2026-10-02'], '01/01–02/10/2025 · sem dado'],
+      custom: ['Personalizado', 'escolha no calendário', ['2026-09-10', '2026-09-24'], 'período anterior de mesmo tamanho'],
+    };
+    const per = PER[periodo] || PER['30d'];
+    const presets = Object.entries(PER).map(([id, v]) => {
+      const on = id === periodo;
+      return { label: v[0], on, pick: () => set('periodo', id), bg: on ? 'var(--nav-active)' : 'transparent', fg: on ? 'var(--ink)' : 'var(--t1)', fw: on ? 600 : 400, borda: on ? 'var(--ink)' : 'var(--border-strong)' };
+    });
+    const COMP = [
+      ['anterior', 'Período anterior', per[3], false],
+      ['ano', 'Mesmo período do ano passado', 'sem dado antes de 03/08/2026', true],
+      ['custom', 'Personalizado', 'escolha no calendário', false],
+      ['nenhum', 'Sem comparação', '', false],
+    ];
+    const comparacoes = COMP.map(([id, label, sub, semDado]) => {
+      const on = id === comparar;
+      return { label, sub, on, desab: semDado ? 'true' : undefined, pick: () => set('comparar', id), dot: on ? 'var(--ink)' : 'transparent', fg: semDado ? 'var(--t2)' : 'var(--ink)' };
+    });
+    const compRotulo = { anterior: 'período anterior', ano: 'ano passado', custom: 'personalizado', nenhum: 'sem comparação' }[comparar];
+    // calendário
+    const [ini, fim] = per[2];
+    const HIST = '2026-08-03', HOJE = '2026-10-02';
+    const mesNome = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+    const pad = n => String(n).padStart(2, '0');
+    const meses = [[2026, 8], [2026, 9]].map(([a, m]) => {
+      const primeiro = new Date(a, m, 1).getDay();
+      const nd = new Date(a, m + 1, 0).getDate();
+      const dias = [];
+      for (let i = 0; i < primeiro; i++) dias.push({ n: '', bg: 'transparent', fg: 'transparent', raio: '0', risco: 'none' });
+      for (let d = 1; d <= nd; d++) {
+        const iso = `${a}-${pad(m + 1)}-${pad(d)}`;
+        const desab = iso > HOJE || iso < HIST;
+        const dentro = iso >= ini && iso <= fim;
+        const ponta = iso === ini || iso === fim;
+        dias.push({ n: d, desab: desab ? 'true' : undefined, sel: dentro ? 'true' : undefined,
+          bg: ponta ? 'var(--solid)' : dentro ? 'var(--info-bg)' : 'transparent',
+          fg: ponta ? 'var(--on-solid)' : desab ? 'var(--t4)' : 'var(--ink)',
+          raio: ponta ? 'var(--r-control)' : dentro ? '0' : 'var(--r-control)', risco: iso < HIST ? 'line-through' : 'none' });
+      }
+      return { titulo: `${mesNome[m]} ${a}`, dias };
+    });
+    // lojas
+    const bl = st.buscaLoja.trim().toLowerCase();
+    const filt = l => !bl || (l.nome + ' ' + l.dominio).toLowerCase().includes(bl);
+    const mkL = (l) => {
+      const sel = l.id === loja;
+      return { nome: l.nome, sub: l.sub || l.dominio, sel: sel ? 'true' : undefined, bg: sel ? 'var(--nav-active)' : 'transparent', fg: l.ativa === false ? 'var(--t2)' : 'var(--ink)', dot: l.dot || 'var(--ok)', pick: () => { set('loja', l.id); this.setState({ pop: null, buscaLoja: '' }); } };
+    };
+    const ativas = lojas.filter(l => l.ativa !== false).filter(filt);
+    const inativas = lojas.filter(l => l.ativa === false).filter(filt);
+    const gruposLoja = [];
+    if (!bl || 'todas as lojas'.includes(bl)) gruposLoja.push({ titulo: '', items: [mkL({ id: 'todas', nome: 'Todas as lojas', sub: `${lojas.filter(l => l.ativa !== false).length} ativas somadas em ${moeda}`, dot: 'var(--ink)' })] });
+    if (ativas.length) gruposLoja.push({ titulo: `Ativas (${ativas.length})`, items: ativas.map(mkL) });
+    if (inativas.length) gruposLoja.push({ titulo: `Sem acesso (${inativas.length}) · ficam fora dos totais`, items: inativas.map(l => mkL({ ...l, sub: l.motivo, dot: 'var(--t4)' })) });
+    const moedas = ['BRL', 'USD', 'EUR'].map(id => { const on = id === moeda; return { id, on, pick: () => set('moeda', id), bg: on ? 'var(--surface)' : 'transparent', fg: on ? 'var(--ink)' : 'var(--t2)', fw: on ? 600 : 400, sh: on ? '0 0 0 1px var(--border)' : 'none' }; });
+    // paleta
+    const Ic = {
+      tela: 'M3 3h18v18H3Z M3 9h18 M9 21V9', loja: 'M3 9l1.5-5h15L21 9 M4 9v11h16V9 M3 9h18 M10 20v-5h4v5', acao: 'M13 2L3 14h9l-1 8 10-12h-9l1-8Z', busca: 'M11 3a8 8 0 1 0 0 16a8 8 0 1 0 0-16 M21 21l-4.3-4.3', tecla: 'M2 6h20v12H2Z M6 10h.01 M10 10h.01 M14 10h.01 M18 10h.01 M7 14h10',
+    };
+    const telas = [['Lucro', 'g l', 'Lucro.dc.html'], ['Saúde dos pixels', 'g s', 'Saude%20dos%20pixels.dc.html'], ['Eventos ao vivo', 'g e', 'Eventos%20ao%20vivo.dc.html'], ['Alertas', 'g a', 'Alertas.dc.html'], ['Lojas', 'g o', 'Lojas.dc.html'], ['Integrações', 'g i', 'Integracoes.dc.html'], ['Custos e taxas', 'g c', 'Casca.dc.html'], ['Importar', 'g m', 'Casca.dc.html']];
+    const acoes = [['Atualizar agora', '', '#'], ['Trocar de loja', '', '#'], ['Importar produto', '', 'Casca.dc.html'], ['Conectar loja', '', 'Lojas.dc.html']];
+    const q = st.q.trim().toLowerCase();
+    let grupos = [];
+    const opMatch = q.match(/^(sku|loja|pedido|status|valor):(.*)$/);
+    if (opMatch) {
+      grupos.push({ titulo: 'Buscar', items: [{ label: `${opMatch[1]}:${opMatch[2] || '…'}`, sub: opMatch[1] === 'loja' ? 'lojas conectadas' : 'pedidos, SKUs e eventos sincronizados', icon: Ic.busca, href: '#' }] });
+    } else {
+      const f = arr => arr.filter(x => !q || x.label.toLowerCase().includes(q));
+      grupos = [
+        { titulo: 'Ir para', items: f(telas.map(([label, kbd, href]) => ({ label, kbd, href, icon: Ic.tela, sub: '' }))) },
+        { titulo: 'Lojas', items: f(lojas.filter(l => l.ativa !== false).map(l => ({ label: l.nome, sub: l.dominio, icon: Ic.loja, href: '#', loja: l.id }))) },
+        { titulo: 'Ações', items: f(acoes.map(([label, kbd, href]) => ({ label, kbd, href, icon: Ic.acao, sub: '' }))) },
+      ].filter(g => g.items.length);
+    }
+    let k = 0;
+    const plano = [];
+    const resultados = grupos.map(g => ({ titulo: g.titulo, items: g.items.map(it => {
+      const i = k++; plano.push(it);
+      const on = i === st.idx;
+      return { ...it, kbd: it.kbd || null, on: on ? 'true' : undefined, bg: on ? 'var(--nav-active)' : 'transparent', hover: () => this.setState({ idx: i }),
+        click: (e) => { if (it.loja) { e.preventDefault(); set('loja', it.loja); this.setState({ pop: null }); } else if (it.href === '#') { e.preventDefault(); this.setState({ pop: null }); } } };
+    }) }));
+    const teclaPaleta = (e) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); this.setState(s => ({ idx: Math.min(plano.length - 1, s.idx + 1) })); }
+      if (e.key === 'ArrowUp') { e.preventDefault(); this.setState(s => ({ idx: Math.max(0, s.idx - 1) })); }
+      if (e.key === 'Enter') { const it = plano[st.idx]; if (it) { if (it.loja) { set('loja', it.loja); this.setState({ pop: null }); } else if (it.href && it.href !== '#') location.href = it.href; else this.setState({ pop: null }); } }
+    };
+    const operadores = ['sku:', 'loja:', 'pedido:', 'status:', 'valor:>100'].map(t => ({ t, pick: () => { this.setState({ q: t, idx: 0 }); this.refBusca.current && this.refBusca.current.focus(); } }));
+    // inbox
+    const INBOX = [
+      { id: 1, sev: 'Crítico', titulo: 'Token do Meta (CAPI) recusado', loja: 'Orla Wear', quando: 'há 2 h', href: 'Saude%20dos%20pixels.dc.html' },
+      { id: 2, sev: 'Aviso', titulo: '38 compras não chegaram no Google', loja: 'Lumen Casa', quando: 'há 5 h', href: 'Saude%20dos%20pixels.dc.html' },
+      { id: 3, sev: 'Aviso', titulo: 'Gastou R$ 412,00 sem vender hoje', loja: 'Alto Fit', quando: 'há 1 h', href: 'Integracoes.dc.html' },
+      { id: 4, sev: 'Resolvido', titulo: 'Pedidos da Shopify sem atualizar', loja: 'Kova Home', quando: 'ontem, 22:10', href: 'Lojas.dc.html', lida: true },
+    ];
+    const cores = { 'Crítico': ['var(--err)', 'var(--err)'], 'Aviso': ['var(--warn)', 'var(--warn)'], 'Resolvido': ['var(--ok)', 'var(--ok)'] };
+    const visiveis = INBOX.filter(n => !st.adiadas.includes(n.id));
+    const inbox = visiveis.map(n => {
+      const lida = n.lida || st.lidas.includes(n.id);
+      return { ...n, dot: cores[n.sev][0], sevFg: cores[n.sev][1], fw: lida ? 400 : 600, bg: lida ? 'transparent' : 'var(--surface-2)', novo: !lida, adiar: () => this.setState(s => ({ adiadas: [...s.adiadas, n.id] })) };
+    });
+    const naoLidas = inbox.filter(n => n.novo).length;
+    const hora = st.hora || p.atualizado || '14:32';
+    const lojaRotulo = lojaFiltrada ? `Loja: ${lojaSel.nome}` : 'Todas as lojas';
+    const resumo = [lojaFiltrada ? lojaSel.nome : 'Todas as lojas'];
+    if (ctx === 'completo') resumo.push(per[0], moeda);
+    if (ctx === 'fixo') resumo.push('7 dias fixos');
+    return {
+      desktop: !p.mobile, mobile: !!p.mobile, anot: !!p.anot, titulo: p.titulo ?? '',
+      temLoja: ctx !== 'nenhum', temPeriodo: ctx === 'completo', temMoeda: ctx === 'completo', temFixo: ctx === 'fixo',
+      soLoja: ctx === 'loja', soLojaTexto: p.soLojaTexto ?? 'Esta tela usa só a loja.',
+      temContexto: ctx !== 'nenhum',
+      periodoFixo: p.periodoFixo ?? 'Últimos 7 dias · período fixo desta tela',
+      lojaRotulo, lojaFiltrada, lojaBorda: lojaFiltrada ? 'var(--info-border)' : 'var(--border-strong)', lojaFundo: lojaFiltrada ? 'var(--info-bg)' : 'var(--surface)',
+      limparLoja: () => set('loja', 'todas'),
+      lojaAberta: st.pop === 'loja', abrirLoja: () => this.abrir('loja'),
+      buscaLoja: st.buscaLoja, digitarLoja: e => this.setState({ buscaLoja: e.target.value }), gruposLoja, lojaVazia: gruposLoja.length === 0,
+      periodoAberto: st.pop === 'periodo', abrirPeriodo: () => this.abrir('periodo'),
+      periodoRotulo: per[0], periodoDatas: per[1], presets, meses, semana: ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'], comparacoes, compRotulo, moedas,
+      atualizadoTexto: st.atualizando ? 'Atualizando…' : `Atualizado às ${hora}`, atualizadoCurto: st.atualizando ? '…' : hora,
+      atualizando: st.atualizando, giro: st.atualizando ? 'xc-spin 900ms linear infinite' : 'none',
+      atualizar: () => { this.setState({ atualizando: true }); this._t = setTimeout(() => { const d = new Date(); this.setState({ atualizando: false, hora: `${pad(d.getHours())}:${pad(d.getMinutes())}` }); p.onAtualizar && p.onAtualizar(); }, 1200); },
+      paletaAberta: st.pop === 'paleta', abrirPaleta: () => this.abrir('paleta'), paletaPad: p.mobile ? '8px' : '88px 24px',
+      q: st.q, digitar: e => this.setState({ q: e.target.value, idx: 0 }), teclaPaleta, refBusca: this.refBusca, operadores, resultados, semResultado: resultados.length === 0,
+      sinoAberto: st.pop === 'sino', abrirSino: () => this.abrir('sino'), inbox, naoLidas: naoLidas ? String(naoLidas) : null,
+      sinoAria: naoLidas ? `Notificações, ${naoLidas} não lidas` : 'Notificações',
+      marcarTudo: () => this.setState({ lidas: INBOX.map(n => n.id) }),
+      sheetAberto: st.pop === 'sheet', abrirSheet: () => this.abrir('sheet'),
+      resumoMobile: resumo.join(' · '),
+      fecharTudo: () => this.setState({ pop: null }),
+    };
+  }
+}
+</script>
+</body>
+</html>

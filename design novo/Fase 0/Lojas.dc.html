@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <title>xcart · Lojas (Fase 0)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Public+Sans:wght@400;500;600;700&amp;display=swap">
+  <link rel="stylesheet" href="xcart-tokens.css">
+</helmet>
+<div style="min-height:100vh; background:#e9e8e5; display:flex; flex-direction:column;">
+  <dc-import name="Revisao" tela="Lojas e detalhe da loja" theme="{{ theme }}" width="{{ width }}" cenario="{{ cenario }}" cenarios="{{ cenarios }}" anot="{{ anot }}" onTheme="{{ setTheme }}" onWidth="{{ setWidth }}" onCenario="{{ setCenario }}" onAnot="{{ setAnot }}" hint-size="100%,48px"></dc-import>
+  <div style="flex:1; padding:24px 16px 48px; display:flex; justify-content:center;">
+    <div style="width:{{ wrapW }}; height:{{ wrapH }}; flex:none;">
+      <div data-theme="{{ theme }}" style="position:relative; width:{{ frameW }}; height:{{ frameH }}; transform:scale({{ escala }}); transform-origin:top left; overflow:hidden; border-radius:{{ frameRaio }}; box-shadow:0 0 0 1px rgba(0,0,0,.12), 0 24px 64px rgba(0,0,0,.16); background:var(--bg); display:flex; flex-direction:{{ frameDir }};">
+        <a href="#conteudo" style="position:absolute; left:-9999px; top:8px; z-index:100; background:var(--solid); color:var(--on-solid); padding:8px 12px; border-radius:var(--r-control);" style-focus="left:8px;">Pular para o conteúdo</a>
+        <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}">
+          <dc-import name="Navegacao" active="lojas" mobile="{{ false }}" theme="{{ theme }}" onTheme="{{ setTheme }}" alertas="{{ 3 }}" lojas="{{ nAtivas }}" hint-size="232px,100%" style="height:100%; flex:none;"></dc-import>
+        </sc-if>
+        <div style="flex:1; min-width:0; min-height:0; display:flex; flex-direction:column;">
+          <dc-import name="Topo" mobile="{{ mobile }}" titulo="{{ tituloTopo }}" contexto="completo" anot="{{ anot }}" lojas="{{ lojasTopo }}" loja="{{ loja }}" periodo="{{ periodo }}" comparar="{{ comparar }}" moeda="{{ moeda }}" onCtx="{{ setCtx }}" hint-size="100%,60px"></dc-import>
+          <main id="conteudo" tabindex="-1" style="flex:1; min-height:0; overflow-y:auto; background:var(--bg);">
+            <div style="max-width:1280px; margin:0 auto; padding:{{ pad }}; display:flex; flex-direction:column; gap:24px;">
+
+              <sc-if value="{{ vLista }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+                  <div style="display:flex; flex-direction:column; gap:4px; max-width:720px;">
+                    <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}"><h1 style="font-size:var(--fs-page); line-height:28px; font-weight:600; letter-spacing:-0.01em;">Lojas</h1></sc-if>
+                    <p style="font-size:var(--fs-body); color:var(--t2); text-wrap:pretty;">As lojas Shopify conectadas, a saúde de cada conexão e o que fazer com as que você não usa mais.</p>
+                  </div>
+                  <button type="button" onClick="{{ abrirConectar }}" style="display:flex; align-items:center; gap:8px; height:var(--h-md); padding:0 16px; border:0; background:var(--solid); color:var(--on-solid); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;" style-hover="background:var(--solid-hover);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14 M5 12h14"></path></svg>Conectar loja</button>
+                </div>
+
+                <sc-if value="{{ voltou }}" hint-placeholder-val="{{ false }}">
+                  <div role="status" style="display:flex; gap:12px; padding:14px 16px; background:var(--ok-bg); border:1px solid var(--ok-border); border-radius:var(--r-card); align-items:flex-start; flex-wrap:wrap;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--ok); flex:none;"><path d="M20 6L9 17l-5-5"></path></svg>
+                    <div style="flex:1; min-width:240px; display:flex; flex-direction:column; gap:6px;">
+                      <strong style="font-size:var(--fs-dense); color:var(--ok);">Kova Home conectada</strong>
+                      <span style="font-size:var(--fs-dense); color:var(--ink);">A Shopify autorizou o xcart. Os pedidos dos últimos 60 dias começam a chegar em alguns minutos. Próximos passos:</span>
+                      <div style="display:flex; gap:16px; flex-wrap:wrap; font-size:var(--fs-dense);"><a href="Integracoes.dc.html">Ligar contas de anúncio</a><a href="Casca.dc.html">Cadastrar custos</a><a href="Saude%20dos%20pixels.dc.html">Ligar rastreamento</a></div>
+                    </div>
+                    <button type="button" onClick="{{ fecharVoltou }}" aria-label="Fechar aviso" style="width:var(--h-sm); height:var(--h-sm); display:grid; place-items:center; border:0; background:transparent; color:var(--ok); cursor:pointer; border-radius:var(--r-control);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18 M6 6l12 12"></path></svg></button>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ vazio }}" hint-placeholder-val="{{ false }}">
+                  <section style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:48px 24px; display:flex; flex-direction:column; align-items:center; gap:10px; text-align:center;">
+                    <h2 style="font-size:var(--fs-section); font-weight:600;">Nenhuma loja conectada</h2>
+                    <p style="font-size:var(--fs-dense); color:var(--t2); max-width:420px;">Conecte uma loja Shopify para ver lucro, rastreamento e alertas.</p>
+                    <button type="button" onClick="{{ abrirConectar }}" style="height:var(--h-md); padding:0 16px; border:0; background:var(--solid); color:var(--on-solid); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;">Conectar loja</button>
+                  </section>
+                </sc-if>
+
+                <sc-if value="{{ temLista }}" hint-placeholder-val="{{ true }}">
+                  <section aria-label="Lojas conectadas" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); min-width:0;">
+                    <div style="display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border-subtle); flex-wrap:wrap;">
+                      <div role="tablist" aria-label="Filtrar lojas" style="display:flex; padding:2px; gap:2px; background:var(--track); border-radius:var(--r-control);">
+                        <sc-for list="{{ grupos }}" as="g" hint-placeholder-count="3"><button type="button" role="tab" aria-selected="{{ g.on }}" onClick="{{ g.pick }}" style="height:30px; padding:0 12px; border:0; border-radius:4px; font-size:var(--fs-dense); background:{{ g.bg }}; color:{{ g.fg }}; font-weight:{{ g.fw }}; box-shadow:{{ g.sh }}; cursor:pointer; white-space:nowrap;">{{ g.label }}</button></sc-for>
+                      </div>
+                      <label style="display:flex; align-items:center; gap:8px; height:var(--h-sm); padding:0 10px; border:1px solid var(--control-border); border-radius:var(--r-control); min-width:200px; flex:1; max-width:280px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true" style="color:var(--t3);"><path d="M11 3a8 8 0 1 0 0 16a8 8 0 1 0 0-16 M21 21l-4.3-4.3"></path></svg>
+                        <input value="{{ busca }}" onInput="{{ digitar }}" aria-label="Buscar loja por nome ou domínio" placeholder="Buscar por nome ou domínio" style="flex:1; min-width:0; border:0; outline:0; background:transparent; font-size:var(--fs-dense);">
+                      </label>
+                      <sc-if value="{{ busca }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ limpar }}" style="border:0; background:transparent; color:var(--brand); font-size:var(--fs-dense); cursor:pointer;">Limpar filtros</button></sc-if>
+                      <div style="flex:1;"></div>
+                      <span style="font-size:var(--fs-label); color:var(--t2);">Faturamento e lucro: {{ periodoTxt }}</span>
+                    </div>
+
+                    <sc-if value="{{ carregando }}" hint-placeholder-val="{{ false }}">
+                      <div aria-busy="true" aria-label="Carregando lojas" style="padding:8px 16px;"><sc-for list="{{ cinco }}" as="x" hint-placeholder-count="5"><div style="display:grid; grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 40px; gap:16px; height:56px; align-items:center;"><span style="height:12px; width:70%; border-radius:4px; background:var(--skeleton);"></span><span style="height:20px; width:90px; border-radius:10px; background:var(--skeleton);"></span><span style="height:12px; border-radius:4px; background:var(--skeleton);"></span><span style="height:12px; border-radius:4px; background:var(--skeleton);"></span><span style="height:12px; border-radius:4px; background:var(--skeleton);"></span><span style="height:12px; border-radius:4px; background:var(--skeleton);"></span><span style="height:20px; border-radius:4px; background:var(--skeleton);"></span></div></sc-for></div>
+                    </sc-if>
+                    <sc-if value="{{ filtradoVazio }}" hint-placeholder-val="{{ false }}">
+                      <div style="min-height:180px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:24px; text-align:center;"><strong style="font-size:var(--fs-section);">Nenhuma loja com “{{ busca }}”</strong><span style="font-size:var(--fs-dense); color:var(--t2);">Busque pelo nome ou pelo domínio .myshopify.com.</span><button type="button" onClick="{{ limpar }}" style="height:var(--h-md); padding:0 14px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;">Limpar filtros</button></div>
+                    </sc-if>
+
+                    <sc-if value="{{ tabela }}" hint-placeholder-val="{{ true }}">
+                      <div style="overflow-x:auto;">
+                        <table style="width:100%; border-collapse:separate; border-spacing:0; font-size:var(--fs-dense);">
+                          <caption style="position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);">Lojas conectadas</caption>
+                          <thead><tr><sc-for list="{{ cab }}" as="h" hint-placeholder-count="8"><th scope="col" style="height:40px; padding:0 12px; text-align:{{ h.align }}; font-size:var(--fs-label); font-weight:600; color:var(--t1); background:var(--surface-2); border-bottom:1px solid var(--border); white-space:nowrap;">{{ h.label }}</th></sc-for></tr></thead>
+                          <tbody>
+                            <sc-for list="{{ linhas }}" as="l" hint-placeholder-count="5">
+                              <tr onClick="{{ l.abrir }}" style="cursor:pointer;" style-hover="background:var(--hover);">
+                                <td style="height:60px; padding:0 12px; border-bottom:1px solid var(--border-subtle);"><span style="display:flex; flex-direction:column; gap:2px;"><button type="button" onClick="{{ l.abrir }}" style="border:0; background:transparent; padding:0; font:inherit; font-weight:600; color:var(--ink); text-align:left; cursor:pointer;">{{ l.nome }}</button><span style="display:flex; gap:10px; font-size:var(--fs-label);"><span style="color:var(--t2);">{{ l.dominio }}</span><a href="#" onClick="{{ l.parar }}" aria-label="{{ l.lojaAria }}">Loja ↗</a><a href="#" onClick="{{ l.parar }}" aria-label="{{ l.adminAria }}">Admin ↗</a></span></span></td>
+                                <td style="padding:0 12px; border-bottom:1px solid var(--border-subtle);"><span style="display:flex; flex-direction:column; gap:4px; align-items:flex-start;"><span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ l.cBorda }}; background:{{ l.cBg }}; color:{{ l.cFg }}; font-size:var(--fs-label); font-weight:500; white-space:nowrap;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ l.conexao }}</span><span style="font-size:var(--fs-label); color:var(--t2);">{{ l.conexaoSub }}</span></span></td>
+                                <td style="padding:0 12px; border-bottom:1px solid var(--border-subtle); color:var(--t1); white-space:nowrap;">{{ l.moedaIdioma }}</td>
+                                <td style="padding:0 12px; border-bottom:1px solid var(--border-subtle); text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap;">{{ l.fat }}</td>
+                                <td style="padding:0 12px; border-bottom:1px solid var(--border-subtle); text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; font-weight:600; color:{{ l.lucroFg }};">{{ l.lucro }}</td>
+                                <td style="padding:0 12px; border-bottom:1px solid var(--border-subtle);"><span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ l.rBorda }}; background:{{ l.rBg }}; color:{{ l.rFg }}; font-size:var(--fs-label); font-weight:500; white-space:nowrap;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ l.rast }}</span></td>
+                                <td style="padding:0 12px; border-bottom:1px solid var(--border-subtle); color:var(--t1); white-space:nowrap; font-variant-numeric:tabular-nums;">{{ l.sync }}</td>
+                                <td style="padding:0 12px; border-bottom:1px solid var(--border-subtle); text-align:right; white-space:nowrap;">
+                                  <span style="display:inline-flex; gap:8px; align-items:center; position:relative;">
+                                    <sc-if value="{{ l.sugerida }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ l.agirSugerida }}" style="height:var(--h-sm); padding:0 10px; border:{{ l.sBorda }}; background:{{ l.sBg }}; color:{{ l.sFg }}; border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;">{{ l.sugerida }}</button></sc-if>
+                                    <button type="button" onClick="{{ l.menu }}" aria-label="{{ l.menuAria }}" aria-haspopup="menu" aria-expanded="{{ l.menuOn }}" style="width:var(--h-sm); height:var(--h-sm); display:grid; place-items:center; border:0; background:transparent; color:var(--t1); border-radius:var(--r-control); cursor:pointer;" style-hover="background:var(--track);"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg></button>
+                                    <sc-if value="{{ l.menuOn }}" hint-placeholder-val="{{ false }}">
+                                      <span role="menu" style="position:absolute; right:0; top:34px; z-index:20; width:210px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-overlay); box-shadow:var(--shadow); padding:6px; display:flex; flex-direction:column; text-align:left;">
+                                        <button type="button" role="menuitem" onClick="{{ l.abrir }}" style="height:32px; padding:0 8px; border:0; background:transparent; text-align:left; border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer;" style-hover="background:var(--hover);">Abrir detalhe</button>
+                                        <button type="button" role="menuitem" onClick="{{ l.reconectar }}" style="height:32px; padding:0 8px; border:0; background:transparent; text-align:left; border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer;" style-hover="background:var(--hover);">Reconectar</button>
+                                        <button type="button" role="menuitem" onClick="{{ l.sincronizar }}" style="height:32px; padding:0 8px; border:0; background:transparent; text-align:left; border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer;" style-hover="background:var(--hover);">Sincronizar agora</button>
+                                        <span style="height:1px; background:var(--border); margin:4px 0;"></span>
+                                        <button type="button" role="menuitem" onClick="{{ l.remover }}" style="height:32px; padding:0 8px; border:0; background:transparent; text-align:left; border-radius:var(--r-control); font-size:var(--fs-dense); color:var(--err); cursor:pointer;" style-hover="background:var(--err-bg);">Remover do xcart…</button>
+                                      </span>
+                                    </sc-if>
+                                  </span>
+                                </td>
+                              </tr>
+                            </sc-for>
+                          </tbody>
+                        </table>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ cartoes }}" hint-placeholder-val="{{ false }}">
+                      <ul style="list-style:none; margin:0; padding:12px; display:flex; flex-direction:column; gap:8px;">
+                        <sc-for list="{{ linhas }}" as="l" hint-placeholder-count="5">
+                          <li style="border:1px solid var(--border); border-radius:var(--r-card); padding:12px; display:flex; flex-direction:column; gap:10px;">
+                            <button type="button" onClick="{{ l.abrir }}" style="display:flex; justify-content:space-between; gap:8px; border:0; background:transparent; padding:0; text-align:left; cursor:pointer; width:100%;"><span style="display:flex; flex-direction:column;"><strong style="font-size:var(--fs-body); font-weight:600;">{{ l.nome }}</strong><span style="font-size:var(--fs-label); color:var(--t2);">{{ l.dominio }}</span></span><span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ l.cBorda }}; background:{{ l.cBg }}; color:{{ l.cFg }}; font-size:var(--fs-label); font-weight:500; flex:none;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ l.conexao }}</span></button>
+                            <span style="display:grid; grid-template-columns:1fr 1fr; gap:8px;"><span style="display:flex; flex-direction:column;"><span style="font-size:var(--fs-label); color:var(--t2);">Lucro estimado</span><span style="font-size:var(--fs-body); font-weight:600; font-variant-numeric:tabular-nums; color:{{ l.lucroFg }};">{{ l.lucro }}</span></span><span style="display:flex; flex-direction:column;"><span style="font-size:var(--fs-label); color:var(--t2);">Rastreamento</span><span style="font-size:var(--fs-body);">{{ l.rast }}</span></span></span>
+                            <sc-if value="{{ l.sugerida }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ l.agirSugerida }}" style="height:var(--h-lg); border:{{ l.sBorda }}; background:{{ l.sBg }}; color:{{ l.sFg }}; border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;">{{ l.sugerida }}</button></sc-if>
+                          </li>
+                        </sc-for>
+                      </ul>
+                    </sc-if>
+                    <div style="padding:10px 16px; border-top:1px solid var(--border-subtle); font-size:var(--fs-label); color:var(--t2);">{{ rodape }}</div>
+                  </section>
+                </sc-if>
+              </sc-if>
+
+              <sc-if value="{{ vDetalhe }}" hint-placeholder-val="{{ false }}">
+                <nav aria-label="Caminho" style="display:flex; align-items:center; gap:6px; font-size:var(--fs-dense);"><a href="#" onClick="{{ voltarLista }}">Lojas</a><span aria-hidden="true" style="color:var(--t3);">/</span><span aria-current="page" style="color:var(--t1);">{{ d.nome }}</span></nav>
+                <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+                  <div style="display:flex; flex-direction:column; gap:8px;">
+                    <h1 style="font-size:var(--fs-page); line-height:28px; font-weight:600;">{{ d.nome }}</h1>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; font-size:var(--fs-label);">
+                      <span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid var(--ok-border); background:var(--ok-bg); color:var(--ok); font-weight:500;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>Conectada</span>
+                      <span style="color:var(--t1);">{{ d.dominio }}</span><span aria-hidden="true" style="color:var(--t3);">·</span><span style="color:var(--t1);">USD · inglês</span><span aria-hidden="true" style="color:var(--t3);">·</span><span style="color:var(--t1);">Todas as permissões</span>
+                    </div>
+                  </div>
+                  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <a href="#" style="display:flex; align-items:center; height:var(--h-md); padding:0 14px; border:1px solid var(--border-strong); background:var(--surface); color:var(--ink); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; text-decoration:none;" style-hover="color:var(--ink); text-decoration:none; border-color:var(--control-border);">Admin da Shopify ↗</a>
+                    <button type="button" onClick="{{ sincronizarDet }}" aria-busy="{{ sincronizando }}" disabled="{{ sincronizando }}" style="display:flex; align-items:center; gap:8px; height:var(--h-md); padding:0 14px; border:0; background:var(--solid); color:var(--on-solid); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer; min-width:150px; justify-content:center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="animation:{{ giro }};"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8 M21 3v5h-5 M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16 M8 16H3v5"></path></svg>{{ sincRotulo }}</button>
+                  </div>
+                </div>
+                <div role="tablist" aria-label="Seções da loja" style="display:flex; gap:4px; border-bottom:1px solid var(--border); overflow-x:auto; scrollbar-width:none;">
+                  <sc-for list="{{ abasDet }}" as="a" hint-placeholder-count="6"><button type="button" role="tab" aria-selected="{{ a.on }}" onClick="{{ a.pick }}" style="height:44px; padding:0 12px; border:0; border-bottom:2px solid {{ a.borda }}; background:transparent; color:{{ a.fg }}; font-weight:{{ a.fw }}; font-size:var(--fs-dense); cursor:pointer; white-space:nowrap; margin-bottom:-1px;">{{ a.label }}</button></sc-for>
+                </div>
+
+                <sc-if value="{{ abaVisao }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax({{ kpiMin }}, 1fr)); gap:12px;">
+                    <sc-for list="{{ d.kpis }}" as="k" hint-placeholder-count="4"><div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:6px;"><span style="font-size:var(--fs-label); font-weight:500; color:var(--t1);">{{ k.l }}</span><span style="font-size:{{ kpiFs }}; line-height:32px; font-weight:600; font-variant-numeric:tabular-nums;">{{ k.v }}</span><span style="font-size:var(--fs-label); color:var(--t2);">{{ k.s }}</span></div></sc-for>
+                  </div>
+                  <div style="display:grid; grid-template-columns:{{ cols3 }}; gap:12px;">
+                    <section style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:10px;">
+                      <h2 style="font-size:var(--fs-section); font-weight:600;">Rastreamento</h2>
+                      <span style="display:inline-flex; align-self:flex-start; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid var(--warn-border); background:var(--warn-bg); color:var(--warn); font-size:var(--fs-label); font-weight:500;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>Precisa de atenção</span>
+                      <span style="font-size:var(--fs-dense); color:var(--t1);">Meta: 178 de 182 compras · Google: 144 de 182</span>
+                      <a href="Saude%20dos%20pixels.dc.html" style="margin-top:auto; font-size:var(--fs-dense); font-weight:500;">Abrir em Saúde dos pixels</a>
+                    </section>
+                    <section style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:10px;">
+                      <h2 style="font-size:var(--fs-section); font-weight:600;">Alertas abertos</h2>
+                      <span style="font-size:var(--fs-dense);"><strong style="color:var(--warn); font-weight:600;">Aviso:</strong> 38 compras não chegaram no Google</span>
+                      <span style="font-size:var(--fs-label); color:var(--t2);">Aberto há 5 h 40 min</span>
+                      <a href="Alertas.dc.html" style="margin-top:auto; font-size:var(--fs-dense); font-weight:500;">Ver alertas da loja</a>
+                    </section>
+                    <section style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:10px;">
+                      <h2 style="font-size:var(--fs-section); font-weight:600;">Conexão</h2>
+                      <ul style="list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; font-size:var(--fs-dense);">
+                        <sc-for list="{{ escopos }}" as="e" hint-placeholder-count="4"><li style="display:flex; align-items:center; gap:8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--ok);"><path d="M20 6L9 17l-5-5"></path></svg><span>{{ e }}</span></li></sc-for>
+                      </ul>
+                      <span style="margin-top:auto; font-size:var(--fs-label); color:var(--t2);">{{ ultimaSync }}</span>
+                    </section>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ abaPerfil }}" hint-placeholder-val="{{ false }}">
+                  <section style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:20px; display:flex; flex-direction:column; gap:16px; max-width:640px;">
+                    <div style="display:flex; flex-direction:column; gap:6px;"><label for="f-nome" style="font-size:var(--fs-dense); font-weight:500;">Nome da loja</label><input id="f-nome" value="{{ nomeEdit }}" onInput="{{ editarNome }}" aria-invalid="{{ nomeInvalido }}" aria-describedby="f-nome-ajuda" style="height:var(--h-md); padding:0 12px; border:1px solid {{ nomeBorda }}; border-radius:var(--r-control); background:var(--surface); font-size:var(--fs-body);"><span id="f-nome-ajuda" style="font-size:var(--fs-label); color:{{ nomeAjudaFg }};">{{ nomeAjuda }}</span></div>
+                    <div style="display:flex; flex-direction:column; gap:6px;"><span id="f-idioma" style="font-size:var(--fs-dense); font-weight:500;">Idioma principal da IA</span><button type="button" aria-labelledby="f-idioma" aria-haspopup="listbox" style="height:var(--h-md); padding:0 12px; border:1px solid var(--control-border); border-radius:var(--r-control); background:var(--surface); font-size:var(--fs-body); display:flex; align-items:center; justify-content:space-between; cursor:pointer;">Inglês (Estados Unidos)<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button><span style="font-size:var(--fs-label); color:var(--t2);">A mesma lista de idiomas do assistente de rota e do Importar.</span></div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;"><div style="display:flex; flex-direction:column; gap:4px;"><span style="font-size:var(--fs-label); color:var(--t2);">Moeda (vem da Shopify)</span><span style="font-size:var(--fs-body);">USD</span></div><div style="display:flex; flex-direction:column; gap:4px;"><span style="font-size:var(--fs-label); color:var(--t2);">País</span><span style="font-size:var(--fs-body);">—</span></div></div>
+                    <div style="display:flex; gap:8px; justify-content:flex-end; border-top:1px solid var(--border-subtle); padding-top:16px;"><button type="button" onClick="{{ descartarNome }}" disabled="{{ semMudanca }}" style="height:var(--h-md); padding:0 14px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer;">Descartar</button><button type="button" onClick="{{ salvarNome }}" disabled="{{ semMudanca }}" style="height:var(--h-md); padding:0 14px; border:0; background:var(--solid); color:var(--on-solid); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer; opacity:{{ salvarOp }};">Salvar perfil</button></div>
+                  </section>
+                </sc-if>
+
+                <sc-if value="{{ abaMarca }}" hint-placeholder-val="{{ false }}">
+                  <section style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:20px; display:flex; flex-direction:column; gap:20px;">
+                    <div style="display:flex; flex-direction:column; gap:8px;"><h2 style="font-size:var(--fs-section); font-weight:600;">Logo principal</h2><span style="font-size:var(--fs-label); color:var(--t2);">PNG ou SVG até 2 MB. A IA usa nas imagens geradas.</span><div style="width:200px; height:96px; border:1px dashed var(--control-border); border-radius:var(--r-card); display:grid; place-items:center; background:repeating-linear-gradient(45deg, var(--track) 0 6px, var(--surface-2) 6px 12px); font-family:var(--font-mono); font-size:var(--fs-label); color:var(--t1);">logo da loja</div></div>
+                    <div style="display:flex; flex-direction:column; gap:8px;"><h2 style="font-size:var(--fs-section); font-weight:600;">Materiais de marca <span style="font-size:var(--fs-label); color:var(--t2); font-weight:400;">· 4 de 12 imagens, até 6 MB cada</span></h2>
+                      <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(120px, 1fr)); gap:12px;">
+                        <sc-for list="{{ materiais }}" as="m" hint-placeholder-count="4"><div style="display:flex; flex-direction:column; gap:6px;"><div style="aspect-ratio:1; border:1px solid var(--border); border-radius:var(--r-control); background:repeating-linear-gradient(45deg, var(--track) 0 6px, var(--surface-2) 6px 12px); display:grid; place-items:center; font-family:var(--font-mono); font-size:var(--fs-label); color:var(--t1);">{{ m.n }}</div><button type="button" aria-label="{{ m.aria }}" style="height:var(--h-sm); border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-label); cursor:pointer;">Remover</button></div></sc-for>
+                        <button type="button" style="aspect-ratio:1; border:1px dashed var(--control-border); border-radius:var(--r-control); background:transparent; color:var(--t1); font-size:var(--fs-dense); cursor:pointer;">Adicionar imagens</button>
+                      </div>
+                    </div>
+                  </section>
+                </sc-if>
+
+                <sc-if value="{{ abaAtalho }}" hint-placeholder-val="{{ false }}">
+                  <section style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:24px; display:flex; flex-direction:column; gap:10px; align-items:flex-start; max-width:640px;">
+                    <h2 style="font-size:var(--fs-section); font-weight:600;">{{ atalhoTitulo }}</h2>
+                    <p style="font-size:var(--fs-dense); color:var(--t1);">{{ atalhoTexto }}</p>
+                    <a href="{{ atalhoHref }}" style="display:flex; align-items:center; height:var(--h-md); padding:0 14px; border-radius:var(--r-control); background:var(--solid); color:var(--on-solid); font-size:var(--fs-dense); font-weight:500; text-decoration:none;" style-hover="color:var(--on-solid); text-decoration:none; background:var(--solid-hover);">{{ atalhoCta }}</a>
+                  </section>
+                </sc-if>
+
+                <sc-if value="{{ abaPerigo }}" hint-placeholder-val="{{ false }}">
+                  <section style="background:var(--surface); border:1px solid var(--err-border); border-radius:var(--r-card); padding:20px; display:flex; gap:16px; align-items:center; justify-content:space-between; flex-wrap:wrap; max-width:820px;">
+                    <div style="display:flex; flex-direction:column; gap:4px; max-width:520px;"><h2 style="font-size:var(--fs-section); font-weight:600;">Remover {{ d.nome }} do xcart</h2><p style="font-size:var(--fs-dense); color:var(--t1); text-wrap:pretty;">Apaga do xcart os produtos importados, os materiais de marca, o rastreamento e o histórico financeiro desta loja. Nada muda na Shopify.</p></div>
+                    <button type="button" onClick="{{ removerDet }}" style="height:var(--h-md); padding:0 14px; border:1px solid var(--err); background:var(--surface); color:var(--err); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:600; cursor:pointer;">Remover do xcart…</button>
+                  </section>
+                </sc-if>
+              </sc-if>
+            </div>
+          </main>
+        </div>
+        <sc-if value="{{ mobile }}" hint-placeholder-val="{{ false }}">
+          <dc-import name="Navegacao" active="lojas" mobile="{{ true }}" theme="{{ theme }}" onTheme="{{ setTheme }}" alertas="{{ 3 }}" hint-size="100%,64px"></dc-import>
+        </sc-if>
+
+        <sc-if value="{{ confirmar }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute; inset:0; z-index:95; display:grid; place-items:center; padding:16px;">
+            <div style="position:absolute; inset:0; background:var(--scrim);"></div>
+            <div role="alertdialog" aria-modal="true" aria-labelledby="rm-t" aria-describedby="rm-d" style="position:relative; width:100%; max-width:480px; background:var(--surface); border-radius:var(--r-overlay); box-shadow:var(--shadow); padding:20px; display:flex; flex-direction:column; gap:14px; animation:xc-in 140ms var(--ease);">
+              <h2 id="rm-t" style="font-size:var(--fs-overlay); font-weight:600;">Remover {{ cf.nome }} do xcart?</h2>
+              <div id="rm-d" style="display:flex; flex-direction:column; gap:8px; font-size:var(--fs-dense); color:var(--t1);">
+                <span>Isto apaga do xcart, sem volta:</span>
+                <ul style="margin:0; padding-left:18px; display:flex; flex-direction:column; gap:4px; color:var(--ink);"><sc-for list="{{ cf.itens }}" as="it" hint-placeholder-count="4"><li>{{ it }}</li></sc-for></ul>
+                <span>A loja continua igual na Shopify. Para voltar a usar, conecte de novo.</span>
+              </div>
+              <div style="display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap;">
+                <button type="button" onClick="{{ cancelar }}" style="height:var(--h-md); padding:0 14px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;">Cancelar</button>
+                <button type="button" onClick="{{ confirmarRemover }}" aria-busy="{{ removendo }}" disabled="{{ removendo }}" style="height:var(--h-md); padding:0 14px; border:0; background:var(--err); color:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:600; cursor:pointer; min-width:160px;">{{ removerRotulo }}</button>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ conectar }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute; inset:0; z-index:90; display:flex; align-items:{{ dlgAlign }}; justify-content:center; padding:{{ dlgPad }};">
+            <div onClick="{{ fecharConectar }}" style="position:absolute; inset:0; background:var(--scrim);"></div>
+            <div role="dialog" aria-modal="true" aria-labelledby="cn-t" style="position:relative; width:100%; max-width:760px; max-height:100%; background:var(--surface); border-radius:var(--r-overlay); box-shadow:var(--shadow); display:flex; flex-direction:column; overflow:hidden; animation:xc-in 140ms var(--ease);">
+              <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--border);"><div style="display:flex; flex-direction:column; gap:2px;"><h2 id="cn-t" style="font-size:var(--fs-overlay); font-weight:600;">Conectar loja Shopify</h2><span style="font-size:var(--fs-label); color:var(--t2);">Passo {{ passo }} de 4 · leva uns 5 minutos</span></div><button type="button" onClick="{{ fecharConectar }}" aria-label="Fechar" style="width:var(--h-md); height:var(--h-md); display:grid; place-items:center; border:0; background:transparent; border-radius:var(--r-control); cursor:pointer; color:var(--t1);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18 M6 6l12 12"></path></svg></button></div>
+              <div style="display:grid; grid-template-columns:{{ dlgCols }}; flex:1; min-height:0;">
+                <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}">
+                  <ol style="list-style:none; margin:0; padding:16px; border-right:1px solid var(--border); display:flex; flex-direction:column; gap:4px; background:var(--surface-2);">
+                    <sc-for list="{{ passos }}" as="p" hint-placeholder-count="4"><li aria-current="{{ p.atual }}" style="display:flex; align-items:center; gap:10px; min-height:36px; font-size:var(--fs-dense); color:{{ p.fg }}; font-weight:{{ p.fw }};"><span aria-hidden="true" style="width:22px; height:22px; flex:none; border-radius:50%; display:grid; place-items:center; font-size:var(--fs-label); font-weight:600; background:{{ p.bg }}; color:{{ p.numFg }}; border:1px solid {{ p.borda }};">{{ p.n }}</span>{{ p.t }}</li></sc-for>
+                  </ol>
+                </sc-if>
+                <div style="padding:20px; overflow-y:auto; display:flex; flex-direction:column; gap:14px;">
+                  <sc-if value="{{ p1 }}" hint-placeholder-val="{{ true }}">
+                    <h3 style="font-size:var(--fs-section); font-weight:600;">Qual é o endereço da loja?</h3>
+                    <div style="display:flex; flex-direction:column; gap:6px;"><label for="cn-dom" style="font-size:var(--fs-dense); font-weight:500;">Domínio .myshopify.com</label><input id="cn-dom" value="{{ dominio }}" onInput="{{ digitarDominio }}" aria-invalid="{{ domInvalido }}" aria-describedby="cn-dom-a" placeholder="minhaloja.myshopify.com" style="height:var(--h-md); padding:0 12px; border:1px solid {{ domBorda }}; border-radius:var(--r-control); background:var(--surface); font-size:var(--fs-body); font-family:var(--font-mono);"><span id="cn-dom-a" style="font-size:var(--fs-label); color:{{ domAjudaFg }};">{{ domAjuda }}</span></div>
+                  </sc-if>
+                  <sc-if value="{{ p2 }}" hint-placeholder-val="{{ false }}">
+                    <h3 style="font-size:var(--fs-section); font-weight:600;">Crie o app da loja na Shopify</h3>
+                    <p style="font-size:var(--fs-dense); color:var(--t1);">Em dev.shopify.com, crie um app para a loja e cole estes valores. Marque cada item quando terminar.</p>
+                    <sc-for list="{{ copias }}" as="c" hint-placeholder-count="3">
+                      <div style="display:flex; flex-direction:column; gap:6px;"><span style="font-size:var(--fs-dense); font-weight:500;">{{ c.l }}</span><div style="display:flex; gap:8px;"><code style="flex:1; min-width:0; height:var(--h-md); display:flex; align-items:center; padding:0 12px; border:1px solid var(--border); border-radius:var(--r-control); background:var(--surface-2); font-family:var(--font-mono); font-size:var(--fs-label); overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">{{ c.v }}</code><button type="button" onClick="{{ c.copiar }}" style="height:var(--h-md); padding:0 12px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer; min-width:84px;">{{ c.rot }}</button></div></div>
+                    </sc-for>
+                    <div style="height:120px; border:1px dashed var(--control-border); border-radius:var(--r-card); display:grid; place-items:center; background:repeating-linear-gradient(45deg, var(--track) 0 6px, var(--surface-2) 6px 12px); font-family:var(--font-mono); font-size:var(--fs-label); color:var(--t1);">captura da tela da Shopify (a enviar)</div>
+                  </sc-if>
+                  <sc-if value="{{ p3 }}" hint-placeholder-val="{{ false }}">
+                    <h3 style="font-size:var(--fs-section); font-weight:600;">Cole as credenciais do app</h3>
+                    <div style="display:flex; flex-direction:column; gap:6px;"><label for="cn-id" style="font-size:var(--fs-dense); font-weight:500;">Client ID</label><input id="cn-id" value="8f2c41a0e7d94b1f" style="height:var(--h-md); padding:0 12px; border:1px solid var(--control-border); border-radius:var(--r-control); background:var(--surface); font-family:var(--font-mono); font-size:var(--fs-dense);"></div>
+                    <div style="display:flex; flex-direction:column; gap:6px;"><label for="cn-sec" style="font-size:var(--fs-dense); font-weight:500;">Client Secret</label><div style="display:flex; gap:8px;"><input id="cn-sec" type="{{ secTipo }}" value="shpss_4b7e0c2d91a8" style="flex:1; height:var(--h-md); padding:0 12px; border:1px solid var(--control-border); border-radius:var(--r-control); background:var(--surface); font-family:var(--font-mono); font-size:var(--fs-dense);"><button type="button" onClick="{{ toggleSec }}" aria-pressed="{{ secVisivel }}" style="height:var(--h-md); padding:0 12px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer;">{{ secRotulo }}</button></div><span style="font-size:var(--fs-label); color:var(--t2);">Fica guardado só no servidor; não volta para o navegador.</span></div>
+                  </sc-if>
+                  <sc-if value="{{ p4 }}" hint-placeholder-val="{{ false }}">
+                    <h3 style="font-size:var(--fs-section); font-weight:600;">Autorize na Shopify</h3>
+                    <p style="font-size:var(--fs-dense); color:var(--t1);">Vamos abrir a Shopify para você aprovar o acesso. Na volta, a loja aparece aqui com os próximos passos.</p>
+                    <sc-if value="{{ redirecionando }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:flex; align-items:center; gap:10px; padding:12px; border-radius:var(--r-control); background:var(--run-bg); border:1px solid var(--run-border); color:var(--run); font-size:var(--fs-dense);"><span aria-hidden="true" style="width:8px; height:8px; border-radius:50%; background:currentColor; animation:xc-pulse 1.4s ease-out infinite;"></span>Redirecionando para a Shopify…</div></sc-if>
+                  </sc-if>
+                </div>
+              </div>
+              <div style="display:flex; justify-content:space-between; gap:8px; padding:12px 20px; border-top:1px solid var(--border); background:var(--surface-2);">
+                <button type="button" onClick="{{ voltarPasso }}" disabled="{{ primeiroPasso }}" style="height:var(--h-md); padding:0 14px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer; opacity:{{ voltarOp }};">Voltar</button>
+                <button type="button" onClick="{{ avancar }}" style="height:var(--h-md); padding:0 16px; border:0; background:var(--solid); color:var(--on-solid); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;">{{ avancarRotulo }}</button>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+          <div role="status" aria-live="polite" style="position:absolute; right:{{ toastDir }}; left:{{ toastEsq }}; bottom:{{ toastBase }}; z-index:96; max-width:400px; background:var(--solid); color:var(--on-solid); border-radius:var(--r-card); box-shadow:var(--shadow); padding:12px 14px; display:flex; gap:12px; align-items:flex-start; animation:xc-up 180ms var(--ease);">
+            <div style="flex:1; display:flex; flex-direction:column; gap:2px; font-size:var(--fs-dense);"><strong style="font-weight:600;">{{ toastTitulo }}</strong><span style="white-space:pre-line; opacity:.9;">{{ toastTexto }}</span></div>
+            <button type="button" onClick="{{ fecharToast }}" aria-label="Fechar aviso" style="width:24px; height:24px; display:grid; place-items:center; border:0; background:transparent; color:inherit; cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18 M6 6l12 12"></path></svg></button>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { theme: 'light', width: 'desktop', cenario: 'dados', anot: false, vw: 1400, loja: 'todas', periodo: '30d', comparar: 'anterior', moeda: 'BRL', grupo: 'ativas', busca: '', menu: null, removidas: [], confirmar: null, removendo: false, view: 'lista', det: 'lumen', abaDet: 'visao', sinc: false, sincHora: '14:28', nome: null, conectar: false, passo: 1, dominio: '', domTocado: false, copiado: null, sec: false, redir: false, voltouFechado: false, toast: null };
+  componentDidMount() {
+    try { const t = localStorage.getItem('xcart-mock-tema'); const w = localStorage.getItem('xcart-mock-largura'); const s = { vw: window.innerWidth }; if (t) s.theme = t; if (w) s.width = w; this.setState(s); } catch (e) { this.setState({ vw: window.innerWidth }); }
+    this._rs = () => this.setState({ vw: window.innerWidth }); window.addEventListener('resize', this._rs);
+    this._k = e => { if (e.key === 'Escape') this.setState({ menu: null, confirmar: null, conectar: false }); }; window.addEventListener('keydown', this._k);
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this._rs); window.removeEventListener('keydown', this._k); clearTimeout(this._tt); }
+  avisar(t, d) { clearTimeout(this._tt); this.setState({ toast: { t, d } }); this._tt = setTimeout(() => this.setState({ toast: null }), 6000); }
+  renderVals() {
+    const st = this.state; const mobile = st.width === 'mobile'; const set = o => this.setState(o); const cen = st.cenario;
+    const L = [
+      { id: 'lumen', nome: 'Lumen Casa', dominio: 'lumencasa.myshopify.com', ativa: true, conexao: 'Conectada', tom: 'ok', sub: 'Todas as permissões', mi: 'USD · inglês', fat: 104231.37, lucro: 31528.15, rast: 'Precisa de atenção', rt: 'warn', sync: 'hoje, 14:28' },
+      { id: 'orla', nome: 'Orla Wear', dominio: 'orlawear.myshopify.com', ativa: true, conexao: 'Conectada', tom: 'ok', sub: 'Todas as permissões', mi: 'USD · inglês', fat: 67230.52, lucro: 14865.07, rast: 'Parado', rt: 'err', sync: 'hoje, 14:27' },
+      { id: 'kova', nome: 'Kova Home', dominio: 'kovahome.myshopify.com', ativa: true, conexao: 'Conectada', tom: 'ok', sub: 'Todas as permissões', mi: 'EUR · alemão', fat: 34006.13, lucro: 2627.54, rast: 'Tudo certo', rt: 'ok', sync: 'hoje, 14:28' },
+      { id: 'alto', nome: 'Alto Fit', dominio: 'altofit.myshopify.com', ativa: true, conexao: 'Conectada', tom: 'ok', sub: 'Todas as permissões', mi: 'USD · inglês', fat: 11533.19, lucro: -310.07, rast: 'Desligado', rt: 'neutral', sync: 'hoje, 14:26' },
+      { id: 'tarn', nome: 'Tarn Gear', dominio: 'tarngear.myshopify.com', ativa: false, conexao: 'Sem permissão', tom: 'err', sub: 'Falta read_orders', mi: 'USD · inglês', motivo: 'Sem permissão para ler pedidos', acao: 'Reconectar', desde: '30/09' },
+      { id: 'pico', nome: 'Pico Tools', dominio: 'picotools.myshopify.com', ativa: false, conexao: 'Token inválido', tom: 'warn', sub: 'desde 12/09', mi: 'USD · inglês', motivo: 'Token inválido', acao: 'Reconectar', desde: '12/09' },
+      { id: 'nimbo', nome: 'Nimbo Shop', dominio: 'nimboshop.myshopify.com', ativa: false, conexao: 'Token inválido', tom: 'warn', sub: 'desde 02/09', mi: 'EUR · francês', motivo: 'Token inválido', acao: 'Reconectar', desde: '02/09' },
+      { id: 'selva', nome: 'Selva Kids', dominio: 'selvakids.myshopify.com', ativa: false, conexao: 'App desinstalado', tom: 'neutral', sub: 'desde 27/09', mi: 'USD · inglês', motivo: 'App desinstalado', acao: 'Remover do xcart', desde: '27/09' },
+      { id: 'mira', nome: 'Mira Beauty', dominio: 'mirabeauty.myshopify.com', ativa: false, conexao: 'App desinstalado', tom: 'neutral', sub: 'desde 14/08', mi: 'USD · inglês', motivo: 'App desinstalado', acao: 'Remover do xcart', desde: '14/08' },
+      { id: 'brisa', nome: 'Brisa Pet', dominio: 'brisapet.myshopify.com', ativa: false, conexao: 'Pausada', tom: 'neutral', sub: 'pausada na Shopify', mi: 'USD · inglês', motivo: 'Pausada na Shopify', acao: 'Remover do xcart', desde: '20/08' },
+      { id: 'vela', nome: 'Vela & Co', dominio: 'velaco.myshopify.com', ativa: false, conexao: 'Pausada', tom: 'neutral', sub: 'pausada na Shopify', mi: 'EUR · espanhol', motivo: 'Pausada na Shopify', acao: 'Remover do xcart', desde: '05/08' },
+    ];
+    const vivas = L.filter(l => !st.removidas.includes(l.id));
+    const TAXA = { BRL: 1, USD: 5.32, EUR: 6.21 };
+    const din = v => v === undefined ? '—' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: st.moeda }).format(v / TAXA[st.moeda]);
+    const q = st.busca.trim().toLowerCase();
+    const doGrupo = vivas.filter(l => st.grupo === 'todas' || (st.grupo === 'ativas' ? l.ativa : !l.ativa));
+    const filtradas = doGrupo.filter(l => !q || (l.nome + l.dominio).toLowerCase().includes(q));
+    const abrirRemover = l => set({ menu: null, confirmar: { id: l.id, nome: l.nome, itens: l.ativa ? ['312 produtos importados e as versões neutralizadas', '18 materiais de marca', '2 destinos de rastreamento e o histórico de envios', 'O histórico financeiro: pedidos, custos e taxas'] : ['Os dados antigos da loja no xcart', 'O histórico financeiro desta loja', 'Os destinos de rastreamento que ainda existirem'] } });
+    const linhas = filtradas.map(l => {
+      const reconectar = l.acao === 'Reconectar';
+      return { ...l, conexaoSub: l.sub, moedaIdioma: l.mi, fat: l.ativa ? din(l.fat) : '—', lucro: l.ativa ? din(l.lucro) : '—', lucroFg: l.lucro < 0 ? 'var(--err)' : 'var(--ink)',
+        cFg: `var(--${l.tom})`, cBg: `var(--${l.tom}-bg)`, cBorda: `var(--${l.tom}-border)`, conexao: l.conexao,
+        rast: l.ativa ? l.rast : 'Sem acesso', rFg: l.ativa ? `var(--${l.rt})` : 'var(--neutral)', rBg: l.ativa ? `var(--${l.rt}-bg)` : 'var(--neutral-bg)', rBorda: l.ativa ? `var(--${l.rt}-border)` : 'var(--neutral-border)',
+        sync: l.ativa ? (l.id === st.det && st.sinc ? 'sincronizando…' : (l.id === 'lumen' ? `hoje, ${st.sincHora}` : l.sync)) : `parou em ${l.desde}`,
+        sugerida: l.ativa ? null : l.acao, sBorda: reconectar ? '0' : '1px solid var(--err-border)', sBg: reconectar ? 'var(--solid)' : 'var(--surface)', sFg: reconectar ? 'var(--on-solid)' : 'var(--err)',
+        agirSugerida: e => { e.stopPropagation(); if (reconectar) set({ conectar: true, passo: 1, dominio: l.dominio, redir: false }); else abrirRemover(l); },
+        menuOn: st.menu === l.id, menuAria: `Ações de ${l.nome}`, menu: e => { e.stopPropagation(); set({ menu: st.menu === l.id ? null : l.id }); },
+        abrir: e => { e && e.stopPropagation && e.stopPropagation(); if (l.ativa) set({ view: 'detalhe', det: l.id, abaDet: 'visao', menu: null }); },
+        parar: e => { e.preventDefault(); e.stopPropagation(); }, lojaAria: `Abrir a loja ${l.nome}`, adminAria: `Abrir ${l.nome} no admin da Shopify`,
+        reconectar: e => { e.stopPropagation(); set({ menu: null, conectar: true, passo: 1, dominio: l.dominio }); },
+        sincronizar: e => { e.stopPropagation(); set({ menu: null }); this.avisar(`Sincronizando ${l.nome}`, 'Os números atualizam nesta tela quando terminar.'); },
+        remover: e => { e.stopPropagation(); abrirRemover(l); } };
+    });
+    const nAt = vivas.filter(l => l.ativa).length, nIn = vivas.filter(l => !l.ativa).length;
+    const seg = (list, cur, fn) => list.map(([id, label]) => { const on = id === cur; return { label, on, pick: () => fn(id), bg: on ? 'var(--surface)' : 'transparent', fg: on ? 'var(--ink)' : 'var(--t2)', fw: on ? 600 : 400, sh: on ? '0 0 0 1px var(--border)' : 'none' }; });
+    const grupos = seg([['ativas', `Ativas (${nAt})`], ['inativas', `Sem acesso (${nIn})`], ['todas', `Todas (${vivas.length})`]], st.grupo, id => set({ grupo: id, menu: null }));
+    const cab = (st.grupo === 'inativas' ? [['Loja', 'left'], ['Conexão', 'left'], ['Moeda · idioma', 'left'], ['Faturamento', 'right'], ['Lucro estimado', 'right'], ['Rastreamento', 'left'], ['Última sincronização', 'left'], ['Ações', 'right']] : [['Loja', 'left'], ['Conexão', 'left'], ['Moeda · idioma', 'left'], ['Faturamento', 'right'], ['Lucro estimado', 'right'], ['Rastreamento', 'left'], ['Última sincronização', 'left'], ['', 'right']]).map(([label, align]) => ({ label, align }));
+    const PER = { hoje: 'hoje', ontem: 'ontem', '7d': 'últimos 7 dias', '30d': 'últimos 30 dias', mes: 'este mês', mes_passado: 'mês passado', ano: 'este ano', custom: 'período personalizado' };
+    const carregando = cen === 'carregando', vazio = cen === 'vazio';
+    const detL = L.find(l => l.id === st.det);
+    const ABAS = [['visao', 'Visão geral'], ['perfil', 'Perfil'], ['marca', 'Marca'], ['custos', 'Custos'], ['rastreamento', 'Rastreamento'], ['perigo', 'Zona de perigo']];
+    const abasDet = ABAS.map(([id, label]) => { const on = st.abaDet === id; return { label, on, pick: () => set({ abaDet: id }), borda: on ? 'var(--ink)' : 'transparent', fg: on ? (id === 'perigo' ? 'var(--err)' : 'var(--ink)') : (id === 'perigo' ? 'var(--err)' : 'var(--t2)'), fw: on ? 600 : 400 }; });
+    const nome = st.nome === null ? detL.nome : st.nome;
+    const nomeInvalido = nome.trim().length === 0;
+    const PASSOS = ['Domínio da loja', 'Criar o app na Shopify', 'Credenciais', 'Autorizar'];
+    const passos = PASSOS.map((t, i) => { const n = i + 1; const feito = n < st.passo, atual = n === st.passo; return { t, n: feito ? '✓' : String(n), atual: atual ? 'step' : undefined, fg: atual ? 'var(--ink)' : feito ? 'var(--t1)' : 'var(--t2)', fw: atual ? 600 : 400, bg: atual ? 'var(--solid)' : feito ? 'var(--ok)' : 'transparent', numFg: atual || feito ? 'var(--on-solid)' : 'var(--t2)', borda: atual ? 'var(--solid)' : feito ? 'var(--ok)' : 'var(--border-strong)' }; });
+    const dom = st.dominio.trim();
+    const domOk = /^[a-z0-9-]+\.myshopify\.com$/.test(dom);
+    const domErro = st.domTocado && !domOk;
+    const COP = [['URL de redirecionamento', 'https://user.xcart.app/api/shopify/callback'], ['URL do app', 'https://user.xcart.app'], ['Permissões (escopos)', 'read_orders, read_products, write_products, read_themes, write_script_tags']];
+    const copias = COP.map(([l, v], i) => ({ l, v, rot: st.copiado === i ? 'Copiado' : 'Copiar', copiar: () => { set({ copiado: i }); setTimeout(() => this.setState({ copiado: null }), 1800); } }));
+    const fw = mobile ? 375 : 1440, fh = mobile ? 812 : 900;
+    const escala = mobile ? 1 : Math.min(1, Math.max(0.4, (st.vw - 32) / fw));
+    const toast = st.toast; const cf = st.confirmar || { nome: '', itens: [] };
+    const vDetalhe = st.view === 'detalhe' && !vazio && !carregando;
+    return {
+      theme: st.theme, width: st.width, cenario: cen, anot: st.anot,
+      cenarios: [{ id: 'dados', label: 'Lista' }, { id: 'voltou', label: 'Voltou da Shopify' }, { id: 'vazio', label: 'Conta nova' }, { id: 'carregando', label: 'Carregando' }],
+      setTheme: v => { try { localStorage.setItem('xcart-mock-tema', v); } catch (e) {} set({ theme: v }); },
+      setWidth: v => { try { localStorage.setItem('xcart-mock-largura', v); } catch (e) {} set({ width: v }); },
+      setCenario: v => set({ cenario: v, view: 'lista', voltouFechado: false }), setAnot: v => set({ anot: v }),
+      desktop: !mobile, mobile, frameDir: mobile ? 'column' : 'row', frameW: `${fw}px`, frameH: `${fh}px`, escala, wrapW: `${fw * escala}px`, wrapH: `${fh * escala}px`, frameRaio: mobile ? '28px' : '10px', pad: mobile ? '16px 16px 32px' : '24px 32px 48px',
+      kpiMin: mobile ? '150px' : '220px', kpiFs: mobile ? 'var(--fs-page)' : 'var(--fs-kpi)', cols3: mobile ? '1fr' : 'repeat(3, minmax(0,1fr))',
+      lojasTopo: L.filter(l => !st.removidas.includes(l.id)).map(l => ({ id: l.id, nome: l.nome, dominio: l.dominio.replace('.myshopify.com', ''), ativa: l.ativa, motivo: l.motivo })), loja: st.loja, periodo: st.periodo, comparar: st.comparar, moeda: st.moeda, setCtx: (k, v) => set({ [k]: v }),
+      nAtivas: nAt, tituloTopo: vDetalhe ? detL.nome : 'Lojas',
+      vLista: !vDetalhe, vDetalhe, voltou: cen === 'voltou' && !st.voltouFechado, fecharVoltou: () => set({ voltouFechado: true }),
+      vazio, temLista: !vazio, carregando, cinco: [1, 2, 3, 4, 5], grupos, busca: st.busca, digitar: e => set({ busca: e.target.value }), limpar: () => set({ busca: '' }),
+      periodoTxt: `${PER[st.periodo]} · ${st.moeda}`, filtradoVazio: !carregando && filtradas.length === 0 && !!q,
+      tabela: !carregando && !mobile && filtradas.length > 0, cartoes: !carregando && mobile && filtradas.length > 0, cab, linhas,
+      rodape: st.grupo === 'inativas' ? 'Lojas sem acesso ficam fora dos totais de Lucro e de Saúde dos pixels.' : `${nIn} lojas sem acesso ficam numa aba à parte e fora dos totais.`,
+      d: { nome: detL.nome, dominio: detL.dominio, kpis: [{ l: 'Faturamento', v: din(detL.fat), s: PER[st.periodo] }, { l: 'Lucro estimado', v: din(detL.lucro), s: 'estimado · não contábil' }, { l: 'Pedidos', v: '720', s: '+ 5 reenvios' }, { l: 'ROAS real', v: '2,84×', s: 'equilíbrio 1,53×' }] },
+      voltarLista: e => { e.preventDefault(); set({ view: 'lista' }); }, abasDet,
+      abaVisao: st.abaDet === 'visao', abaPerfil: st.abaDet === 'perfil', abaMarca: st.abaDet === 'marca', abaAtalho: st.abaDet === 'custos' || st.abaDet === 'rastreamento', abaPerigo: st.abaDet === 'perigo',
+      escopos: ['Ler pedidos (read_orders)', 'Ler e editar produtos', 'Ler o tema', 'Token válido'], ultimaSync: st.sinc ? 'Sincronizando…' : `Última sincronização hoje, ${st.sincHora}`,
+      sincronizando: st.sinc, giro: st.sinc ? 'xc-spin 900ms linear infinite' : 'none', sincRotulo: st.sinc ? 'Sincronizando…' : 'Sincronizar agora',
+      sincronizarDet: () => { set({ sinc: true }); setTimeout(() => { const d = new Date(); this.setState({ sinc: false, sincHora: `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }); this.avisar('Lumen Casa sincronizada', '2 pedidos novos. Os números desta tela já mudaram.'); }, 1400); },
+      nomeEdit: nome, editarNome: e => set({ nome: e.target.value }), nomeInvalido: nomeInvalido ? 'true' : undefined, nomeBorda: nomeInvalido ? 'var(--err)' : 'var(--control-border)',
+      nomeAjuda: nomeInvalido ? 'Escreva um nome para a loja.' : 'Aparece nos menus e nos alertas. Não muda o nome na Shopify.', nomeAjudaFg: nomeInvalido ? 'var(--err)' : 'var(--t2)',
+      semMudanca: st.nome === null || st.nome === detL.nome, salvarOp: st.nome === null || st.nome === detL.nome ? 0.5 : 1, descartarNome: () => set({ nome: null }),
+      salvarNome: () => { if (nomeInvalido) return; this.avisar('Perfil salvo', 'O nome novo já aparece no menu e nos alertas.'); set({ nome: null }); },
+      materiais: [1, 2, 3, 4].map(n => ({ n: `material ${n}`, aria: `Remover material ${n}` })),
+      atalhoTitulo: st.abaDet === 'custos' ? 'Custos e taxas de Lumen Casa' : 'Rastreamento de Lumen Casa', atalhoTexto: st.abaDet === 'custos' ? '612 de 640 SKUs vendidos têm custo. Taxa do gateway: 3,9% + US$ 0,30.' : 'Meta enviando; Google com o Checkout sem rótulo.',
+      atalhoHref: st.abaDet === 'custos' ? 'Casca.dc.html' : 'Saude%20dos%20pixels.dc.html', atalhoCta: st.abaDet === 'custos' ? 'Abrir Custos já filtrado para a loja' : 'Abrir Saúde dos pixels da loja',
+      removerDet: () => abrirRemover(detL),
+      confirmar: !!st.confirmar, cf, cancelar: () => set({ confirmar: null }), removendo: st.removendo, removerRotulo: st.removendo ? 'Removendo…' : 'Remover do xcart',
+      confirmarRemover: () => { const { id, nome: n } = st.confirmar; set({ removendo: true }); setTimeout(() => { this.setState(s => ({ removidas: [...s.removidas, id], confirmar: null, removendo: false, view: 'lista' })); this.avisar(`${n} removida do xcart`, 'A lista já foi atualizada.'); }, 900); },
+      conectar: st.conectar, abrirConectar: () => set({ conectar: true, passo: 1, dominio: '', domTocado: false, redir: false }), fecharConectar: () => set({ conectar: false }),
+      passo: st.passo, passos, p1: st.passo === 1, p2: st.passo === 2, p3: st.passo === 3, p4: st.passo === 4,
+      dominio: st.dominio, digitarDominio: e => set({ dominio: e.target.value.toLowerCase() }), domInvalido: domErro ? 'true' : undefined, domBorda: domErro ? 'var(--err)' : 'var(--control-border)',
+      domAjuda: domErro ? 'Use o domínio que termina em .myshopify.com, por exemplo minhaloja.myshopify.com.' : 'Está em Configurações › Domínios, na Shopify.', domAjudaFg: domErro ? 'var(--err)' : 'var(--t2)',
+      copias, secTipo: st.sec ? 'text' : 'password', secVisivel: st.sec, secRotulo: st.sec ? 'Ocultar' : 'Mostrar', toggleSec: () => set({ sec: !st.sec }), redirecionando: st.redir,
+      primeiroPasso: st.passo === 1, voltarOp: st.passo === 1 ? 0.5 : 1, voltarPasso: () => set({ passo: Math.max(1, st.passo - 1) }),
+      avancarRotulo: st.passo === 4 ? (st.redir ? 'Abrindo…' : 'Abrir a Shopify') : 'Continuar',
+      avancar: () => { if (st.passo === 1 && !domOk) { set({ domTocado: true }); return; } if (st.passo < 4) set({ passo: st.passo + 1 }); else { set({ redir: true }); setTimeout(() => this.setState({ conectar: false, redir: false, cenario: 'voltou', voltouFechado: false, view: 'lista' }), 1400); } },
+      dlgCols: mobile ? '1fr' : '220px 1fr', dlgAlign: mobile ? 'stretch' : 'center', dlgPad: mobile ? '0' : '32px',
+      toast: !!toast, toastTitulo: toast ? toast.t : '', toastTexto: toast ? toast.d : '', fecharToast: () => set({ toast: null }),
+      toastDir: mobile ? '12px' : '24px', toastEsq: mobile ? '12px' : 'auto', toastBase: mobile ? '76px' : '24px',
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <title>xcart · Fundação do design system (Fase 0)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Public+Sans:wght@400;500;600;700&amp;display=swap">
+  <link rel="stylesheet" href="xcart-tokens.css">
+</helmet>
+<div style="min-height:100vh; background:#e9e8e5; display:flex; flex-direction:column;">
+  <dc-import name="Revisao" tela="Fundação: tokens, contraste, tipo e componentes" theme="{{ theme }}" width="{{ width }}" anot="{{ anot }}" onTheme="{{ setTheme }}" onWidth="{{ setWidth }}" onAnot="{{ setAnot }}" hint-size="100%,48px"></dc-import>
+  <div data-theme="{{ theme }}" style="flex:1; background:var(--bg); color:var(--ink);">
+    <div style="max-width:{{ maxW }}; margin:0 auto; padding:{{ pad }}; display:flex; flex-direction:column; gap:48px;">
+      <header style="display:flex; flex-direction:column; gap:8px; max-width:760px;">
+        <span style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--t2);">Fase 0 · proposta para aprovação</span>
+        <h1 style="font-size:var(--fs-page); line-height:28px; font-weight:600;">Fundação do design system</h1>
+        <p style="font-size:var(--fs-body); color:var(--t1); text-wrap:pretty;">Mantém a direção do protótipo de 13/09 (base neutra quente, botão primário preto, terracota só em link e foco, Public Sans e IBM Plex Mono) e fecha o que faltava: contraste AA, escala nomeada e um componente por padrão. Os tokens estão em xcart-tokens.css e viram o @theme de src/app/globals.css na Fase 1.</p>
+      </header>
+
+      <!-- 1. Cores -->
+      <section aria-labelledby="s1" style="display:flex; flex-direction:column; gap:16px;">
+        <h2 id="s1" style="font-size:var(--fs-overlay); font-weight:600;">1. Cores, um nome por cor</h2>
+        <p style="font-size:var(--fs-dense); color:var(--t1); max-width:760px; text-wrap:pretty;">Vocabulário único. Os nomes do shadcn passam a apontar para estes: foreground → ink, muted-foreground → t2, primary → solid, destructive → err, ring → focus. Saem: --t5, --scrim duplicado, --vitrine-soft, --checkout-soft, --warning, --primary-cyan, danger e o --info que apontava para a terracota.</p>
+        <div style="display:grid; grid-template-columns:{{ cols2 }}; gap:16px;">
+          <sc-for list="{{ paineisCor }}" as="pn" hint-placeholder-count="2">
+            <div data-theme="{{ pn.tema }}" style="background:var(--bg); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:16px;">
+              <strong style="font-size:var(--fs-dense); font-weight:600;">{{ pn.titulo }}</strong>
+              <sc-for list="{{ pn.grupos }}" as="g" hint-placeholder-count="5">
+                <div style="display:flex; flex-direction:column; gap:6px;">
+                  <span style="font-size:var(--fs-label); font-weight:600; color:var(--t2);">{{ g.nome }}</span>
+                  <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:6px;">
+                    <sc-for list="{{ g.itens }}" as="t" hint-placeholder-count="5">
+                      <div style="display:flex; align-items:center; gap:8px; padding:6px; border-radius:var(--r-control); background:var(--surface); border:1px solid var(--border-subtle);">
+                        <span aria-hidden="true" style="width:28px; height:28px; flex:none; border-radius:4px; background:{{ t.v }}; border:1px solid var(--border);"></span>
+                        <span style="display:flex; flex-direction:column; min-width:0;"><span style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--ink);">--{{ t.k }}</span><span style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--t2);">{{ t.v }}</span></span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <!-- 2. Contraste -->
+      <section aria-labelledby="s2" style="display:flex; flex-direction:column; gap:16px;">
+        <h2 id="s2" style="font-size:var(--fs-overlay); font-weight:600;">2. Tabela de contraste</h2>
+        <p style="font-size:var(--fs-dense); color:var(--t1); max-width:760px; text-wrap:pretty;">Calculada nesta página a partir dos valores dos tokens (fórmula WCAG 2.2). Texto útil precisa de 4,5:1; borda de controle, foco, ícone e série de gráfico precisam de 3:1. A coluna “Hoje” mostra os pares que reprovam no globals.css atual.</p>
+        <div style="overflow-x:auto; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card);">
+          <table style="width:100%; border-collapse:collapse; font-size:var(--fs-dense);">
+            <caption style="position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);">Contraste de cada par de tokens nos temas claro e escuro</caption>
+            <thead><tr><sc-for list="{{ cabContraste }}" as="h" hint-placeholder-count="6"><th scope="col" style="height:40px; padding:0 12px; text-align:{{ h.align }}; font-size:var(--fs-label); font-weight:600; color:var(--t1); background:var(--surface-2); border-bottom:1px solid var(--border); white-space:nowrap;">{{ h.label }}</th></sc-for></tr></thead>
+            <tbody>
+              <sc-for list="{{ contraste }}" as="c" hint-placeholder-count="20">
+                <tr>
+                  <td style="height:40px; padding:0 12px; border-bottom:1px solid var(--border-subtle);"><span style="display:flex; flex-direction:column;"><span style="font-weight:500;">{{ c.uso }}</span><span style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--t2);">{{ c.par }}</span></span></td>
+                  <td style="padding:0 12px; border-bottom:1px solid var(--border-subtle); text-align:right; font-variant-numeric:tabular-nums; color:var(--t1);">{{ c.min }}</td>
+                  <td data-theme="light" style="padding:0 12px; border-bottom:1px solid var(--border-subtle); background:{{ c.fundoC }};"><span style="display:flex; align-items:center; gap:8px; color:{{ c.textoC }}; font-weight:600;">Aa <span style="font-variant-numeric:tabular-nums; font-weight:500;">{{ c.rC }}</span></span></td>
+                  <td style="padding:0 12px; border-bottom:1px solid var(--border-subtle);"><span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ c.bC }}; background:{{ c.bgC }}; color:{{ c.fgC }}; font-size:var(--fs-label); font-weight:600; white-space:nowrap;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ c.okC }}</span></td>
+                  <td data-theme="dark" style="padding:0 12px; border-bottom:1px solid var(--border-subtle); background:{{ c.fundoE }};"><span style="display:flex; align-items:center; gap:8px; color:{{ c.textoE }}; font-weight:600;">Aa <span style="font-variant-numeric:tabular-nums; font-weight:500;">{{ c.rE }}</span></span></td>
+                  <td style="padding:0 12px; border-bottom:1px solid var(--border-subtle);"><span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ c.bE }}; background:{{ c.bgE }}; color:{{ c.fgE }}; font-size:var(--fs-label); font-weight:600; white-space:nowrap;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ c.okE }}</span></td>
+                  <td style="padding:0 12px; border-bottom:1px solid var(--border-subtle); font-variant-numeric:tabular-nums; color:{{ c.antesFg }}; white-space:nowrap;">{{ c.antes }}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+        <span style="font-size:var(--fs-label); color:var(--t2);">{{ resumoContraste }}</span>
+      </section>
+
+      <!-- 3. Tipografia -->
+      <section aria-labelledby="s3" style="display:flex; flex-direction:column; gap:16px;">
+        <h2 id="s3" style="font-size:var(--fs-overlay); font-weight:600;">3. Tipografia: 7 tamanhos, nenhum abaixo de 12px</h2>
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card);">
+          <sc-for list="{{ tipos }}" as="t" hint-placeholder-count="7">
+            <div style="display:grid; grid-template-columns:{{ tipoCols }}; gap:8px 24px; align-items:baseline; padding:14px 16px; border-bottom:1px solid var(--border-subtle);">
+              <span style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--t2);">{{ t.tok }} · {{ t.spec }}</span>
+              <span style="font-size:{{ t.var }}; font-weight:{{ t.w }}; line-height:1.3; font-variant-numeric:tabular-nums;">{{ t.amostra }}</span>
+              <span style="font-size:var(--fs-label); color:var(--t1);">{{ t.uso }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:grid; grid-template-columns:{{ cols2 }}; gap:16px;">
+          <div style="background:var(--surface); border:2px solid var(--ink); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:10px;">
+            <span style="display:flex; justify-content:space-between; gap:8px; align-items:center;"><strong style="font-size:var(--fs-dense);">A · Public Sans com algarismos tabulares</strong><span style="font-size:var(--fs-label); color:var(--ok); border:1px solid var(--ok-border); background:var(--ok-bg); border-radius:11px; padding:1px 8px; font-weight:600;">Recomendado</span></span>
+            <sc-for list="{{ amostraNum }}" as="n" hint-placeholder-count="3"><span style="display:grid; grid-template-columns:1fr auto auto; gap:16px; font-size:var(--fs-dense); font-variant-numeric:tabular-nums; border-bottom:1px solid var(--border-subtle); padding-bottom:6px;"><span>{{ n.l }}</span><span style="text-align:right;">{{ n.a }}</span><span style="text-align:right; font-weight:600;">{{ n.b }}</span></span></sc-for>
+            <span style="font-size:var(--fs-label); color:var(--t1); text-wrap:pretty;">Número na mesma fonte do texto, alinhado à direita. Mono fica só para SKU, ID de conta, domínio técnico e código copiável: <span style="font-family:var(--font-mono);">LC-LUM-01-BK</span>.</span>
+          </div>
+          <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:10px;">
+            <strong style="font-size:var(--fs-dense);">B · IBM Plex Mono em todo número</strong>
+            <sc-for list="{{ amostraNum }}" as="n" hint-placeholder-count="3"><span style="display:grid; grid-template-columns:1fr auto auto; gap:16px; font-size:var(--fs-dense); border-bottom:1px solid var(--border-subtle); padding-bottom:6px;"><span>{{ n.l }}</span><span style="text-align:right; font-family:var(--font-mono);">{{ n.a }}</span><span style="text-align:right; font-family:var(--font-mono); font-weight:500;">{{ n.b }}</span></span></sc-for>
+            <span style="font-size:var(--fs-label); color:var(--t1); text-wrap:pretty;">Alinha igual, mas fica mais largo e mistura duas vozes na mesma linha. É o que acontece hoje na tabela por loja.</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. Espaço, raio, alturas, elevação -->
+      <section aria-labelledby="s4" style="display:flex; flex-direction:column; gap:16px;">
+        <h2 id="s4" style="font-size:var(--fs-overlay); font-weight:600;">4. Espaço, raios, alturas e elevação</h2>
+        <div style="display:grid; grid-template-columns:{{ cols2 }}; gap:16px;">
+          <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:8px;">
+            <strong style="font-size:var(--fs-dense);">Grade de 4 px</strong>
+            <sc-for list="{{ espacos }}" as="e" hint-placeholder-count="7"><span style="display:flex; align-items:center; gap:12px; font-size:var(--fs-label); color:var(--t1);"><span style="width:40px; font-family:var(--font-mono);">{{ e.v }}</span><span aria-hidden="true" style="height:8px; width:{{ e.w }}; background:var(--chart-2); border-radius:2px;"></span><span>{{ e.uso }}</span></span></sc-for>
+            <span style="font-size:var(--fs-label); color:var(--t2); margin-top:4px;">Container: até 1280 px, centralizado. Tabelas largas usam a largura toda do container.</span>
+          </div>
+          <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:16px;">
+            <strong style="font-size:var(--fs-dense);">3 raios · 3 alturas · sombra só em overlay</strong>
+            <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end;">
+              <sc-for list="{{ raios }}" as="r" hint-placeholder-count="3"><span style="display:flex; flex-direction:column; gap:6px; align-items:center; font-size:var(--fs-label); color:var(--t1);"><span aria-hidden="true" style="width:64px; height:48px; border:1px solid var(--border-strong); border-radius:{{ r.v }}; background:var(--surface-2);"></span>{{ r.l }}</span></sc-for>
+            </div>
+            <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+              <sc-for list="{{ alturas }}" as="h" hint-placeholder-count="3"><span style="display:flex; align-items:center; height:{{ h.v }}; padding:0 14px; background:var(--solid); color:var(--on-solid); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500;">{{ h.l }}</span></sc-for>
+            </div>
+            <div style="display:flex; gap:16px; flex-wrap:wrap;">
+              <span style="flex:1; min-width:140px; height:72px; border:1px solid var(--border); border-radius:var(--r-card); background:var(--surface); display:grid; place-items:center; font-size:var(--fs-label); color:var(--t1);">Card: borda, sem sombra</span>
+              <span style="flex:1; min-width:140px; height:72px; border:1px solid var(--border); border-radius:var(--r-overlay); background:var(--surface); box-shadow:var(--shadow); display:grid; place-items:center; font-size:var(--fs-label); color:var(--t1);">Overlay: --shadow</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. Status -->
+      <section aria-labelledby="s5" style="display:flex; flex-direction:column; gap:16px;">
+        <h2 id="s5" style="font-size:var(--fs-overlay); font-weight:600;">5. Status: seis tons e um mapa só</h2>
+        <p style="font-size:var(--fs-dense); color:var(--t1); max-width:760px; text-wrap:pretty;">Sempre cor + ponto + palavra em caixa de frase. “Em andamento” é o único com ponto animado, que para no estado final e respeita a preferência por menos movimento. Pausado é sempre neutro.</p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <sc-for list="{{ tons }}" as="t" hint-placeholder-count="6"><span style="display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px; border-radius:14px; border:1px solid {{ t.borda }}; background:{{ t.bg }}; color:{{ t.fg }}; font-size:var(--fs-label); font-weight:600;"><span aria-hidden="true" style="width:7px; height:7px; border-radius:50%; background:currentColor; animation:{{ t.anim }};"></span>{{ t.l }}</span></sc-for>
+        </div>
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card);">
+          <sc-for list="{{ mapaStatus }}" as="m" hint-placeholder-count="7">
+            <div style="display:grid; grid-template-columns:{{ statusCols }}; gap:8px 16px; padding:12px 16px; border-bottom:1px solid var(--border-subtle); align-items:center;">
+              <span style="font-size:var(--fs-dense); font-weight:600;">{{ m.dominio }}</span>
+              <span style="display:flex; gap:6px; flex-wrap:wrap;"><sc-for list="{{ m.estados }}" as="e" hint-placeholder-count="4"><span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ e.borda }}; background:{{ e.bg }}; color:{{ e.fg }}; font-size:var(--fs-label); font-weight:500;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor; animation:{{ e.anim }};"></span>{{ e.l }}</span></sc-for></span>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <!-- 6. Gráficos -->
+      <section aria-labelledby="s6" style="display:flex; flex-direction:column; gap:16px;">
+        <h2 id="s6" style="font-size:var(--fs-overlay); font-weight:600;">6. Gráficos</h2>
+        <div style="display:grid; grid-template-columns:{{ cols2 }}; gap:16px;">
+          <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:10px;">
+            <strong style="font-size:var(--fs-dense);">Paleta com significado fixo</strong>
+            <sc-for list="{{ series }}" as="s" hint-placeholder-count="5"><span style="display:flex; align-items:center; gap:10px; font-size:var(--fs-dense);"><span aria-hidden="true" style="width:28px; height:4px; border-radius:2px; background:{{ s.cor }};"></span><span style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--t2); width:72px;">{{ s.tok }}</span><span>{{ s.uso }}</span></span></sc-for>
+            <span style="font-size:var(--fs-label); color:var(--t1); text-wrap:pretty;">Azul e laranja continuam distintos para quem não diferencia verde e vermelho. Comparação é sempre tracejada, nunca só outra cor. Verde e vermelho ficam para status, não para série.</span>
+          </div>
+          <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:10px;">
+            <strong style="font-size:var(--fs-dense);">Regras</strong>
+            <ul style="margin:0; padding-left:18px; display:flex; flex-direction:column; gap:4px; font-size:var(--fs-dense); color:var(--t1);">
+              <sc-for list="{{ regrasGraf }}" as="r" hint-placeholder-count="8"><li>{{ r }}</li></sc-for>
+            </ul>
+          </div>
+        </div>
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:8px;">
+          <span style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;"><strong style="font-size:var(--fs-dense);">Biblioteca proposta: Recharts</strong><span style="font-size:var(--fs-label); color:var(--t2); border:1px solid var(--border); border-radius:4px; padding:0 6px;">decisão 4</span></span>
+          <p style="font-size:var(--fs-dense); color:var(--t1); text-wrap:pretty; max-width:860px;">É a base do componente Chart do shadcn/ui, que o repo já usa; desenha em SVG, então a cor de cada série vem direto de var(--chart-n) e o tema escuro funciona sem código extra; cobre linha, barra e barra empilhada, que são os únicos tipos previstos; tem tooltip navegável por teclado. Alternativas avaliadas: visx (mais controle, muito mais código por gráfico), ECharts (canvas, cores fora dos tokens) e Tremor (traz um design próprio que competiria com este). Conferir na Fase 1 a versão estável e a compatibilidade com React 19.</p>
+        </div>
+      </section>
+
+      <!-- 7. Componentes -->
+      <section aria-labelledby="s7" style="display:flex; flex-direction:column; gap:16px;">
+        <h2 id="s7" style="font-size:var(--fs-overlay); font-weight:600;">7. Componentes, um de cada</h2>
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:14px;">
+          <strong style="font-size:var(--fs-dense);">Button · 5 variantes, 3 alturas, estado pending</strong>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+            <button type="button" style="height:var(--h-md); padding:0 16px; border:0; background:var(--solid); color:var(--on-solid); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;" style-hover="background:var(--solid-hover);">Primária</button>
+            <button type="button" style="height:var(--h-md); padding:0 16px; border:1px solid var(--border-strong); background:var(--surface); color:var(--ink); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;" style-hover="border-color:var(--control-border);">Secundária</button>
+            <button type="button" style="height:var(--h-md); padding:0 12px; border:0; background:transparent; color:var(--ink); border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer;" style-hover="background:var(--hover);">Ghost</button>
+            <button type="button" style="height:var(--h-md); padding:0 16px; border:0; background:var(--err); color:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:600; cursor:pointer;">Remover loja</button>
+            <button type="button" style="height:var(--h-md); padding:0 4px; border:0; background:transparent; color:var(--brand); font-size:var(--fs-dense); cursor:pointer; text-decoration:underline;">Link</button>
+            <span aria-hidden="true" style="width:1px; height:24px; background:var(--border);"></span>
+            <button type="button" style="height:var(--h-md); padding:0 16px; border:0; background:var(--solid); color:var(--on-solid); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; outline:2px solid var(--focus); outline-offset:2px;">Com foco</button>
+            <button type="button" disabled="true" style="height:var(--h-md); padding:0 16px; border:0; background:var(--track); color:var(--t2); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:not-allowed;">Desabilitado</button>
+            <button type="button" onClick="{{ pending }}" aria-busy="{{ pendente }}" style="display:flex; align-items:center; gap:8px; height:var(--h-md); padding:0 16px; border:0; background:var(--solid); color:var(--on-solid); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer; min-width:130px; justify-content:center;"><sc-if value="{{ pendente }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="width:12px; height:12px; border-radius:50%; border:2px solid currentColor; border-right-color:transparent; animation:xc-spin 800ms linear infinite;"></span></sc-if>{{ pendRotulo }}</button>
+            <button type="button" aria-label="Atualizar agora" style="width:var(--h-md); height:var(--h-md); display:grid; place-items:center; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); cursor:pointer; color:var(--t1);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8 M21 3v5h-5 M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16 M8 16H3v5"></path></svg></button>
+          </div>
+          <span style="font-size:var(--fs-label); color:var(--t2);">Pequeno 28 px em tabela · médio 36 px padrão · grande 44 px no celular. Botão só de ícone sempre com aria-label. Pending impede duplo envio.</span>
+        </div>
+
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:grid; grid-template-columns:{{ cols3 }}; gap:20px;">
+          <div style="display:flex; flex-direction:column; gap:6px;"><label for="c1" style="font-size:var(--fs-dense); font-weight:500;">Custo do produto</label><div style="display:flex; align-items:center; height:var(--h-md); border:1px solid var(--control-border); border-radius:var(--r-control); background:var(--surface);"><span style="padding:0 0 0 12px; color:var(--t2); font-size:var(--fs-body);">US$</span><input id="c1" value="{{ custo }}" onInput="{{ digitarCusto }}" inputmode="decimal" aria-describedby="c1a" style="flex:1; min-width:0; height:100%; border:0; outline:0; background:transparent; padding:0 12px 0 6px; font-size:var(--fs-body); font-variant-numeric:tabular-nums; text-align:right;"></div><span id="c1a" style="font-size:var(--fs-label); color:var(--t2);">Aceita vírgula ou ponto: {{ custoLido }}</span></div>
+          <div style="display:flex; flex-direction:column; gap:6px;"><label for="c2" style="font-size:var(--fs-dense); font-weight:500;">Taxa do gateway</label><input id="c2" value="3,9" aria-invalid="true" aria-describedby="c2a" style="height:var(--h-md); border:1px solid var(--err); border-radius:var(--r-control); background:var(--surface); padding:0 12px; font-size:var(--fs-body); outline:0;"><span id="c2a" style="font-size:var(--fs-label); color:var(--err);">Falta o símbolo de %: escreva 3,9%.</span></div>
+          <div style="display:flex; flex-direction:column; gap:6px;"><label for="c3" style="font-size:var(--fs-dense); font-weight:500;">Token de conversões</label><div style="display:flex; gap:8px;"><input id="c3" type="{{ segTipo }}" value="EAAGm0PX4ZCpsBA" style="flex:1; min-width:0; height:var(--h-md); border:1px solid var(--control-border); border-radius:var(--r-control); background:var(--surface); padding:0 12px; font-family:var(--font-mono); font-size:var(--fs-dense);"><button type="button" onClick="{{ toggleSeg }}" aria-pressed="{{ segVis }}" style="height:var(--h-md); padding:0 12px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer;">{{ segRot }}</button></div><span style="font-size:var(--fs-label); color:var(--t2);">Campo de segredo com mostrar e ocultar.</span></div>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <span style="font-size:var(--fs-dense); font-weight:500;">Switch e checkbox</span>
+            <button type="button" role="switch" aria-checked="{{ sw }}" onClick="{{ toggleSw }}" style="display:flex; align-items:center; gap:10px; border:0; background:transparent; padding:0; cursor:pointer; font-size:var(--fs-dense);"><span aria-hidden="true" style="width:40px; height:24px; border-radius:12px; background:{{ swTrilho }}; position:relative; display:block;"><span style="position:absolute; top:3px; left:{{ swBola }}; width:18px; height:18px; border-radius:50%; background:var(--surface); transition:left 150ms var(--ease);"></span></span>Usar no lucro</button>
+            <div style="display:flex; gap:16px; flex-wrap:wrap; font-size:var(--fs-dense);">
+              <sc-for list="{{ checks }}" as="ck" hint-placeholder-count="3"><span role="checkbox" aria-checked="{{ ck.aria }}" style="display:flex; align-items:center; gap:8px;"><span aria-hidden="true" style="width:16px; height:16px; border-radius:4px; border:1px solid {{ ck.borda }}; background:{{ ck.bg }}; display:grid; place-items:center; color:var(--on-solid);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="{{ ck.d }}"></path></svg></span>{{ ck.l }}</span></sc-for>
+            </div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <span style="font-size:var(--fs-dense); font-weight:500;">Controle segmentado</span>
+            <div role="radiogroup" aria-label="Agrupar por" style="display:flex; align-self:flex-start; padding:2px; gap:2px; background:var(--track); border-radius:var(--r-control);"><span role="radio" aria-checked="true" style="height:28px; display:flex; align-items:center; padding:0 12px; border-radius:4px; background:var(--surface); box-shadow:0 0 0 1px var(--border); font-size:var(--fs-label); font-weight:600;">Dia</span><span role="radio" aria-checked="false" style="height:28px; display:flex; align-items:center; padding:0 12px; font-size:var(--fs-label); color:var(--t2);">Semana</span><span role="radio" aria-checked="false" style="height:28px; display:flex; align-items:center; padding:0 12px; font-size:var(--fs-label); color:var(--t2);">Mês</span></div>
+            <span style="font-size:var(--fs-dense); font-weight:500; margin-top:4px;">Filtro em chip</span>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;"><span style="height:var(--h-sm); display:flex; align-items:center; padding:0 10px; border:1px dashed var(--control-border); border-radius:14px; font-size:var(--fs-dense); color:var(--t1);">+ Status</span><span style="height:var(--h-sm); display:flex; align-items:center; padding:0 10px; border:1px solid var(--info-border); background:var(--info-bg); color:var(--info); border-radius:14px; font-size:var(--fs-dense);">Status: Falhou ×</span></div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px;"><span style="font-size:var(--fs-dense); font-weight:500;">Campo para copiar</span><div style="display:flex; gap:8px;"><code style="flex:1; min-width:0; height:var(--h-md); display:flex; align-items:center; padding:0 12px; border:1px solid var(--border); border-radius:var(--r-control); background:var(--surface-2); font-family:var(--font-mono); font-size:var(--fs-label); overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">https://user.xcart.app/api/shopify/callback</code><button type="button" onClick="{{ copiar }}" style="height:var(--h-md); padding:0 12px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer; min-width:84px;">{{ copiarRot }}</button></div><span style="font-size:var(--fs-label); color:var(--t2);">Atalho no teclado: <kbd style="font-family:var(--font-mono); border:1px solid var(--border); border-radius:4px; padding:0 4px;">⌘K</kbd></span></div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:{{ cols2 }}; gap:16px;">
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <strong style="font-size:var(--fs-dense);">Callout · um por vez, ícone, título, detalhe e uma ação</strong>
+            <sc-for list="{{ callouts }}" as="co" hint-placeholder-count="4">
+              <div style="display:flex; gap:10px; padding:12px 14px; border-radius:var(--r-card); background:{{ co.bg }}; border:1px solid {{ co.borda }}; align-items:flex-start;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:{{ co.fg }}; flex:none; margin-top:1px;"><path d="{{ co.ic }}"></path></svg><span style="flex:1; display:flex; flex-direction:column; gap:2px; font-size:var(--fs-dense);"><strong style="color:{{ co.fg }};">{{ co.t }}</strong><span style="color:var(--ink);">{{ co.d }}</span></span><span style="font-size:var(--fs-dense); font-weight:500; color:var(--brand); white-space:nowrap;">{{ co.cta }}</span></div>
+            </sc-for>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <strong style="font-size:var(--fs-dense);">Toast e confirmação destrutiva</strong>
+            <div role="status" style="display:flex; gap:12px; align-items:center; padding:12px 14px; background:var(--solid); color:var(--on-solid); border-radius:var(--r-card); box-shadow:var(--shadow);"><span style="flex:1; display:flex; flex-direction:column; gap:2px; font-size:var(--fs-dense);"><strong>Conta pausada no xcart</strong><span style="white-space:pre-line; opacity:.9;">{{ toastTexto }}</span></span><span style="height:var(--h-sm); display:flex; align-items:center; padding:0 10px; border:1px solid currentColor; border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:600;">Desfazer</span></div>
+            <div role="alertdialog" aria-label="Exemplo de confirmação" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-overlay); box-shadow:var(--shadow); padding:16px; display:flex; flex-direction:column; gap:10px;"><strong style="font-size:var(--fs-section);">Apagar a versão de custo de 12/09?</strong><span style="font-size:var(--fs-dense); color:var(--t1);">Os pedidos de 12/09 a 27/09 passam a usar o custo anterior, US$ 11,20. O lucro desses dias muda.</span><div style="display:flex; gap:8px; justify-content:flex-end;"><span style="height:var(--h-md); display:flex; align-items:center; padding:0 14px; border:1px solid var(--border-strong); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500;">Cancelar</span><span style="height:var(--h-md); display:flex; align-items:center; padding:0 14px; background:var(--err); color:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:600;">Apagar versão</span></div></div>
+          </div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <strong style="font-size:var(--fs-dense);">Estados vazios · título diz o que falta, descrição com menos de 14 palavras, um CTA</strong>
+          <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax({{ vazioMin }}, 1fr)); gap:12px;">
+            <sc-for list="{{ vazios }}" as="v" hint-placeholder-count="6">
+              <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:20px 16px; display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center; min-height:200px; justify-content:center;">
+                <span style="font-size:var(--fs-label); color:var(--t2); border:1px solid var(--border-strong); border-radius:11px; padding:1px 8px; font-weight:500;">{{ v.tipo }}</span>
+                <strong style="font-size:var(--fs-dense); font-weight:600;">{{ v.t }}</strong>
+                <span style="font-size:var(--fs-label); color:var(--t1);">{{ v.d }}</span>
+                <sc-if value="{{ v.cta }}" hint-placeholder-val="{{ true }}"><span style="margin-top:4px; height:var(--h-sm); display:flex; align-items:center; padding:0 12px; border-radius:var(--r-control); background:{{ v.ctaBg }}; color:{{ v.ctaFg }}; border:{{ v.ctaBorda }}; font-size:var(--fs-dense); font-weight:500;">{{ v.cta }}</span></sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="s8" style="display:flex; flex-direction:column; gap:12px;">
+        <h2 id="s8" style="font-size:var(--fs-overlay); font-weight:600;">8. Ícones e movimento</h2>
+        <ul style="margin:0; padding-left:18px; display:flex; flex-direction:column; gap:4px; font-size:var(--fs-dense); color:var(--t1); max-width:860px;">
+          <li>Só lucide, em 14, 16 e 20 px, com traço 1,75 em todo lugar. Ícone decorativo leva aria-hidden.</li>
+          <li>Transições de até 200 ms, só em opacidade e posição. Todas desligam com “reduzir movimento” (regra global em xcart-tokens.css).</li>
+          <li>Linha nova num feed ao vivo ganha um fundo azul que some em 2 s. Ponto animado só para o que está em andamento.</li>
+          <li>A logo segue o tema: nos mockups o wordmark “xcart” é texto; na Fase 1 a logo real entra em SVG com currentColor.</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { theme: 'light', width: 'desktop', anot: false, pend: false, custo: '12,90', seg: false, sw: true, copiado: false };
+  componentDidMount() { try { const t = localStorage.getItem('xcart-mock-tema'); const w = localStorage.getItem('xcart-mock-largura'); const s = {}; if (t) s.theme = t; if (w) s.width = w; this.setState(s); } catch (e) {} }
+  lum(hex) { const h = hex.replace('#', ''); const c = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16) / 255).map(v => v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; }
+  ratio(a, b) { const x = this.lum(a), y = this.lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+  renderVals() {
+    const st = this.state; const mobile = st.width === 'mobile'; const set = o => this.setState(o);
+    const T = {
+      light: { bg: '#f7f6f5', surface: '#ffffff', 'surface-2': '#fbfbfa', hover: '#f3f2f0', track: '#ecebe8', border: '#e4e2df', 'border-strong': '#cfccc8', 'control-border': '#8c8a86', ink: '#1a1a1a', t1: '#3f3e3c', t2: '#575553', t3: '#6e6c69', t4: '#8c8a86', solid: '#1a1a1a', 'on-solid': '#ffffff', brand: '#b04a2f', focus: '#b04a2f', ok: '#276b43', 'ok-bg': '#eaf3ee', warn: '#875c12', 'warn-bg': '#fbf3e2', err: '#b3261e', 'err-bg': '#fceceb', info: '#2c5d8f', 'info-bg': '#ebf1f7', neutral: '#575553', 'neutral-bg': '#f1f0ee', 'chart-1': '#1a1a1a', 'chart-2': '#3b6fa8', 'chart-3': '#c0661f', 'chart-4': '#24877c', 'chart-5': '#7c5cad' },
+      dark: { bg: '#0f0f0f', surface: '#171717', 'surface-2': '#1c1c1c', hover: '#232322', track: '#2a2a29', border: '#2c2c2b', 'border-strong': '#3d3d3b', 'control-border': '#74726e', ink: '#f1f0ee', t1: '#d4d2ce', t2: '#b3b1ad', t3: '#96948f', t4: '#75736f', solid: '#f1f0ee', 'on-solid': '#141414', brand: '#d9784f', focus: '#d9784f', ok: '#5cbf85', 'ok-bg': '#13291b', warn: '#e0ad52', 'warn-bg': '#2e2410', err: '#e8786a', 'err-bg': '#331816', info: '#7fb0e0', 'info-bg': '#142233', neutral: '#b3b1ad', 'neutral-bg': '#232322', 'chart-1': '#f1f0ee', 'chart-2': '#78a6dc', 'chart-3': '#e8955a', 'chart-4': '#5cc0b3', 'chart-5': '#a98ddb' },
+    };
+    const GR = [['Superfícies', ['bg', 'surface', 'surface-2', 'hover', 'track']], ['Texto', ['ink', 't1', 't2', 't3', 't4']], ['Bordas e ação', ['border', 'border-strong', 'control-border', 'solid', 'on-solid', 'brand']], ['Estados (cor · fundo)', ['ok', 'ok-bg', 'warn', 'warn-bg', 'err', 'err-bg', 'info', 'info-bg', 'neutral', 'neutral-bg']], ['Gráficos', ['chart-1', 'chart-2', 'chart-3', 'chart-4', 'chart-5']]];
+    const paineisCor = [['light', 'Tema claro'], ['dark', 'Tema escuro']].map(([tema, titulo]) => ({ tema, titulo, grupos: GR.map(([nome, ks]) => ({ nome, itens: ks.map(k => ({ k, v: T[tema][k] })) })) }));
+    const PARES = [
+      ['Texto principal', 'ink / surface', 'ink', 'surface', 4.5], ['Texto principal no fundo da página', 'ink / bg', 'ink', 'bg', 4.5],
+      ['Texto secundário', 't1 / surface', 't1', 'surface', 4.5], ['Texto de apoio', 't2 / surface', 't2', 'surface', 4.5], ['Texto de apoio no controle segmentado', 't2 / track', 't2', 'track', 4.5],
+      ['Legenda e rótulo', 't3 / surface', 't3', 'surface', 4.5, ['#8a8a8a', '#ffffff']], ['Legenda no fundo da página', 't3 / bg', 't3', 'bg', 4.5], ['Legenda em linha com hover', 't3 / hover', 't3', 'hover', 4.5],
+      ['Link', 'brand / surface', 'brand', 'surface', 4.5], ['Botão primário', 'on-solid / solid', 'on-solid', 'solid', 4.5],
+      ['Selo de sucesso', 'ok / ok-bg', 'ok', 'ok-bg', 4.5, ['#2f7d4f', '#eaf3ee']], ['Selo de atenção', 'warn / warn-bg', 'warn', 'warn-bg', 4.5, ['#a5741a', '#fbf3e2']], ['Selo crítico', 'err / err-bg', 'err', 'err-bg', 4.5], ['Selo de informação', 'info / info-bg', 'info', 'info-bg', 4.5], ['Selo neutro', 'neutral / neutral-bg', 'neutral', 'neutral-bg', 4.5], ['Texto destrutivo', 'err / surface', 'err', 'surface', 4.5],
+      ['Borda de campo', 'control-border / surface', 'control-border', 'surface', 3, ['#b6b3af', '#ffffff']], ['Anel de foco', 'focus / surface', 'focus', 'surface', 3], ['Ícone e desabilitado', 't4 / surface', 't4', 'surface', 3, ['#a5a3a0', '#ffffff']],
+      ['Série: faturamento', 'chart-2 / surface', 'chart-2', 'surface', 3], ['Série: gasto', 'chart-3 / surface', 'chart-3', 'surface', 3], ['Série 4', 'chart-4 / surface', 'chart-4', 'surface', 3], ['Série 5', 'chart-5 / surface', 'chart-5', 'surface', 3],
+    ];
+    const fmt = r => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.floor(r * 100) / 100) + ':1';
+    let falhas = 0;
+    const contraste = PARES.map(([uso, par, a, b, min, antes]) => {
+      const rC = this.ratio(T.light[a], T.light[b]), rE = this.ratio(T.dark[a], T.dark[b]);
+      const okC = rC >= min, okE = rE >= min; if (!okC) falhas++; if (!okE) falhas++;
+      const pill = ok => ({ l: ok ? (min === 3 ? 'Passa 3:1' : 'AA') : 'Falha', fg: ok ? 'var(--ok)' : 'var(--err)', bg: ok ? 'var(--ok-bg)' : 'var(--err-bg)', b: ok ? 'var(--ok-border)' : 'var(--err-border)' });
+      const pC = pill(okC), pE = pill(okE);
+      const rA = antes ? this.ratio(antes[0], antes[1]) : null;
+      return { uso, par, min: `${new Intl.NumberFormat('pt-BR').format(min)}:1`, rC: fmt(rC), rE: fmt(rE), textoC: T.light[a], fundoC: T.light[b], textoE: T.dark[a], fundoE: T.dark[b],
+        okC: pC.l, fgC: pC.fg, bgC: pC.bg, bC: pC.b, okE: pE.l, fgE: pE.fg, bgE: pE.bg, bE: pE.b,
+        antes: rA ? `${fmt(rA)} (${antes[0]})` : '—', antesFg: rA && rA < min ? 'var(--err)' : 'var(--t2)' };
+    });
+    const tipos = [['--fs-kpi', '26/32 · 600', 'var(--fs-kpi)', 600, 'R$ 48,7 mil', 'Valor de KPI'], ['--fs-page', '22/28 · 600', 'var(--fs-page)', 600, 'Saúde dos pixels', 'Título de página (um por tela)'], ['--fs-overlay', '18/24 · 600', 'var(--fs-overlay)', 600, 'Remover Brisa Pet do xcart?', 'Título de drawer, dialog e seção de documento'], ['--fs-section', '15/20 · 600', 'var(--fs-section)', 600, 'Para onde foi o faturamento', 'Título de card e de seção'], ['--fs-body', '14/20 · 400', 'var(--fs-body)', 400, 'Lucro estimado por loja, já descontados os custos.', 'Corpo, descrição, campo de formulário'], ['--fs-dense', '13/18 · 400', 'var(--fs-dense)', 400, 'Lumen Casa · 720 pedidos · R$ 104.231,37', 'Tabela, lista, menu: base densa'], ['--fs-label', '12/16 · 500', 'var(--fs-label)', 500, 'Atualizado às 14:32 · horário de São Paulo', 'Rótulo, legenda, selo. O menor tamanho permitido']].map(([tok, spec, v, w, amostra, uso]) => ({ tok, spec, var: v, w, amostra, uso }));
+    const amostraNum = [['Lumen Casa', 'R$ 104.231,37', 'R$ 31.528,15'], ['Orla Wear', 'R$ 67.230,52', 'R$ 14.865,07'], ['Alto Fit', 'R$ 11.533,19', '−R$ 310,07']].map(([l, a, b]) => ({ l, a, b }));
+    const espacos = [['4', '4px', 'entre ícone e texto'], ['8', '8px', 'entre controles'], ['12', '12px', 'entre cards de uma grade'], ['16', '16px', 'padding de card'], ['24', '24px', 'entre blocos da página (um valor só)'], ['32', '32px', 'margem lateral no desktop'], ['48', '48px', 'entre seções de documento']].map(([v, w, uso]) => ({ v, w, uso }));
+    const raios = [['var(--r-control)', 'Controle · 6'], ['var(--r-card)', 'Card · 8'], ['var(--r-overlay)', 'Overlay · 12']].map(([v, l]) => ({ v, l }));
+    const alturas = [['var(--h-sm)', '28 · tabela'], ['var(--h-md)', '36 · padrão'], ['var(--h-lg)', '44 · celular']].map(([v, l]) => ({ v, l }));
+    const tom = (t, l) => ({ l, fg: `var(--${t})`, bg: `var(--${t}-bg)`, borda: `var(--${t}-border)`, anim: t === 'run' ? 'xc-pulse 1.4s ease-out infinite' : 'none' });
+    const tons = [['ok', 'Sucesso'], ['warn', 'Atenção'], ['err', 'Crítico'], ['info', 'Informação'], ['neutral', 'Neutro'], ['run', 'Em andamento']].map(([t, l]) => tom(t, l));
+    const MAPA = [['Loja', [['ok', 'Conectada'], ['err', 'Sem permissão'], ['warn', 'Token inválido'], ['neutral', 'App desinstalado'], ['neutral', 'Pausada']]], ['Rota', [['ok', 'Ativa'], ['warn', 'Atenção'], ['neutral', 'Pausada'], ['neutral', 'Sem rota']]], ['Destino de rastreamento', [['ok', 'Enviando'], ['warn', 'Incompleto'], ['neutral', 'Desativado'], ['info', 'Modo teste'], ['err', 'Erro']]], ['Conta de anúncio', [['ok', 'Atualizada'], ['run', 'Aguardando'], ['err', 'Erro'], ['warn', 'Sem loja'], ['neutral', 'Pausada']]], ['Importação (job)', [['neutral', 'Na fila'], ['run', 'Rodando'], ['ok', 'Concluída'], ['err', 'Falhou']]], ['Alerta', [['err', 'Crítico'], ['warn', 'Aviso'], ['ok', 'Resolvido']]], ['Semáforo de lucro', [['ok', 'Lucro'], ['warn', 'No limite'], ['err', 'Prejuízo'], ['neutral', 'Sem gasto']]], ['Saúde do rastreamento', [['ok', 'Tudo certo'], ['warn', 'Precisa de atenção'], ['err', 'Parado'], ['neutral', 'Desligado']]]];
+    const mapaStatus = MAPA.map(([dominio, es]) => ({ dominio, estados: es.map(([t, l]) => tom(t, l)) }));
+    const series = [['var(--chart-1)', '--chart-1', 'Lucro estimado (a métrica principal)'], ['var(--chart-2)', '--chart-2', 'Faturamento'], ['var(--chart-3)', '--chart-3', 'Gasto em anúncios'], ['var(--chart-4)', '--chart-4', 'Série extra (ex.: Meta contou)'], ['var(--chart-5)', '--chart-5', 'Série extra (ex.: Google contou)']].map(([cor, tok, uso]) => ({ cor, tok, uso }));
+    const regrasGraf = ['Valor em cima, gráfico embaixo.', 'Linha para tendência; período de comparação tracejado.', 'Barra para total por loja, produto ou campanha.', 'Barras horizontais em cascata para a composição do lucro.', 'Sparkline dentro do KPI, sem eixo.', 'Altura fixa: 180 px em card, 320 px em destaque; no máximo 3 por linha.', 'Carregando, erro e vazio com a mesma altura do gráfico.', 'Sem histórico vira lacuna hachurada e rotulada, nunca linha em zero.', 'Sem pizza nem velocímetro.'];
+    const ICO = { err: 'M7.86 2h8.28L22 7.86v8.28L16.14 22H7.86L2 16.14V7.86Z M12 8v4 M12 16h.01', warn: 'M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z M12 9v4 M12 17h.01', info: 'M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20 M12 16v-4 M12 8h.01', ok: 'M20 6L9 17l-5-5' };
+    const callouts = [['err', 'Lucro inflado em 2 lojas', '14 SKUs vendidos sem custo entraram como R$ 0,00.', 'Cadastrar custos'], ['warn', 'Gasto do Google parado há 3 h', 'O lucro de hoje pode estar alto demais.', 'Ver integração'], ['info', 'Câmbio aproximado em 2 dias', 'Fim de semana sem cotação oficial.', 'Como calculamos'], ['ok', 'Kova Home conectada', 'Os pedidos chegam em alguns minutos.', 'Ligar contas']].map(([t, ti, d, cta]) => ({ t: ti, d, cta, fg: `var(--${t})`, bg: `var(--${t}-bg)`, borda: `var(--${t}-border)`, ic: ICO[t] }));
+    const prim = { ctaBg: 'var(--solid)', ctaFg: 'var(--on-solid)', ctaBorda: '0' }, sec = { ctaBg: 'var(--surface)', ctaFg: 'var(--ink)', ctaBorda: '1px solid var(--border-strong)' };
+    const vazios = [['Primeiro uso', 'Nenhuma loja conectada', 'Conecte uma loja Shopify para ver lucro e rastreamento.', 'Conectar loja', prim], ['Informativo', 'Nenhum pedido no período', 'Os pedidos aparecem até 15 minutos depois da venda.', null, prim], ['Educativo', 'Você vende direto na loja de checkout', 'O roteamento é opcional e não afeta seu lucro.', 'Ativar roteamento', sec], ['Guia', 'Falta ligar o Google', 'Ligue a conta para o gasto entrar no lucro.', 'Ligar o Google', prim], ['Filtrado sem resultado', 'Nenhum evento com esses filtros', 'Nas linhas carregadas nada combina com tudo.', 'Limpar filtros', sec], ['Em breve', 'Lucro por país ainda não existe', 'O pedido ainda não guarda o país do comprador.', null, prim]].map(([tipo, t, d, cta, s]) => ({ tipo, t, d, cta, ...s }));
+    const CHK = [['Marcado', true], ['Desmarcado', false], ['Alguns', 'mixed']];
+    const checks = CHK.map(([l, v]) => ({ l, aria: v === 'mixed' ? 'mixed' : String(v), borda: v ? 'var(--solid)' : 'var(--control-border)', bg: v ? 'var(--solid)' : 'transparent', d: v === 'mixed' ? 'M6 12h12' : v ? 'M20 6L9 17l-5-5' : 'M0 0' }));
+    const lido = parseFloat(st.custo.replace(/\./g, '').replace(',', '.'));
+    return {
+      theme: st.theme, width: st.width, anot: st.anot,
+      setTheme: v => { try { localStorage.setItem('xcart-mock-tema', v); } catch (e) {} set({ theme: v }); },
+      setWidth: v => { try { localStorage.setItem('xcart-mock-largura', v); } catch (e) {} set({ width: v }); }, setAnot: v => set({ anot: v }),
+      maxW: mobile ? '375px' : '1200px', pad: mobile ? '24px 16px 64px' : '40px 32px 80px', cols2: mobile ? '1fr' : 'repeat(2, minmax(0,1fr))', cols3: mobile ? '1fr' : 'repeat(3, minmax(0,1fr))',
+      tipoCols: mobile ? '1fr' : '180px minmax(0,1fr) 240px', statusCols: mobile ? '1fr' : '200px 1fr', vazioMin: mobile ? '100%' : '220px',
+      paineisCor, contraste, cabContraste: [['Par', 'left'], ['Mínimo', 'right'], ['Claro', 'left'], ['', 'left'], ['Escuro', 'left'], ['', 'left'], ['Hoje (claro)', 'left']].map(([label, align]) => ({ label, align })),
+      resumoContraste: falhas ? `${falhas} pares abaixo do mínimo.` : `${PARES.length} pares conferidos nos dois temas: todos acima do mínimo.`,
+      tipos, amostraNum, espacos, raios, alturas, tons, mapaStatus, series, regrasGraf, callouts, vazios, checks,
+      pendente: st.pend, pendRotulo: st.pend ? 'Salvando…' : 'Salvar custos', pending: () => { if (st.pend) return; set({ pend: true }); setTimeout(() => this.setState({ pend: false }), 1500); },
+      custo: st.custo, digitarCusto: e => set({ custo: e.target.value }), custoLido: isFinite(lido) ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'USD' }).format(lido) : 'valor inválido',
+      segTipo: st.seg ? 'text' : 'password', segVis: st.seg, segRot: st.seg ? 'Ocultar' : 'Mostrar', toggleSeg: () => set({ seg: !st.seg }),
+      sw: st.sw, toggleSw: () => set({ sw: !st.sw }), swTrilho: st.sw ? 'var(--ok)' : 'var(--t4)', swBola: st.sw ? '19px' : '3px',
+      copiarRot: st.copiado ? 'Copiado' : 'Copiar', copiar: () => { set({ copiado: true }); setTimeout(() => this.setState({ copiado: false }), 1800); },
+      toastTexto: 'Orla · Teste criativos sai do lucro.\nNada muda no Meta.',
+    };
+  }
+}
+</script>
+</body>
+</html>

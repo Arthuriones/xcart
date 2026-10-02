@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <title>xcart · Saúde dos pixels (Fase 0)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Public+Sans:wght@400;500;600;700&amp;display=swap">
+  <link rel="stylesheet" href="xcart-tokens.css">
+</helmet>
+<div style="min-height:100vh; background:#e9e8e5; display:flex; flex-direction:column;">
+  <dc-import name="Revisao" tela="Saúde dos pixels" theme="{{ theme }}" width="{{ width }}" cenario="{{ cenario }}" cenarios="{{ cenarios }}" anot="{{ anot }}" onTheme="{{ setTheme }}" onWidth="{{ setWidth }}" onCenario="{{ setCenario }}" onAnot="{{ setAnot }}" hint-size="100%,48px"></dc-import>
+  <div style="flex:1; padding:24px 16px 48px; display:flex; justify-content:center;">
+    <div style="width:{{ wrapW }}; height:{{ wrapH }}; flex:none;">
+      <div data-theme="{{ theme }}" style="position:relative; width:{{ frameW }}; height:{{ frameH }}; transform:scale({{ escala }}); transform-origin:top left; overflow:hidden; border-radius:{{ frameRaio }}; box-shadow:0 0 0 1px rgba(0,0,0,.12), 0 24px 64px rgba(0,0,0,.16); background:var(--bg); display:flex; flex-direction:{{ frameDir }};">
+        <a href="#conteudo" style="position:absolute; left:-9999px; top:8px; z-index:100; background:var(--solid); color:var(--on-solid); padding:8px 12px; border-radius:var(--r-control);" style-focus="left:8px;">Pular para o conteúdo</a>
+        <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}">
+          <dc-import name="Navegacao" active="saude" mobile="{{ false }}" theme="{{ theme }}" onTheme="{{ setTheme }}" alertas="{{ 3 }}" hint-size="232px,100%" style="height:100%; flex:none;"></dc-import>
+        </sc-if>
+        <div style="flex:1; min-width:0; min-height:0; display:flex; flex-direction:column;">
+          <dc-import name="Topo" mobile="{{ mobile }}" titulo="Saúde dos pixels" contexto="fixo" periodoFixo="Últimos 7 dias · período fixo desta tela" anot="{{ anot }}" lojas="{{ lojasTopo }}" loja="{{ loja }}" onCtx="{{ setCtx }}" hint-size="100%,60px"></dc-import>
+          <main id="conteudo" tabindex="-1" style="flex:1; min-height:0; overflow-y:auto; background:var(--bg);">
+            <div style="max-width:1280px; margin:0 auto; padding:{{ pad }}; display:flex; flex-direction:column; gap:24px;">
+              <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+                <div style="display:flex; flex-direction:column; gap:4px; max-width:720px;">
+                  <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}"><h1 style="font-size:var(--fs-page); line-height:28px; font-weight:600; letter-spacing:-0.01em;">Saúde dos pixels</h1></sc-if>
+                  <p style="font-size:var(--fs-body); color:var(--t2); text-wrap:pretty;">Se as compras de cada loja estão chegando ao Meta e ao Google pelo servidor, e o que consertar quando não estão.</p>
+                </div>
+                <a href="Eventos%20ao%20vivo.dc.html" style="display:flex; align-items:center; gap:8px; height:var(--h-md); padding:0 14px; border:1px solid var(--border-strong); background:var(--surface); color:var(--ink); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; text-decoration:none;" style-hover="border-color:var(--control-border); color:var(--ink); text-decoration:none;">Ver eventos ao vivo</a>
+              </div>
+
+              <sc-if value="{{ carregando }}" hint-placeholder-val="{{ false }}">
+                <div aria-busy="true" aria-label="Carregando" style="display:flex; flex-direction:column; gap:12px;">
+                  <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax({{ kpiMin }}, 1fr)); gap:12px;"><sc-for list="{{ quatro }}" as="x" hint-placeholder-count="4"><div style="height:104px; border-radius:var(--r-card); background:var(--surface); border:1px solid var(--border); padding:16px; display:flex; flex-direction:column; gap:12px;"><span style="width:50%; height:12px; border-radius:4px; background:var(--skeleton);"></span><span style="width:40%; height:26px; border-radius:4px; background:var(--skeleton);"></span></div></sc-for></div>
+                  <sc-for list="{{ quatro }}" as="x" hint-placeholder-count="4"><div style="height:76px; border-radius:var(--r-card); background:var(--surface); border:1px solid var(--border); display:flex; align-items:center; gap:24px; padding:0 16px;"><span style="width:160px; height:14px; border-radius:4px; background:var(--skeleton);"></span><span style="flex:1; height:8px; border-radius:4px; background:var(--skeleton);"></span><span style="flex:1; height:8px; border-radius:4px; background:var(--skeleton);"></span><span style="width:120px; height:28px; border-radius:var(--r-control); background:var(--skeleton);"></span></div></sc-for>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ vazio }}" hint-placeholder-val="{{ false }}">
+                <section style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:40px 24px; display:flex; flex-direction:column; align-items:center; gap:10px; text-align:center;">
+                  <span style="font-size:var(--fs-label); color:var(--t2); border:1px solid var(--border-strong); border-radius:11px; padding:2px 10px; font-weight:500;">Primeiro uso</span>
+                  <h2 style="font-size:var(--fs-section); font-weight:600;">Nenhuma loja enviando compras ainda</h2>
+                  <p style="font-size:var(--fs-dense); color:var(--t2); max-width:440px;">Ligue o Meta ou o Google numa loja para ver as compras chegando aqui.</p>
+                  <button type="button" onClick="{{ abrirAlto }}" style="height:var(--h-md); padding:0 16px; border:0; background:var(--solid); color:var(--on-solid); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;">Ligar rastreamento</button>
+                </section>
+              </sc-if>
+
+              <sc-if value="{{ comDados }}" hint-placeholder-val="{{ true }}">
+                <section aria-label="Resumo dos últimos 7 dias" style="display:grid; grid-template-columns:repeat(auto-fill, minmax({{ kpiMin }}, 1fr)); gap:12px;">
+                  <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="4">
+                    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:6px;">
+                      <span style="font-size:var(--fs-label); font-weight:500; color:var(--t1);">{{ k.label }}</span>
+                      <span style="font-size:{{ kpiFs }}; line-height:32px; font-weight:600; font-variant-numeric:tabular-nums; color:{{ k.fg }};">{{ k.valor }}</span>
+                      <span style="font-size:var(--fs-label); color:var(--t2); font-variant-numeric:tabular-nums;">{{ k.sub }}</span>
+                    </div>
+                  </sc-for>
+                </section>
+
+                <section aria-labelledby="lojas-t" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); overflow:hidden;">
+                  <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; border-bottom:1px solid var(--border); flex-wrap:wrap;">
+                    <div style="display:flex; flex-direction:column; gap:2px;"><h2 id="lojas-t" style="font-size:var(--fs-section); font-weight:600;">Lojas, da mais urgente para a mais tranquila</h2><span style="font-size:var(--fs-label); color:var(--t2);">Compras que chegaram à plataforma sobre os pedidos da Shopify nos últimos 7 dias.</span></div>
+                    <sc-if value="{{ anot }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--info);">loja vem da barra global (Front) · período escolhível: #24, pede aprovação</span></sc-if>
+                  </div>
+                  <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}">
+                    <div role="row" style="display:grid; grid-template-columns:minmax(200px,1.1fr) minmax(170px,1fr) minmax(170px,1fr) minmax(280px,1.7fr) 24px; gap:20px; padding:10px 16px; background:var(--surface-2); border-bottom:1px solid var(--border); font-size:var(--fs-label); font-weight:600; color:var(--t1);"><span>Loja</span><span>Meta · compras</span><span>Google · compras</span><span>O que fazer</span><span></span></div>
+                  </sc-if>
+                  <ul style="list-style:none; margin:0; padding:0;">
+                    <sc-for list="{{ lojas }}" as="l" hint-placeholder-count="4">
+                      <li style="border-bottom:1px solid var(--border-subtle);">
+                        <sc-if value="{{ l.erroCheck }}" hint-placeholder-val="{{ false }}">
+                          <div role="alert" style="display:flex; align-items:center; gap:12px; padding:16px; flex-wrap:wrap;">
+                            <span style="flex:1; min-width:200px; display:flex; flex-direction:column;"><strong style="font-size:var(--fs-dense); font-weight:600;">{{ l.nome }}</strong><span style="font-size:var(--fs-label); color:var(--t2);">{{ l.dominio }}</span></span>
+                            <span style="font-size:var(--fs-dense); color:var(--t1); flex:2; min-width:220px;">Não conseguimos checar esta loja agora. As outras lojas estão atualizadas.</span>
+                            <button type="button" onClick="{{ l.tentar }}" style="height:var(--h-sm); padding:0 12px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;">Tentar de novo</button>
+                          </div>
+                        </sc-if>
+                        <sc-if value="{{ l.normal }}" hint-placeholder-val="{{ true }}">
+                          <div onClick="{{ l.abrir }}" style="display:grid; grid-template-columns:{{ colsLinha }}; gap:{{ gapLinha }}; padding:16px; align-items:center; cursor:pointer;" style-hover="background:var(--hover);">
+                            <div style="display:flex; flex-direction:column; gap:6px; min-width:0;">
+                              <span style="display:inline-flex; align-self:flex-start; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ l.borda }}; background:{{ l.bg }}; color:{{ l.fg }}; font-size:var(--fs-label); font-weight:500;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ l.estado }}</span>
+                              <button type="button" onClick="{{ l.abrir }}" aria-label="{{ l.abrirAria }}" style="border:0; background:transparent; padding:0; text-align:left; font-size:var(--fs-body); font-weight:600; color:var(--ink); cursor:pointer;">{{ l.nome }}</button>
+                              <span style="font-size:var(--fs-label); color:var(--t2); margin-top:-4px;">{{ l.dominio }}</span>
+                            </div>
+                            <sc-for list="{{ l.destinos }}" as="d" hint-placeholder-count="2">
+                              <div style="display:flex; flex-direction:column; gap:6px; min-width:0;">
+                                <sc-if value="{{ mobile }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--fs-label); font-weight:600; color:var(--t1);">{{ d.plat }}</span></sc-if>
+                                <span style="font-size:var(--fs-dense); font-variant-numeric:tabular-nums; color:{{ d.fg }}; font-weight:500;">{{ d.texto }}</span>
+                                <sc-if value="{{ d.temBarra }}" hint-placeholder-val="{{ true }}"><span aria-hidden="true" style="height:6px; border-radius:3px; background:var(--track); overflow:hidden; display:block;"><span style="display:block; height:100%; width:{{ d.pct }}; background:{{ d.cor }}; border-radius:3px;"></span></span></sc-if>
+                                <span style="font-size:var(--fs-label); color:var(--t2);">{{ d.sub }}</span>
+                              </div>
+                            </sc-for>
+                            <div style="display:flex; align-items:center; gap:12px; justify-content:space-between; flex-wrap:wrap; min-width:0;">
+                              <span style="font-size:var(--fs-dense); color:var(--ink); flex:1; min-width:160px; text-wrap:pretty;">{{ l.problema }}</span>
+                              <sc-if value="{{ l.cta }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ l.agir }}" style="height:var(--h-sm); padding:0 12px; border:{{ l.ctaBorda }}; background:{{ l.ctaBg }}; color:{{ l.ctaFg }}; border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer; white-space:nowrap;">{{ l.cta }}</button></sc-if>
+                            </div>
+                            <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--t3);"><path d="M9 18l6-6-6-6"></path></svg></sc-if>
+                          </div>
+                        </sc-if>
+                      </li>
+                    </sc-for>
+                  </ul>
+                  <div style="padding:10px 16px; font-size:var(--fs-label); color:var(--t2); background:var(--surface-2);">7 lojas sem acesso não aparecem aqui. <a href="Lojas.dc.html">Ver em Lojas</a></div>
+                </section>
+
+                <section aria-labelledby="comp-t" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:12px;">
+                  <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:flex-start;">
+                    <div style="display:flex; flex-direction:column; gap:2px;"><h2 id="comp-t" style="font-size:var(--fs-section); font-weight:600;">Pedidos, compras enviadas e compras contadas</h2><span style="font-size:var(--fs-label); color:var(--t2);">Todas as lojas rastreadas · últimos 7 dias</span></div>
+                    <sc-if value="{{ anot }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--info);">#8 Parcial · “contadas” existe por conta de anúncio, não por pixel</span></sc-if>
+                  </div>
+                  <div style="display:flex; flex-direction:column; gap:10px;">
+                    <sc-for list="{{ funil }}" as="f" hint-placeholder-count="4">
+                      <div style="display:grid; grid-template-columns:{{ funilCols }}; gap:12px; align-items:center;">
+                        <span style="font-size:var(--fs-dense); color:var(--t1);">{{ f.label }}</span>
+                        <span aria-hidden="true" style="height:12px; border-radius:2px; background:var(--track); display:block; overflow:hidden;"><span style="display:block; height:100%; width:{{ f.pct }}; background:{{ f.cor }};"></span></span>
+                        <span style="font-size:var(--fs-dense); font-variant-numeric:tabular-nums; text-align:right; font-weight:600;">{{ f.v }} <span style="color:var(--t2); font-weight:400;">{{ f.p }}</span></span>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <p style="font-size:var(--fs-label); color:var(--t2); max-width:760px; text-wrap:pretty;">“Enviada” é o que o xcart mandou. “Contada” é o que a plataforma diz que atribuiu a um anúncio. A diferença é normal: a plataforma descarta compras sem clique e usa a própria janela de atribuição.</p>
+                </section>
+
+                <section aria-labelledby="como-t" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card);">
+                  <h2 id="como-t" style="font-size:var(--fs-section); font-weight:600; padding:14px 16px; border-bottom:1px solid var(--border-subtle);">Como funciona</h2>
+                  <sc-for list="{{ glossario }}" as="g" hint-placeholder-count="5">
+                    <div style="border-bottom:1px solid var(--border-subtle);">
+                      <h3 style="margin:0;"><button type="button" onClick="{{ g.toggle }}" aria-expanded="{{ g.aberto }}" style="width:100%; display:flex; align-items:center; gap:10px; min-height:44px; padding:0 16px; border:0; background:transparent; cursor:pointer; text-align:left; font-size:var(--fs-dense); font-weight:500; color:var(--ink);" style-hover="background:var(--hover);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform:{{ g.seta }}; color:var(--t2);"><path d="M9 18l6-6-6-6"></path></svg>{{ g.t }}</button></h3>
+                      <sc-if value="{{ g.aberto }}" hint-placeholder-val="{{ false }}"><p style="padding:0 16px 14px 40px; font-size:var(--fs-dense); color:var(--t1); max-width:760px; text-wrap:pretty;">{{ g.d }}</p></sc-if>
+                    </div>
+                  </sc-for>
+                </section>
+              </sc-if>
+            </div>
+          </main>
+        </div>
+        <sc-if value="{{ mobile }}" hint-placeholder-val="{{ false }}">
+          <dc-import name="Navegacao" active="saude" mobile="{{ true }}" theme="{{ theme }}" onTheme="{{ setTheme }}" alertas="{{ 3 }}" hint-size="100%,64px"></dc-import>
+        </sc-if>
+
+        <sc-if value="{{ detalhe }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute; inset:0; z-index:70; display:flex; justify-content:flex-end;">
+            <div onClick="{{ fechar }}" style="position:absolute; inset:0; background:var(--scrim);"></div>
+            <div role="dialog" aria-modal="true" aria-labelledby="det-t" style="position:relative; width:{{ drawerW }}; max-width:100%; height:100%; background:var(--surface); box-shadow:var(--shadow-panel); display:flex; flex-direction:column; animation:xc-left 180ms var(--ease);">
+              <div style="flex:none; display:flex; align-items:flex-start; gap:12px; padding:16px 16px 12px 20px; border-bottom:1px solid var(--border);">
+                <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:6px;">
+                  <span style="display:inline-flex; align-self:flex-start; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ d.borda }}; background:{{ d.bg }}; color:{{ d.fg }}; font-size:var(--fs-label); font-weight:500;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ d.estado }}</span>
+                  <h2 id="det-t" style="font-size:var(--fs-overlay); font-weight:600;">{{ d.nome }}</h2>
+                  <span style="font-size:var(--fs-label); color:var(--t2);">{{ d.dominio }} · últimos 7 dias</span>
+                </div>
+                <button type="button" onClick="{{ fechar }}" aria-label="Fechar detalhe" style="width:var(--h-md); height:var(--h-md); display:grid; place-items:center; border:0; background:transparent; border-radius:var(--r-control); color:var(--t1); cursor:pointer;" style-hover="background:var(--hover);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18 M6 6l12 12"></path></svg></button>
+              </div>
+              <div style="flex:1; overflow-y:auto; padding:16px 20px 24px; display:flex; flex-direction:column; gap:20px;">
+                <sc-if value="{{ d.temAcao }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex; flex-direction:column; gap:10px; padding:14px; border-radius:var(--r-card); background:{{ d.bg }}; border:1px solid {{ d.borda }};">
+                    <strong style="font-size:var(--fs-dense); color:{{ d.fg }};">O que fazer</strong>
+                    <span style="font-size:var(--fs-dense); color:var(--ink); text-wrap:pretty;">{{ d.acaoTexto }}</span>
+                    <button type="button" onClick="{{ agirDetalhe }}" style="align-self:flex-start; height:var(--h-md); padding:0 14px; border:0; background:var(--solid); color:var(--on-solid); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;">{{ d.acaoCta }}</button>
+                  </div>
+                </sc-if>
+                <section aria-labelledby="pre-t" style="display:flex; flex-direction:column; gap:8px;">
+                  <h3 id="pre-t" style="font-size:var(--fs-dense); font-weight:600;">Pré-requisitos</h3>
+                  <ul style="list-style:none; margin:0; padding:0; border:1px solid var(--border); border-radius:var(--r-card);">
+                    <sc-for list="{{ d.pre }}" as="p" hint-placeholder-count="4">
+                      <li style="border-bottom:1px solid var(--border-subtle);">
+                        <div style="display:flex; align-items:center; gap:12px; padding:12px; flex-wrap:wrap;">
+                          <span aria-hidden="true" style="width:20px; height:20px; flex:none; border-radius:50%; display:grid; place-items:center; background:{{ p.iconeBg }}; color:{{ p.iconeFg }}; border:1px solid {{ p.iconeBorda }};"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="{{ p.icone }}"></path></svg></span>
+                          <span style="flex:1; min-width:180px; display:flex; flex-direction:column;"><span style="font-size:var(--fs-dense); font-weight:500;">{{ p.t }}</span><span style="font-size:var(--fs-label); color:var(--t2);">{{ p.sub }}</span></span>
+                          <sc-if value="{{ p.emBreve }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--fs-label); color:var(--t2); border:1px solid var(--border); border-radius:4px; padding:0 6px;">Em breve</span></sc-if>
+                          <button type="button" onClick="{{ p.agir }}" aria-expanded="{{ p.aberto }}" disabled="{{ p.desab }}" style="height:var(--h-sm); padding:0 10px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer; color:{{ p.ctaFg }};">{{ p.cta }}</button>
+                        </div>
+                        <sc-if value="{{ p.aberto }}" hint-placeholder-val="{{ false }}">
+                          <div style="padding:0 12px 12px 44px; display:flex; flex-direction:column; gap:10px;">
+                            <ol style="margin:0; padding-left:18px; font-size:var(--fs-dense); color:var(--t1); display:flex; flex-direction:column; gap:4px;"><li>Na Shopify, abra Configurações › Eventos do cliente.</li><li>Clique em Adicionar pixel personalizado e dê o nome “xcart”.</li><li>Cole o código abaixo, salve e clique em Conectar.</li></ol>
+                            <div style="position:relative; border:1px solid var(--border); border-radius:var(--r-control); background:var(--surface-2);">
+                              <pre style="margin:0; padding:12px; font-family:var(--font-mono); font-size:var(--fs-label); line-height:18px; color:var(--ink); overflow-x:auto; white-space:pre;">{{ codigoPixel }}</pre>
+                              <button type="button" onClick="{{ copiar }}" style="position:absolute; top:8px; right:8px; height:var(--h-sm); padding:0 10px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-label); font-weight:500; cursor:pointer;">{{ copiarRotulo }}</button>
+                            </div>
+                            <span style="font-size:var(--fs-label); color:var(--t2);">O código sai exatamente como hoje; só a apresentação mudou.</span>
+                          </div>
+                        </sc-if>
+                      </li>
+                    </sc-for>
+                  </ul>
+                </section>
+                <section aria-labelledby="dest-t" style="display:flex; flex-direction:column; gap:8px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;"><h3 id="dest-t" style="font-size:var(--fs-dense); font-weight:600;">Destinos</h3><button type="button" style="height:var(--h-sm); padding:0 10px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer;">Adicionar destino</button></div>
+                  <sc-for list="{{ d.dest }}" as="ds" hint-placeholder-count="2">
+                    <div style="border:1px solid var(--border); border-radius:var(--r-card); padding:12px; display:flex; flex-direction:column; gap:12px;">
+                      <div style="display:flex; align-items:flex-start; gap:10px;">
+                        <span style="font-size:var(--fs-label); font-weight:600; color:var(--t1); border:1px solid var(--border-strong); border-radius:4px; padding:1px 6px;">{{ ds.plat }}</span>
+                        <span style="flex:1; min-width:0; display:flex; flex-direction:column;"><span style="font-size:var(--fs-dense); font-weight:600;">{{ ds.nome }}</span><span style="font-size:var(--fs-label); color:var(--t2); font-family:var(--font-mono);">{{ ds.id }}</span></span>
+                        <span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ ds.borda }}; background:{{ ds.bg }}; color:{{ ds.fg }}; font-size:var(--fs-label); font-weight:500;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ ds.estado }}</span>
+                        <div style="position:relative;">
+                          <button type="button" onClick="{{ ds.menu }}" aria-label="{{ ds.menuAria }}" aria-expanded="{{ ds.menuOn }}" style="width:var(--h-sm); height:var(--h-sm); display:grid; place-items:center; border:0; background:transparent; color:var(--t1); border-radius:var(--r-control); cursor:pointer;" style-hover="background:var(--hover);"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg></button>
+                          <sc-if value="{{ ds.menuOn }}" hint-placeholder-val="{{ false }}">
+                            <div role="menu" style="position:absolute; right:0; top:32px; z-index:10; width:220px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-overlay); box-shadow:var(--shadow); padding:6px; display:flex; flex-direction:column;">
+                              <button type="button" role="menuitem" style="height:32px; padding:0 8px; border:0; background:transparent; text-align:left; border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer;" style-hover="background:var(--hover);">Editar destino</button>
+                              <button type="button" role="menuitem" style="height:32px; padding:0 8px; border:0; background:transparent; text-align:left; border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer;" style-hover="background:var(--hover);">Desativar envio</button>
+                              <div style="height:1px; background:var(--border); margin:4px 0;"></div>
+                              <button type="button" role="menuitem" onClick="{{ ds.remover }}" style="height:32px; padding:0 8px; border:0; background:transparent; text-align:left; border-radius:var(--r-control); font-size:var(--fs-dense); color:var(--err); cursor:pointer;" style-hover="background:var(--err-bg);">Remover destino…</button>
+                            </div>
+                          </sc-if>
+                        </div>
+                      </div>
+                      <div role="table" aria-label="{{ ds.tabAria }}" style="display:grid; grid-template-columns:repeat({{ evCols }}, minmax(0,1fr)); gap:8px;">
+                        <sc-for list="{{ ds.eventos }}" as="ev" hint-placeholder-count="5">
+                          <div role="cell" style="display:flex; flex-direction:column; gap:2px; padding:8px; border-radius:var(--r-control); background:{{ ev.bg }}; border:1px solid {{ ev.borda }};">
+                            <span style="font-size:var(--fs-label); color:var(--t1);">{{ ev.label }}</span>
+                            <span style="font-size:var(--fs-dense); font-weight:600; font-variant-numeric:tabular-nums; color:{{ ev.fg }};">{{ ev.v }}</span>
+                          </div>
+                        </sc-for>
+                      </div>
+                      <sc-if value="{{ ds.nota }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--fs-label); color:var(--t1); text-wrap:pretty;">{{ ds.nota }}</span></sc-if>
+                      <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:center;">
+                        <a href="Eventos%20ao%20vivo.dc.html" style="font-size:var(--fs-label); font-weight:500;">Ver eventos deste destino</a>
+                        <sc-if value="{{ ds.emq }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--fs-label); color:var(--t2);">Qualidade de correspondência do Meta · <span style="border:1px solid var(--border); border-radius:4px; padding:0 4px;">Em breve</span></span></sc-if>
+                      </div>
+                    </div>
+                  </sc-for>
+                </section>
+                <a href="Eventos%20ao%20vivo.dc.html" style="align-self:flex-start; font-size:var(--fs-dense); font-weight:500;">Ver todos os eventos de {{ d.nome }}</a>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ confirmar }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute; inset:0; z-index:95; display:grid; place-items:center; padding:16px;">
+            <div style="position:absolute; inset:0; background:var(--scrim);"></div>
+            <div role="alertdialog" aria-modal="true" aria-labelledby="ad-t" aria-describedby="ad-d" style="position:relative; width:100%; max-width:440px; background:var(--surface); border-radius:var(--r-overlay); box-shadow:var(--shadow); padding:20px; display:flex; flex-direction:column; gap:12px; animation:xc-in 140ms var(--ease);">
+              <h2 id="ad-t" style="font-size:var(--fs-overlay); font-weight:600;">Remover o destino {{ confirmarNome }}?</h2>
+              <p id="ad-d" style="font-size:var(--fs-dense); color:var(--t1); text-wrap:pretty;">As compras desta loja param de chegar a esse pixel agora. O histórico de envios deste destino é apagado junto e não volta.</p>
+              <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:4px; flex-wrap:wrap;">
+                <button type="button" onClick="{{ cancelar }}" style="height:var(--h-md); padding:0 14px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;">Cancelar</button>
+                <button type="button" onClick="{{ confirmarRemover }}" style="height:var(--h-md); padding:0 14px; border:0; background:var(--err); color:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:600; cursor:pointer;">Remover destino</button>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+          <div role="status" aria-live="polite" style="position:absolute; right:{{ toastDir }}; left:{{ toastEsq }}; bottom:{{ toastBase }}; z-index:96; max-width:400px; background:var(--solid); color:var(--on-solid); border-radius:var(--r-card); box-shadow:var(--shadow); padding:12px 14px; display:flex; gap:12px; align-items:flex-start; animation:xc-up 180ms var(--ease);">
+            <div style="flex:1; display:flex; flex-direction:column; gap:2px; font-size:var(--fs-dense);"><strong style="font-weight:600;">{{ toastTitulo }}</strong><span style="white-space:pre-line; opacity:.9;">{{ toastTexto }}</span></div>
+            <button type="button" onClick="{{ fecharToast }}" aria-label="Fechar aviso" style="width:24px; height:24px; display:grid; place-items:center; border:0; background:transparent; color:inherit; cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18 M6 6l12 12"></path></svg></button>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { theme: 'light', width: 'desktop', cenario: 'dados', anot: false, vw: 1400, loja: 'todas', aberta: null, preAberto: null, menu: null, confirmar: null, removidos: [], copiado: false, toast: null, gl: [0], resolvidos: [], kovaOk: false };
+  componentDidMount() {
+    try { const t = localStorage.getItem('xcart-mock-tema'); const w = localStorage.getItem('xcart-mock-largura'); const s = { vw: window.innerWidth }; if (t) s.theme = t; if (w) s.width = w; this.setState(s); } catch (e) { this.setState({ vw: window.innerWidth }); }
+    this._rs = () => this.setState({ vw: window.innerWidth }); window.addEventListener('resize', this._rs);
+    this._k = e => { if (e.key === 'Escape') this.setState({ aberta: null, menu: null, confirmar: null }); }; window.addEventListener('keydown', this._k);
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this._rs); window.removeEventListener('keydown', this._k); clearTimeout(this._tt); }
+  avisar(t, d) { clearTimeout(this._tt); this.setState({ toast: { t, d } }); this._tt = setTimeout(() => this.setState({ toast: null }), 6000); }
+  renderVals() {
+    const st = this.state; const mobile = st.width === 'mobile'; const set = o => this.setState(o);
+    const cen = st.cenario;
+    if (cen === 'detalhe' && st.aberta === null && !this._abriu) { this._abriu = true; setTimeout(() => this.setState({ aberta: 'lumen' }), 0); }
+    if (cen !== 'detalhe') this._abriu = false;
+    const LOJAS = [
+      { id: 'lumen', nome: 'Lumen Casa', dominio: 'lumencasa.com' }, { id: 'orla', nome: 'Orla Wear', dominio: 'orlawear.com' }, { id: 'kova', nome: 'Kova Home', dominio: 'kovahome.eu' }, { id: 'alto', nome: 'Alto Fit', dominio: 'altofit.co' },
+      { id: 'tarn', nome: 'Tarn Gear', dominio: 'tarngear.com', ativa: false, motivo: 'Sem permissão para ler pedidos' }, { id: 'brisa', nome: 'Brisa Pet', dominio: 'brisapet.com', ativa: false, motivo: 'Pausada na Shopify' }, { id: 'selva', nome: 'Selva Kids', dominio: 'selvakids.shop', ativa: false, motivo: 'App desinstalado' }, { id: 'pico', nome: 'Pico Tools', dominio: 'picotools.com', ativa: false, motivo: 'Token inválido' }, { id: 'mira', nome: 'Mira Beauty', dominio: 'mirabeauty.co', ativa: false, motivo: 'App desinstalado' }, { id: 'vela', nome: 'Vela & Co', dominio: 'velaco.store', ativa: false, motivo: 'Pausada na Shopify' }, { id: 'nimbo', nome: 'Nimbo Shop', dominio: 'nimboshop.com', ativa: false, motivo: 'Token inválido' },
+    ];
+    const TOM = { ok: ['Tudo certo'], warn: ['Precisa de atenção'], err: ['Parado'], neutral: ['Desligado'] };
+    const orlaOk = st.resolvidos.includes('orla');
+    const lumenOk = st.resolvidos.includes('lumen');
+    const T = [
+      { id: 'orla', tom: orlaOk ? 'ok' : 'err', ped: 96, meta: orlaOk ? [94, 96, 'faltam 2'] : [0, 96, 'token recusado desde 12:10'], google: [88, 96, 'faltam 8 · 6 sem clique do Google'], problema: orlaOk ? 'Nada a fazer agora.' : 'O Meta recusou o token de conversões. Nenhuma compra chegou desde 12:10.', cta: orlaOk ? null : 'Trocar token', acao: 'Gere um token novo de conversões no Gerenciador de Eventos do Meta e cole aqui. O envio volta na hora e as compras de até 7 dias atrás são reenviadas.' },
+      { id: 'lumen', tom: lumenOk ? 'ok' : 'warn', ped: 182, meta: [178, 182, 'faltam 4'], google: [144, 182, '38 sem clique do Google'], problema: lumenOk ? 'Nada a fazer agora.' : 'O Google não recebe o evento de Checkout: falta o rótulo de conversão.', cta: lumenOk ? null : 'Adicionar rótulo', acao: 'No Google Ads, abra a ação de conversão “Iniciar checkout”, copie o rótulo (a parte depois da barra em AW-…/rótulo) e cole no destino Google desta loja.' },
+      { id: 'kova', tom: 'ok', ped: 94, meta: [92, 94, 'faltam 2'], google: null, problema: 'Nada a fazer. O Google não está ligado nesta loja.', cta: null, erroCheck: cen === 'erro' && !st.kovaOk },
+      { id: 'alto', tom: 'neutral', ped: 40, meta: null, google: null, problema: 'Nenhum destino ligado. As compras não chegam a nenhuma plataforma.', cta: 'Ligar rastreamento' },
+    ];
+    const ordem = { err: 0, warn: 1, ok: 2, neutral: 3 };
+    const filtro = st.loja === 'todas' ? T : T.filter(t => t.id === st.loja);
+    const lojas = [...filtro].sort((a, b) => ordem[a.tom] - ordem[b.tom]).map(t => {
+      const l = LOJAS.find(x => x.id === t.id);
+      const dest = (plat, v) => v ? { plat, texto: `${v[0]} de ${v[1]}`, sub: v[2], pct: `${Math.round(v[0] / v[1] * 100)}%`, temBarra: true, cor: v[0] / v[1] >= 0.95 ? 'var(--ok)' : v[0] === 0 ? 'var(--err)' : 'var(--warn)', fg: v[0] === 0 ? 'var(--err)' : 'var(--ink)' } : { plat, texto: 'Desligado', sub: 'sem destino nesta loja', pct: '0%', temBarra: false, fg: 'var(--t2)' };
+      const prim = t.tom === 'err' || t.tom === 'warn' || t.tom === 'neutral';
+      return { ...l, ...t, normal: !t.erroCheck, estado: TOM[t.tom][0], fg: `var(--${t.tom})`, bg: `var(--${t.tom}-bg)`, borda: `var(--${t.tom}-border)`,
+        destinos: [dest('Meta', t.meta), dest('Google', t.google)], abrirAria: `Abrir detalhe de ${l.nome}`,
+        abrir: () => set({ aberta: t.id }), agir: e => { e.stopPropagation(); set({ aberta: t.id }); },
+        ctaBorda: prim ? '0' : '1px solid var(--border-strong)', ctaBg: prim ? 'var(--solid)' : 'var(--surface)', ctaFg: prim ? 'var(--on-solid)' : 'var(--ink)',
+        tentar: () => { this.setState({ kovaOk: true }); this.avisar('Kova Home checada', 'Tudo certo nos últimos 7 dias.'); } };
+    });
+    const rast = T.filter(t => t.meta || t.google).length;
+    const peds = T.reduce((a, t) => a + t.ped, 0);
+    const env = T.reduce((a, t) => a + Math.max(t.meta ? t.meta[0] : 0, t.google ? t.google[0] : 0), 0);
+    const prec = T.filter(t => t.tom === 'err' || t.tom === 'warn').length;
+    const nf = new Intl.NumberFormat('pt-BR');
+    const kpis = [
+      { label: 'Lojas rastreando', valor: `${rast} de ${T.length}`, sub: `${T.filter(t => t.tom === 'neutral').length} sem nenhum destino`, fg: 'var(--ink)' },
+      { label: 'Pedidos na Shopify', valor: nf.format(peds), sub: 'lojas ativas · 7 dias', fg: 'var(--ink)' },
+      { label: 'Compras enviadas', valor: nf.format(env), sub: `${new Intl.NumberFormat('pt-BR', { style: 'percent', maximumFractionDigits: 1 }).format(env / peds)} dos pedidos`, fg: 'var(--ink)' },
+      { label: 'Precisam de você', valor: String(prec), sub: prec ? `${T.filter(t => t.tom === 'err').length} parada · ${T.filter(t => t.tom === 'warn').length} com atenção` : 'nenhuma loja', fg: prec ? 'var(--err)' : 'var(--ok)' },
+    ];
+    const funilMax = peds;
+    const funil = [['Pedidos na Shopify', peds, 'var(--chart-1)'], ['Compras enviadas pelo xcart', env, 'var(--chart-2)'], ['Contadas pelo Meta', 318, 'var(--chart-4)'], ['Contadas pelo Google', 202, 'var(--chart-5)']].map(([label, v, cor]) => ({ label, v: nf.format(v), p: v === peds ? '' : `· ${Math.round(v / funilMax * 100)}%`, pct: `${v / funilMax * 100}%`, cor }));
+    const GL = [
+      ['Como a compra chega ao Meta e ao Google', 'Quando a Shopify avisa um pedido novo, o xcart envia a compra direto do servidor para cada destino ligado. Ver produto, carrinho e checkout vêm do script no tema da loja.'],
+      ['O que é o identificador de clique (gclid e fbc)', 'É o código que o Google (gclid) e o Meta (fbc) põem no link do anúncio. Sem ele, a compra chega à plataforma, mas não é ligada ao anúncio que trouxe o comprador.'],
+      ['O que é o token de conversões (CAPI)', 'É a chave que deixa o xcart enviar compras ao pixel do Meta. É diferente do token que lê o gasto: um envia, o outro só lê.'],
+      ['O que é o rótulo de conversão do Google', 'No Google Ads, cada evento (compra, checkout…) é uma ação de conversão com rótulo próprio. O AW- é da conta; o rótulo muda por evento.'],
+      ['Loja com vitrine e checkout separados', 'Quando o tráfego entra numa vitrine e o pedido nasce na loja de checkout, a compra sai sem atribuição. É uma decisão do produto e não tem conserto nesta tela.'],
+    ];
+    const glossario = GL.map(([t, d], i) => { const ab = st.gl.includes(i); return { t, d, aberto: ab, seta: ab ? 'rotate(90deg)' : 'none', toggle: () => set({ gl: ab ? st.gl.filter(x => x !== i) : [...st.gl, i] }) }; });
+    // detalhe
+    const ab = st.aberta ? T.find(t => t.id === st.aberta) : null;
+    const lab = ab ? LOJAS.find(x => x.id === ab.id) : null;
+    const CHECK = 'M20 6L9 17l-5-5', X = 'M18 6L6 18 M6 6l12 12', MIN = 'M5 12h14';
+    const preItem = (t, sub, ok, cta, extra = {}) => ({ t, sub, cta, iconeBg: ok === true ? 'var(--ok)' : ok === false ? 'var(--err-bg)' : 'var(--neutral-bg)', iconeFg: ok === true ? 'var(--surface)' : ok === false ? 'var(--err)' : 'var(--neutral)', iconeBorda: ok === true ? 'var(--ok)' : ok === false ? 'var(--err-border)' : 'var(--neutral-border)', icone: ok === true ? CHECK : ok === false ? X : MIN, ctaFg: 'var(--ink)', ...extra });
+    const ev = (label, v, tom) => ({ label, v, bg: tom ? `var(--${tom}-bg)` : 'var(--surface-2)', borda: tom ? `var(--${tom}-border)` : 'var(--border-subtle)', fg: tom ? `var(--${tom})` : 'var(--ink)' });
+    let d = {};
+    if (ab) {
+      const destinos = [];
+      if (ab.meta && !st.removidos.includes(ab.id + 'meta')) destinos.push({ k: 'meta', plat: 'Meta', nome: `Pixel ${lab.nome}`, id: '4829 1735 0021 1093', estado: ab.meta[0] === 0 ? 'Erro' : 'Enviando', tom: ab.meta[0] === 0 ? 'err' : 'ok', eventos: [ev('Ver produto', '8.210'), ev('Carrinho', '1.204'), ev('Checkout', '512'), ev('Pagamento', '230'), ev('Compra', `${ab.meta[0]} de ${ab.meta[1]}`, ab.meta[0] === 0 ? 'err' : null)], nota: ab.meta[0] === 0 ? 'O Meta respondeu que o token não tem mais permissão. Nada foi perdido: as compras ficam na fila por até 7 dias.' : null, emq: true });
+      if (ab.google && !st.removidos.includes(ab.id + 'google')) destinos.push({ k: 'google', plat: 'Google', nome: `Google Ads ${lab.nome}`, id: 'AW-11284 30917', estado: ab.id === 'lumen' && !lumenOk ? 'Incompleto' : 'Enviando', tom: ab.id === 'lumen' && !lumenOk ? 'warn' : 'ok', eventos: [ev('Ver produto', '8.190'), ev('Carrinho', '1.198'), ev('Checkout', ab.id === 'lumen' && !lumenOk ? 'sem rótulo' : '508', ab.id === 'lumen' && !lumenOk ? 'warn' : null), ev('Pagamento', '229'), ev('Compra', `${ab.google[0]} de ${ab.google[1]}`)], nota: `${ab.google[1] - ab.google[0]} compras chegaram sem o clique do Google. Elas contam como venda, mas sem ligação com um anúncio.`, emq: false });
+      d = { nome: lab.nome, dominio: lab.dominio, estado: TOM[ab.tom][0], fg: `var(--${ab.tom})`, bg: `var(--${ab.tom}-bg)`, borda: `var(--${ab.tom}-border)`, temAcao: !!ab.cta, acaoTexto: ab.acao || ab.problema, acaoCta: ab.cta,
+        pre: [
+          preItem('Aviso de pedidos da Shopify', 'Recebendo · último às 14:28', true, 'Reinscrever', { emBreve: true, desab: 'true', ctaFg: 'var(--t2)' }),
+          preItem('Script no tema da loja', 'Instalado · versão de 28/09', true, 'Reinstalar', { agir: () => this.avisar('Script reinstalado no tema', 'Os números da tela já consideram a versão nova.') }),
+          preItem('Remarketing do Google (opcional)', 'Desligado · só serve para públicos de remarketing', null, 'Ligar'),
+          preItem('Pixel do checkout', 'Instalado · Compra e Pagamento vêm do checkout', true, st.preAberto === 'pixel' ? 'Ocultar código' : 'Ver código', { aberto: st.preAberto === 'pixel', agir: () => set({ preAberto: st.preAberto === 'pixel' ? null : 'pixel' }) }),
+        ],
+        dest: destinos.map(x => ({ ...x, fg: `var(--${x.tom})`, bg: `var(--${x.tom}-bg)`, borda: `var(--${x.tom}-border)`, menuOn: st.menu === x.k, menuAria: `Ações do destino ${x.nome}`, tabAria: `Eventos enviados a ${x.nome} em 7 dias`, menu: () => set({ menu: st.menu === x.k ? null : x.k }), remover: () => set({ menu: null, confirmar: { k: ab.id + x.k, nome: x.nome } }) })),
+      };
+    }
+    const fw = mobile ? 375 : 1440, fh = mobile ? 812 : 900;
+    const escala = mobile ? 1 : Math.min(1, Math.max(0.4, (st.vw - 32) / fw));
+    const toast = st.toast;
+    return {
+      theme: st.theme, width: st.width, cenario: cen, anot: st.anot,
+      cenarios: [{ id: 'dados', label: 'Operação' }, { id: 'detalhe', label: 'Detalhe da loja' }, { id: 'erro', label: 'Falha numa loja' }, { id: 'vazio', label: 'Primeiro uso' }, { id: 'carregando', label: 'Carregando' }],
+      setTheme: v => { try { localStorage.setItem('xcart-mock-tema', v); } catch (e) {} set({ theme: v }); },
+      setWidth: v => { try { localStorage.setItem('xcart-mock-largura', v); } catch (e) {} set({ width: v }); },
+      setCenario: v => set({ cenario: v, aberta: null, kovaOk: false }), setAnot: v => set({ anot: v }),
+      desktop: !mobile, mobile, frameDir: mobile ? 'column' : 'row', frameW: `${fw}px`, frameH: `${fh}px`, escala, wrapW: `${fw * escala}px`, wrapH: `${fh * escala}px`, frameRaio: mobile ? '28px' : '10px',
+      pad: mobile ? '16px 16px 32px' : '24px 32px 48px', kpiMin: mobile ? '150px' : '220px', kpiFs: mobile ? 'var(--fs-page)' : 'var(--fs-kpi)',
+      colsLinha: mobile ? '1fr' : 'minmax(200px,1.1fr) minmax(170px,1fr) minmax(170px,1fr) minmax(280px,1.7fr) 24px', gapLinha: mobile ? '12px' : '20px', funilCols: mobile ? '1fr' : '220px 1fr 120px',
+      lojasTopo: LOJAS.map(l => ({ ...l, ativa: l.ativa !== false })), loja: st.loja, setCtx: (k, v) => set({ [k]: v }),
+      carregando: cen === 'carregando', vazio: cen === 'vazio', comDados: cen !== 'carregando' && cen !== 'vazio', quatro: [1, 2, 3, 4],
+      kpis, lojas, funil, glossario, abrirAlto: () => set({ aberta: 'alto' }),
+      detalhe: !!ab, d, fechar: () => set({ aberta: null, menu: null, preAberto: null }), drawerW: mobile ? '100%' : '600px', evCols: mobile ? 2 : 5,
+      agirDetalhe: () => { if (ab && (ab.id === 'orla' || ab.id === 'lumen')) { this.setState(s => ({ resolvidos: [...s.resolvidos, ab.id] })); this.avisar(ab.id === 'orla' ? 'Token do Meta trocado' : 'Rótulo de Checkout salvo', ab.id === 'orla' ? 'As compras voltaram a chegar.\nA loja já aparece como Tudo certo.' : 'O Google passa a receber o Checkout a partir de agora.'); } },
+      codigoPixel: "analytics.subscribe('checkout_completed', (event) => {\n  xcart.track('purchase', event.data.checkout);\n});\n// código completo: igual ao de hoje",
+      copiarRotulo: st.copiado ? 'Copiado' : 'Copiar código', copiar: () => { set({ copiado: true }); setTimeout(() => this.setState({ copiado: false }), 2000); },
+      confirmar: !!st.confirmar, confirmarNome: st.confirmar ? st.confirmar.nome : '', cancelar: () => set({ confirmar: null }),
+      confirmarRemover: () => { const k = st.confirmar.k; this.setState(s => ({ removidos: [...s.removidos, k], confirmar: null })); this.avisar('Destino removido', 'O envio para esse pixel parou.'); },
+      toast: !!toast, toastTitulo: toast ? toast.t : '', toastTexto: toast ? toast.d : '', fecharToast: () => set({ toast: null }),
+      toastDir: mobile ? '12px' : '24px', toastEsq: mobile ? '12px' : 'auto', toastBase: mobile ? '76px' : '24px',
+    };
+  }
+}
+</script>
+</body>
+</html>

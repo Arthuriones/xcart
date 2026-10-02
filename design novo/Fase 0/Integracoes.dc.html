@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <title>xcart · Integrações (Fase 0)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Public+Sans:wght@400;500;600;700&amp;display=swap">
+  <link rel="stylesheet" href="xcart-tokens.css">
+</helmet>
+<div style="min-height:100vh; background:#e9e8e5; display:flex; flex-direction:column;">
+  <dc-import name="Revisao" tela="Integrações → Meta" theme="{{ theme }}" width="{{ width }}" cenario="{{ cenario }}" cenarios="{{ cenarios }}" anot="{{ anot }}" onTheme="{{ setTheme }}" onWidth="{{ setWidth }}" onCenario="{{ setCenario }}" onAnot="{{ setAnot }}" hint-size="100%,48px"></dc-import>
+  <div style="flex:1; padding:24px 16px 48px; display:flex; justify-content:center;">
+    <div style="width:{{ wrapW }}; height:{{ wrapH }}; flex:none;">
+      <div data-theme="{{ theme }}" style="position:relative; width:{{ frameW }}; height:{{ frameH }}; transform:scale({{ escala }}); transform-origin:top left; overflow:hidden; border-radius:{{ frameRaio }}; box-shadow:0 0 0 1px rgba(0,0,0,.12), 0 24px 64px rgba(0,0,0,.16); background:var(--bg); display:flex; flex-direction:{{ frameDir }};">
+        <a href="#conteudo" style="position:absolute; left:-9999px; top:8px; z-index:100; background:var(--solid); color:var(--on-solid); padding:8px 12px; border-radius:var(--r-control);" style-focus="left:8px;">Pular para o conteúdo</a>
+        <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}">
+          <dc-import name="Navegacao" active="integracoes" mobile="{{ false }}" theme="{{ theme }}" onTheme="{{ setTheme }}" alertas="{{ 3 }}" hint-size="232px,100%" style="height:100%; flex:none;"></dc-import>
+        </sc-if>
+        <div style="flex:1; min-width:0; min-height:0; display:flex; flex-direction:column;">
+          <dc-import name="Topo" mobile="{{ mobile }}" titulo="Integrações" contexto="completo" anot="{{ anot }}" lojas="{{ lojasTopo }}" loja="{{ loja }}" periodo="{{ periodo }}" comparar="{{ comparar }}" moeda="{{ moeda }}" onCtx="{{ setCtx }}" hint-size="100%,60px"></dc-import>
+          <main id="conteudo" tabindex="-1" style="flex:1; min-height:0; overflow-y:auto; background:var(--bg);">
+            <div style="max-width:1280px; margin:0 auto; padding:{{ pad }}; display:flex; flex-direction:column; gap:24px;">
+              <div style="display:flex; flex-direction:column; gap:4px; max-width:720px;">
+                <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}"><h1 style="font-size:var(--fs-page); line-height:28px; font-weight:600; letter-spacing:-0.01em;">Integrações</h1></sc-if>
+                <p style="font-size:var(--fs-body); color:var(--t2); text-wrap:pretty;">Cada plataforma num lugar só: o que lê quanto você gastou e o que envia as compras.</p>
+              </div>
+              <div style="display:grid; grid-template-columns:{{ layoutCols }}; gap:24px; align-items:start;">
+                <nav aria-label="Plataformas" style="display:flex; flex-direction:{{ navDir }}; gap:2px; overflow-x:auto; scrollbar-width:none; border-bottom:{{ navBorda }}; padding-bottom:{{ navPb }};">
+                  <sc-for list="{{ plataformas }}" as="p" hint-placeholder-count="5">
+                    <a href="#" onClick="{{ p.pick }}" aria-current="{{ p.atual }}" style="display:flex; align-items:center; gap:10px; min-height:{{ navH }}; padding:0 10px; border-radius:var(--r-control); text-decoration:none; font-size:var(--fs-dense); background:{{ p.bg }}; color:{{ p.fg }}; font-weight:{{ p.fw }}; white-space:nowrap;" style-hover="background:var(--hover); color:var(--ink); text-decoration:none;">
+                      <span aria-hidden="true" style="width:8px; height:8px; border-radius:50%; background:{{ p.dot }}; flex:none;"></span><span style="flex:1;">{{ p.label }}</span><sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}"><span style="font-size:var(--fs-label); color:var(--t2);">{{ p.estado }}</span></sc-if>
+                    </a>
+                  </sc-for>
+                </nav>
+
+                <div style="display:flex; flex-direction:column; gap:20px; min-width:0;">
+                  <sc-if value="{{ abaMeta }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+                      <div style="display:flex; flex-direction:column; gap:6px;">
+                        <h2 style="font-size:var(--fs-overlay); font-weight:600;">Meta Ads</h2>
+                        <span style="display:inline-flex; align-self:flex-start; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ metaBorda }}; background:{{ metaBg }}; color:{{ metaFg }}; font-size:var(--fs-label); font-weight:500;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ metaEstado }}</span>
+                      </div>
+                      <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+                        <button type="button" disabled="true" style="display:flex; align-items:center; gap:8px; height:var(--h-md); padding:0 16px; border:1px solid var(--border-strong); background:var(--surface-2); color:var(--t1); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:not-allowed;">Conectar com Facebook<span style="font-size:var(--fs-label); color:var(--t2); border:1px solid var(--border); border-radius:4px; padding:0 4px; font-weight:400;">Em breve</span></button>
+                        <sc-if value="{{ anot }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--info);">#11 Novo · login com Facebook substitui o token manual</span></sc-if>
+                      </div>
+                    </div>
+
+                    <sc-if value="{{ naoConectado }}" hint-placeholder-val="{{ false }}">
+                      <section style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:20px; display:flex; flex-direction:column; gap:16px;">
+                        <div style="display:flex; flex-direction:column; gap:4px;"><h3 style="font-size:var(--fs-section); font-weight:600;">Ligue o Meta em 4 passos (modo manual)</h3><p style="font-size:var(--fs-dense); color:var(--t1);">Até o login com Facebook chegar, o xcart lê o gasto com um token de leitura que você gera no Gerenciador de Negócios.</p></div>
+                        <ol style="list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:0; border:1px solid var(--border); border-radius:var(--r-card);">
+                          <sc-for list="{{ passosMeta }}" as="s" hint-placeholder-count="4">
+                            <li style="display:flex; gap:12px; padding:14px; border-bottom:1px solid var(--border-subtle); align-items:flex-start;">
+                              <span aria-hidden="true" style="width:24px; height:24px; flex:none; border-radius:50%; display:grid; place-items:center; font-size:var(--fs-label); font-weight:600; background:{{ s.bg }}; color:{{ s.numFg }}; border:1px solid {{ s.borda }};">{{ s.n }}</span>
+                              <div style="flex:1; display:flex; flex-direction:column; gap:6px;"><strong style="font-size:var(--fs-dense); font-weight:600;">{{ s.t }}</strong><span style="font-size:var(--fs-dense); color:var(--t1); text-wrap:pretty;">{{ s.d }}</span>
+                                <sc-if value="{{ s.campo }}" hint-placeholder-val="{{ false }}">
+                                  <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;"><label for="tok" style="position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);">Token de leitura</label><input id="tok" type="password" value="{{ token }}" onInput="{{ digitarToken }}" placeholder="Cole o token aqui" aria-describedby="tok-a" style="flex:1; min-width:200px; height:var(--h-md); padding:0 12px; border:1px solid var(--control-border); border-radius:var(--r-control); background:var(--surface); font-family:var(--font-mono); font-size:var(--fs-dense);"><button type="button" onClick="{{ verificar }}" aria-busy="{{ verificando }}" style="height:var(--h-md); padding:0 16px; border:0; background:var(--solid); color:var(--on-solid); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer; min-width:140px;">{{ verificarRotulo }}</button></div>
+                                  <span id="tok-a" style="font-size:var(--fs-label); color:{{ tokAjudaFg }};">{{ tokAjuda }}</span>
+                                </sc-if>
+                              </div>
+                            </li>
+                          </sc-for>
+                        </ol>
+                      </section>
+                    </sc-if>
+
+                    <sc-if value="{{ conectado }}" hint-placeholder-val="{{ true }}">
+                      <div style="display:flex; gap:10px; padding:12px 14px; background:var(--info-bg); border:1px solid var(--info-border); border-radius:var(--r-card); font-size:var(--fs-dense); align-items:flex-start;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true" style="color:var(--info); flex:none; margin-top:1px;"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20 M12 16v-4 M12 8h.01"></path></svg>
+                        <span style="text-wrap:pretty;">São duas permissões diferentes. A de leitura só vê quanto você gastou; a de conversões só envia as compras ao pixel. Uma não substitui a outra.</span>
+                      </div>
+                      <div style="display:grid; grid-template-columns:{{ cols2 }}; gap:12px;">
+                        <section aria-labelledby="ler-t" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:10px;">
+                          <span style="font-size:var(--fs-label); font-weight:600; color:var(--t2);">Para ler o gasto</span>
+                          <h3 id="ler-t" style="font-size:var(--fs-section); font-weight:600;">Token de leitura</h3>
+                          <span style="display:inline-flex; align-self:flex-start; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid var(--ok-border); background:var(--ok-bg); color:var(--ok); font-size:var(--fs-label); font-weight:500;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>Válido</span>
+                          <span style="font-size:var(--fs-dense); color:var(--t1);">Salvo em 28/09 · vê 14 contas de anúncio · gasto atualizado a cada 15 minutos.</span>
+                          <div style="display:flex; gap:8px; margin-top:auto; flex-wrap:wrap;"><button type="button" onClick="{{ trocarToken }}" style="height:var(--h-sm); padding:0 12px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer;">Trocar token</button><button type="button" onClick="{{ toggleComo }}" aria-expanded="{{ comoAberto }}" style="height:var(--h-sm); padding:0 10px; border:0; background:transparent; color:var(--brand); font-size:var(--fs-dense); cursor:pointer;">Como gerar</button></div>
+                          <sc-if value="{{ comoAberto }}" hint-placeholder-val="{{ false }}"><ol style="margin:0; padding-left:18px; font-size:var(--fs-dense); color:var(--t1); display:flex; flex-direction:column; gap:4px;"><li>No Gerenciador de Negócios, abra Usuários do sistema.</li><li>Crie um usuário “xcart leitura”, sem acesso de administrador.</li><li>Atribua as contas de anúncio com “Ver desempenho”.</li><li>Gere um token só com a permissão de leitura de anúncios e cole aqui.</li></ol></sc-if>
+                        </section>
+                        <section aria-labelledby="env-t" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:10px;">
+                          <span style="font-size:var(--fs-label); font-weight:600; color:var(--t2);">Para enviar as compras</span>
+                          <h3 id="env-t" style="font-size:var(--fs-section); font-weight:600;">Token de conversões, por pixel</h3>
+                          <ul style="list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px;">
+                            <sc-for list="{{ pixels }}" as="px" hint-placeholder-count="3"><li style="display:flex; align-items:center; gap:10px; font-size:var(--fs-dense); flex-wrap:wrap;"><span style="flex:1; min-width:140px;">{{ px.loja }} <span style="color:var(--t2); font-family:var(--font-mono); font-size:var(--fs-label);">{{ px.id }}</span></span><span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ px.borda }}; background:{{ px.bg }}; color:{{ px.fg }}; font-size:var(--fs-label); font-weight:500;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ px.estado }}</span></li></sc-for>
+                          </ul>
+                          <a href="Saude%20dos%20pixels.dc.html" style="margin-top:auto; font-size:var(--fs-dense); font-weight:500;">Gerenciar em Saúde dos pixels</a>
+                        </section>
+                      </div>
+
+                      <section aria-labelledby="contas-t" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); min-width:0;">
+                        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:14px 16px; border-bottom:1px solid var(--border-subtle); flex-wrap:wrap;">
+                          <div style="display:flex; flex-direction:column; gap:2px;"><h3 id="contas-t" style="font-size:var(--fs-section); font-weight:600;">Contas de anúncio</h3><span style="font-size:var(--fs-label); color:var(--t2);">Ligue cada conta a uma loja para o gasto entrar no lucro dela. Horários no fuso de São Paulo.</span></div>
+                          <sc-if value="{{ anot }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--info);">#12 Parcial · gasto por conta e dia já gravado; falta a leitura · #10 Front</span></sc-if>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px; padding:12px 16px; flex-wrap:wrap;">
+                          <label style="display:flex; align-items:center; gap:8px; height:var(--h-sm); padding:0 10px; border:1px solid var(--control-border); border-radius:var(--r-control); min-width:200px; flex:1; max-width:280px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true" style="color:var(--t3);"><path d="M11 3a8 8 0 1 0 0 16a8 8 0 1 0 0-16 M21 21l-4.3-4.3"></path></svg><input value="{{ busca }}" onInput="{{ digitar }}" aria-label="Buscar conta por nome ou ID" placeholder="Buscar por nome ou ID" style="flex:1; min-width:0; border:0; outline:0; background:transparent; font-size:var(--fs-dense);"></label>
+                          <div role="tablist" aria-label="Filtrar contas" style="display:flex; padding:2px; gap:2px; background:var(--track); border-radius:var(--r-control); overflow-x:auto; scrollbar-width:none; max-width:100%;">
+                            <sc-for list="{{ filtros }}" as="f" hint-placeholder-count="5"><button type="button" role="tab" aria-selected="{{ f.on }}" onClick="{{ f.pick }}" style="height:24px; padding:0 10px; border:0; border-radius:4px; font-size:var(--fs-label); background:{{ f.bg }}; color:{{ f.fg }}; font-weight:{{ f.fw }}; box-shadow:{{ f.sh }}; cursor:pointer; white-space:nowrap;">{{ f.label }}</button></sc-for>
+                          </div>
+                        </div>
+                        <sc-if value="{{ erroMeta }}" hint-placeholder-val="{{ false }}">
+                          <div role="alert" style="margin:0 16px 12px; display:flex; gap:10px; padding:10px 12px; background:var(--warn-bg); border:1px solid var(--warn-border); border-radius:var(--r-control); font-size:var(--fs-dense); align-items:center; flex-wrap:wrap;"><span style="flex:1; min-width:220px;"><strong style="color:var(--warn);">O Meta não respondeu às 14:20.</strong> O gasto de hoje pode estar até 15 minutos atrasado. Tentamos de novo sozinhos.</span><button type="button" onClick="{{ tentar }}" style="height:var(--h-sm); padding:0 12px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer;">Tentar agora</button></div>
+                        </sc-if>
+                        <sc-if value="{{ carregando }}" hint-placeholder-val="{{ false }}"><div aria-busy="true" aria-label="Carregando contas" style="padding:8px 16px;"><sc-for list="{{ cinco }}" as="x" hint-placeholder-count="5"><div style="display:grid; grid-template-columns:2fr 1fr 1.4fr 1fr 1fr 1fr 60px; gap:16px; height:52px; align-items:center;"><span style="height:12px; border-radius:4px; background:var(--skeleton);"></span><span style="height:12px; border-radius:4px; background:var(--skeleton);"></span><span style="height:28px; border-radius:var(--r-control); background:var(--skeleton);"></span><span style="height:12px; border-radius:4px; background:var(--skeleton);"></span><span style="height:12px; border-radius:4px; background:var(--skeleton);"></span><span style="height:20px; border-radius:10px; background:var(--skeleton);"></span><span style="height:20px; border-radius:10px; background:var(--skeleton);"></span></div></sc-for></div></sc-if>
+                        <sc-if value="{{ filtradoVazio }}" hint-placeholder-val="{{ false }}"><div style="min-height:160px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:24px; text-align:center;"><strong style="font-size:var(--fs-section);">Nenhuma conta com esse filtro</strong><button type="button" onClick="{{ limpar }}" style="height:var(--h-md); padding:0 14px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;">Limpar filtros</button></div></sc-if>
+                        <sc-if value="{{ tabela }}" hint-placeholder-val="{{ true }}">
+                          <div style="overflow-x:auto; border-top:1px solid var(--border);">
+                            <table style="width:100%; border-collapse:separate; border-spacing:0; font-size:var(--fs-dense);">
+                              <caption style="position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);">Contas de anúncio do Meta</caption>
+                              <thead><tr><sc-for list="{{ cab }}" as="h" hint-placeholder-count="8"><th scope="col" style="height:40px; padding:0 10px; text-align:{{ h.align }}; font-size:var(--fs-label); font-weight:600; color:var(--t1); background:var(--surface-2); border-bottom:1px solid var(--border); white-space:nowrap;">{{ h.label }}</th></sc-for></tr></thead>
+                              <tbody>
+                                <sc-for list="{{ contas }}" as="c" hint-placeholder-count="6">
+                                  <tr style-hover="background:var(--hover);">
+                                    <td style="height:56px; padding:0 10px; border-bottom:1px solid var(--border-subtle);"><span style="display:flex; flex-direction:column;"><span style="font-weight:500;">{{ c.nome }}</span><span style="font-size:var(--fs-label); color:var(--t2); font-family:var(--font-mono);">{{ c.id }}</span></span></td>
+                                    <td style="padding:0 10px; border-bottom:1px solid var(--border-subtle); color:var(--t1); white-space:nowrap;">{{ c.moedaFuso }}</td>
+                                    <td style="padding:0 10px; border-bottom:1px solid var(--border-subtle); position:relative;">
+                                      <button type="button" onClick="{{ c.abrirLoja }}" aria-haspopup="listbox" aria-expanded="{{ c.lojaOn }}" aria-label="{{ c.lojaAria }}" style="display:flex; align-items:center; justify-content:space-between; gap:8px; width:170px; height:var(--h-sm); padding:0 8px 0 10px; border:1px solid {{ c.lojaBorda }}; background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); color:{{ c.lojaFg }}; cursor:pointer;">{{ c.loja }}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+                                      <sc-if value="{{ c.lojaOn }}" hint-placeholder-val="{{ false }}"><div role="listbox" style="position:absolute; top:44px; left:10px; z-index:20; width:200px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-overlay); box-shadow:var(--shadow); padding:4px;"><sc-for list="{{ c.opcoes }}" as="o" hint-placeholder-count="5"><button type="button" role="option" aria-selected="{{ o.sel }}" onClick="{{ o.pick }}" style="width:100%; height:34px; padding:0 8px; border:0; background:{{ o.bg }}; text-align:left; border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer;" style-hover="background:var(--hover);">{{ o.label }}</button></sc-for></div></sc-if>
+                                    </td>
+                                    <td style="padding:0 10px; border-bottom:1px solid var(--border-subtle); text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap;">{{ c.hoje }}</td>
+                                    <td style="padding:0 10px; border-bottom:1px solid var(--border-subtle); text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; font-weight:500;">{{ c.periodo }}</td>
+                                    <td style="padding:0 10px; border-bottom:1px solid var(--border-subtle); white-space:nowrap;"><span style="display:flex; flex-direction:column; gap:2px; align-items:flex-start;"><span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ c.borda }}; background:{{ c.bg }}; color:{{ c.fg }}; font-size:var(--fs-label); font-weight:500;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ c.estado }}</span><span style="font-size:var(--fs-label); color:var(--t2);">{{ c.quando }}</span></span></td>
+                                    <td style="padding:0 10px; border-bottom:1px solid var(--border-subtle);"><button type="button" role="switch" aria-checked="{{ c.ativa }}" aria-label="{{ c.switchAria }}" onClick="{{ c.alternar }}" style="width:40px; height:24px; border-radius:12px; border:0; padding:0; background:{{ c.trilho }}; position:relative; cursor:pointer;"><span style="position:absolute; top:3px; left:{{ c.bola }}; width:18px; height:18px; border-radius:50%; background:var(--surface); transition:left 150ms var(--ease);"></span></button></td>
+                                    <td style="padding:0 10px; border-bottom:1px solid var(--border-subtle); text-align:right; white-space:nowrap;"><button type="button" onClick="{{ c.sincronizar }}" aria-label="{{ c.sincAria }}" style="height:var(--h-sm); padding:0 10px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-label); cursor:pointer;">Sincronizar</button></td>
+                                  </tr>
+                                </sc-for>
+                              </tbody>
+                            </table>
+                          </div>
+                        </sc-if>
+                        <sc-if value="{{ cartoes }}" hint-placeholder-val="{{ false }}">
+                          <ul style="list-style:none; margin:0; padding:0 12px 12px; display:flex; flex-direction:column; gap:8px;">
+                            <sc-for list="{{ contas }}" as="c" hint-placeholder-count="6">
+                              <li style="border:1px solid var(--border); border-radius:var(--r-card); padding:12px; display:flex; flex-direction:column; gap:10px;">
+                                <span style="display:flex; justify-content:space-between; gap:8px;"><span style="display:flex; flex-direction:column;"><strong style="font-size:var(--fs-body); font-weight:600;">{{ c.nome }}</strong><span style="font-size:var(--fs-label); color:var(--t2);">{{ c.loja }} · {{ c.moedaFuso }}</span></span><span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ c.borda }}; background:{{ c.bg }}; color:{{ c.fg }}; font-size:var(--fs-label); font-weight:500; flex:none;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ c.estado }}</span></span>
+                                <span style="display:grid; grid-template-columns:1fr 1fr; gap:8px;"><span style="display:flex; flex-direction:column;"><span style="font-size:var(--fs-label); color:var(--t2);">Gasto hoje</span><span style="font-variant-numeric:tabular-nums; font-size:var(--fs-body);">{{ c.hoje }}</span></span><span style="display:flex; flex-direction:column;"><span style="font-size:var(--fs-label); color:var(--t2);">No período</span><span style="font-variant-numeric:tabular-nums; font-size:var(--fs-body); font-weight:600;">{{ c.periodo }}</span></span></span>
+                                <span style="display:flex; align-items:center; justify-content:space-between; min-height:44px;"><span style="font-size:var(--fs-dense);">Ativa</span><button type="button" role="switch" aria-checked="{{ c.ativa }}" aria-label="{{ c.switchAria }}" onClick="{{ c.alternar }}" style="width:48px; height:28px; border-radius:14px; border:0; padding:0; background:{{ c.trilho }}; position:relative; cursor:pointer;"><span style="position:absolute; top:3px; left:{{ c.bolaM }}; width:22px; height:22px; border-radius:50%; background:var(--surface);"></span></button></span>
+                              </li>
+                            </sc-for>
+                          </ul>
+                        </sc-if>
+                        <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:10px 16px; border-top:1px solid var(--border-subtle); font-size:var(--fs-label); color:var(--t2);"><span>{{ rodape }}</span><span>Gasto convertido para {{ moeda }} pela cotação de cada dia</span></div>
+                      </section>
+                    </sc-if>
+                  </sc-if>
+
+                  <sc-if value="{{ abaOutra }}" hint-placeholder-val="{{ false }}">
+                    <section style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:24px; display:flex; flex-direction:column; gap:12px;">
+                      <h2 style="font-size:var(--fs-overlay); font-weight:600;">{{ outraTitulo }}</h2>
+                      <p style="font-size:var(--fs-dense); color:var(--t1); max-width:620px; text-wrap:pretty;">{{ outraTexto }}</p>
+                      <div style="display:grid; grid-template-columns:{{ cols2 }}; gap:12px;">
+                        <sc-for list="{{ outraCards }}" as="oc" hint-placeholder-count="2">
+                          <div style="border:1px solid var(--border); border-radius:var(--r-card); padding:14px; display:flex; flex-direction:column; gap:8px;">
+                            <span style="font-size:var(--fs-label); font-weight:600; color:var(--t2);">{{ oc.k }}</span>
+                            <strong style="font-size:var(--fs-dense); font-weight:600;">{{ oc.t }}</strong>
+                            <span style="display:inline-flex; align-self:flex-start; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ oc.borda }}; background:{{ oc.bg }}; color:{{ oc.fg }}; font-size:var(--fs-label); font-weight:500;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ oc.estado }}</span>
+                            <span style="font-size:var(--fs-label); color:var(--t1);">{{ oc.d }}</span>
+                          </div>
+                        </sc-for>
+                      </div>
+                      <span style="font-size:var(--fs-label); color:var(--t2);">Fora das telas-âncora da Fase 0: segue a mesma estrutura de Meta.</span>
+                    </section>
+                  </sc-if>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+        <sc-if value="{{ mobile }}" hint-placeholder-val="{{ false }}">
+          <dc-import name="Navegacao" active="integracoes" mobile="{{ true }}" theme="{{ theme }}" onTheme="{{ setTheme }}" alertas="{{ 3 }}" hint-size="100%,64px"></dc-import>
+        </sc-if>
+        <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+          <div role="status" aria-live="polite" style="position:absolute; right:{{ toastDir }}; left:{{ toastEsq }}; bottom:{{ toastBase }}; z-index:96; max-width:420px; background:var(--solid); color:var(--on-solid); border-radius:var(--r-card); box-shadow:var(--shadow); padding:12px 14px; display:flex; gap:12px; align-items:center; animation:xc-up 180ms var(--ease);">
+            <div style="flex:1; display:flex; flex-direction:column; gap:2px; font-size:var(--fs-dense);"><strong style="font-weight:600;">{{ toastTitulo }}</strong><span style="white-space:pre-line; opacity:.9;">{{ toastTexto }}</span></div>
+            <sc-if value="{{ toastDesfazer }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ desfazer }}" style="height:var(--h-sm); padding:0 10px; border:1px solid currentColor; background:transparent; color:inherit; border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:600; cursor:pointer;">Desfazer</button></sc-if>
+            <button type="button" onClick="{{ fecharToast }}" aria-label="Fechar aviso" style="width:24px; height:24px; display:grid; place-items:center; border:0; background:transparent; color:inherit; cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18 M6 6l12 12"></path></svg></button>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { theme: 'light', width: 'desktop', cenario: 'dados', anot: false, vw: 1400, loja: 'todas', periodo: '30d', comparar: 'anterior', moeda: 'BRL', aba: 'meta', filtro: 'todas', busca: '', abertoLoja: null, ativas: {}, lojas: {}, toast: null, como: false, token: '', verif: 'idle' };
+  componentDidMount() {
+    try { const t = localStorage.getItem('xcart-mock-tema'); const w = localStorage.getItem('xcart-mock-largura'); const s = { vw: window.innerWidth }; if (t) s.theme = t; if (w) s.width = w; this.setState(s); } catch (e) { this.setState({ vw: window.innerWidth }); }
+    this._rs = () => this.setState({ vw: window.innerWidth }); window.addEventListener('resize', this._rs);
+    this._k = e => { if (e.key === 'Escape') this.setState({ abertoLoja: null }); }; window.addEventListener('keydown', this._k);
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this._rs); window.removeEventListener('keydown', this._k); clearTimeout(this._tt); }
+  avisar(t, d, desfazer) { clearTimeout(this._tt); this.setState({ toast: { t, d, desfazer } }); this._tt = setTimeout(() => this.setState({ toast: null }), 7000); }
+  renderVals() {
+    const st = this.state; const mobile = st.width === 'mobile'; const set = o => this.setState(o); const cen = st.cenario;
+    const LOJAS = [{ id: 'lumen', nome: 'Lumen Casa', dominio: 'lumencasa.com' }, { id: 'orla', nome: 'Orla Wear', dominio: 'orlawear.com' }, { id: 'kova', nome: 'Kova Home', dominio: 'kovahome.eu' }, { id: 'alto', nome: 'Alto Fit', dominio: 'altofit.co' }, { id: 'tarn', nome: 'Tarn Gear', dominio: 'tarngear.com', ativa: false, motivo: 'Sem permissão para ler pedidos' }, { id: 'pico', nome: 'Pico Tools', dominio: 'picotools.com', ativa: false, motivo: 'Token inválido' }];
+    const naoConectado = cen === 'nova';
+    const PLAT = [['meta', 'Meta', naoConectado ? 'neutral' : 'warn', naoConectado ? 'Não ligado' : '1 atenção'], ['google', 'Google', 'warn', '1 atenção'], ['shopify', 'Shopify', 'ok', '4 lojas'], ['notif', 'Notificações', 'ok', 'Telegram'], ['avancado', 'Avançado', 'neutral', 'Claude']];
+    const plataformas = PLAT.map(([id, label, tom, estado]) => { const on = st.aba === id; return { label, estado, dot: `var(--${tom})`, atual: on ? 'page' : undefined, bg: on ? 'var(--nav-active)' : 'transparent', fg: on ? 'var(--ink)' : 'var(--t1)', fw: on ? 600 : 400, pick: e => { e.preventDefault(); set({ aba: id }); } }; });
+    const TAXA = { BRL: 1, USD: 5.32, EUR: 6.21 };
+    const din = (v, m) => v === null ? '—' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: st.moeda }).format(v * (TAXA[m] || 1) / TAXA[st.moeda]);
+    const C = [
+      ['act_10294811', 'Lumen · Principal', 'USD', 'Nova York', 'lumen', 'ok', 'Atualizada', 'às 14:30', 812.4, 14820, true],
+      ['act_10294877', 'Lumen · Remarketing', 'USD', 'Nova York', 'lumen', 'ok', 'Atualizada', 'às 14:30', 96.1, 2210, true],
+      ['act_20918842', 'Orla · Principal', 'USD', 'Nova York', 'orla', 'ok', 'Atualizada', 'às 14:29', 604.9, 11250, true],
+      ['act_20918899', 'Orla · Teste criativos', 'USD', 'Nova York', null, 'warn', 'Sem loja', 'gasto fora do lucro', 41.0, 860, true],
+      ['act_30551201', 'Kova · EU', 'EUR', 'Lisboa', 'kova', cen === 'erro' ? 'warn' : 'ok', cen === 'erro' ? 'Aguardando' : 'Atualizada', cen === 'erro' ? 'última às 14:05' : 'às 14:30', 388.2, 7340, true],
+      ['act_40012955', 'Alto · Principal', 'USD', 'Nova York', 'alto', 'ok', 'Atualizada', 'às 14:28', 77.3, 2280, true],
+      ['act_40013300', 'Alto · Antiga', 'USD', 'Nova York', 'alto', 'neutral', 'Pausada', 'desde 03/09', 0, 0, false],
+      ['act_50190331', 'Tarn · Principal', 'USD', 'Nova York', 'tarn', 'err', 'Erro', 'o Meta tirou o acesso', null, null, true],
+      ['act_50190388', 'Selva · Principal', 'USD', 'Nova York', null, 'neutral', 'Pausada', 'desde 27/09', 0, 0, false],
+    ];
+    const nomeLoja = id => (LOJAS.find(l => l.id === id) || {}).nome;
+    let contas = C.map(([id, nome, m, fuso, loja0, tom0, est0, quando, hoje, per, ativa0]) => {
+      const loja = st.lojas[id] !== undefined ? st.lojas[id] : loja0;
+      const ativa = st.ativas[id] !== undefined ? st.ativas[id] : ativa0;
+      let tom = tom0, estado = est0, q = quando;
+      if (!ativa) { tom = 'neutral'; estado = 'Pausada'; q = 'não entra no lucro'; } else if (!loja) { tom = 'warn'; estado = 'Sem loja'; q = 'gasto fora do lucro'; } else if (est0 === 'Sem loja' || est0 === 'Pausada') { tom = 'run'; estado = 'Aguardando'; q = 'primeira leitura em até 15 min'; }
+      return { idc: id, id: id.replace('act_', ''), nome, moedaFuso: `${m} · ${fuso}`, loja: loja ? nomeLoja(loja) : 'Escolher loja', lojaFg: loja ? 'var(--ink)' : 'var(--warn)', lojaBorda: loja ? 'var(--control-border)' : 'var(--warn-border)',
+        hoje: hoje === null ? '—' : din(hoje, m), periodo: per === null ? '—' : din(per, m), estado, quando: q, fg: `var(--${tom})`, bg: `var(--${tom}-bg)`, borda: `var(--${tom}-border)`, tom,
+        ativa, trilho: ativa ? 'var(--ok)' : 'var(--t4)', bola: ativa ? '19px' : '3px', bolaM: ativa ? '23px' : '3px', switchAria: `Usar o gasto de ${nome} no lucro`, sincAria: `Sincronizar ${nome} agora`, lojaAria: `Loja ligada a ${nome}`,
+        lojaOn: st.abertoLoja === id, abrirLoja: () => set({ abertoLoja: st.abertoLoja === id ? null : id }),
+        opcoes: [...LOJAS.filter(l => l.ativa !== false).map(l => ({ label: l.nome, v: l.id })), { label: 'Nenhuma loja', v: null }].map(o => ({ label: o.label, sel: o.v === loja ? 'true' : undefined, bg: o.v === loja ? 'var(--nav-active)' : 'transparent', pick: () => { const antes = loja; this.setState(s => ({ lojas: { ...s.lojas, [id]: o.v }, abertoLoja: null })); this.avisar(o.v ? `${nome} ligada a ${o.label}` : `${nome} sem loja`, o.v ? 'O gasto entra no lucro dessa loja a partir de agora.' : 'O gasto dela sai do lucro.', () => this.setState(s => ({ lojas: { ...s.lojas, [id]: antes } }))); } })),
+        alternar: () => { this.setState(s => ({ ativas: { ...s.ativas, [id]: !ativa } })); this.avisar(ativa ? `${nome} pausada no xcart` : `${nome} ativa de novo`, ativa ? 'O gasto dela sai do lucro. Nada muda no Meta.' : 'O gasto volta a entrar no lucro.', () => this.setState(s => ({ ativas: { ...s.ativas, [id]: ativa } }))); },
+        sincronizar: () => this.avisar(`${nome} sincronizando`, 'O gasto desta tela atualiza quando terminar.') };
+    });
+    const cnt = f => contas.filter(f).length;
+    const FIL = [['todas', 'Todas', () => true], ['ligadas', 'Ligadas', c => c.ativa && c.estado !== 'Sem loja' && c.tom !== 'err'], ['semloja', 'Sem loja', c => c.estado === 'Sem loja'], ['erro', 'Com erro', c => c.tom === 'err' || c.estado === 'Aguardando'], ['pausadas', 'Pausadas', c => !c.ativa || c.estado === 'Pausada']];
+    const filtros = FIL.map(([id, label, f]) => { const on = st.filtro === id; return { label: `${label} (${cnt(f)})`, on, pick: () => set({ filtro: id }), bg: on ? 'var(--surface)' : 'transparent', fg: on ? 'var(--ink)' : 'var(--t2)', fw: on ? 600 : 400, sh: on ? '0 0 0 1px var(--border)' : 'none' }; });
+    const fAtual = FIL.find(f => f[0] === st.filtro)[2];
+    const q = st.busca.trim().toLowerCase();
+    contas = contas.filter(fAtual).filter(c => !q || (c.nome + c.idc).toLowerCase().includes(q));
+    const carregando = cen === 'carregando';
+    const pixels = [['Lumen Casa', '4829…1093', 'ok', 'Enviando'], ['Orla Wear', '7710…2284', 'err', 'Token recusado'], ['Kova Home', '3391…0457', 'ok', 'Enviando']].map(([loja, id, tom, estado]) => ({ loja, id, estado, fg: `var(--${tom})`, bg: `var(--${tom}-bg)`, borda: `var(--${tom}-border)` }));
+    const tokOk = st.token.trim().length >= 20;
+    const passosMeta = [['Abra Usuários do sistema', 'No Gerenciador de Negócios do Meta, vá em Configurações › Usuários › Usuários do sistema.'], ['Crie o usuário “xcart leitura”', 'Função de funcionário, sem acesso de administrador.'], ['Atribua as contas de anúncio', 'Marque cada conta com a permissão “Ver desempenho”. Contas de outro portfólio precisam ser compartilhadas antes.'], ['Gere o token e cole aqui', 'Só a permissão de leitura de anúncios. O xcart confere sozinho quais contas o token enxerga.']].map(([t, d], i) => ({ t, d, n: String(i + 1), campo: i === 3, bg: i === 3 ? 'var(--solid)' : 'transparent', numFg: i === 3 ? 'var(--on-solid)' : 'var(--t1)', borda: i === 3 ? 'var(--solid)' : 'var(--border-strong)' }));
+    const OUT = {
+      google: ['Google Ads', 'O gasto chega pelo script de cada conta; as compras, pelo AW- e um rótulo por evento. São identificadores diferentes: o ID de cliente (123-456-7890) lê o gasto, o AW- recebe conversões.', [['Para ler o gasto', 'Script em 3 contas', 'warn', 'Atenção', '“Lumen · Pesquisa” sem enviar desde 11:30.'], ['Para enviar as compras', 'AW-11284 30917', 'warn', 'Incompleto', 'Lumen Casa sem rótulo de Checkout.']]],
+      shopify: ['Shopify', 'Cada loja usa o próprio app da loja. Reconectar e remover ficam em Lojas.', [['Lojas', '4 ativas', 'ok', 'Conectadas', 'Pedidos a cada 15 minutos.'], ['Sem acesso', '7 lojas', 'neutral', 'Fora dos totais', 'Reconecte ou remova em Lojas.']]],
+      notif: ['Notificações', 'Onde os alertas chegam. Hoje só o Telegram funciona.', [['Telegram', '@arthur', 'ok', 'Conectado', 'Conectar em 1 clique, sem procurar o chat: em breve.'], ['E-mail e push', 'arthur@exemplo.com', 'neutral', 'Em breve', 'Resumo diário com o lucro de ontem por loja.']]],
+      avancado: ['Avançado · Claude', 'Operar as lojas conversando com o Claude Code ou o Claude Desktop. Gere um token e copie o comando.', [['Tokens', '1 ativo · termina em …8F2A', 'ok', 'Ativo', 'Último uso hoje, 09:12. Revogar pede confirmação.'], ['Configuração', 'Comando e JSON prontos', 'neutral', 'Copiar', 'O texto copiado é idêntico ao de hoje.']]],
+    };
+    const outra = OUT[st.aba];
+    const fw = mobile ? 375 : 1440, fh = mobile ? 812 : 900;
+    const escala = mobile ? 1 : Math.min(1, Math.max(0.4, (st.vw - 32) / fw));
+    const toast = st.toast;
+    return {
+      theme: st.theme, width: st.width, cenario: cen, anot: st.anot,
+      cenarios: [{ id: 'dados', label: 'Conectado' }, { id: 'nova', label: 'Não conectado' }, { id: 'erro', label: 'Meta sem responder' }, { id: 'carregando', label: 'Carregando' }],
+      setTheme: v => { try { localStorage.setItem('xcart-mock-tema', v); } catch (e) {} set({ theme: v }); },
+      setWidth: v => { try { localStorage.setItem('xcart-mock-largura', v); } catch (e) {} set({ width: v }); },
+      setCenario: v => set({ cenario: v, aba: 'meta', verif: 'idle', token: '' }), setAnot: v => set({ anot: v }),
+      desktop: !mobile, mobile, frameDir: mobile ? 'column' : 'row', frameW: `${fw}px`, frameH: `${fh}px`, escala, wrapW: `${fw * escala}px`, wrapH: `${fh * escala}px`, frameRaio: mobile ? '28px' : '10px', pad: mobile ? '16px 16px 32px' : '24px 32px 48px',
+      layoutCols: mobile ? 'minmax(0,1fr)' : '200px minmax(0,1fr)', navDir: mobile ? 'row' : 'column', navBorda: mobile ? '1px solid var(--border)' : '0', navPb: mobile ? '8px' : '0', navH: mobile ? 'var(--h-lg)' : '40px', cols2: mobile ? '1fr' : 'repeat(2, minmax(0,1fr))',
+      lojasTopo: LOJAS.map(l => ({ ...l, ativa: l.ativa !== false })), loja: st.loja, periodo: st.periodo, comparar: st.comparar, moeda: st.moeda, setCtx: (k, v) => set({ [k]: v }),
+      plataformas, abaMeta: st.aba === 'meta', abaOutra: st.aba !== 'meta',
+      outraTitulo: outra ? outra[0] : '', outraTexto: outra ? outra[1] : '', outraCards: outra ? outra[2].map(([k, t, tom, estado, d]) => ({ k, t, estado, d, fg: `var(--${tom})`, bg: `var(--${tom}-bg)`, borda: `var(--${tom}-border)` })) : [],
+      metaEstado: naoConectado ? 'Não ligado' : 'Conectado · modo manual', metaFg: naoConectado ? 'var(--neutral)' : 'var(--ok)', metaBg: naoConectado ? 'var(--neutral-bg)' : 'var(--ok-bg)', metaBorda: naoConectado ? 'var(--neutral-border)' : 'var(--ok-border)',
+      naoConectado, conectado: !naoConectado, passosMeta, token: st.token, digitarToken: e => set({ token: e.target.value, verif: 'idle' }),
+      verificando: st.verif === 'rodando', verificarRotulo: st.verif === 'rodando' ? 'Conferindo…' : 'Conferir token',
+      verificar: () => { if (!tokOk) { set({ verif: 'erro' }); return; } set({ verif: 'rodando' }); setTimeout(() => { this.setState({ verif: 'ok', cenario: 'dados' }); this.avisar('Token válido', 'Ele enxerga 9 contas de anúncio.\nLigue cada uma à sua loja abaixo.'); }, 1300); },
+      tokAjuda: st.verif === 'erro' ? 'Esse texto não parece um token do Meta. Ele é longo e começa com EAA.' : 'Fica guardado só no servidor e não volta para o navegador.', tokAjudaFg: st.verif === 'erro' ? 'var(--err)' : 'var(--t2)',
+      comoAberto: st.como, toggleComo: () => set({ como: !st.como }), trocarToken: () => set({ cenario: 'nova' }), pixels,
+      busca: st.busca, digitar: e => set({ busca: e.target.value }), filtros, limpar: () => set({ busca: '', filtro: 'todas' }),
+      erroMeta: cen === 'erro', tentar: () => set({ cenario: 'dados' }), carregando, cinco: [1, 2, 3, 4, 5],
+      filtradoVazio: !carregando && contas.length === 0, tabela: !carregando && !mobile && contas.length > 0, cartoes: !carregando && mobile && contas.length > 0, contas,
+      cab: [['Conta', 'left'], ['Moeda · fuso', 'left'], ['Loja ligada', 'left'], ['Gasto hoje', 'right'], ['Gasto no período', 'right'], ['Situação', 'left'], ['Ativa', 'left'], ['', 'right']].map(([label, align]) => ({ label, align })),
+      rodape: `${contas.length} contas · gasto no período: últimos 30 dias`, moeda: st.moeda,
+      toast: !!toast, toastTitulo: toast ? toast.t : '', toastTexto: toast ? toast.d : '', toastDesfazer: !!(toast && toast.desfazer), fecharToast: () => set({ toast: null }),
+      desfazer: () => { toast.desfazer(); set({ toast: null }); },
+      toastDir: mobile ? '12px' : '24px', toastEsq: mobile ? '12px' : 'auto', toastBase: mobile ? '76px' : '24px',
+    };
+  }
+}
+</script>
+</body>
+</html>

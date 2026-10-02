@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <title>xcart · Eventos ao vivo (Fase 0)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Public+Sans:wght@400;500;600;700&amp;display=swap">
+  <link rel="stylesheet" href="xcart-tokens.css">
+</helmet>
+<div style="min-height:100vh; background:#e9e8e5; display:flex; flex-direction:column;">
+  <dc-import name="Revisao" tela="Eventos ao vivo" theme="{{ theme }}" width="{{ width }}" cenario="{{ cenario }}" cenarios="{{ cenarios }}" anot="{{ anot }}" onTheme="{{ setTheme }}" onWidth="{{ setWidth }}" onCenario="{{ setCenario }}" onAnot="{{ setAnot }}" hint-size="100%,48px"></dc-import>
+  <div style="flex:1; padding:24px 16px 48px; display:flex; justify-content:center;">
+    <div style="width:{{ wrapW }}; height:{{ wrapH }}; flex:none;">
+      <div data-theme="{{ theme }}" style="position:relative; width:{{ frameW }}; height:{{ frameH }}; transform:scale({{ escala }}); transform-origin:top left; overflow:hidden; border-radius:{{ frameRaio }}; box-shadow:0 0 0 1px rgba(0,0,0,.12), 0 24px 64px rgba(0,0,0,.16); background:var(--bg); display:flex; flex-direction:{{ frameDir }};">
+        <a href="#conteudo" style="position:absolute; left:-9999px; top:8px; z-index:100; background:var(--solid); color:var(--on-solid); padding:8px 12px; border-radius:var(--r-control);" style-focus="left:8px;">Pular para o conteúdo</a>
+        <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}">
+          <dc-import name="Navegacao" active="eventos" mobile="{{ false }}" theme="{{ theme }}" onTheme="{{ setTheme }}" alertas="{{ 3 }}" hint-size="232px,100%" style="height:100%; flex:none;"></dc-import>
+        </sc-if>
+        <div style="flex:1; min-width:0; min-height:0; display:flex; flex-direction:column;">
+          <dc-import name="Topo" mobile="{{ mobile }}" titulo="Eventos ao vivo" contexto="loja" soLojaTexto="Mostra os eventos mais recentes da loja escolhida." anot="{{ anot }}" lojas="{{ lojasTopo }}" loja="{{ loja }}" onCtx="{{ setCtx }}" hint-size="100%,60px"></dc-import>
+          <main id="conteudo" tabindex="-1" style="flex:1; min-height:0; overflow-y:auto; background:var(--bg);">
+            <div style="max-width:1280px; margin:0 auto; padding:{{ pad }}; display:flex; flex-direction:column; gap:24px;">
+              <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+                <div style="display:flex; flex-direction:column; gap:4px; max-width:720px;">
+                  <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}"><h1 style="font-size:var(--fs-page); line-height:28px; font-weight:600; letter-spacing:-0.01em;">Eventos ao vivo</h1></sc-if>
+                  <p style="font-size:var(--fs-body); color:var(--t2); text-wrap:pretty;">Cada evento de rastreamento enviado ao Meta e ao Google, quase em tempo real. Clique numa linha para ver o detalhe.</p>
+                </div>
+                <button type="button" onClick="{{ exportar }}" style="display:flex; align-items:center; gap:8px; height:var(--h-md); padding:0 14px; border:1px solid var(--border-strong); background:var(--surface); color:var(--ink); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;" style-hover="border-color:var(--control-border);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3"></path></svg>Exportar CSV</button>
+              </div>
+
+              <section aria-label="Eventos" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); min-width:0;">
+                <div style="display:flex; align-items:center; gap:12px 16px; padding:12px 16px; border-bottom:1px solid var(--border-subtle); flex-wrap:wrap;">
+                  <button type="button" role="switch" aria-checked="{{ aoVivo }}" onClick="{{ toggleVivo }}" style="display:flex; align-items:center; gap:10px; height:var(--h-md); padding:0 14px 0 10px; border:1px solid {{ vivoBorda }}; background:{{ vivoBg }}; color:{{ vivoFg }}; border-radius:18px; font-size:var(--fs-dense); font-weight:600; cursor:pointer;">
+                    <span aria-hidden="true" style="width:28px; height:16px; border-radius:8px; background:{{ trilho }}; position:relative; display:block;"><span style="position:absolute; top:2px; left:{{ bolinha }}; width:12px; height:12px; border-radius:50%; background:var(--surface); transition:left 150ms var(--ease);"></span></span>
+                    {{ vivoRotulo }}
+                  </button>
+                  <span aria-live="off" style="font-size:var(--fs-label); color:var(--t2); font-variant-numeric:tabular-nums;">{{ atualizadoHa }}</span>
+                  <div style="flex:1;"></div>
+                  <div role="group" aria-label="Contagem nas linhas carregadas" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:var(--fs-label); color:var(--t2);">
+                    <span>{{ contagemRotulo }}</span>
+                    <sc-for list="{{ contadores }}" as="c" hint-placeholder-count="3">
+                      <button type="button" onClick="{{ c.pick }}" aria-pressed="{{ c.on }}" style="display:inline-flex; align-items:center; gap:6px; height:var(--h-sm); padding:0 10px; border:1px solid {{ c.borda }}; background:{{ c.bg }}; color:{{ c.fg }}; border-radius:14px; font-size:var(--fs-label); font-weight:600; font-variant-numeric:tabular-nums; cursor:pointer;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ c.texto }}</button>
+                    </sc-for>
+                  </div>
+                </div>
+
+                <div role="tablist" aria-label="Visões salvas" style="display:flex; align-items:center; gap:4px; padding:0 16px; border-bottom:1px solid var(--border); overflow-x:auto; scrollbar-width:none;">
+                  <sc-for list="{{ visoes }}" as="v" hint-placeholder-count="3">
+                    <button type="button" role="tab" aria-selected="{{ v.on }}" onClick="{{ v.pick }}" style="height:40px; padding:0 10px; border:0; border-bottom:2px solid {{ v.borda }}; background:transparent; color:{{ v.fg }}; font-weight:{{ v.fw }}; font-size:var(--fs-dense); cursor:pointer; white-space:nowrap; margin-bottom:-1px;">{{ v.label }}</button>
+                  </sc-for>
+                  <button type="button" onClick="{{ salvarVisao }}" style="height:var(--h-sm); padding:0 10px; margin-left:8px; border:1px dashed var(--control-border); background:transparent; color:var(--t1); border-radius:var(--r-control); font-size:var(--fs-label); cursor:pointer; white-space:nowrap;">Salvar visão</button>
+                </div>
+
+                <div style="display:flex; align-items:center; gap:8px; padding:12px 16px; flex-wrap:wrap;">
+                  <sc-for list="{{ chips }}" as="ch" hint-placeholder-count="5">
+                    <div style="position:relative;">
+                      <button type="button" onClick="{{ ch.abrir }}" aria-expanded="{{ ch.aberto }}" aria-haspopup="dialog" style="display:flex; align-items:center; gap:6px; height:var(--h-sm); padding:0 10px; border:1px {{ ch.estilo }} {{ ch.borda }}; border-radius:14px; background:{{ ch.bg }}; color:{{ ch.fg }}; font-size:var(--fs-dense); cursor:pointer; white-space:nowrap;">{{ ch.rotulo }}</button>
+                      <sc-if value="{{ ch.ativo }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ ch.limpar }}" aria-label="{{ ch.limparAria }}" style="position:absolute; right:-6px; top:-6px; width:18px; height:18px; border-radius:50%; border:1px solid var(--info-border); background:var(--surface); color:var(--info); display:grid; place-items:center; cursor:pointer; padding:0;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18 M6 6l12 12"></path></svg></button></sc-if>
+                      <sc-if value="{{ ch.aberto }}" hint-placeholder-val="{{ false }}">
+                        <div role="dialog" aria-label="{{ ch.label }}" style="position:absolute; top:34px; left:0; z-index:30; width:240px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-overlay); box-shadow:var(--shadow); padding:6px;">
+                          <sc-for list="{{ ch.opcoes }}" as="o" hint-placeholder-count="3">
+                            <button type="button" role="checkbox" aria-checked="{{ o.on }}" onClick="{{ o.toggle }}" style="width:100%; display:flex; align-items:center; gap:10px; height:36px; padding:0 8px; border:0; background:transparent; border-radius:var(--r-control); cursor:pointer; font-size:var(--fs-dense); text-align:left;" style-hover="background:var(--hover);">
+                              <span aria-hidden="true" style="width:16px; height:16px; border-radius:4px; border:1px solid {{ o.borda }}; background:{{ o.bg }}; display:grid; place-items:center; color:var(--on-solid);"><sc-if value="{{ o.on }}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg></sc-if></span>
+                              <span style="flex:1;">{{ o.label }}</span><span style="font-size:var(--fs-label); color:var(--t2); font-variant-numeric:tabular-nums;">{{ o.n }}</span>
+                            </button>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{ temFiltro }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ limparTudo }}" style="height:var(--h-sm); padding:0 8px; border:0; background:transparent; color:var(--brand); font-size:var(--fs-dense); cursor:pointer;">Limpar filtros</button></sc-if>
+                  <div style="flex:1;"></div>
+                  <span style="font-size:var(--fs-label); color:var(--t2);">{{ notaFiltro }}</span>
+                </div>
+                <sc-if value="{{ anot }}" hint-placeholder-val="{{ false }}"><div style="margin:0 16px 12px; font-family:var(--font-mono); font-size:var(--fs-label); color:var(--info);">#33 Parcial · hoje o filtro vale só nas linhas carregadas; filtrar no servidor e contar o período pede migration · #20 Front · visões salvas no navegador</div></sc-if>
+
+                <sc-if value="{{ carregando }}" hint-placeholder-val="{{ false }}">
+                  <div aria-busy="true" aria-label="Carregando eventos" style="border-top:1px solid var(--border); padding:8px 16px;">
+                    <sc-for list="{{ oito }}" as="x" hint-placeholder-count="8"><div style="display:grid; grid-template-columns:80px 1fr 1fr 1fr 1.4fr 90px 70px 1.4fr; gap:16px; height:44px; align-items:center;"><span style="height:10px; border-radius:4px; background:var(--skeleton);"></span><span style="height:10px; border-radius:4px; background:var(--skeleton);"></span><span style="height:10px; border-radius:4px; background:var(--skeleton);"></span><span style="height:10px; border-radius:4px; background:var(--skeleton);"></span><span style="height:10px; border-radius:4px; background:var(--skeleton);"></span><span style="height:18px; border-radius:9px; background:var(--skeleton);"></span><span style="height:10px; border-radius:4px; background:var(--skeleton);"></span><span style="height:10px; border-radius:4px; background:var(--skeleton);"></span></div></sc-for>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ erro }}" hint-placeholder-val="{{ false }}">
+                  <div role="alert" style="border-top:1px solid var(--border); min-height:280px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:32px 16px; text-align:center;">
+                    <strong style="font-size:var(--fs-section);">Não conseguimos buscar os eventos</strong>
+                    <span style="font-size:var(--fs-dense); color:var(--t1); max-width:440px;">O rastreamento continua enviando normalmente. Só a lista desta tela não carregou.</span>
+                    <button type="button" onClick="{{ tentar }}" style="height:var(--h-md); padding:0 16px; border:0; background:var(--solid); color:var(--on-solid); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;">Tentar de novo</button>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ vazio }}" hint-placeholder-val="{{ false }}">
+                  <div style="border-top:1px solid var(--border); min-height:260px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:32px 16px; text-align:center;">
+                    <strong style="font-size:var(--fs-section);">Nenhum evento ainda</strong>
+                    <span style="font-size:var(--fs-dense); color:var(--t2);">Os eventos aparecem aqui assim que alguém visitar a loja rastreada.</span>
+                    <a href="Saude%20dos%20pixels.dc.html" style="margin-top:4px; display:flex; align-items:center; height:var(--h-md); padding:0 16px; border-radius:var(--r-control); background:var(--solid); color:var(--on-solid); font-size:var(--fs-dense); font-weight:500; text-decoration:none;" style-hover="color:var(--on-solid); text-decoration:none; background:var(--solid-hover);">Conferir rastreamento</a>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ filtradoVazio }}" hint-placeholder-val="{{ false }}">
+                  <div style="border-top:1px solid var(--border); min-height:220px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:24px 16px; text-align:center;">
+                    <strong style="font-size:var(--fs-section);">Nenhum evento com esses filtros</strong>
+                    <span style="font-size:var(--fs-dense); color:var(--t2);">Nas linhas carregadas não há evento que combine com tudo.</span>
+                    <button type="button" onClick="{{ limparTudo }}" style="height:var(--h-md); padding:0 14px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;">Limpar filtros</button>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ tabela }}" hint-placeholder-val="{{ true }}">
+                  <div style="overflow-x:auto; border-top:1px solid var(--border);">
+                    <table style="width:100%; border-collapse:separate; border-spacing:0; font-size:var(--fs-dense);">
+                      <caption style="position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);">Eventos de rastreamento, do mais novo para o mais antigo</caption>
+                      <thead><tr>
+                        <sc-for list="{{ cabecalho }}" as="h" hint-placeholder-count="10"><th scope="col" style="height:40px; padding:0 10px; text-align:{{ h.align }}; font-size:var(--fs-label); font-weight:600; color:var(--t1); background:var(--surface-2); border-bottom:1px solid var(--border); white-space:nowrap;">{{ h.label }}</th></sc-for>
+                      </tr></thead>
+                      <tbody>
+                        <sc-for list="{{ linhas }}" as="r" hint-placeholder-count="10">
+                          <tr onClick="{{ r.abrir }}" style="cursor:pointer; animation:{{ r.anim }}; background:{{ r.bg }};" style-hover="background:var(--hover);">
+                            <td style="height:44px; padding:0 10px; border-bottom:1px solid var(--border-subtle); white-space:nowrap; font-variant-numeric:tabular-nums;"><button type="button" onClick="{{ r.abrir }}" aria-label="{{ r.aria }}" style="border:0; background:transparent; padding:0; font:inherit; color:var(--ink); cursor:pointer;">{{ r.hora }}</button><sc-if value="{{ r.dia }}" hint-placeholder-val="{{ false }}"><span style="display:block; font-size:var(--fs-label); color:var(--t2);">{{ r.dia }}</span></sc-if></td>
+                            <td style="padding:0 10px; border-bottom:1px solid var(--border-subtle); white-space:nowrap;">{{ r.loja }}</td>
+                            <td style="padding:0 10px; border-bottom:1px solid var(--border-subtle); white-space:nowrap; font-weight:{{ r.evFw }};">{{ r.evento }}</td>
+                            <td style="padding:0 10px; border-bottom:1px solid var(--border-subtle); white-space:nowrap; color:var(--t1);">{{ r.fonte }}</td>
+                            <td style="padding:0 10px; border-bottom:1px solid var(--border-subtle); white-space:nowrap;"><span style="font-size:var(--fs-label); font-weight:600; color:var(--t1); border:1px solid var(--border-strong); border-radius:4px; padding:0 5px; margin-right:6px;">{{ r.plat }}</span>{{ r.destino }}</td>
+                            <td style="padding:0 10px; border-bottom:1px solid var(--border-subtle); white-space:nowrap;"><span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ r.borda }}; background:{{ r.sbg }}; color:{{ r.sfg }}; font-size:var(--fs-label); font-weight:500;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor; animation:{{ r.pulso }};"></span>{{ r.status }}</span></td>
+                            <td style="padding:0 10px; border-bottom:1px solid var(--border-subtle); white-space:nowrap; text-align:right; font-variant-numeric:tabular-nums; color:var(--t1);">{{ r.lat }}</td>
+                            <td style="padding:0 10px; border-bottom:1px solid var(--border-subtle); white-space:nowrap; color:var(--t1);">{{ r.clique }}</td>
+                            <td style="padding:0 10px; border-bottom:1px solid var(--border-subtle); color:var(--t1); min-width:220px;">{{ r.origem }}</td>
+                            <td style="padding:0 10px; border-bottom:1px solid var(--border-subtle); white-space:nowrap; text-align:right; font-variant-numeric:tabular-nums;"><sc-if value="{{ r.pedido }}" hint-placeholder-val="{{ false }}"><a href="#" onClick="{{ r.pedidoClick }}" aria-label="{{ r.pedidoAria }}" style="display:inline-flex; align-items:center; gap:4px;">{{ r.pedido }}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6 M10 14L21 3 M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></a></sc-if><sc-if value="{{ r.semPedido }}" hint-placeholder-val="{{ true }}"><span style="color:var(--t2);">—</span></sc-if></td>
+                          </tr>
+                        </sc-for>
+                      </tbody>
+                    </table>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ cartoes }}" hint-placeholder-val="{{ false }}">
+                  <ul style="list-style:none; margin:0; padding:0 12px 12px; display:flex; flex-direction:column; gap:8px; border-top:1px solid var(--border); padding-top:12px;">
+                    <sc-for list="{{ linhas }}" as="r" hint-placeholder-count="6">
+                      <li style="border:1px solid var(--border); border-radius:var(--r-card); animation:{{ r.anim }};">
+                        <button type="button" onClick="{{ r.abrir }}" style="width:100%; display:flex; flex-direction:column; gap:8px; padding:12px; border:0; background:transparent; text-align:left; cursor:pointer;">
+                          <span style="display:flex; justify-content:space-between; gap:8px; width:100%; align-items:flex-start;"><span style="display:flex; flex-direction:column;"><strong style="font-size:var(--fs-body); font-weight:600;">{{ r.evento }} · {{ r.plat }}</strong><span style="font-size:var(--fs-label); color:var(--t2);">{{ r.loja }} · {{ r.hora }} {{ r.dia }}</span></span><span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ r.borda }}; background:{{ r.sbg }}; color:{{ r.sfg }}; font-size:var(--fs-label); font-weight:500; flex:none;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ r.status }}</span></span>
+                          <span style="font-size:var(--fs-label); color:var(--t1);">{{ r.fonte }} · {{ r.lat }} · clique: {{ r.clique }}</span>
+                          <span style="font-size:var(--fs-label); color:var(--t2);">{{ r.origem }}</span>
+                        </button>
+                      </li>
+                    </sc-for>
+                  </ul>
+                </sc-if>
+                <sc-if value="{{ temLista }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:12px 16px; border-top:1px solid var(--border-subtle);">
+                    <span style="font-size:var(--fs-label); color:var(--t2);">{{ rodape }}</span>
+                    <button type="button" onClick="{{ carregarMais }}" aria-busy="{{ carregandoMais }}" style="height:var(--h-sm); padding:0 12px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer; min-width:180px;">{{ maisRotulo }}</button>
+                  </div>
+                </sc-if>
+              </section>
+            </div>
+          </main>
+        </div>
+        <sc-if value="{{ mobile }}" hint-placeholder-val="{{ false }}">
+          <dc-import name="Navegacao" active="eventos" mobile="{{ true }}" theme="{{ theme }}" onTheme="{{ setTheme }}" alertas="{{ 3 }}" hint-size="100%,64px"></dc-import>
+        </sc-if>
+
+        <sc-if value="{{ detalhe }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute; inset:0; z-index:70; display:flex; justify-content:flex-end;">
+            <div onClick="{{ fechar }}" style="position:absolute; inset:0; background:var(--scrim);"></div>
+            <div role="dialog" aria-modal="true" aria-labelledby="ev-t" style="position:relative; width:{{ drawerW }}; height:100%; background:var(--surface); box-shadow:var(--shadow-panel); display:flex; flex-direction:column; animation:xc-left 180ms var(--ease);">
+              <div style="flex:none; display:flex; align-items:flex-start; gap:12px; padding:16px 16px 12px 20px; border-bottom:1px solid var(--border);">
+                <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
+                  <span style="display:inline-flex; align-self:flex-start; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ ev.borda }}; background:{{ ev.sbg }}; color:{{ ev.sfg }}; font-size:var(--fs-label); font-weight:500;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ ev.status }}</span>
+                  <h2 id="ev-t" style="font-size:var(--fs-overlay); font-weight:600;">{{ ev.evento }} para {{ ev.plat }}</h2>
+                  <span style="font-size:var(--fs-label); color:var(--t2);">{{ ev.loja }} · {{ ev.quando }}</span>
+                </div>
+                <button type="button" onClick="{{ fechar }}" aria-label="Fechar detalhe" style="width:var(--h-md); height:var(--h-md); display:grid; place-items:center; border:0; background:transparent; border-radius:var(--r-control); color:var(--t1); cursor:pointer;" style-hover="background:var(--hover);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18 M6 6l12 12"></path></svg></button>
+              </div>
+              <div style="flex:1; overflow-y:auto; padding:16px 20px 24px; display:flex; flex-direction:column; gap:20px;">
+                <sc-if value="{{ ev.erro }}" hint-placeholder-val="{{ false }}">
+                  <div role="alert" style="display:flex; flex-direction:column; gap:8px; padding:12px 14px; border-radius:var(--r-card); background:var(--err-bg); border:1px solid var(--err-border);">
+                    <strong style="font-size:var(--fs-dense); color:var(--err);">O que deu errado</strong>
+                    <span style="font-size:var(--fs-dense); color:var(--ink); text-wrap:pretty;">{{ ev.erro }}</span>
+                    <a href="Saude%20dos%20pixels.dc.html" style="align-self:flex-start; display:flex; align-items:center; height:var(--h-sm); padding:0 12px; border-radius:var(--r-control); background:var(--solid); color:var(--on-solid); font-size:var(--fs-dense); font-weight:500; text-decoration:none;" style-hover="color:var(--on-solid); text-decoration:none;">Consertar em Saúde dos pixels</a>
+                  </div>
+                </sc-if>
+                <dl style="margin:0; display:grid; grid-template-columns:140px 1fr; gap:10px 16px; font-size:var(--fs-dense);">
+                  <sc-for list="{{ ev.campos }}" as="f" hint-placeholder-count="9"><dt style="color:var(--t2);">{{ f.k }}</dt><dd style="margin:0; color:var(--ink); font-variant-numeric:tabular-nums; word-break:break-word;">{{ f.v }}</dd></sc-for>
+                </dl>
+                <div style="display:flex; flex-direction:column; gap:8px; padding:12px; border:1px dashed var(--border-strong); border-radius:var(--r-card);">
+                  <div style="display:flex; align-items:center; gap:8px;"><strong style="font-size:var(--fs-dense);">Resposta da plataforma e reenvio</strong><span style="font-size:var(--fs-label); color:var(--t2); border:1px solid var(--border); border-radius:4px; padding:0 4px;">Em breve</span></div>
+                  <span style="font-size:var(--fs-label); color:var(--t1);">Vai mostrar o que o Meta ou o Google respondeu e permitir reenviar este evento.</span>
+                  <button type="button" disabled="true" style="align-self:flex-start; height:var(--h-sm); padding:0 12px; border:1px solid var(--border); background:var(--surface-2); color:var(--t2); border-radius:var(--r-control); font-size:var(--fs-dense); cursor:not-allowed;">Reenviar evento</button>
+                  <sc-if value="{{ anot }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--info);">#25 Front para os campos acima · resposta e reenvio: Novo</span></sc-if>
+                </div>
+                <p style="font-size:var(--fs-label); color:var(--t2); text-wrap:pretty;">O conteúdo bruto do evento não aparece aqui porque traz o IP e o navegador do comprador.</p>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+          <div role="status" aria-live="polite" style="position:absolute; right:{{ toastDir }}; left:{{ toastEsq }}; bottom:{{ toastBase }}; z-index:96; max-width:400px; background:var(--solid); color:var(--on-solid); border-radius:var(--r-card); box-shadow:var(--shadow); padding:12px 14px; display:flex; gap:12px; align-items:flex-start; animation:xc-up 180ms var(--ease);">
+            <div style="flex:1; display:flex; flex-direction:column; gap:2px; font-size:var(--fs-dense);"><strong style="font-weight:600;">{{ toastTitulo }}</strong><span style="white-space:pre-line; opacity:.9;">{{ toastTexto }}</span></div>
+            <button type="button" onClick="{{ fecharToast }}" aria-label="Fechar aviso" style="width:24px; height:24px; display:grid; place-items:center; border:0; background:transparent; color:inherit; cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18 M6 6l12 12"></path></svg></button>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { theme: 'light', width: 'desktop', cenario: 'dados', anot: false, vw: 1400, loja: 'todas', vivo: true, seg: 3, f: { status: [], evento: [], plat: [], fonte: [], utm: [] }, chip: null, visao: 'todos', aberto: null, extra: 0, mais: false, toast: null, novos: [] };
+  EV = this.gerar();
+  componentDidMount() {
+    try { const t = localStorage.getItem('xcart-mock-tema'); const w = localStorage.getItem('xcart-mock-largura'); const s = { vw: window.innerWidth }; if (t) s.theme = t; if (w) s.width = w; this.setState(s); } catch (e) { this.setState({ vw: window.innerWidth }); }
+    this._rs = () => this.setState({ vw: window.innerWidth }); window.addEventListener('resize', this._rs);
+    this._k = e => { if (e.key === 'Escape') this.setState({ aberto: null, chip: null }); }; window.addEventListener('keydown', this._k);
+    this._iv = setInterval(() => {
+      if (!this.state.vivo || this.state.cenario !== 'dados') return;
+      const s = this.state.seg + 1;
+      if (s >= 6) { const n = this.novo(); this.EV.unshift(n); this.setState({ seg: 0, novos: [n.id] }); } else this.setState({ seg: s });
+    }, 1000);
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this._rs); window.removeEventListener('keydown', this._k); clearInterval(this._iv); clearTimeout(this._tt); }
+  avisar(t, d) { clearTimeout(this._tt); this.setState({ toast: { t, d } }); this._tt = setTimeout(() => this.setState({ toast: null }), 5000); }
+  rnd() { this._s = ((this._s || 5) * 16807) % 2147483647; return (this._s - 1) / 2147483646; }
+  base(i, t) {
+    const LOJAS = [['lumen', 'Lumen Casa'], ['orla', 'Orla Wear'], ['kova', 'Kova Home'], ['lumen', 'Lumen Casa'], ['orla', 'Orla Wear']];
+    const EVS = [['Ver produto', 'Tema'], ['Ver produto', 'Tema'], ['Carrinho', 'Tema'], ['Checkout', 'Pixel do checkout'], ['Pagamento', 'Pixel do checkout'], ['Compra', 'Webhook de pedido']];
+    const ORIG = [['instagram.com', 'meta', 'luminarias-abo'], ['google.com', 'google', 'pesquisa-marca'], ['facebook.com', 'meta', 'corta-vento-cbo'], ['direto', null, null], ['google.com', 'google', 'shopping']];
+    const [lid, loja] = LOJAS[Math.floor(this.rnd() * LOJAS.length)];
+    const [evento, fonte] = EVS[Math.floor(this.rnd() * EVS.length)];
+    const o = ORIG[Math.floor(this.rnd() * ORIG.length)];
+    const plat = o[1] === 'google' ? 'Google' : (this.rnd() < 0.65 ? 'Meta' : 'Google');
+    let status = 'Enviado';
+    const r = this.rnd();
+    if (lid === 'orla' && plat === 'Meta' && (evento === 'Compra' || r < 0.5)) status = 'Falhou'; else if (r < 0.06) status = 'Na fila';
+    const clique = o[1] === 'google' && plat === 'Google' ? 'Sim · gclid' : o[1] === 'meta' && plat === 'Meta' ? 'Sim · fbc' : 'Não';
+    return { id: `e${i}-${t}`, t, lid, loja, evento, fonte, plat, destino: plat === 'Meta' ? `Pixel ${loja}` : `AW-11284 30917`, status, lat: status === 'Na fila' ? '—' : `${Math.round(180 + this.rnd() * 900)} ms`, tent: status === 'Falhou' ? 3 : status === 'Na fila' ? 1 : 1, clique, host: o[0], utm: o[2], medium: o[1] ? 'cpc' : null, pedido: evento === 'Compra' ? `#${10400 + i}` : null };
+  }
+  gerar() { const out = []; let t = new Date(2026, 9, 2, 14, 32, 5).getTime(); for (let i = 0; i < 40; i++) { out.push(this.base(i, t)); t -= Math.round(20 + this.rnd() * 240) * 1000; if (i === 33) t = new Date(2026, 9, 1, 23, 58, 10).getTime(); } return out; }
+  novo() { const t = this.EV[0].t + 6000; return this.base(100 + this.EV.length, t); }
+  renderVals() {
+    const st = this.state; const mobile = st.width === 'mobile'; const set = o => this.setState(o); const cen = st.cenario;
+    const LOJAS = [{ id: 'lumen', nome: 'Lumen Casa', dominio: 'lumencasa.com' }, { id: 'orla', nome: 'Orla Wear', dominio: 'orlawear.com' }, { id: 'kova', nome: 'Kova Home', dominio: 'kovahome.eu' }, { id: 'alto', nome: 'Alto Fit', dominio: 'altofit.co' }, { id: 'tarn', nome: 'Tarn Gear', dominio: 'tarngear.com', ativa: false, motivo: 'Sem permissão para ler pedidos' }, { id: 'selva', nome: 'Selva Kids', dominio: 'selvakids.shop', ativa: false, motivo: 'App desinstalado' }, { id: 'pico', nome: 'Pico Tools', dominio: 'picotools.com', ativa: false, motivo: 'Token inválido' }];
+    const pad = n => String(n).padStart(2, '0');
+    const fmtH = t => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
+    const hoje = new Date(2026, 9, 2).getTime();
+    const carregadas = this.EV.slice(0, 40 + st.extra).filter(e => st.loja === 'todas' || e.lid === st.loja);
+    const F = st.f;
+    const passa = (e, skip) => Object.entries(F).every(([k, vals]) => k === skip || !vals.length || vals.includes(k === 'utm' ? (e.utm || 'sem campanha') : e[k]));
+    const visiveis = carregadas.filter(e => passa(e));
+    const TOM = { 'Enviado': 'ok', 'Na fila': 'run', 'Falhou': 'err' };
+    const linhas = visiveis.map(e => {
+      const tom = TOM[e.status]; const outroDia = e.t < hoje;
+      return { ...e, hora: fmtH(e.t), dia: outroDia ? '01/10 · ontem' : '', sfg: `var(--${tom})`, sbg: `var(--${tom}-bg)`, borda: `var(--${tom}-border)`, pulso: e.status === 'Na fila' ? 'xc-pulse 1.4s ease-out infinite' : 'none',
+        origem: e.utm ? `${e.host} · ${e.medium} · ${e.utm}` : e.host, evFw: e.evento === 'Compra' ? 600 : 400,
+        anim: st.novos.includes(e.id) ? 'xc-flash 2s ease-out' : 'none', bg: 'transparent', semPedido: !e.pedido,
+        aria: `${e.evento} para ${e.plat}, ${e.status}, ${fmtH(e.t)}: abrir detalhe`, pedidoAria: `Abrir pedido ${e.pedido} no admin da Shopify`,
+        pedidoClick: ev => { ev.preventDefault(); ev.stopPropagation(); this.avisar('Abre o pedido no admin da Shopify', `${e.pedido} · ${e.loja}`); },
+        abrir: ev => { ev && ev.stopPropagation && ev.stopPropagation(); set({ aberto: e.id }); } };
+    });
+    const cnt = s => carregadas.filter(e => e.status === s).length;
+    const contadores = [['Enviado', 'enviados'], ['Na fila', 'na fila'], ['Falhou', 'falhas']].map(([s, lbl]) => { const tom = TOM[s]; const on = F.status.length === 1 && F.status[0] === s; return { texto: `${cnt(s)} ${lbl}`, on, fg: `var(--${tom})`, bg: on ? `var(--${tom}-bg)` : 'transparent', borda: `var(--${tom}-border)`, pick: () => set({ f: { ...F, status: on ? [] : [s] }, visao: on ? 'todos' : s === 'Falhou' ? 'falhas' : 'custom' }) }; });
+    const DIMS = [['status', 'Status', ['Enviado', 'Na fila', 'Falhou']], ['evento', 'Evento', ['Ver produto', 'Carrinho', 'Checkout', 'Pagamento', 'Compra']], ['plat', 'Plataforma', ['Meta', 'Google']], ['fonte', 'Fonte', ['Tema', 'Pixel do checkout', 'Webhook de pedido']], ['utm', 'Campanha (UTM)', ['luminarias-abo', 'pesquisa-marca', 'corta-vento-cbo', 'shopping', 'sem campanha']]];
+    const chips = DIMS.map(([k, label, opts]) => {
+      const vals = F[k]; const ativo = vals.length > 0;
+      return { label, ativo, aberto: st.chip === k, rotulo: ativo ? `${label}: ${vals.join(', ')}` : `+ ${label}`, estilo: ativo ? 'solid' : 'dashed', borda: ativo ? 'var(--info-border)' : 'var(--control-border)', bg: ativo ? 'var(--info-bg)' : 'transparent', fg: ativo ? 'var(--info)' : 'var(--t1)',
+        limparAria: `Remover filtro ${label}`, limpar: () => set({ f: { ...F, [k]: [] }, visao: 'custom' }), abrir: () => set({ chip: st.chip === k ? null : k }),
+        opcoes: opts.map(o => { const on = vals.includes(o); const n = carregadas.filter(e => passa(e, k) && (k === 'utm' ? (e.utm || 'sem campanha') : e[k]) === o).length; return { label: o, on, n, borda: on ? 'var(--solid)' : 'var(--control-border)', bg: on ? 'var(--solid)' : 'transparent', toggle: () => set({ f: { ...F, [k]: on ? vals.filter(x => x !== o) : [...vals, o] }, visao: 'custom' }) }; }) };
+    });
+    const vazioF = { status: [], evento: [], plat: [], fonte: [], utm: [] };
+    const VIS = [['todos', 'Todos', vazioF], ['falhas', 'Só falhas', { ...vazioF, status: ['Falhou'] }], ['compras', 'Só compras', { ...vazioF, evento: ['Compra'] }]];
+    if (st.visao === 'custom') VIS.push(['custom', 'Filtro atual (não salvo)', F]);
+    const visoes = VIS.map(([id, label, f]) => { const on = st.visao === id; return { label, on, pick: () => set({ visao: id, f }), borda: on ? 'var(--ink)' : 'transparent', fg: on ? 'var(--ink)' : 'var(--t2)', fw: on ? 600 : 400 }; });
+    const temFiltro = Object.values(F).some(v => v.length);
+    const ab = st.aberto ? this.EV.find(e => e.id === st.aberto) : null;
+    let ev = {};
+    if (ab) { const tom = TOM[ab.status]; const d = new Date(ab.t);
+      ev = { ...ab, sfg: `var(--${tom})`, sbg: `var(--${tom}-bg)`, borda: `var(--${tom}-border)`, quando: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/2026 às ${fmtH(ab.t)} (São Paulo)`,
+        erro: ab.status === 'Falhou' ? 'O Meta recusou o token de conversões desta loja: ele não tem mais permissão para enviar eventos. O xcart tentou 3 vezes e o evento fica na fila por até 7 dias.' : null,
+        campos: [['Loja', ab.loja], ['Evento', ab.evento], ['Veio de', ab.fonte], ['Destino', `${ab.plat} · ${ab.destino}`], ['Tentativas', String(ab.tent)], ['Latência', ab.lat], ['Clique do anúncio', ab.clique === 'Não' ? 'Não: a compra chega sem ligação com um anúncio' : ab.clique], ['Origem', ab.host], ['UTM', ab.utm ? `source=${ab.host.split('.')[0]} · medium=${ab.medium} · campaign=${ab.utm}` : '—'], ['Pedido', ab.pedido || '—']].map(([k, v]) => ({ k, v })) };
+    }
+    const carregando = cen === 'carregando', erro = cen === 'erro', vazio = cen === 'vazio';
+    const ok = !carregando && !erro && !vazio;
+    const fw = mobile ? 375 : 1440, fh = mobile ? 812 : 900;
+    const escala = mobile ? 1 : Math.min(1, Math.max(0.4, (st.vw - 32) / fw));
+    const toast = st.toast;
+    return {
+      theme: st.theme, width: st.width, cenario: cen, anot: st.anot,
+      cenarios: [{ id: 'dados', label: 'Ao vivo' }, { id: 'vazio', label: 'Sem eventos' }, { id: 'carregando', label: 'Carregando' }, { id: 'erro', label: 'Erro' }],
+      setTheme: v => { try { localStorage.setItem('xcart-mock-tema', v); } catch (e) {} set({ theme: v }); },
+      setWidth: v => { try { localStorage.setItem('xcart-mock-largura', v); } catch (e) {} set({ width: v }); },
+      setCenario: v => set({ cenario: v }), setAnot: v => set({ anot: v }),
+      desktop: !mobile, mobile, frameDir: mobile ? 'column' : 'row', frameW: `${fw}px`, frameH: `${fh}px`, escala, wrapW: `${fw * escala}px`, wrapH: `${fh * escala}px`, frameRaio: mobile ? '28px' : '10px', pad: mobile ? '16px 16px 32px' : '24px 32px 48px',
+      lojasTopo: LOJAS.map(l => ({ ...l, ativa: l.ativa !== false })), loja: st.loja, setCtx: (k, v) => set({ [k]: v }),
+      aoVivo: st.vivo, toggleVivo: () => set({ vivo: !st.vivo }), vivoRotulo: st.vivo ? 'Ao vivo' : 'Pausado',
+      vivoBorda: st.vivo ? 'var(--ok-border)' : 'var(--border-strong)', vivoBg: st.vivo ? 'var(--ok-bg)' : 'var(--surface)', vivoFg: st.vivo ? 'var(--ok)' : 'var(--t1)', trilho: st.vivo ? 'var(--ok)' : 'var(--t4)', bolinha: st.vivo ? '14px' : '2px',
+      atualizadoHa: st.vivo ? `atualizado há ${st.seg} s · 14:32 (São Paulo)` : 'pausado: a lista não muda até você retomar',
+      contagemRotulo: `Nas ${carregadas.length} linhas carregadas:`, contadores, visoes, chips, temFiltro,
+      salvarVisao: () => this.avisar('Visão salva neste navegador', 'Aparece em Atalhos, na barra lateral.'),
+      notaFiltro: temFiltro ? `Filtrando as ${carregadas.length} linhas carregadas` : '',
+      limparTudo: () => set({ f: vazioF, visao: 'todos', chip: null }),
+      carregando, erro, vazio, oito: [1, 2, 3, 4, 5, 6, 7, 8], tentar: () => set({ cenario: 'dados' }),
+      filtradoVazio: ok && linhas.length === 0, tabela: ok && !mobile && linhas.length > 0, cartoes: ok && mobile && linhas.length > 0, temLista: ok && linhas.length > 0,
+      cabecalho: [['Hora', 'left'], ['Loja', 'left'], ['Evento', 'left'], ['Veio de', 'left'], ['Destino', 'left'], ['Status', 'left'], ['Latência', 'right'], ['Clique', 'left'], ['Origem', 'left'], ['Pedido', 'right']].map(([label, align]) => ({ label, align })),
+      linhas, rodape: `Mostrando ${linhas.length} de ${carregadas.length} carregadas. A contagem do período inteiro ainda não existe.`,
+      maisRotulo: st.mais ? 'Carregando…' : 'Carregar mais antigos', carregandoMais: st.mais,
+      carregarMais: () => { set({ mais: true }); setTimeout(() => { for (let i = 0; i < 10; i++) { const last = this.EV[this.EV.length - 1]; this.EV.push(this.base(200 + this.EV.length, last.t - 90000)); } this.setState(s => ({ mais: false, extra: s.extra + 10 })); }, 700); },
+      exportar: () => this.avisar('CSV pronto', `eventos-${linhas.length}-linhas.csv\nSó as colunas da tabela; nada de IP ou navegador.`),
+      detalhe: !!ab, ev, fechar: () => set({ aberto: null }), drawerW: mobile ? '100%' : '520px',
+      toast: !!toast, toastTitulo: toast ? toast.t : '', toastTexto: toast ? toast.d : '', fecharToast: () => set({ toast: null }),
+      toastDir: mobile ? '12px' : '24px', toastEsq: mobile ? '12px' : 'auto', toastBase: mobile ? '76px' : '24px',
+    };
+  }
+}
+</script>
+</body>
+</html>

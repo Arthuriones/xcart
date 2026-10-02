@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <title>xcart · Casca (Fase 0)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Public+Sans:wght@400;500;600;700&amp;display=swap">
+  <link rel="stylesheet" href="xcart-tokens.css">
+</helmet>
+<div style="min-height:100vh; background:#e9e8e5; display:flex; flex-direction:column;">
+  <dc-import name="Revisao" tela="Casca: menu, contexto, ⌘K e estados globais" theme="{{ theme }}" width="{{ width }}" cenario="{{ cenario }}" cenarios="{{ cenarios }}" anot="{{ anot }}" onTheme="{{ setTheme }}" onWidth="{{ setWidth }}" onCenario="{{ setCenario }}" onAnot="{{ setAnot }}" hint-size="100%,48px"></dc-import>
+  <div style="flex:1; padding:24px 16px 48px; display:flex; justify-content:center;">
+    <div style="width:{{ wrapW }}; height:{{ wrapH }}; flex:none;">
+      <div data-theme="{{ theme }}" style="position:relative; width:{{ frameW }}; height:{{ frameH }}; transform:scale({{ escala }}); transform-origin:top left; overflow:hidden; border-radius:{{ frameRaio }}; box-shadow:0 0 0 1px rgba(0,0,0,.12), 0 24px 64px rgba(0,0,0,.16); background:var(--bg); display:flex; flex-direction:{{ frameDir }};">
+        <a href="#conteudo" style="position:absolute; left:-9999px; top:8px; z-index:100; background:var(--solid); color:var(--on-solid); padding:8px 12px; border-radius:var(--r-control);" style-focus="left:8px;">Pular para o conteúdo</a>
+        <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}">
+          <dc-import name="Navegacao" active="custos" mobile="{{ false }}" theme="{{ theme }}" onTheme="{{ setTheme }}" alertas="{{ 3 }}" hint-size="232px,100%" style="height:100%; flex:none;"></dc-import>
+        </sc-if>
+        <div style="flex:1; min-width:0; min-height:0; display:flex; flex-direction:column;">
+          <dc-import name="Topo" mobile="{{ mobile }}" titulo="{{ titulo }}" contexto="{{ contexto }}" soLojaTexto="Esta tela usa só a loja." anot="{{ anot }}" lojas="{{ lojasTopo }}" loja="{{ loja }}" periodo="{{ periodo }}" comparar="{{ comparar }}" moeda="{{ moeda }}" onCtx="{{ setCtx }}" hint-size="100%,60px"></dc-import>
+          <main id="conteudo" tabindex="-1" style="flex:1; min-height:0; overflow-y:auto; background:var(--bg);">
+            <div style="max-width:1280px; margin:0 auto; padding:{{ pad }}; display:flex; flex-direction:column; gap:24px; min-height:100%;">
+
+              <sc-if value="{{ cFora }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex; flex-direction:column; gap:4px;"><sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}"><h1 style="font-size:var(--fs-page); line-height:28px; font-weight:600;">Custos e taxas</h1></sc-if><p style="font-size:var(--fs-body); color:var(--t2);">Custo de cada SKU, frete do fornecedor e taxa do gateway, por loja.</p></div>
+                <div style="display:flex; gap:12px; padding:14px 16px; background:var(--info-bg); border:1px solid var(--info-border); border-radius:var(--r-card); align-items:flex-start;">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true" style="color:var(--info); flex:none;"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20 M12 16v-4 M12 8h.01"></path></svg>
+                  <div style="display:flex; flex-direction:column; gap:4px; font-size:var(--fs-dense);"><strong style="color:var(--info);">Esta tela entra na Fase 3</strong><span style="color:var(--ink); text-wrap:pretty;">Aqui só a casca está desenhada: menu, barra de contexto (esta tela usa só a loja), busca com ⌘K, sino e o menu “Mais” no celular. Use o seletor de cenário para ver carregando, erro e página não encontrada.</span></div>
+                </div>
+                <section aria-label="Prévia da geometria" style="display:grid; grid-template-columns:{{ cols }}; gap:12px;">
+                  <sc-for list="{{ blocos }}" as="b" hint-placeholder-count="3"><div style="height:120px; border:1px dashed var(--border-strong); border-radius:var(--r-card); display:grid; place-items:center; font-family:var(--font-mono); font-size:var(--fs-label); color:var(--t1); background:var(--surface);">{{ b }}</div></sc-for>
+                </section>
+                <section aria-labelledby="at-t" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card);">
+                  <h2 id="at-t" style="font-size:var(--fs-section); font-weight:600; padding:14px 16px; border-bottom:1px solid var(--border-subtle);">Atalhos de teclado</h2>
+                  <ul style="list-style:none; margin:0; padding:8px 16px 12px; display:grid; grid-template-columns:{{ colsAt }}; gap:4px 24px;">
+                    <sc-for list="{{ atalhos }}" as="a" hint-placeholder-count="10"><li style="display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:36px; border-bottom:1px solid var(--border-subtle); font-size:var(--fs-dense);"><span>{{ a.t }}</span><kbd style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--t1); border:1px solid var(--border); border-radius:4px; padding:1px 6px; background:var(--surface-2); white-space:nowrap;">{{ a.k }}</kbd></li></sc-for>
+                  </ul>
+                </section>
+              </sc-if>
+
+              <sc-if value="{{ cCarregando }}" hint-placeholder-val="{{ false }}">
+                <div aria-busy="true" aria-label="Carregando a tela" style="display:flex; flex-direction:column; gap:24px;">
+                  <div style="display:flex; flex-direction:column; gap:8px;"><span style="width:160px; height:22px; border-radius:4px; background:var(--skeleton);"></span><span style="width:min(420px, 80%); height:14px; border-radius:4px; background:var(--skeleton);"></span></div>
+                  <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax({{ kpiMin }}, 1fr)); gap:12px;"><sc-for list="{{ quatro }}" as="x" hint-placeholder-count="4"><div style="height:120px; border-radius:var(--r-card); background:var(--surface); border:1px solid var(--border); padding:16px; display:flex; flex-direction:column; gap:12px;"><span style="width:50%; height:12px; border-radius:4px; background:linear-gradient(90deg, var(--skeleton) 25%, var(--skeleton-hi) 50%, var(--skeleton) 75%); background-size:200% 100%; animation:xc-shimmer 1.6s ease-in-out infinite;"></span><span style="width:70%; height:26px; border-radius:4px; background:var(--skeleton);"></span><span style="width:40%; height:12px; border-radius:4px; background:var(--skeleton);"></span></div></sc-for></div>
+                  <div style="height:320px; border-radius:var(--r-card); background:var(--surface); border:1px solid var(--border); padding:16px;"><span style="display:block; height:100%; border-radius:var(--r-control); background:var(--skeleton);"></span></div>
+                  <span style="font-size:var(--fs-label); color:var(--t2);">Cada tela tem o próprio esqueleto, com a geometria do conteúdo. O indicador de carregando só aparece depois de 300 ms.</span>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ cErro }}" hint-placeholder-val="{{ false }}">
+                <div role="alert" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; text-align:center; padding:48px 16px;">
+                  <span aria-hidden="true" style="width:44px; height:44px; border-radius:50%; display:grid; place-items:center; background:var(--err-bg); color:var(--err); border:1px solid var(--err-border);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z M12 9v4 M12 17h.01"></path></svg></span>
+                  <h1 style="font-size:var(--fs-page); font-weight:600;">Esta tela não abriu</h1>
+                  <p style="font-size:var(--fs-body); color:var(--t1); max-width:460px; text-wrap:pretty;">O resto do xcart continua funcionando e nenhum dado foi perdido. Tente de novo; se repetir, volte para o Lucro.</p>
+                  <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center;"><button type="button" onClick="{{ tentar }}" aria-busy="{{ tentando }}" style="height:var(--h-md); padding:0 16px; border:0; background:var(--solid); color:var(--on-solid); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer; min-width:140px;">{{ tentarRotulo }}</button><a href="Lucro.dc.html" style="display:flex; align-items:center; height:var(--h-md); padding:0 16px; border:1px solid var(--border-strong); background:var(--surface); color:var(--ink); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; text-decoration:none;" style-hover="color:var(--ink); text-decoration:none;">Ir para o Lucro</a></div>
+                  <details style="font-size:var(--fs-label); color:var(--t2); margin-top:8px;"><summary style="cursor:pointer;">Detalhes para o suporte</summary><p style="margin-top:6px; font-family:var(--font-mono);">ref. 7Q2-K81 · 02/10/2026 14:32</p></details>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ c404 }}" hint-placeholder-val="{{ false }}">
+                <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; text-align:center; padding:48px 16px;">
+                  <span style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--t2);">Erro 404</span>
+                  <h1 style="font-size:var(--fs-page); font-weight:600;">Página não encontrada</h1>
+                  <p style="font-size:var(--fs-body); color:var(--t1); max-width:460px; text-wrap:pretty;">O endereço pode ter mudado. Os endereços antigos do roteamento levam sozinhos para o lugar novo.</p>
+                  <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center;"><a href="Lucro.dc.html" style="display:flex; align-items:center; height:var(--h-md); padding:0 16px; border-radius:var(--r-control); background:var(--solid); color:var(--on-solid); font-size:var(--fs-dense); font-weight:500; text-decoration:none;" style-hover="color:var(--on-solid); text-decoration:none; background:var(--solid-hover);">Ir para o Lucro</a><span style="display:flex; align-items:center; gap:6px; height:var(--h-md); padding:0 12px; font-size:var(--fs-dense); color:var(--t1);">ou busque com <kbd style="font-family:var(--font-mono); font-size:var(--fs-label); border:1px solid var(--border); border-radius:4px; padding:0 5px;">⌘K</kbd></span></div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ cRota }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex; flex-direction:column; gap:4px;"><sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}"><h1 style="font-size:var(--fs-page); line-height:28px; font-weight:600;">Roteamento</h1></sc-if><p style="font-size:var(--fs-body); color:var(--t2);">Módulo opcional para quem usa uma loja vitrine e lojas de checkout.</p></div>
+                <section style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:32px 24px; display:flex; flex-direction:column; gap:12px; align-items:flex-start; max-width:720px;">
+                  <span style="font-size:var(--fs-label); color:var(--t2); border:1px solid var(--border-strong); border-radius:11px; padding:2px 10px; font-weight:500;">Educativo</span>
+                  <h2 style="font-size:var(--fs-section); font-weight:600;">Você vende direto na loja de checkout</h2>
+                  <p style="font-size:var(--fs-dense); color:var(--t1); text-wrap:pretty;">O roteamento serve para quem recebe o tráfego numa vitrine e cobra em outras lojas, casando os produtos pelo SKU. Seu lucro e seu rastreamento não dependem dele.</p>
+                  <div style="display:flex; gap:8px; flex-wrap:wrap;"><button type="button" style="height:var(--h-md); padding:0 16px; border:0; background:var(--solid); color:var(--on-solid); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;">Ativar roteamento</button><a href="Lucro.dc.html" style="display:flex; align-items:center; height:var(--h-md); padding:0 12px; font-size:var(--fs-dense);">Voltar para o Lucro</a></div>
+                </section>
+              </sc-if>
+            </div>
+          </main>
+        </div>
+        <sc-if value="{{ mobile }}" hint-placeholder-val="{{ false }}">
+          <dc-import name="Navegacao" active="custos" mobile="{{ true }}" theme="{{ theme }}" onTheme="{{ setTheme }}" alertas="{{ 3 }}" hint-size="100%,64px"></dc-import>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { theme: 'light', width: 'desktop', cenario: 'fora', anot: false, vw: 1400, loja: 'todas', periodo: '30d', comparar: 'anterior', moeda: 'BRL', tentando: false };
+  componentDidMount() {
+    try { const t = localStorage.getItem('xcart-mock-tema'); const w = localStorage.getItem('xcart-mock-largura'); const s = { vw: window.innerWidth }; if (t) s.theme = t; if (w) s.width = w; this.setState(s); } catch (e) { this.setState({ vw: window.innerWidth }); }
+    this._rs = () => this.setState({ vw: window.innerWidth }); window.addEventListener('resize', this._rs);
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this._rs); }
+  renderVals() {
+    const st = this.state; const mobile = st.width === 'mobile'; const set = o => this.setState(o); const c = st.cenario;
+    const LOJAS = [{ id: 'lumen', nome: 'Lumen Casa', dominio: 'lumencasa.com' }, { id: 'orla', nome: 'Orla Wear', dominio: 'orlawear.com' }, { id: 'kova', nome: 'Kova Home', dominio: 'kovahome.eu' }, { id: 'alto', nome: 'Alto Fit', dominio: 'altofit.co' }, { id: 'tarn', nome: 'Tarn Gear', dominio: 'tarngear.com', ativa: false, motivo: 'Sem permissão para ler pedidos' }, { id: 'selva', nome: 'Selva Kids', dominio: 'selvakids.shop', ativa: false, motivo: 'App desinstalado' }, { id: 'pico', nome: 'Pico Tools', dominio: 'picotools.com', ativa: false, motivo: 'Token inválido' }];
+    const AT = [['Abrir a busca', '⌘K ou Ctrl K'], ['Ver todos os atalhos', '?'], ['Ir para Lucro', 'g l'], ['Ir para Saúde dos pixels', 'g s'], ['Ir para Eventos ao vivo', 'g e'], ['Ir para Alertas', 'g a'], ['Ir para Lojas', 'g o'], ['Ir para Integrações', 'g i'], ['Ir para Custos e taxas', 'g c'], ['Fechar janela ou painel', 'Esc']];
+    const fw = mobile ? 375 : 1440, fh = mobile ? 812 : 900;
+    const escala = mobile ? 1 : Math.min(1, Math.max(0.4, (st.vw - 32) / fw));
+    return {
+      theme: st.theme, width: st.width, cenario: c, anot: st.anot,
+      cenarios: [{ id: 'fora', label: 'Tela da Fase 3' }, { id: 'carregando', label: 'Carregando' }, { id: 'erro', label: 'Erro (error.tsx)' }, { id: '404', label: 'Não encontrada' }, { id: 'rota', label: 'Roteamento desligado' }],
+      setTheme: v => { try { localStorage.setItem('xcart-mock-tema', v); } catch (e) {} set({ theme: v }); },
+      setWidth: v => { try { localStorage.setItem('xcart-mock-largura', v); } catch (e) {} set({ width: v }); },
+      setCenario: v => set({ cenario: v }), setAnot: v => set({ anot: v }),
+      desktop: !mobile, mobile, frameDir: mobile ? 'column' : 'row', frameW: `${fw}px`, frameH: `${fh}px`, escala, wrapW: `${fw * escala}px`, wrapH: `${fh * escala}px`, frameRaio: mobile ? '28px' : '10px', pad: mobile ? '16px 16px 32px' : '24px 32px 48px',
+      cols: mobile ? '1fr' : 'repeat(3, minmax(0,1fr))', colsAt: mobile ? '1fr' : 'repeat(2, minmax(0,1fr))', kpiMin: mobile ? '150px' : '220px', quatro: [1, 2, 3, 4],
+      lojasTopo: LOJAS.map(l => ({ ...l, ativa: l.ativa !== false })), loja: st.loja, periodo: st.periodo, comparar: st.comparar, moeda: st.moeda, setCtx: (k, v) => set({ [k]: v }),
+      titulo: c === '404' ? 'Não encontrada' : c === 'rota' ? 'Roteamento' : 'Custos e taxas', contexto: c === 'fora' ? 'loja' : c === 'carregando' ? 'completo' : 'nenhum',
+      cFora: c === 'fora', cCarregando: c === 'carregando', cErro: c === 'erro', c404: c === '404', cRota: c === 'rota',
+      blocos: ['progresso por loja', 'taxa do gateway', 'SKUs sem custo'], atalhos: AT.map(([t, k]) => ({ t, k })),
+      tentando: st.tentando, tentarRotulo: st.tentando ? 'Tentando…' : 'Tentar de novo', tentar: () => { set({ tentando: true }); setTimeout(() => this.setState({ tentando: false, cenario: 'fora' }), 1000); },
+    };
+  }
+}
+</script>
+</body>
+</html>

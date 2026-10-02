@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <title>xcart · Lucro (Fase 0)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Public+Sans:wght@400;500;600;700&amp;display=swap">
+  <link rel="stylesheet" href="xcart-tokens.css">
+</helmet>
+<div style="min-height:100vh; background:#e9e8e5; display:flex; flex-direction:column;">
+  <dc-import name="Revisao" tela="Lucro (home)" theme="{{ theme }}" width="{{ width }}" cenario="{{ cenario }}" cenarios="{{ cenarios }}" anot="{{ anot }}" onTheme="{{ setTheme }}" onWidth="{{ setWidth }}" onCenario="{{ setCenario }}" onAnot="{{ setAnot }}" hint-size="100%,48px"></dc-import>
+  <div style="flex:1; padding:24px 16px 48px; display:flex; justify-content:center;">
+    <div style="width:{{ wrapW }}; height:{{ wrapH }}; flex:none;">
+      <div data-theme="{{ theme }}" style="position:relative; width:{{ frameW }}; height:{{ frameH }}; transform:scale({{ escala }}); transform-origin:top left; overflow:hidden; border-radius:{{ frameRaio }}; box-shadow:0 0 0 1px rgba(0,0,0,.12), 0 24px 64px rgba(0,0,0,.16); background:var(--bg); display:flex; flex-direction:{{ frameDir }};">
+        <a href="#conteudo" style="position:absolute; left:-9999px; top:8px; z-index:100; background:var(--solid); color:var(--on-solid); padding:8px 12px; border-radius:var(--r-control);" style-focus="left:8px;">Pular para o conteúdo</a>
+        <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}">
+          <dc-import name="Navegacao" active="lucro" mobile="{{ false }}" theme="{{ theme }}" onTheme="{{ setTheme }}" alertas="{{ 3 }}" hint-size="232px,100%" style="height:100%; flex:none;"></dc-import>
+        </sc-if>
+        <div style="flex:1; min-width:0; min-height:0; display:flex; flex-direction:column;">
+          <dc-import name="Topo" mobile="{{ mobile }}" titulo="Lucro" contexto="completo" anot="{{ anot }}" lojas="{{ lojasTopo }}" loja="{{ loja }}" periodo="{{ periodo }}" comparar="{{ comparar }}" moeda="{{ moeda }}" onCtx="{{ setCtx }}" onAtualizar="{{ aoAtualizar }}" hint-size="100%,60px"></dc-import>
+          <main id="conteudo" tabindex="-1" style="flex:1; min-height:0; overflow-y:auto; background:var(--bg);">
+            <div style="max-width:1280px; margin:0 auto; padding:{{ pad }}; display:flex; flex-direction:column; gap:24px;">
+
+              <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+                  <div style="display:flex; flex-direction:column; gap:4px; max-width:720px;">
+                    <h1 style="font-size:var(--fs-page); line-height:28px; font-weight:600; letter-spacing:-0.01em;">Lucro</h1>
+                    <p style="font-size:var(--fs-body); color:var(--t2); text-wrap:pretty;">Lucro estimado por loja, já descontados produto, frete do fornecedor, taxa de pagamento e anúncios.</p>
+                  </div>
+                  <button type="button" onClick="{{ exportar }}" style="display:flex; align-items:center; gap:8px; height:var(--h-md); padding:0 14px; border:1px solid var(--border-strong); background:var(--surface); color:var(--ink); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;" style-hover="border-color:var(--control-border);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3"></path></svg>Exportar CSV</button>
+                </div>
+              </sc-if>
+              <sc-if value="{{ mobile }}" hint-placeholder-val="{{ false }}">
+                <p style="font-size:var(--fs-dense); color:var(--t2);">Lucro estimado, já descontados produto, frete, taxas e anúncios.</p>
+              </sc-if>
+
+              <!-- Guia de configuração -->
+              <sc-if value="{{ guiaCompacto }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; padding:12px 16px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card);">
+                  <div style="display:flex; align-items:center; gap:12px; flex:1; min-width:240px;">
+                    <span role="progressbar" aria-label="Guia de configuração" aria-valuemin="0" aria-valuemax="5" aria-valuenow="4" style="width:64px; height:4px; border-radius:2px; background:var(--track); display:block; overflow:hidden; flex:none;"><span style="display:block; width:80%; height:100%; background:var(--ink);"></span></span>
+                    <span style="font-size:var(--fs-dense);"><strong style="font-weight:600;">Guia de configuração · 4 de 5.</strong> <span style="color:var(--t2);">Falta a primeira venda rastreada no Google.</span></span>
+                  </div>
+                  <div style="display:flex; gap:8px;">
+                    <a href="Saude%20dos%20pixels.dc.html" style="display:flex; align-items:center; height:var(--h-sm); padding:0 12px; border-radius:var(--r-control); background:var(--solid); color:var(--on-solid); font-size:var(--fs-dense); font-weight:500; text-decoration:none;" style-hover="background:var(--solid-hover); color:var(--on-solid); text-decoration:none;">Conferir rastreamento</a>
+                    <button type="button" onClick="{{ dispensarGuia }}" style="height:var(--h-sm); padding:0 10px; border:0; background:transparent; color:var(--t2); font-size:var(--fs-dense); cursor:pointer; border-radius:var(--r-control);" style-hover="background:var(--hover); color:var(--ink);">Dispensar</button>
+                  </div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ guiaCompleto }}" hint-placeholder-val="{{ false }}">
+                <section aria-labelledby="guia-t" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); overflow:hidden;">
+                  <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; padding:16px 16px 12px;">
+                    <div style="display:flex; flex-direction:column; gap:4px;">
+                      <h2 id="guia-t" style="font-size:var(--fs-section); font-weight:600;">Guia de configuração · 1 de 5</h2>
+                      <p style="font-size:var(--fs-dense); color:var(--t2);">Cada passo marca sozinho quando o xcart detecta que foi feito.</p>
+                    </div>
+                    <div role="radiogroup" aria-label="Como você vende" style="display:flex; padding:2px; gap:2px; background:var(--track); border-radius:var(--r-control);">
+                      <sc-for list="{{ caminhos }}" as="c" hint-placeholder-count="2"><button type="button" role="radio" aria-checked="{{ c.on }}" onClick="{{ c.pick }}" style="height:30px; padding:0 12px; border:0; border-radius:4px; font-size:var(--fs-label); background:{{ c.bg }}; color:{{ c.fg }}; font-weight:{{ c.fw }}; box-shadow:{{ c.sh }}; cursor:pointer;">{{ c.label }}</button></sc-for>
+                    </div>
+                  </div>
+                  <ol style="list-style:none; margin:0; padding:0; border-top:1px solid var(--border);">
+                    <sc-for list="{{ passosGuia }}" as="s" hint-placeholder-count="5">
+                      <li style="border-bottom:1px solid var(--border-subtle);">
+                        <button type="button" onClick="{{ s.toggle }}" aria-expanded="{{ s.aberto }}" style="width:100%; display:flex; align-items:center; gap:12px; min-height:48px; padding:0 16px; border:0; background:transparent; cursor:pointer; text-align:left;" style-hover="background:var(--hover);">
+                          <span aria-hidden="true" style="width:20px; height:20px; flex:none; border-radius:50%; display:grid; place-items:center; border:1px solid {{ s.borda }}; background:{{ s.fundo }}; color:var(--on-solid);"><sc-if value="{{ s.feito }}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg></sc-if></span>
+                          <span style="flex:1; font-size:var(--fs-dense); color:{{ s.fg }}; text-decoration:{{ s.risco }};">{{ s.titulo }}</span>
+                          <span style="font-size:var(--fs-label); color:var(--t2);">{{ s.estado }}</span>
+                        </button>
+                        <sc-if value="{{ s.aberto }}" hint-placeholder-val="{{ false }}">
+                          <div style="padding:0 16px 16px 48px; display:flex; flex-direction:column; gap:10px; align-items:flex-start;">
+                            <p style="font-size:var(--fs-dense); color:var(--t1); max-width:560px; text-wrap:pretty;">{{ s.texto }}</p>
+                            <a href="{{ s.href }}" style="display:flex; align-items:center; height:var(--h-sm); padding:0 12px; border-radius:var(--r-control); background:var(--solid); color:var(--on-solid); font-size:var(--fs-dense); font-weight:500; text-decoration:none;" style-hover="background:var(--solid-hover); color:var(--on-solid); text-decoration:none;">{{ s.cta }}</a>
+                          </div>
+                        </sc-if>
+                      </li>
+                    </sc-for>
+                  </ol>
+                </section>
+              </sc-if>
+
+              <!-- Loja sem acesso escolhida no contexto -->
+              <sc-if value="{{ lojaSemAcesso }}" hint-placeholder-val="{{ false }}">
+                <div role="alert" style="display:flex; gap:12px; padding:14px 16px; background:var(--err-bg); border:1px solid var(--err-border); border-radius:var(--r-card); align-items:flex-start; flex-wrap:wrap;">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--err); flex:none;"><path d="M7.86 2h8.28L22 7.86v8.28L16.14 22H7.86L2 16.14V7.86Z M12 8v4 M12 16h.01"></path></svg>
+                  <div style="flex:1; min-width:220px; display:flex; flex-direction:column; gap:2px;"><strong style="font-size:var(--fs-dense); color:var(--err);">Sem acesso aos pedidos de {{ lojaNome }}</strong><span style="font-size:var(--fs-dense); color:var(--ink);">{{ lojaMotivo }}. Os números desta loja aparecem como “—” até você reconectar.</span></div>
+                  <a href="Lojas.dc.html" style="display:flex; align-items:center; height:var(--h-sm); padding:0 12px; border-radius:var(--r-control); background:var(--solid); color:var(--on-solid); font-size:var(--fs-dense); font-weight:500; text-decoration:none;" style-hover="color:var(--on-solid); text-decoration:none; background:var(--solid-hover);">Reconectar loja</a>
+                </div>
+              </sc-if>
+
+              <!-- Central de pendências -->
+              <sc-if value="{{ temPendencias }}" hint-placeholder-val="{{ true }}">
+                <section aria-labelledby="pend-t" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); overflow:hidden;">
+                  <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:10px 12px 10px 16px; border-bottom:1px solid var(--border-subtle);">
+                    <h2 id="pend-t" style="font-size:var(--fs-dense); font-weight:600;">Pendências</h2>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                      <sc-for list="{{ contagens }}" as="ct" hint-placeholder-count="3">
+                        <span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ ct.borda }}; background:{{ ct.bg }}; color:{{ ct.fg }}; font-size:var(--fs-label); font-weight:500;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ ct.texto }}</span>
+                      </sc-for>
+                    </div>
+                    <div style="flex:1;"></div>
+                    <button type="button" onClick="{{ togglePend }}" aria-expanded="{{ pendAberta }}" style="display:flex; align-items:center; gap:6px; height:var(--h-sm); padding:0 10px; border:0; background:transparent; color:var(--ink); font-size:var(--fs-dense); font-weight:500; border-radius:var(--r-control); cursor:pointer;" style-hover="background:var(--hover);">{{ pendBotao }}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform:{{ pendSeta }};"><path d="M6 9l6 6 6-6"></path></svg></button>
+                  </div>
+                  <ul style="list-style:none; margin:0; padding:0;">
+                    <sc-for list="{{ pendVisiveis }}" as="pd" hint-placeholder-count="1">
+                      <sc-if value="{{ pd.cabecalho }}" hint-placeholder-val="{{ false }}"><li style="padding:10px 16px 2px; font-size:var(--fs-label); font-weight:600; color:{{ pd.fg }};">{{ pd.cabecalho }}</li></sc-if>
+                      <li style="display:flex; align-items:flex-start; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border-subtle); flex-wrap:wrap;">
+                        <span aria-hidden="true" style="width:28px; height:28px; flex:none; display:grid; place-items:center; border-radius:var(--r-control); background:{{ pd.bg }}; color:{{ pd.fg }}; border:1px solid {{ pd.borda }};"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="{{ pd.icone }}"></path></svg></span>
+                        <div style="flex:1; min-width:220px; display:flex; flex-direction:column; gap:2px;">
+                          <span style="font-size:var(--fs-dense); font-weight:600; color:var(--ink);"><span style="color:{{ pd.fg }};">{{ pd.sev }}:</span> {{ pd.titulo }}</span>
+                          <span style="font-size:var(--fs-dense); color:var(--t1); text-wrap:pretty;">{{ pd.detalhe }}</span>
+                        </div>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                          <sc-if value="{{ pd.dispensavel }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ pd.dispensar }}" style="height:var(--h-sm); padding:0 10px; border:0; background:transparent; color:var(--t2); font-size:var(--fs-dense); border-radius:var(--r-control); cursor:pointer;" style-hover="background:var(--hover); color:var(--ink);">Dispensar</button></sc-if>
+                          <a href="{{ pd.href }}" style="display:flex; align-items:center; gap:6px; height:var(--h-sm); padding:0 12px; border-radius:var(--r-control); border:1px solid var(--border-strong); background:var(--surface); color:var(--ink); font-size:var(--fs-dense); font-weight:500; text-decoration:none; white-space:nowrap;" style-hover="border-color:var(--control-border); color:var(--ink); text-decoration:none;">{{ pd.cta }}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg></a>
+                        </div>
+                      </li>
+                    </sc-for>
+                  </ul>
+                  <sc-if value="{{ temDispensadas }}" hint-placeholder-val="{{ false }}"><div style="padding:8px 16px; font-size:var(--fs-label); color:var(--t2); background:var(--surface-2);">{{ dispensadasTexto }} <button type="button" onClick="{{ restaurar }}" style="border:0; background:transparent; color:var(--brand); font-size:var(--fs-label); cursor:pointer; padding:0;">Mostrar de novo</button></div></sc-if>
+                </section>
+              </sc-if>
+
+              <!-- KPIs -->
+              <section aria-label="Indicadores do período" style="display:flex; flex-direction:column; gap:12px;">
+                <sc-if value="{{ semBase }}" hint-placeholder-val="{{ false }}">
+                  <p style="display:flex; gap:8px; align-items:center; font-size:var(--fs-label); color:var(--t2);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20 M12 16v-4 M12 8h.01"></path></svg>{{ semBaseTexto }}</p>
+                </sc-if>
+                <sc-if value="{{ anot }}" hint-placeholder-val="{{ false }}"><span style="align-self:flex-start; font-family:var(--font-mono); font-size:var(--fs-label); color:var(--info); background:var(--info-bg); border:1px solid var(--info-border); border-radius:4px; padding:1px 6px;">#1 Parcial · sparklines e linha tracejada precisam da série diária do período anterior · #22 Front · fixar KPI</span></sc-if>
+                <sc-if value="{{ carregando }}" hint-placeholder-val="{{ false }}">
+                  <div aria-busy="true" aria-label="Carregando indicadores" style="display:grid; grid-template-columns:repeat(auto-fill, minmax({{ kpiMin }}, 1fr)); gap:12px;">
+                    <sc-for list="{{ oito }}" as="x" hint-placeholder-count="8">
+                      <div style="height:156px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:12px;">
+                        <span style="width:40%; height:12px; border-radius:4px; background:linear-gradient(90deg, var(--skeleton) 25%, var(--skeleton-hi) 50%, var(--skeleton) 75%); background-size:200% 100%; animation:xc-shimmer 1.6s ease-in-out infinite;"></span>
+                        <span style="width:65%; height:26px; border-radius:4px; background:var(--skeleton);"></span>
+                        <span style="width:50%; height:12px; border-radius:4px; background:var(--skeleton);"></span>
+                        <span style="margin-top:auto; width:100%; height:32px; border-radius:4px; background:var(--skeleton);"></span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ mostraKpis }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax({{ kpiMin }}, 1fr)); gap:12px;">
+                    <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="8">
+                      <div role="group" aria-label="{{ k.label }}" onClick="{{ k.abrir }}" style="position:relative; min-height:156px; background:var(--surface); border:1px solid {{ k.borda }}; border-radius:var(--r-card); padding:{{ kpiPad }}; display:flex; flex-direction:column; gap:6px; cursor:pointer;" style-hover="border-color:var(--border-strong);">
+                        <div style="display:flex; align-items:center; gap:4px;">
+                          <button type="button" onClick="{{ k.abrir }}" aria-label="{{ k.abrirAria }}" style="border:0; background:transparent; padding:0; font-size:var(--fs-label); font-weight:500; color:var(--t1); cursor:pointer; text-align:left;">{{ k.label }}</button>
+                          <button type="button" onClick="{{ k.tipToggle }}" aria-label="{{ k.tipAria }}" aria-expanded="{{ k.tipOn }}" style="width:24px; height:24px; display:grid; place-items:center; border:0; background:transparent; color:var(--t3); border-radius:4px; cursor:pointer;" style-hover="color:var(--ink); background:var(--hover);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20 M12 16v-4 M12 8h.01"></path></svg></button>
+                          <div style="flex:1;"></div>
+                          <button type="button" onClick="{{ k.pin }}" aria-pressed="{{ k.fixado }}" aria-label="{{ k.pinAria }}" style="width:24px; height:24px; display:grid; place-items:center; border:0; background:transparent; color:{{ k.pinFg }}; border-radius:4px; cursor:pointer;" style-hover="color:var(--ink); background:var(--hover);"><svg width="14" height="14" viewBox="0 0 24 24" fill="{{ k.pinFill }}" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5 M9 10.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.2V17h14v-1.8a2 2 0 0 0-1.1-1.8l-1.8-.9A2 2 0 0 1 15 10.8V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1Z"></path></svg></button>
+                        </div>
+                        <sc-if value="{{ k.tipOn }}" hint-placeholder-val="{{ false }}">
+                          <div role="tooltip" style="position:absolute; top:40px; left:12px; right:12px; z-index:20; background:var(--solid); color:var(--on-solid); font-size:var(--fs-label); line-height:16px; padding:8px 10px; border-radius:var(--r-control); box-shadow:var(--shadow);">{{ k.tip }}</div>
+                        </sc-if>
+                        <div style="display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;">
+                          <span style="font-size:{{ kpiFs }}; line-height:32px; font-weight:600; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; color:{{ k.valorFg }};">{{ k.valor }}</span>
+                          <sc-if value="{{ k.estado }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ k.estadoBorda }}; background:{{ k.estadoBg }}; color:{{ k.estadoFg }}; font-size:var(--fs-label); font-weight:500;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ k.estado }}</span></sc-if>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:6px; font-size:var(--fs-label); font-variant-numeric:tabular-nums; flex-wrap:wrap;">
+                          <sc-if value="{{ k.temDelta }}" hint-placeholder-val="{{ true }}">
+                            <span style="display:inline-flex; align-items:center; gap:2px; color:{{ k.deltaFg }}; font-weight:600;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ k.seta }}"></path></svg>{{ k.delta }}</span>
+                          </sc-if>
+                          <span style="color:var(--t2);">{{ k.anterior }}</span>
+                        </div>
+                        <span style="font-size:var(--fs-label); color:var(--t2); font-variant-numeric:tabular-nums;">{{ k.extra }}</span>
+                        <svg viewBox="0 0 200 32" preserveAspectRatio="none" aria-hidden="true" style="margin-top:auto; width:100%; height:32px; display:block;"><path d="{{ k.spark }}" fill="none" stroke="{{ k.sparkCor }}" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round"></path></svg>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </section>
+
+              <!-- Gráfico + cascata -->
+              <div style="display:grid; grid-template-columns:{{ graficoCols }}; gap:12px; align-items:stretch;">
+                <section aria-labelledby="graf-t" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:12px; min-width:0;">
+                  <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                    <div style="display:flex; flex-direction:column; gap:2px;">
+                      <h2 id="graf-t" style="font-size:var(--fs-section); font-weight:600;">{{ graficoTitulo }}</h2>
+                      <span style="font-size:var(--fs-label); color:var(--t2);">{{ graficoSub }}</span>
+                    </div>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                      <sc-if value="{{ metricaAtiva }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ voltarComposto }}" style="border:0; background:transparent; color:var(--brand); font-size:var(--fs-label); cursor:pointer; padding:4px;">Voltar para receita, gasto e lucro</button></sc-if>
+                      <div role="radiogroup" aria-label="Agrupar por" style="display:flex; padding:2px; gap:2px; background:var(--track); border-radius:var(--r-control);">
+                        <sc-for list="{{ grans }}" as="g" hint-placeholder-count="3"><button type="button" role="radio" aria-checked="{{ g.on }}" aria-disabled="{{ g.desab }}" onClick="{{ g.pick }}" style="height:24px; padding:0 10px; border:0; border-radius:4px; font-size:var(--fs-label); background:{{ g.bg }}; color:{{ g.fg }}; font-weight:{{ g.fw }}; box-shadow:{{ g.sh }}; cursor:pointer;">{{ g.label }}</button></sc-for>
+                      </div>
+                    </div>
+                  </div>
+                  <sc-if value="{{ graficoComDados }}" hint-placeholder-val="{{ true }}">
+                    <div role="group" aria-label="Legenda: clique para mostrar ou ocultar" style="display:flex; gap:6px; flex-wrap:wrap;">
+                      <sc-for list="{{ legenda }}" as="lg" hint-placeholder-count="4">
+                        <button type="button" aria-pressed="{{ lg.on }}" onClick="{{ lg.toggle }}" style="display:inline-flex; align-items:center; gap:6px; height:24px; padding:0 8px; border:1px solid var(--border); border-radius:4px; background:{{ lg.bg }}; color:{{ lg.fg }}; font-size:var(--fs-label); cursor:pointer;"><svg width="16" height="8" aria-hidden="true"><line x1="0" y1="4" x2="16" y2="4" stroke="{{ lg.cor }}" stroke-width="2.5" stroke-dasharray="{{ lg.dash }}"></line></svg>{{ lg.label }}</button>
+                      </sc-for>
+                    </div>
+                    <div style="position:relative; height:{{ graficoH }};" onMouseLeave="{{ sairGrafico }}">
+                      <svg viewBox="{{ vb }}" preserveAspectRatio="none" width="100%" height="100%" role="img" aria-label="{{ graficoAria }}" style="position:absolute; inset:0; display:block; overflow:visible;">
+                        <defs><pattern id="hach" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="var(--border-strong)" stroke-width="2"></line></pattern></defs>
+                        <sc-for list="{{ gaps }}" as="gp" hint-placeholder-count="0"><rect x="{{ gp.x }}" y="{{ gp.y }}" width="{{ gp.w }}" height="{{ gp.h }}" fill="url(#hach)" opacity="0.6"></rect></sc-for>
+                        <sc-for list="{{ ticksY }}" as="t" hint-placeholder-count="5"><line x1="{{ t.x1 }}" x2="{{ t.x2 }}" y1="{{ t.y }}" y2="{{ t.y }}" stroke="{{ t.cor }}" stroke-width="1" vector-effect="non-scaling-stroke"></line></sc-for>
+                        <sc-for list="{{ linhasGrafico }}" as="ln" hint-placeholder-count="3"><path d="{{ ln.d }}" fill="none" stroke="{{ ln.cor }}" stroke-width="{{ ln.w }}" stroke-dasharray="{{ ln.dash }}" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></path><path d="{{ ln.dParcial }}" fill="none" stroke="{{ ln.cor }}" stroke-width="{{ ln.w }}" stroke-dasharray="3 4" stroke-linecap="round" vector-effect="non-scaling-stroke"></path></sc-for>
+                        <sc-if value="{{ hovOn }}" hint-placeholder-val="{{ false }}"><line x1="{{ hovX }}" x2="{{ hovX }}" y1="8" y2="{{ baseY }}" stroke="var(--border-strong)" stroke-width="1" vector-effect="non-scaling-stroke"></line></sc-if>
+                        <sc-for list="{{ colunas }}" as="cl" hint-placeholder-count="0"><rect x="{{ cl.x }}" y="0" width="{{ cl.w }}" height="{{ baseY }}" fill="transparent" tabindex="0" aria-label="{{ cl.aria }}" onMouseEnter="{{ cl.enter }}" onFocus="{{ cl.enter }}" style="outline:none; cursor:crosshair;"></rect></sc-for>
+                      </svg>
+                      <sc-for list="{{ ticksY }}" as="t" hint-placeholder-count="5"><span aria-hidden="true" style="position:absolute; left:0; width:{{ eixoW }}; top:{{ t.top }}; transform:translateY(-50%); padding-right:8px; text-align:right; font-size:var(--fs-label); color:var(--t2); font-variant-numeric:tabular-nums; pointer-events:none; white-space:nowrap;">{{ t.label }}</span></sc-for>
+                      <sc-for list="{{ ticksX }}" as="t" hint-placeholder-count="6"><span aria-hidden="true" style="position:absolute; top:{{ t.top }}; left:{{ t.left }}; transform:translate(-50%, 8px); font-size:var(--fs-label); color:var(--t2); font-variant-numeric:tabular-nums; pointer-events:none; white-space:nowrap;">{{ t.label }}</span></sc-for>
+                      <sc-for list="{{ gaps }}" as="gp" hint-placeholder-count="0"><span style="position:absolute; top:{{ gp.top }}; left:{{ gp.left }}; transform:translate(-50%, -50%); font-size:var(--fs-label); color:var(--t1); background:var(--surface); padding:2px 8px; border:1px solid var(--border); border-radius:4px; pointer-events:none; white-space:nowrap;">{{ gp.label }}</span></sc-for>
+                      <sc-if value="{{ parcialOn }}" hint-placeholder-val="{{ false }}"><span style="position:absolute; top:0; left:{{ parcialLeft }}; transform:translateX(-100%); font-size:var(--fs-label); color:var(--t2); pointer-events:none; white-space:nowrap;">hoje · parcial ┐</span></sc-if>
+                      <sc-for list="{{ hovPontos }}" as="hp" hint-placeholder-count="0"><span aria-hidden="true" style="position:absolute; left:{{ hp.left }}; top:{{ hp.top }}; width:10px; height:10px; transform:translate(-50%, -50%); border-radius:50%; background:var(--surface); border:2px solid {{ hp.cor }}; pointer-events:none;"></span></sc-for>
+                      <sc-if value="{{ hovOn }}" hint-placeholder-val="{{ false }}">
+                        <div role="status" style="position:absolute; top:8px; left:{{ tipLeft }}; transform:{{ tipTrans }}; z-index:10; min-width:200px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-control); box-shadow:var(--shadow); padding:10px 12px; display:flex; flex-direction:column; gap:6px; pointer-events:none;">
+                          <span style="font-size:var(--fs-label); font-weight:600; color:var(--ink);">{{ tipTitulo }}</span>
+                          <sc-for list="{{ tipLinhas }}" as="tl" hint-placeholder-count="3"><span style="display:flex; align-items:center; gap:8px; font-size:var(--fs-label); font-variant-numeric:tabular-nums;"><span aria-hidden="true" style="width:10px; height:2px; background:{{ tl.cor }};"></span><span style="flex:1; color:var(--t1);">{{ tl.label }}</span><strong style="font-weight:600; color:var(--ink);">{{ tl.v }}</strong></span></sc-for>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ graficoCarregando }}" hint-placeholder-val="{{ false }}"><div aria-busy="true" aria-label="Carregando gráfico" style="height:{{ graficoHVazio }}; border-radius:var(--r-control); background:linear-gradient(90deg, var(--skeleton) 25%, var(--skeleton-hi) 50%, var(--skeleton) 75%); background-size:200% 100%; animation:xc-shimmer 1.6s ease-in-out infinite;"></div></sc-if>
+                  <sc-if value="{{ graficoVazio }}" hint-placeholder-val="{{ false }}">
+                    <div style="height:{{ graficoHVazio }}; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; text-align:center; border:1px dashed var(--border-strong); border-radius:var(--r-control); padding:16px;">
+                      <strong style="font-size:var(--fs-dense);">Ainda não há vendas para desenhar</strong>
+                      <span style="font-size:var(--fs-dense); color:var(--t2);">O gráfico aparece depois do primeiro pedido sincronizado.</span>
+                    </div>
+                  </sc-if>
+                </section>
+                <section aria-labelledby="casc-t" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:12px; min-width:0;">
+                  <div style="display:flex; flex-direction:column; gap:2px;">
+                    <h2 id="casc-t" style="font-size:var(--fs-section); font-weight:600;">Para onde foi o faturamento</h2>
+                    <span style="font-size:var(--fs-label); color:var(--t2);">{{ cascataSub }}</span>
+                  </div>
+                  <sc-if value="{{ cascataComDados }}" hint-placeholder-val="{{ true }}">
+                    <ol style="list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:14px;">
+                      <sc-for list="{{ cascata }}" as="cs" hint-placeholder-count="6">
+                        <li style="display:flex; flex-direction:column; gap:6px;">
+                          <div style="display:flex; justify-content:space-between; gap:8px; font-size:var(--fs-dense); font-variant-numeric:tabular-nums;"><span style="color:{{ cs.rotFg }}; font-weight:{{ cs.fw }};">{{ cs.label }}</span><span style="color:var(--ink); font-weight:{{ cs.fw }};">{{ cs.v }} <span style="color:var(--t2); font-weight:400;">{{ cs.pct }}</span></span></div>
+                          <div aria-hidden="true" style="position:relative; height:10px; border-radius:2px; background:var(--track);"><span style="position:absolute; top:0; bottom:0; left:{{ cs.esq }}; width:{{ cs.larg }}; background:{{ cs.cor }}; border-radius:2px;"></span></div>
+                        </li>
+                      </sc-for>
+                    </ol>
+                    <p style="margin-top:auto; font-size:var(--fs-label); color:var(--t2); text-wrap:pretty;">Cada barra mostra quanto aquele custo tira do faturamento. Lucro estimado, não contábil.</p>
+                  </sc-if>
+                  <sc-if value="{{ cascataCarregando }}" hint-placeholder-val="{{ false }}"><div aria-busy="true" style="flex:1; min-height:280px; border-radius:var(--r-control); background:var(--skeleton);"></div></sc-if>
+                  <sc-if value="{{ cascataVazia }}" hint-placeholder-val="{{ false }}"><div style="flex:1; min-height:280px; display:grid; place-items:center; text-align:center; font-size:var(--fs-dense); color:var(--t2); border:1px dashed var(--border-strong); border-radius:var(--r-control); padding:16px;">A composição aparece com o primeiro pedido.</div></sc-if>
+                </section>
+              </div>
+
+              <!-- Detalhar por -->
+              <section aria-labelledby="det-t" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); min-width:0;">
+                <div style="display:flex; align-items:center; gap:16px; padding:0 16px; border-bottom:1px solid var(--border); flex-wrap:wrap;">
+                  <h2 id="det-t" style="font-size:var(--fs-dense); font-weight:600; color:var(--t1); padding:12px 0;">Detalhar por</h2>
+                  <div role="tablist" aria-label="Detalhar por" style="display:flex; gap:4px; overflow-x:auto; overflow-y:hidden; max-width:100%; scrollbar-width:none;">
+                    <sc-for list="{{ abas }}" as="a" hint-placeholder-count="5">
+                      <button type="button" role="tab" aria-selected="{{ a.on }}" onClick="{{ a.pick }}" style="display:flex; align-items:center; gap:6px; height:44px; padding:0 10px; border:0; border-bottom:2px solid {{ a.borda }}; background:transparent; color:{{ a.fg }}; font-weight:{{ a.fw }}; font-size:var(--fs-dense); cursor:pointer; white-space:nowrap; margin-bottom:-1px;">{{ a.label }}<sc-if value="{{ a.tag }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--fs-label); color:var(--t2); border:1px solid var(--border); border-radius:4px; padding:0 4px; font-weight:400;">{{ a.tag }}</span></sc-if></button>
+                    </sc-for>
+                  </div>
+                </div>
+
+                <sc-if value="{{ abaErro }}" hint-placeholder-val="{{ false }}">
+                  <div role="alert" style="min-height:280px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:32px 16px; text-align:center;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--err);"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z M12 9v4 M12 17h.01"></path></svg>
+                    <strong style="font-size:var(--fs-section);">Não conseguimos carregar o detalhamento</strong>
+                    <span style="font-size:var(--fs-dense); color:var(--t1); max-width:440px;">Os indicadores e o gráfico acima estão certos. Tente de novo em alguns segundos.</span>
+                    <button type="button" onClick="{{ tentarDeNovo }}" aria-busy="{{ tentando }}" style="height:var(--h-md); padding:0 16px; border:0; background:var(--solid); color:var(--on-solid); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer; min-width:140px;">{{ tentarRotulo }}</button>
+                    <details style="font-size:var(--fs-label); color:var(--t2);"><summary style="cursor:pointer;">Detalhes para o suporte</summary><p style="margin-top:6px; font-family:var(--font-mono);">ref. FIN-DET-7Q2 · 02/10/2026 14:32</p></details>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ abaCarregando }}" hint-placeholder-val="{{ false }}">
+                  <div aria-busy="true" aria-label="Carregando tabela" style="padding:12px 16px; display:flex; flex-direction:column; gap:8px;">
+                    <sc-for list="{{ seis }}" as="x" hint-placeholder-count="6"><div style="display:grid; grid-template-columns:2fr repeat(6, 1fr); gap:16px; align-items:center; height:36px;"><span style="height:12px; border-radius:4px; background:var(--skeleton);"></span><span style="height:12px; border-radius:4px; background:var(--skeleton);"></span><span style="height:12px; border-radius:4px; background:var(--skeleton);"></span><span style="height:12px; border-radius:4px; background:var(--skeleton);"></span><span style="height:12px; border-radius:4px; background:var(--skeleton);"></span><span style="height:12px; border-radius:4px; background:var(--skeleton);"></span><span style="height:12px; border-radius:4px; background:var(--skeleton);"></span></div></sc-for>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ abaVazia }}" hint-placeholder-val="{{ false }}">
+                  <div style="min-height:240px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:32px 16px; text-align:center;">
+                    <strong style="font-size:var(--fs-section);">Nenhum pedido no período</strong>
+                    <span style="font-size:var(--fs-dense); color:var(--t2);">Os pedidos aparecem até 15 minutos depois da venda.</span>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ abaEmBreve }}" hint-placeholder-val="{{ false }}">
+                  <div style="min-height:240px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:32px 16px; text-align:center;">
+                    <span style="font-size:var(--fs-label); color:var(--t2); border:1px solid var(--border-strong); border-radius:11px; padding:2px 10px; font-weight:500;">Em breve</span>
+                    <strong style="font-size:var(--fs-section);">Lucro por país ainda não existe</strong>
+                    <span style="font-size:var(--fs-dense); color:var(--t2); max-width:420px;">O pedido sincronizado ainda não guarda o país do comprador.</span>
+                    <sc-if value="{{ anot }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--info);">#7 Novo · backend precisa gravar o país do pedido</span></sc-if>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ abaTabela }}" hint-placeholder-val="{{ true }}">
+                  <sc-if value="{{ avisoAba }}" hint-placeholder-val="{{ false }}">
+                    <div style="margin:12px 16px 0; display:flex; gap:10px; padding:10px 12px; background:var(--info-bg); border:1px solid var(--info-border); border-radius:var(--r-control); font-size:var(--fs-dense); color:var(--ink); align-items:flex-start;">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--info); flex:none; margin-top:1px;"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20 M12 16v-4 M12 8h.01"></path></svg>
+                      <span style="text-wrap:pretty;">{{ avisoAba }}</span>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ anot }}" hint-placeholder-val="{{ false }}"><sc-if value="{{ anotAba }}" hint-placeholder-val="{{ false }}"><div style="margin:8px 16px 0; font-family:var(--font-mono); font-size:var(--fs-label); color:var(--info);">{{ anotAba }}</div></sc-if></sc-if>
+                  <div style="display:flex; align-items:center; gap:8px; padding:12px 16px; flex-wrap:wrap;">
+                    <label style="display:flex; align-items:center; gap:8px; height:var(--h-sm); padding:0 10px; border:1px solid var(--control-border); border-radius:var(--r-control); background:var(--surface); min-width:200px; flex:1; max-width:280px;">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--t3);"><path d="M11 3a8 8 0 1 0 0 16a8 8 0 1 0 0-16 M21 21l-4.3-4.3"></path></svg>
+                      <input value="{{ busca }}" onInput="{{ digitarBusca }}" aria-label="{{ buscaRotulo }}" placeholder="{{ buscaRotulo }}" style="flex:1; min-width:0; border:0; outline:0; background:transparent; font-size:var(--fs-dense);">
+                    </label>
+                    <sc-if value="{{ temFiltroSit }}" hint-placeholder-val="{{ true }}">
+                      <div style="position:relative;">
+                        <button type="button" onClick="{{ abrirFiltro }}" aria-expanded="{{ filtroAberto }}" style="display:flex; align-items:center; gap:6px; height:var(--h-sm); padding:0 10px; border:1px {{ filtroEstilo }} {{ filtroBorda }}; border-radius:14px; background:{{ filtroBg }}; color:{{ filtroFg }}; font-size:var(--fs-dense); cursor:pointer;">{{ filtroRotulo }}</button>
+                        <sc-if value="{{ filtroAberto }}" hint-placeholder-val="{{ false }}">
+                          <div role="dialog" aria-label="Filtrar por situação" style="position:absolute; top:34px; left:0; z-index:30; width:220px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-overlay); box-shadow:var(--shadow); padding:6px;">
+                            <sc-for list="{{ opcoesSit }}" as="o" hint-placeholder-count="4">
+                              <button type="button" role="checkbox" aria-checked="{{ o.on }}" onClick="{{ o.toggle }}" style="width:100%; display:flex; align-items:center; gap:10px; height:36px; padding:0 8px; border:0; background:transparent; border-radius:var(--r-control); cursor:pointer; font-size:var(--fs-dense); text-align:left;" style-hover="background:var(--hover);">
+                                <span aria-hidden="true" style="width:16px; height:16px; border-radius:4px; border:1px solid {{ o.borda }}; background:{{ o.bg }}; display:grid; place-items:center; color:var(--on-solid);"><sc-if value="{{ o.on }}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg></sc-if></span>
+                                <span style="display:inline-flex; align-items:center; gap:6px; color:{{ o.fg }};"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ o.label }}</span>
+                              </button>
+                            </sc-for>
+                          </div>
+                        </sc-if>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ temFiltroAtivo }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ limparFiltros }}" style="height:var(--h-sm); padding:0 8px; border:0; background:transparent; color:var(--brand); font-size:var(--fs-dense); cursor:pointer;">Limpar filtros</button></sc-if>
+                    <sc-if value="{{ temOrdemProd }}" hint-placeholder-val="{{ false }}">
+                      <div role="radiogroup" aria-label="Ordem" style="display:flex; padding:2px; gap:2px; background:var(--track); border-radius:var(--r-control);">
+                        <sc-for list="{{ ordensProd }}" as="o" hint-placeholder-count="2"><button type="button" role="radio" aria-checked="{{ o.on }}" onClick="{{ o.pick }}" style="height:24px; padding:0 10px; border:0; border-radius:4px; font-size:var(--fs-label); background:{{ o.bg }}; color:{{ o.fg }}; font-weight:{{ o.fw }}; box-shadow:{{ o.sh }}; cursor:pointer;">{{ o.label }}</button></sc-for>
+                      </div>
+                    </sc-if>
+                    <div style="flex:1;"></div>
+                    <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}">
+                      <span style="font-size:var(--fs-label); color:var(--t2);">Shift + clique ordena por mais de uma coluna</span>
+                      <div role="radiogroup" aria-label="Densidade" style="display:flex; padding:2px; gap:2px; background:var(--track); border-radius:var(--r-control);">
+                        <sc-for list="{{ densidades }}" as="o" hint-placeholder-count="2"><button type="button" role="radio" aria-checked="{{ o.on }}" onClick="{{ o.pick }}" style="height:24px; padding:0 10px; border:0; border-radius:4px; font-size:var(--fs-label); background:{{ o.bg }}; color:{{ o.fg }}; font-weight:{{ o.fw }}; box-shadow:{{ o.sh }}; cursor:pointer;">{{ o.label }}</button></sc-for>
+                      </div>
+                    </sc-if>
+                    <button type="button" onClick="{{ exportar }}" aria-label="Exportar esta tabela em CSV" style="display:flex; align-items:center; gap:6px; height:var(--h-sm); padding:0 10px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer;" style-hover="border-color:var(--control-border);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3"></path></svg>CSV</button>
+                  </div>
+
+                  <sc-if value="{{ filtradoVazio }}" hint-placeholder-val="{{ false }}">
+                    <div style="min-height:200px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:24px 16px; text-align:center; border-top:1px solid var(--border-subtle);">
+                      <strong style="font-size:var(--fs-section);">Nenhuma linha com esses filtros</strong>
+                      <span style="font-size:var(--fs-dense); color:var(--t2);">Mude a busca ou a situação escolhida.</span>
+                      <button type="button" onClick="{{ limparFiltros }}" style="height:var(--h-md); padding:0 14px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;">Limpar filtros</button>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ tabelaDesktop }}" hint-placeholder-val="{{ true }}">
+                    <div style="overflow-x:auto; border-top:1px solid var(--border);">
+                      <table style="width:100%; border-collapse:separate; border-spacing:0; font-size:var(--fs-dense);">
+                        <caption style="position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);">{{ tabelaCaption }}</caption>
+                        <thead>
+                          <tr>
+                            <sc-for list="{{ colunasTabela }}" as="c" hint-placeholder-count="10">
+                              <th scope="col" aria-sort="{{ c.ariaSort }}" style="height:48px; padding:0 10px; text-align:{{ c.align }}; font-size:var(--fs-label); font-weight:600; color:var(--t1); background:var(--surface-2); border-bottom:1px solid var(--border); white-space:normal; line-height:16px; position:{{ c.pos }}; left:0; z-index:{{ c.z }};">
+                                <span style="display:inline-flex; align-items:center; gap:4px; flex-direction:{{ c.dir }};">
+                                  <button type="button" onClick="{{ c.sort }}" disabled="{{ c.semSort }}" style="display:inline-flex; align-items:center; gap:4px; border:0; background:transparent; padding:4px 0; font:inherit; color:inherit; cursor:pointer;">{{ c.label }}<sc-if value="{{ c.ind }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="color:var(--ink); font-variant-numeric:tabular-nums;">{{ c.ind }}</span></sc-if></button>
+                                  <sc-if value="{{ c.legenda }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ toggleLegenda }}" aria-label="O que cada situação quer dizer" aria-expanded="{{ legendaAberta }}" style="width:20px; height:20px; display:grid; place-items:center; border:0; background:transparent; color:var(--t3); cursor:pointer; border-radius:4px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20 M12 16v-4 M12 8h.01"></path></svg></button></sc-if>
+                                </span>
+                              </th>
+                            </sc-for>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <sc-for list="{{ linhasTabela }}" as="row" hint-placeholder-count="5">
+                            <tr onClick="{{ row.click }}" style="cursor:{{ row.cursor }}; background:{{ row.bg }};" style-hover="background:var(--hover);">
+                              <sc-for list="{{ row.cells }}" as="c" hint-placeholder-count="10">
+                                <td style="height:{{ c.h }}; padding:0 10px; text-align:{{ c.align }}; border-bottom:1px solid var(--border-subtle); white-space:nowrap; font-variant-numeric:tabular-nums; font-weight:{{ c.fw }}; color:{{ c.fg }}; position:{{ c.pos }}; left:0; z-index:{{ c.z }}; background:{{ c.bg }};">
+                                  <sc-if value="{{ c.isLoja }}" hint-placeholder-val="{{ false }}">
+                                    <span style="display:flex; align-items:center; gap:10px;">
+                                      <sc-if value="{{ c.thumb }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="width:32px; height:32px; flex:none; border-radius:4px; border:1px solid var(--border); background:repeating-linear-gradient(45deg, var(--track) 0 4px, var(--surface-2) 4px 8px);"></span></sc-if>
+                                      <span style="display:flex; flex-direction:column; min-width:0;">
+                                        <button type="button" onClick="{{ c.click }}" disabled="{{ c.semClique }}" style="border:0; background:transparent; padding:0; font:inherit; font-weight:{{ c.fw }}; color:var(--ink); cursor:pointer; text-align:left;">{{ c.v }}</button>
+                                        <span style="font-size:var(--fs-label); color:var(--t2); font-weight:400; font-family:{{ c.subFonte }};">{{ c.sub }}</span>
+                                      </span>
+                                    </span>
+                                  </sc-if>
+                                  <sc-if value="{{ c.isBadge }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ c.borda }}; background:{{ c.bgB }}; color:{{ c.fgB }}; font-size:var(--fs-label); font-weight:500;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ c.v }}</span></sc-if>
+                                  <sc-if value="{{ c.isText }}" hint-placeholder-val="{{ true }}">{{ c.v }}<sc-if value="{{ c.tag }}" hint-placeholder-val="{{ false }}"><span style="margin-left:6px; font-size:var(--fs-label); color:var(--t2); border:1px solid var(--border); border-radius:4px; padding:0 4px; font-weight:400;">{{ c.tag }}</span></sc-if></sc-if>
+                                  <sc-if value="{{ c.isSpark }}" hint-placeholder-val="{{ false }}"><svg viewBox="0 0 80 24" width="80" height="24" aria-hidden="true" style="display:inline-block; vertical-align:middle;"><path d="{{ c.v }}" fill="none" stroke="{{ c.cor }}" stroke-width="1.5" stroke-linejoin="round"></path></svg></sc-if>
+                                </td>
+                              </sc-for>
+                            </tr>
+                          </sc-for>
+                        </tbody>
+                      </table>
+                    </div>
+                    <sc-if value="{{ legendaAberta }}" hint-placeholder-val="{{ false }}">
+                      <div role="note" style="margin:12px 16px 0; display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:8px 16px; padding:12px; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-control); font-size:var(--fs-label); color:var(--t1);">
+                        <span><strong style="color:var(--ok);">Lucro</strong>: ROAS real pelo menos 1,2× o ROAS de equilíbrio.</span>
+                        <span><strong style="color:var(--warn);">No limite</strong>: tem lucro, mas o ROAS real está abaixo de 1,2× o equilíbrio.</span>
+                        <span><strong style="color:var(--err);">Prejuízo</strong>: o lucro estimado está negativo.</span>
+                        <span><strong style="color:var(--neutral);">Sem gasto</strong>: nenhum anúncio no período.</span>
+                      </div>
+                    </sc-if>
+                  </sc-if>
+
+                  <sc-if value="{{ tabelaMobile }}" hint-placeholder-val="{{ false }}">
+                    <ul style="list-style:none; margin:0; padding:0 12px 12px; display:flex; flex-direction:column; gap:8px;">
+                      <sc-for list="{{ cartoes }}" as="cd" hint-placeholder-count="4">
+                        <li style="border:1px solid var(--border); border-radius:var(--r-card); background:{{ cd.bg }};">
+                          <button type="button" onClick="{{ cd.click }}" disabled="{{ cd.semClique }}" style="width:100%; display:flex; flex-direction:column; gap:10px; padding:12px; border:0; background:transparent; text-align:left; cursor:pointer;">
+                            <span style="display:flex; align-items:flex-start; justify-content:space-between; gap:8px; width:100%;">
+                              <span style="display:flex; flex-direction:column; min-width:0;"><strong style="font-size:var(--fs-body); font-weight:600; color:var(--ink);">{{ cd.titulo }}</strong><span style="font-size:var(--fs-label); color:var(--t2);">{{ cd.sub }}</span></span>
+                              <sc-if value="{{ cd.badge }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ cd.borda }}; background:{{ cd.bgB }}; color:{{ cd.fgB }}; font-size:var(--fs-label); font-weight:500; flex:none;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ cd.badge }}</span></sc-if>
+                            </span>
+                            <span style="display:grid; grid-template-columns:1fr 1fr; gap:8px 12px; width:100%;">
+                              <sc-for list="{{ cd.campos }}" as="f" hint-placeholder-count="4"><span style="display:flex; flex-direction:column;"><span style="font-size:var(--fs-label); color:var(--t2);">{{ f.label }}</span><span style="font-size:var(--fs-body); font-weight:{{ f.fw }}; color:{{ f.fg }}; font-variant-numeric:tabular-nums;">{{ f.v }}</span></span></sc-for>
+                            </span>
+                          </button>
+                        </li>
+                      </sc-for>
+                    </ul>
+                  </sc-if>
+
+                  <sc-if value="{{ temSemAcesso }}" hint-placeholder-val="{{ true }}">
+                    <div style="border-top:1px solid var(--border);">
+                      <button type="button" onClick="{{ toggleSemAcesso }}" aria-expanded="{{ semAcessoAberto }}" style="width:100%; display:flex; align-items:center; gap:10px; min-height:44px; padding:0 16px; border:0; background:var(--surface-2); cursor:pointer; text-align:left; font-size:var(--fs-dense); color:var(--t1);">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform:{{ semAcessoSeta }};"><path d="M9 18l6-6-6-6"></path></svg>
+                        <span style="flex:1;"><strong style="font-weight:600; color:var(--ink);">{{ semAcessoTitulo }}</strong> · ficam fora do total. Os números aparecem como “—”.</span>
+                      </button>
+                      <sc-if value="{{ semAcessoAberto }}" hint-placeholder-val="{{ false }}">
+                        <ul style="list-style:none; margin:0; padding:0;">
+                          <sc-for list="{{ semAcesso }}" as="sa" hint-placeholder-count="7">
+                            <li style="display:flex; align-items:center; gap:12px; padding:10px 16px 10px 40px; border-top:1px solid var(--border-subtle); flex-wrap:wrap;">
+                              <span style="flex:1; min-width:180px; display:flex; flex-direction:column;"><span style="font-size:var(--fs-dense); color:var(--ink);">{{ sa.nome }}</span><span style="font-size:var(--fs-label); color:var(--t2);">{{ sa.dominio }}</span></span>
+                              <span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid var(--neutral-border); background:var(--neutral-bg); color:var(--neutral); font-size:var(--fs-label); font-weight:500;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ sa.motivo }}</span>
+                              <a href="Lojas.dc.html" style="font-size:var(--fs-dense); font-weight:500;">{{ sa.acao }}</a>
+                            </li>
+                          </sc-for>
+                        </ul>
+                      </sc-if>
+                    </div>
+                  </sc-if>
+                  <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:10px 16px; border-top:1px solid var(--border-subtle); font-size:var(--fs-label); color:var(--t2);">
+                    <span>{{ rodapeTabela }}</span>
+                    <span>Valores completos em {{ moeda }} · convertidos pela cotação de cada dia</span>
+                  </div>
+                </sc-if>
+              </section>
+
+              <!-- Como calculamos -->
+              <section aria-labelledby="como-t" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card);">
+                <h2 id="como-t" style="font-size:var(--fs-section); font-weight:600; padding:14px 16px; border-bottom:1px solid var(--border-subtle);">Como calculamos</h2>
+                <sc-for list="{{ comoCalculamos }}" as="cc" hint-placeholder-count="5">
+                  <div style="border-bottom:1px solid var(--border-subtle);">
+                    <h3 style="margin:0;"><button type="button" onClick="{{ cc.toggle }}" aria-expanded="{{ cc.aberto }}" style="width:100%; display:flex; align-items:center; gap:10px; min-height:44px; padding:0 16px; border:0; background:transparent; cursor:pointer; text-align:left; font-size:var(--fs-dense); font-weight:500; color:var(--ink);" style-hover="background:var(--hover);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform:{{ cc.seta }}; color:var(--t2);"><path d="M9 18l6-6-6-6"></path></svg>{{ cc.t }}</button></h3>
+                    <sc-if value="{{ cc.aberto }}" hint-placeholder-val="{{ false }}"><p style="padding:0 16px 14px 40px; font-size:var(--fs-dense); color:var(--t1); max-width:760px; text-wrap:pretty;">{{ cc.d }}</p></sc-if>
+                  </div>
+                </sc-for>
+              </section>
+            </div>
+          </main>
+        </div>
+        <sc-if value="{{ mobile }}" hint-placeholder-val="{{ false }}">
+          <dc-import name="Navegacao" active="lucro" mobile="{{ true }}" theme="{{ theme }}" onTheme="{{ setTheme }}" alertas="{{ 3 }}" hint-size="100%,64px"></dc-import>
+        </sc-if>
+        <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+          <div role="status" aria-live="polite" style="position:absolute; right:{{ toastDir }}; left:{{ toastEsq }}; bottom:{{ toastBase }}; z-index:90; max-width:400px; background:var(--solid); color:var(--on-solid); border-radius:var(--r-card); box-shadow:var(--shadow); padding:12px 14px; display:flex; gap:12px; align-items:flex-start; animation:xc-up 180ms var(--ease);">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none; margin-top:2px;"><path d="M20 6L9 17l-5-5"></path></svg>
+            <div style="flex:1; display:flex; flex-direction:column; gap:2px; font-size:var(--fs-dense);"><strong style="font-weight:600;">{{ toastTitulo }}</strong><span style="white-space:pre-line; opacity:.9;">{{ toastTexto }}</span></div>
+            <button type="button" onClick="{{ fecharToast }}" aria-label="Fechar aviso" style="width:24px; height:24px; display:grid; place-items:center; border:0; background:transparent; color:inherit; cursor:pointer; border-radius:4px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18 M6 6l12 12"></path></svg></button>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    theme: 'light', width: 'desktop', cenario: 'dados', anot: false, vw: 1400,
+    loja: 'todas', periodo: '30d', comparar: 'anterior', moeda: 'BRL',
+    aba: 'loja', gran: 'dia', metrica: null, ocultas: [], hov: null,
+    pendAberta: false, dispensadas: [], pinned: ['lucro'], tip: null,
+    sorts: [{ k: 'lucro', dir: 'desc' }], busca: '', sit: [], filtroAberto: false, densidade: 'compacta',
+    semAcessoAberto: false, legendaAberta: false, prodOrdem: 'mais', guiaDispensado: false, caminho: 'direto', passoAberto: 1,
+    como: [0], tentando: false, toast: null,
+  };
+  DIAS = this.gerar();
+  componentDidMount() {
+    try {
+      const t = localStorage.getItem('xcart-mock-tema'); const w = localStorage.getItem('xcart-mock-largura');
+      const s = {}; if (t) s.theme = t; if (w) s.width = w; s.vw = window.innerWidth; this.setState(s);
+    } catch (e) { this.setState({ vw: window.innerWidth }); }
+    this._rs = () => this.setState({ vw: window.innerWidth });
+    window.addEventListener('resize', this._rs);
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this._rs); clearTimeout(this._tt); }
+  gerar() {
+    let s = 11; const rnd = () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
+    const P = { lumen: [2950, 0.353, 0.30, 0.045, 144, 0.82], orla: [1910, 0.40, 0.33, 0.045, 144, 0.78], kova: [960, 0.49, 0.38, 0.05, 143, 1], alto: [325, 0.39, 0.60, 0.05, 133, 0.9] };
+    const out = []; const d0 = new Date(2026, 7, 3);
+    for (let i = 0; i < 61; i++) {
+      const d = new Date(d0); d.setDate(d0.getDate() + i);
+      const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const dow = d.getDay(); const lojas = {};
+      for (const [id, [r0, g, c, t, tk, mf]] of Object.entries(P)) {
+        let r = r0 * (1 + 0.16 * Math.sin(i / 4.3) + (dow === 0 || dow === 6 ? -0.07 : 0.03)) * (1 + i * 0.004) * (0.86 + rnd() * 0.28);
+        if (iso === '2026-10-02') r *= 0.46;
+        const ped = Math.max(0, Math.round(r / tk)); r = ped * tk * (0.95 + rnd() * 0.1);
+        const gasto = r * g * (0.9 + rnd() * 0.2);
+        lojas[id] = { r, ped, meta: gasto * mf, google: gasto * (1 - mf), cmv: r * c * (0.95 + rnd() * 0.1), tax: r * t };
+      }
+      out.push({ iso, dow, d, lojas });
+    }
+    return out;
+  }
+  renderVals() {
+    const st = this.state;
+    const mobile = st.width === 'mobile';
+    const set = (o) => this.setState(o);
+    const LOJAS = [
+      { id: 'lumen', nome: 'Lumen Casa', dominio: 'lumencasa.com', moeda: 'USD' },
+      { id: 'orla', nome: 'Orla Wear', dominio: 'orlawear.com', moeda: 'USD' },
+      { id: 'kova', nome: 'Kova Home', dominio: 'kovahome.eu', moeda: 'EUR' },
+      { id: 'alto', nome: 'Alto Fit', dominio: 'altofit.co', moeda: 'USD' },
+      { id: 'tarn', nome: 'Tarn Gear', dominio: 'tarngear.com', ativa: false, motivo: 'Sem permissão para ler pedidos', acao: 'Reconectar' },
+      { id: 'brisa', nome: 'Brisa Pet', dominio: 'brisapet.com', ativa: false, motivo: 'Pausada na Shopify', acao: 'Remover do xcart' },
+      { id: 'selva', nome: 'Selva Kids', dominio: 'selvakids.shop', ativa: false, motivo: 'App desinstalado', acao: 'Reconectar' },
+      { id: 'pico', nome: 'Pico Tools', dominio: 'picotools.com', ativa: false, motivo: 'Token inválido', acao: 'Reconectar' },
+      { id: 'mira', nome: 'Mira Beauty', dominio: 'mirabeauty.co', ativa: false, motivo: 'App desinstalado', acao: 'Remover do xcart' },
+      { id: 'vela', nome: 'Vela & Co', dominio: 'velaco.store', ativa: false, motivo: 'Pausada na Shopify', acao: 'Remover do xcart' },
+      { id: 'nimbo', nome: 'Nimbo Shop', dominio: 'nimboshop.com', ativa: false, motivo: 'Token inválido', acao: 'Reconectar' },
+    ];
+    const ATIVAS = LOJAS.filter(l => l.ativa !== false);
+    const lojaSel = LOJAS.find(l => l.id === st.loja);
+    const lojaSemAcesso = !!(lojaSel && lojaSel.ativa === false);
+    const ids = lojaSel ? (lojaSemAcesso ? [] : [lojaSel.id]) : ATIVAS.map(l => l.id);
+    const cen = st.cenario;
+    const nova = cen === 'nova', carregando = cen === 'carregando', erro = cen === 'erro';
+    const semDados = nova || lojaSemAcesso;
+    // moeda
+    const TAXA = { BRL: 1, USD: 5.32, EUR: 6.21 };
+    const conv = v => v / TAXA[st.moeda];
+    const nf = (o) => new Intl.NumberFormat('pt-BR', o);
+    const din = (v, compacto) => v === null || v === undefined || !isFinite(v) ? '—' : nf({ style: 'currency', currency: st.moeda, notation: compacto ? 'compact' : 'standard', maximumFractionDigits: compacto ? 1 : 2, minimumFractionDigits: compacto ? 0 : 2 }).format(conv(v));
+    const num = v => v === null || !isFinite(v) ? '—' : nf({ maximumFractionDigits: 0 }).format(v);
+    const pct = (v, casas = 1) => v === null || !isFinite(v) ? '—' : nf({ style: 'percent', minimumFractionDigits: casas, maximumFractionDigits: casas }).format(v);
+    const xv = v => v === null || !isFinite(v) ? '—' : nf({ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v) + '×';
+    // períodos
+    const PER = { hoje: ['2026-10-02', '2026-10-02', ['2026-10-01', '2026-10-01']], ontem: ['2026-10-01', '2026-10-01', ['2026-09-30', '2026-09-30']], '7d': ['2026-09-26', '2026-10-02', ['2026-09-19', '2026-09-25']], '30d': ['2026-09-03', '2026-10-02', ['2026-08-04', '2026-09-02']], mes: ['2026-10-01', '2026-10-02', ['2026-09-01', '2026-09-02']], mes_passado: ['2026-09-01', '2026-09-30', null], ano: ['2026-01-01', '2026-10-02', null], custom: ['2026-09-10', '2026-09-24', ['2026-08-26', '2026-09-09']] };
+    const [ini, fim, ant] = PER[st.periodo] || PER['30d'];
+    const semComp = st.comparar === 'nenhum' || st.comparar === 'ano';
+    const prevR = semComp ? null : ant;
+    const HIST = '2026-08-03';
+    const noIntervalo = (a, b) => this.DIAS.filter(d => d.iso >= a && d.iso <= b);
+    const somar = (dias) => {
+      const t = { ped: 0, r: 0, cmv: 0, tax: 0, meta: 0, google: 0 };
+      for (const d of dias) for (const id of ids) { const x = d.lojas[id]; if (!x) continue; t.ped += x.ped; t.r += x.r; t.cmv += x.cmv; t.tax += x.tax; t.meta += x.meta; t.google += x.google; }
+      return this.deriv(t);
+    };
+    const diasAtual = semDados ? [] : noIntervalo(ini, fim);
+    const A = somar(diasAtual);
+    const P = prevR && !semDados ? somar(noIntervalo(prevR[0], prevR[1])) : null;
+    const semBase = !semDados && !P;
+    const semHistAtual = ini < HIST;
+    // KPIs
+    const delta = (a, b) => (b === null || b === undefined || !isFinite(b) || b === 0 || a === null) ? null : (a - b) / Math.abs(b);
+    const serie = (k) => diasAtual.map(d => { const t = { ped: 0, r: 0, cmv: 0, tax: 0, meta: 0, google: 0 }; for (const id of ids) { const x = d.lojas[id]; t.ped += x.ped; t.r += x.r; t.cmv += x.cmv; t.tax += x.tax; t.meta += x.meta; t.google += x.google; } return this.deriv(t)[k]; });
+    const spark = (vals) => {
+      const v = vals.filter(x => x !== null && isFinite(x)); if (v.length < 2) return 'M0 16 L200 16';
+      const mn = Math.min(...v), mx = Math.max(...v), rg = mx - mn || 1;
+      return vals.map((x, i) => `${i ? 'L' : 'M'}${(i / (vals.length - 1) * 200).toFixed(1)} ${(28 - ((x ?? mn) - mn) / rg * 24).toFixed(1)}`).join(' ');
+    };
+    const DEF = [
+      { k: 'r', id: 'receita', label: 'Faturamento', fmt: v => din(v, true), bom: 'up', tip: 'Soma dos pedidos pagos, com frete cobrado e sem impostos. Na Shopify, compare com “Vendas totais menos impostos”.' },
+      { k: 'gasto', id: 'gasto', label: 'Gasto em anúncios', fmt: v => din(v, true), bom: 'neutro', tip: 'Gasto do Meta e do Google nas contas ligadas a cada loja, convertido pela cotação do dia.', extra: t => `Meta ${din(t.meta, true)} · Google ${din(t.google, true)}` },
+      { k: 'lucro', id: 'lucro', label: 'Lucro estimado', fmt: v => din(v, true), bom: 'up', tip: 'Faturamento menos produto, frete do fornecedor, taxa de pagamento e anúncios. Estimado, não contábil.', estado: true, extra: () => 'Estimado · não contábil' },
+      { k: 'roas', id: 'roas', label: 'ROAS real', fmt: xv, bom: 'up', tip: 'Faturamento dividido pelo gasto em anúncios, com os pedidos da Shopify, não os da plataforma.', extra: t => `Equilíbrio ${xv(t.eq)}` },
+      { k: 'ped', id: 'ped', label: 'Pedidos', fmt: num, bom: 'up', tip: 'Pedidos pagos. Reenvios aparecem à parte e não contam como venda.', extra: t => `+ ${num(t.reenv)} reenvios` },
+      { k: 'ticket', id: 'ticket', label: 'Ticket médio', fmt: v => din(v, false), bom: 'up', tip: 'Faturamento dividido pelo número de pedidos.', extra: () => 'Por pedido pago' },
+      { k: 'cpa', id: 'cpa', label: 'CPA', fmt: v => din(v, false), bom: 'down', tip: 'Gasto em anúncios dividido pelo número de pedidos. Quanto menor, melhor.', extra: () => 'Custo por pedido' },
+      { k: 'margem', id: 'margem', label: 'Margem', fmt: v => pct(v), bom: 'up', tip: 'Lucro estimado dividido pelo faturamento.', extra: () => 'Lucro sobre faturamento' },
+    ];
+    const pinned = st.pinned;
+    const ordem = [...DEF].sort((a, b) => (pinned.includes(b.id) ? 1 : 0) - (pinned.includes(a.id) ? 1 : 0));
+    const ARROW_UP = 'M12 19V5 M5 12l7-7 7 7', ARROW_DN = 'M12 5v14 M19 12l-7 7-7-7';
+    const kpis = ordem.map(d => {
+      const a = semDados ? null : A[d.k];
+      const p = P ? P[d.k] : null;
+      const dl = d.k === 'margem' ? (p === null || a === null ? null : a - p) : delta(a, p);
+      const sobe = dl !== null && dl > 0;
+      const bom = d.bom === 'neutro' ? null : (d.bom === 'up' ? sobe : !sobe);
+      const fix = pinned.includes(d.id);
+      let estado = null, eFg, eBg, eB;
+      if (d.estado && a !== null) { const neg = a < 0; estado = neg ? 'Prejuízo' : 'Lucro'; eFg = neg ? 'var(--err)' : 'var(--ok)'; eBg = neg ? 'var(--err-bg)' : 'var(--ok-bg)'; eB = neg ? 'var(--err-border)' : 'var(--ok-border)'; }
+      const deltaTxt = dl === null ? '' : (d.k === 'margem' ? `${nf({ maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(Math.abs(dl) * 100)} p.p.` : pct(Math.abs(dl)));
+      return {
+        label: d.label, valor: a === null ? '—' : d.fmt(a), valorFg: 'var(--ink)',
+        estado, estadoFg: eFg, estadoBg: eBg, estadoBorda: eB,
+        temDelta: dl !== null, delta: deltaTxt, seta: sobe ? ARROW_UP : ARROW_DN,
+        deltaFg: bom === null ? 'var(--t1)' : (bom ? 'var(--ok)' : 'var(--err)'),
+        anterior: semDados ? (nova ? 'Sem pedidos no período' : 'Sem acesso à loja') : (p === null ? 'sem comparação' : `vs. ${d.fmt(p)}`),
+        extra: a === null ? ' ' : (d.extra ? d.extra(A) : ' '),
+        spark: semDados ? 'M0 28 L200 28' : spark(serie(d.k)), sparkCor: 'var(--t2)',
+        tip: d.tip, tipOn: st.tip === d.id, tipAria: `O que é ${d.label}`, tipToggle: (e) => { e.stopPropagation(); this.setState(s => ({ tip: s.tip === d.id ? null : d.id })); },
+        fixado: fix, pinAria: fix ? `Desafixar ${d.label}` : `Fixar ${d.label} no início`, pinFg: fix ? 'var(--ink)' : 'var(--t3)', pinFill: fix ? 'currentColor' : 'none',
+        pin: (e) => { e.stopPropagation(); this.setState(s => ({ pinned: s.pinned.includes(d.id) ? s.pinned.filter(x => x !== d.id) : [...s.pinned, d.id] })); },
+        borda: st.metrica === d.k ? 'var(--ink)' : 'var(--border)',
+        abrir: (e) => { e && e.stopPropagation && e.stopPropagation(); this.setState({ metrica: ['r', 'gasto', 'lucro'].includes(d.k) && st.metrica === null ? d.k : d.k, hov: null }); },
+        abrirAria: `${d.label}: ver no gráfico comparado ao período anterior`,
+      };
+    });
+    // gráfico
+    const W = mobile ? 330 : 720, H = mobile ? 220 : 280, padL = mobile ? 44 : 64, padR = 12, padT = 12, padB = 28;
+    const ano = st.periodo === 'ano';
+    let gran = st.gran; if (ano) gran = 'mes'; if (diasAtual.length <= 2 && gran !== 'dia') gran = 'dia';
+    const buckets = [];
+    const diasPrev = P ? noIntervalo(prevR[0], prevR[1]) : [];
+    if (ano) {
+      const meses = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out'];
+      meses.forEach((m, i) => { const dd = this.DIAS.filter(d => d.d.getMonth() === i && d.iso <= fim); buckets.push({ label: m, dias: dd, prev: [], parcial: i === 9 || i === 7 }); });
+    } else if (gran === 'dia') {
+      diasAtual.forEach((d, i) => buckets.push({ label: `${String(d.d.getDate()).padStart(2, '0')}/${String(d.d.getMonth() + 1).padStart(2, '0')}`, dias: [d], prev: diasPrev[i] ? [diasPrev[i]] : [], parcial: d.iso === '2026-10-02' }));
+    } else if (gran === 'semana') {
+      for (let i = 0; i < diasAtual.length; i += 7) { const ch = diasAtual.slice(i, i + 7); buckets.push({ label: `${String(ch[0].d.getDate()).padStart(2, '0')}/${String(ch[0].d.getMonth() + 1).padStart(2, '0')}`, dias: ch, prev: diasPrev.slice(i, i + 7), parcial: ch.some(x => x.iso === '2026-10-02') }); }
+    } else {
+      const ms = [...new Set(diasAtual.map(d => d.d.getMonth()))];
+      const nomes = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+      ms.forEach(m => { const ch = diasAtual.filter(d => d.d.getMonth() === m); buckets.push({ label: nomes[m], dias: ch, prev: [], parcial: m === 9 }); });
+    }
+    const metrica = st.metrica;
+    const MET_LBL = { r: 'Faturamento', gasto: 'Gasto em anúncios', lucro: 'Lucro estimado', roas: 'ROAS real', ped: 'Pedidos', ticket: 'Ticket médio', cpa: 'CPA', margem: 'Margem' };
+    const fmtMet = (k, v) => k === 'roas' ? xv(v) : k === 'ped' ? num(v) : k === 'margem' ? pct(v) : din(v, true);
+    const valB = (b, k, prev) => { const dd = prev ? b.prev : b.dias; if (!dd.length) return null; return somar(dd)[k]; };
+    let series;
+    if (metrica) {
+      series = [{ id: 'cur', label: `${MET_LBL[metrica]} · período atual`, cor: 'var(--chart-1)', w: 2.5, dash: 'none', vals: buckets.map(b => valB(b, metrica)) }];
+      if (P && !ano) series.push({ id: 'prev', label: 'Período anterior', cor: 'var(--t3)', w: 2, dash: '5 4', vals: buckets.map(b => valB(b, metrica, true)), semParcial: true });
+    } else {
+      series = [
+        { id: 'receita', label: 'Faturamento', cor: 'var(--chart-2)', w: 2, dash: 'none', vals: buckets.map(b => valB(b, 'r')) },
+        { id: 'gasto', label: 'Gasto em anúncios', cor: 'var(--chart-3)', w: 2, dash: 'none', vals: buckets.map(b => valB(b, 'gasto')) },
+        { id: 'lucro', label: 'Lucro estimado', cor: 'var(--chart-1)', w: 2.75, dash: 'none', vals: buckets.map(b => valB(b, 'lucro')) },
+      ];
+      if (P && !ano) series.push({ id: 'comp', label: 'Lucro · período anterior', cor: 'var(--t3)', w: 2, dash: '5 4', vals: buckets.map(b => valB(b, 'lucro', true)), semParcial: true });
+    }
+    const visiveis = series.filter(s => !st.ocultas.includes(s.id));
+    const todos = visiveis.flatMap(s => s.vals).filter(v => v !== null && isFinite(v)).map(conv);
+    let mn = Math.min(0, ...(todos.length ? todos : [0])), mx = Math.max(...(todos.length ? todos : [1]));
+    if (metrica === 'roas' || metrica === 'margem') mn = Math.min(0, mn);
+    const passo = this.passoBom((mx - mn) / 4 || 1); mn = Math.floor(mn / passo) * passo; mx = Math.ceil(mx / passo) * passo || passo;
+    const n = buckets.length; const iw = W - padL - padR, ih = H - padT - padB;
+    const X = i => padL + (n <= 1 ? iw / 2 : i * iw / (n - 1));
+    const Y = v => padT + ih - (conv(v) - mn) / (mx - mn) * ih;
+    const baseY = padT + ih;
+    const ticksY = []; for (let v = mn; v <= mx + 1e-9; v += passo) { const y = padT + ih - (v - mn) / (mx - mn) * ih; ticksY.push({ x1: padL, x2: W - padR, y: y.toFixed(1), top: `${(y / H * 100).toFixed(2)}%`, cor: Math.abs(v) < 1e-9 ? 'var(--border-strong)' : 'var(--chart-grid)', label: metrica === 'roas' ? nf({ maximumFractionDigits: 1 }).format(v) + '×' : metrica === 'ped' ? nf({ notation: 'compact' }).format(v) : metrica === 'margem' ? nf({ style: 'percent' }).format(v) : nf({ notation: 'compact', maximumFractionDigits: 1 }).format(v) }); }
+    const passoX = Math.max(1, Math.ceil(n / (mobile ? 4 : 8)));
+    const ticksX = buckets.map((b, i) => ({ left: `${(X(i) / W * 100).toFixed(2)}%`, top: `${(baseY / H * 100).toFixed(2)}%`, label: b.label, show: (i % passoX === 0 && (n - 1 - i) >= passoX / 2) || i === n - 1 })).filter(t => t.show);
+    const linhasGrafico = visiveis.map(s => {
+      let d = '', dp = '';
+      const lastIdx = n - 1; const parcialFinal = !s.semParcial && buckets[lastIdx] && buckets[lastIdx].parcial && n > 1;
+      let pen = false;
+      s.vals.forEach((v, i) => {
+        if (v === null || !isFinite(v)) { pen = false; return; }
+        if (parcialFinal && i === lastIdx) { const pv = s.vals[i - 1]; if (pv !== null) dp = `M${X(i - 1).toFixed(1)} ${Y(pv).toFixed(1)} L${X(i).toFixed(1)} ${Y(v).toFixed(1)}`; return; }
+        d += `${pen ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(v).toFixed(1)} `; pen = true;
+      });
+      return { d: d || 'M0 0', dParcial: dp || 'M0 0', cor: s.cor, w: s.w, dash: s.dash };
+    });
+    const gaps = [];
+    if (ano) { const lastNull = buckets.reduce((acc, b, i) => b.dias.length ? acc : i, -1); if (lastNull >= 0) { const x0 = padL, x1 = X(lastNull) + (iw / (n - 1)) / 2; gaps.push({ x: x0, y: padT, w: (x1 - x0).toFixed(1), h: ih, left: `${((x0 + x1) / 2 / W * 100).toFixed(2)}%`, top: `${((padT + ih / 2) / H * 100).toFixed(2)}%`, label: 'Sem dado antes de 03/08' }); } }
+    const colW = n <= 1 ? iw : iw / (n - 1);
+    const colunas = buckets.map((b, i) => ({ x: (X(i) - colW / 2).toFixed(1), w: colW.toFixed(1), aria: `${b.label}${b.parcial ? ', parcial' : ''}`, enter: () => this.setState({ hov: i }) }));
+    const hov = st.hov !== null && st.hov < n && buckets[st.hov] && buckets[st.hov].dias.length ? st.hov : null;
+    const hovPontos = hov === null ? [] : visiveis.filter(s => s.vals[hov] !== null).map(s => ({ left: `${(X(hov) / W * 100).toFixed(2)}%`, top: `${(Y(s.vals[hov]) / H * 100).toFixed(2)}%`, cor: s.cor }));
+    const ultimo = buckets[n - 1]; const parcialOn = !!(ultimo && ultimo.parcial && n > 1 && !ano);
+    const fmtSerie = (s, v) => metrica ? fmtMet(metrica, v) : din(v, false);
+    const tipLinhas = hov === null ? [] : visiveis.map(s => ({ label: s.label, v: s.vals[hov] === null ? 'sem dado' : fmtSerie(s, s.vals[hov]), cor: s.cor }));
+    const legenda = series.map(s => { const on = !st.ocultas.includes(s.id); return { label: s.label, on, cor: s.cor, dash: s.dash === 'none' ? '0' : s.dash, bg: on ? 'var(--surface)' : 'var(--track)', fg: on ? 'var(--ink)' : 'var(--t2)', toggle: () => this.setState(z => ({ ocultas: z.ocultas.includes(s.id) ? z.ocultas.filter(x => x !== s.id) : [...z.ocultas, s.id] })) }; });
+    const grans = [['dia', 'Dia'], ['semana', 'Semana'], ['mes', 'Mês']].map(([id, label]) => { const on = id === gran; const desab = ano && id !== 'mes'; return { label, on, desab: desab ? 'true' : undefined, pick: () => !desab && this.setState({ gran: id, hov: null }), bg: on ? 'var(--surface)' : 'transparent', fg: desab ? 'var(--t4)' : on ? 'var(--ink)' : 'var(--t2)', fw: on ? 600 : 400, sh: on ? '0 0 0 1px var(--border)' : 'none' }; });
+    // cascata
+    const r = A.r || 0;
+    const p100 = v => r ? `${Math.max(0, Math.min(100, v / r * 100)).toFixed(2)}%` : '0%';
+    let acc = r;
+    const passos = [['Faturamento', r, 'var(--chart-2)'], ['Produtos + frete do fornecedor', A.cmv, 'var(--t4)'], ['Taxas de pagamento', A.tax, 'var(--t4)'], ['Meta Ads', A.meta, 'var(--chart-3)'], ['Google Ads', A.google, 'var(--chart-3)']];
+    const cascata = passos.map(([label, v, cor], i) => {
+      if (i === 0) return { label, v: din(v, false), pct: '', esq: '0%', larg: '100%', cor, fw: 600, rotFg: 'var(--ink)' };
+      acc -= v; return { label: `− ${label}`, v: din(v, false), pct: `· ${pct(v / r, 0)}`, esq: p100(Math.max(acc, 0)), larg: p100(v), cor, fw: 400, rotFg: 'var(--t1)' };
+    });
+    cascata.push({ label: '= Lucro estimado', v: din(A.lucro, false), pct: `· ${pct(A.lucro / r, 1)}`, esq: '0%', larg: p100(Math.max(A.lucro, 0)), cor: A.lucro < 0 ? 'var(--err)' : 'var(--chart-1)', fw: 600, rotFg: 'var(--ink)' });
+    // pendências
+    const PEND = [
+      { id: 'p1', sev: 'Crítico', titulo: 'Lucro inflado: 14 SKUs vendidos sem custo', detalhe: 'Kova Home e Alto Fit venderam SKUs sem custo cadastrado e sem custo padrão. O produto entrou como R$ 0,00.', cta: 'Cadastrar custos', href: 'Casca.dc.html', tom: 'err' },
+      { id: 'p2', sev: 'Crítico', titulo: 'A Shopify negou acesso aos pedidos de 1 loja', detalhe: 'Tarn Gear perdeu a permissão de ler pedidos. As vendas dela estão fora do total.', cta: 'Reconectar loja', href: 'Lojas.dc.html', tom: 'err' },
+      { id: 'p3', sev: 'Atenção', titulo: 'Gasto do Google parado há 3 h', detalhe: 'A conta “Lumen · Pesquisa” não enviou o gasto desde 11:30. O lucro de hoje pode estar alto demais.', cta: 'Ver integração', href: 'Integracoes.dc.html', tom: 'warn' },
+      { id: 'p4', sev: 'Atenção', titulo: '1 conta do Meta sem loja ligada', detalhe: 'O gasto da conta “Orla · Teste criativos” não entra em nenhuma loja.', cta: 'Ligar à loja', href: 'Integracoes.dc.html', tom: 'warn' },
+      { id: 'p5', sev: 'Informação', titulo: 'Câmbio aproximado em 2 dias', detalhe: 'Fim de semana sem cotação oficial: usamos a da sexta-feira anterior.', cta: 'Ver como calculamos', href: '#como-t', tom: 'info', disp: true },
+      { id: 'p6', sev: 'Informação', titulo: 'Fuso da conta diferente do fuso da loja', detalhe: 'A conta “Kova · EU” está em Lisboa e a loja em Berlim. O gasto de cada dia pode se deslocar 1 hora.', cta: 'Ver integração', href: 'Integracoes.dc.html', tom: 'info', disp: true },
+    ];
+    const ICONE = { err: 'M7.86 2h8.28L22 7.86v8.28L16.14 22H7.86L2 16.14V7.86Z M12 8v4 M12 16h.01', warn: 'M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z M12 9v4 M12 17h.01', info: 'M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20 M12 16v-4 M12 8h.01' };
+    const pendAtivas = nova ? [] : PEND.filter(x => !st.dispensadas.includes(x.id));
+    let ultimoSev = null;
+    const pendVisiveis = (st.pendAberta ? pendAtivas : pendAtivas.slice(0, 1)).map(x => {
+      const cab = st.pendAberta && x.sev !== ultimoSev ? ({ 'Crítico': 'Críticas', 'Atenção': 'Atenção', 'Informação': 'Informativas' })[x.sev] : null; ultimoSev = x.sev;
+      return { ...x, cabecalho: cab, fg: `var(--${x.tom})`, bg: `var(--${x.tom}-bg)`, borda: `var(--${x.tom}-border)`, icone: ICONE[x.tom], dispensavel: !!x.disp, dispensar: () => this.setState(s => ({ dispensadas: [...s.dispensadas, x.id] })) };
+    });
+    const cnt = t => pendAtivas.filter(x => x.tom === t).length;
+    const contagens = [['err', cnt('err'), ['crítica', 'críticas']], ['warn', cnt('warn'), ['de atenção', 'de atenção']], ['info', cnt('info'), ['informativa', 'informativas']]].filter(c => c[1]).map(([t, q, [s1, s2]]) => ({ texto: `${q} ${q === 1 ? s1 : s2}`, fg: `var(--${t})`, bg: `var(--${t}-bg)`, borda: `var(--${t}-border)` }));
+    // tabelas
+    const lojaRows = ATIVAS.map(l => { const t = this.somarLoja(diasAtual, l.id); return { ...l, t, sem: this.semaforo(t) }; });
+    const SEM = { verde: ['Lucro', 'ok'], amarelo: ['No limite', 'warn'], vermelho: ['Prejuízo', 'err'], cinza: ['Sem gasto', 'neutral'] };
+    const aba = (st.loja !== 'todas' && st.aba === 'loja') ? 'dia' : st.aba;
+    const rowH = st.densidade === 'compacta' ? '44px' : '56px';
+    const sortVal = (row, k) => row.sortv ? row.sortv[k] : 0;
+    const ordenar = (rows) => {
+      const ss = st.sorts.filter(s => rows.length && rows[0].sortv && s.k in rows[0].sortv);
+      return [...rows].sort((a, b) => { for (const s of ss) { const va = sortVal(a, s.k), vb = sortVal(b, s.k); if (va !== vb) return (va < vb ? -1 : 1) * (s.dir === 'asc' ? 1 : -1); } return 0; });
+    };
+    const clickSort = (k) => (e) => {
+      const multi = e && e.shiftKey;
+      this.setState(s => {
+        const ex = s.sorts.find(x => x.k === k);
+        let novo;
+        if (multi) novo = ex ? s.sorts.map(x => x.k === k ? { ...x, dir: x.dir === 'desc' ? 'asc' : 'desc' } : x) : [...s.sorts, { k, dir: 'desc' }];
+        else novo = [{ k, dir: ex && s.sorts.length === 1 && ex.dir === 'desc' ? 'asc' : 'desc' }];
+        return { sorts: novo };
+      });
+    };
+    const badge = (lbl, tom) => ({ isBadge: true, v: lbl, fgB: `var(--${tom})`, bgB: `var(--${tom}-bg)`, borda: `var(--${tom}-border)` });
+    const cell = (v, o = {}) => ({ isText: true, v, align: 'right', fw: 400, fg: 'var(--ink)', ...o });
+    const lucroFg = v => v < 0 ? 'var(--err)' : 'var(--ink)';
+    let cols = [], linhas = [], cartoes = [], aviso = null, anotAba = null, buscaRotulo = 'Buscar', caption = '', rodape = '';
+    const q = st.busca.trim().toLowerCase();
+    if (aba === 'loja') {
+      buscaRotulo = 'Buscar loja'; caption = 'Lucro por loja no período';
+      cols = [['loja', 'Loja', 'left'], ['sit', 'Situação', 'left', true], ['ped', 'Pedidos'], ['r', 'Faturamento'], ['gasto', 'Gasto'], ['roas', 'ROAS real'], ['eq', 'ROAS de equilíbrio'], ['lucro', 'Lucro estimado'], ['margem', 'Margem'], ['lpp', 'Lucro por pedido'], ['tend', 'Tendência', 'right', false, true]];
+      let rows = lojaRows.filter(l => (!q || (l.nome + l.dominio).toLowerCase().includes(q)) && (!st.sit.length || st.sit.includes(l.sem)));
+      rows = rows.map(l => ({ ...l, sortv: { loja: l.nome, sit: l.sem, ped: l.t.ped, r: l.t.r, gasto: l.t.gasto, roas: l.t.roas, eq: l.t.eq, lucro: l.t.lucro, margem: l.t.margem, lpp: l.t.lpp } }));
+      rows = ordenar(rows);
+      const mkRow = (l, total) => {
+        const t = l.t; const s = SEM[l.sem];
+        const sp = total ? 'M0 12' : (() => { const vals = diasAtual.map(d => this.deriv(this.cru(d, [l.id])).lucro); const mn = Math.min(...vals), mx = Math.max(...vals), rg = mx - mn || 1; return vals.map((v, i) => `${i ? 'L' : 'M'}${(i / Math.max(1, vals.length - 1) * 80).toFixed(1)} ${(22 - (v - mn) / rg * 20).toFixed(1)}`).join(' '); })();
+        const pick = total ? undefined : () => this.setState({ loja: l.id, aba: 'dia' });
+        const base = { h: rowH, bg: total ? 'var(--surface-2)' : 'var(--surface)' };
+        return {
+          click: pick, cursor: total ? 'default' : 'pointer', bg: total ? 'var(--surface-2)' : 'transparent',
+          cells: [
+            { ...base, isLoja: true, v: total ? 'Todas as lojas' : l.nome, sub: total ? `${ATIVAS.length} ativas · blended` : l.dominio, align: 'left', fw: 600, fg: 'var(--ink)', pos: 'sticky', z: 1, click: pick, semClique: total ? 'true' : undefined, subFonte: 'inherit' },
+            total ? { ...base, ...cell('') , align: 'left' } : { ...base, ...badge(s[0], s[1]), align: 'left' },
+            { ...base, ...cell(num(t.ped), { fw: total ? 600 : 400 }) },
+            { ...base, ...cell(din(t.r), { fw: total ? 600 : 400 }) },
+            { ...base, ...cell(din(t.gasto), { fw: total ? 600 : 400 }) },
+            { ...base, ...cell(xv(t.roas), { fw: total ? 600 : 400 }) },
+            { ...base, ...cell(xv(t.eq), { fg: 'var(--t1)' }) },
+            { ...base, ...cell(din(t.lucro), { fw: 600, fg: lucroFg(t.lucro) }) },
+            { ...base, ...cell(pct(t.margem), { fg: lucroFg(t.lucro) }) },
+            { ...base, ...cell(din(t.lpp), { fg: lucroFg(t.lucro) }) },
+            total ? { ...base, ...cell('') } : { ...base, isSpark: true, v: sp, cor: t.lucro < 0 ? 'var(--err)' : 'var(--t1)', align: 'right' },
+          ],
+        };
+      };
+      linhas = rows.length ? [mkRow({ t: A, sem: 'verde' }, true), ...rows.map(l => mkRow(l))] : [];
+      cartoes = rows.map(l => ({ titulo: l.nome, sub: l.dominio, badge: SEM[l.sem][0], fgB: `var(--${SEM[l.sem][1]})`, bgB: `var(--${SEM[l.sem][1]}-bg)`, borda: `var(--${SEM[l.sem][1]}-border)`, bg: 'var(--surface)', click: () => this.setState({ loja: l.id, aba: 'dia' }),
+        campos: [{ label: 'Lucro estimado', v: din(l.t.lucro), fw: 600, fg: lucroFg(l.t.lucro) }, { label: 'Faturamento', v: din(l.t.r), fw: 400, fg: 'var(--ink)' }, { label: 'ROAS real · equil.', v: `${xv(l.t.roas)} · ${xv(l.t.eq)}`, fw: 400, fg: 'var(--ink)' }, { label: 'Margem', v: pct(l.t.margem), fw: 400, fg: lucroFg(l.t.lucro) }] }));
+      if (rows.length) cartoes.unshift({ titulo: 'Todas as lojas', sub: `${ATIVAS.length} ativas · blended`, badge: null, bg: 'var(--surface-2)', semClique: 'true', campos: [{ label: 'Lucro estimado', v: din(A.lucro), fw: 600, fg: lucroFg(A.lucro) }, { label: 'Faturamento', v: din(A.r), fw: 400, fg: 'var(--ink)' }, { label: 'ROAS real · equil.', v: `${xv(A.roas)} · ${xv(A.eq)}`, fw: 400, fg: 'var(--ink)' }, { label: 'Margem', v: pct(A.margem), fw: 400, fg: 'var(--ink)' }] });
+      rodape = 'Clique numa loja para ver só ela em todas as telas.';
+      anotAba = '#1 Parcial · a tendência por loja precisa da série diária por loja';
+    } else if (aba === 'dia') {
+      buscaRotulo = 'Buscar data'; caption = 'Lucro dia a dia';
+      cols = [['dia', 'Dia', 'left'], ['dow', 'Dia da semana', 'left', false, true], ['ped', 'Pedidos'], ['r', 'Faturamento'], ['cmv', 'Produtos + frete'], ['tax', 'Taxas'], ['meta', 'Meta'], ['google', 'Google'], ['lucro', 'Lucro estimado'], ['roas', 'ROAS real']];
+      const DOW = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+      let rows = diasAtual.map(d => ({ d, t: this.deriv(this.cru(d, ids)) })).filter(x => !q || x.d.iso.includes(q) || `${String(x.d.d.getDate()).padStart(2, '0')}/${String(x.d.d.getMonth() + 1).padStart(2, '0')}`.includes(q));
+      rows = rows.map(x => ({ ...x, sortv: { dia: x.d.iso, ped: x.t.ped, r: x.t.r, cmv: x.t.cmv, tax: x.t.tax, meta: x.t.meta, google: x.t.google, lucro: x.t.lucro, roas: x.t.roas } }));
+      const ss = st.sorts.some(s => ['dia', 'ped', 'r', 'cmv', 'tax', 'meta', 'google', 'lucro', 'roas'].includes(s.k));
+      rows = ss ? ordenar(rows) : [...rows].reverse();
+      const dl = d => `${String(d.d.getDate()).padStart(2, '0')}/${String(d.d.getMonth() + 1).padStart(2, '0')}`;
+      const mk = (x, total) => { const base = { h: rowH, bg: total ? 'var(--surface-2)' : 'var(--surface)' }; const t = x.t; const hoje = !total && x.d.iso === '2026-10-02';
+        return { cursor: 'default', bg: total ? 'var(--surface-2)' : 'transparent', cells: [
+          { ...base, ...cell(total ? 'Total do período' : dl(x.d), { align: 'left', fw: 600, pos: 'sticky', z: 1, tag: hoje ? 'hoje · parcial' : null }) },
+          { ...base, ...cell(total ? '' : DOW[x.d.dow], { align: 'left', fg: 'var(--t1)' }) },
+          { ...base, ...cell(num(t.ped)) }, { ...base, ...cell(din(t.r)) }, { ...base, ...cell(din(t.cmv), { fg: 'var(--t1)' }) }, { ...base, ...cell(din(t.tax), { fg: 'var(--t1)' }) },
+          { ...base, ...cell(din(t.meta), { fg: 'var(--t1)' }) }, { ...base, ...cell(din(t.google), { fg: 'var(--t1)' }) }, { ...base, ...cell(din(t.lucro), { fw: 600, fg: lucroFg(t.lucro) }) }, { ...base, ...cell(xv(t.roas)) } ] }; };
+      linhas = rows.length ? [mk({ t: A }, true), ...rows.map(x => mk(x))] : [];
+      cartoes = rows.map(x => ({ titulo: `${dl(x.d)} · ${DOW[x.d.dow]}`, sub: x.d.iso === '2026-10-02' ? 'hoje · parcial' : '', bg: 'var(--surface)', semClique: 'true', campos: [{ label: 'Lucro estimado', v: din(x.t.lucro), fw: 600, fg: lucroFg(x.t.lucro) }, { label: 'Faturamento', v: din(x.t.r), fw: 400, fg: 'var(--ink)' }, { label: 'Pedidos', v: num(x.t.ped), fw: 400, fg: 'var(--ink)' }, { label: 'ROAS real', v: xv(x.t.roas), fw: 400, fg: 'var(--ink)' }] }));
+      rodape = semHistAtual ? 'Sem dado antes de 03/08/2026: os dias anteriores não aparecem.' : 'O dia de hoje está incompleto até a meia-noite no horário de São Paulo.';
+    } else if (aba === 'produto') {
+      buscaRotulo = 'Buscar produto ou SKU'; caption = 'Lucro antes do anúncio por produto';
+      aviso = 'Lucro antes do anúncio. O gasto do Meta e do Google não é por produto, então esta aba desconta só produto, frete e taxa.';
+      anotAba = '#3 Parcial · ranking por SKU com as linhas dos pedidos · #34 Parcial · nome e foto buscados na Shopify por SKU';
+      const PRODS = [['Luminária articulada', 'Preta', 'LC-LUM-01-BK', 412, 59.9, 17.2], ['Kit organizador de gaveta', '6 peças', 'LC-ORG-06', 388, 39.9, 11.8], ['Jaqueta corta-vento', 'M · Areia', 'OW-JCK-M-SD', 301, 89.0, 31.5], ['Tapete antiderrapante', '60×90', 'KH-TAP-6090', 214, 49.0, 21.9], ['Garrafa térmica 1 L', 'Grafite', 'AF-GAR-1L-GR', 166, 34.0, 19.6], ['Faixa elástica de treino', 'Kit 5', 'AF-FAI-K5', 92, 24.0, null], ['Capa de almofada linho', '45×45 · Cru', 'KH-ALM-45-CR', 140, 29.0, 14.9]];
+      let rows = PRODS.map(([nome, vari, sku, un, preco, custo]) => { const rec = un * preco * 5.32; const c = custo === null ? null : un * custo * 5.32; const tax = rec * 0.045; const lucro = c === null ? null : rec - c - tax; return { nome, vari, sku, un, rec, c, lucro, mg: lucro === null ? null : lucro / rec, sortv: { produto: nome, un, rec, c: c ?? -1, lucro: lucro ?? -1e12, mg: lucro === null ? -1 : lucro / rec } }; });
+      rows = rows.filter(x => !q || (x.nome + x.sku).toLowerCase().includes(q));
+      rows.sort((a, b) => st.prodOrdem === 'mais' ? b.sortv.lucro - a.sortv.lucro : (a.lucro === null ? -1 : b.lucro === null ? 1 : a.lucro - b.lucro));
+      cols = [['produto', 'Produto', 'left'], ['un', 'Unidades'], ['rec', 'Receita'], ['c', 'Produto + frete'], ['lucro', 'Lucro antes do anúncio'], ['mg', 'Margem antes do anúncio']];
+      linhas = rows.map(x => { const base = { h: '56px', bg: 'var(--surface)' }; return { cursor: 'default', bg: 'transparent', cells: [
+        { ...base, isLoja: true, thumb: true, v: `${x.nome} · ${x.vari}`, sub: x.sku, subFonte: 'var(--font-mono)', align: 'left', fw: 500, fg: 'var(--ink)', pos: 'sticky', z: 1, semClique: 'true' },
+        { ...base, ...cell(num(x.un)) }, { ...base, ...cell(din(x.rec)) },
+        x.c === null ? { ...base, ...badge('Sem custo', 'warn'), align: 'right' } : { ...base, ...cell(din(x.c), { fg: 'var(--t1)' }) },
+        { ...base, ...cell(x.lucro === null ? '—' : din(x.lucro), { fw: 600 }) }, { ...base, ...cell(x.mg === null ? '—' : pct(x.mg)) } ] }; });
+      cartoes = rows.map(x => ({ titulo: `${x.nome} · ${x.vari}`, sub: x.sku, bg: 'var(--surface)', semClique: 'true', badge: x.c === null ? 'Sem custo' : null, fgB: 'var(--warn)', bgB: 'var(--warn-bg)', borda: 'var(--warn-border)', campos: [{ label: 'Lucro antes do anúncio', v: x.lucro === null ? '—' : din(x.lucro), fw: 600, fg: 'var(--ink)' }, { label: 'Receita', v: din(x.rec), fw: 400, fg: 'var(--ink)' }, { label: 'Unidades', v: num(x.un), fw: 400, fg: 'var(--ink)' }, { label: 'Margem', v: x.mg === null ? '—' : pct(x.mg), fw: 400, fg: 'var(--ink)' }] }));
+      rodape = 'SKU sem custo aparece como “—” e não entra na margem.';
+    } else if (aba === 'campanha') {
+      buscaRotulo = 'Buscar campanha'; caption = 'Desempenho por campanha';
+      aviso = 'Compras e valor são os que a própria plataforma reporta. O ROAS real da loja usa os pedidos da Shopify, para você comparar.';
+      anotAba = '#6 Parcial · leitura de ad_spend_daily no nível campanha · lucro por campanha: Novo';
+      const CAMP = [['Lumen · Luminárias · ABO', 'Meta', 'Lumen · Principal', 14820, 412300, 6120, 118, 31200, 'lumen'], ['Lumen · Pesquisa marca', 'Google', 'Lumen · Pesquisa', 3940, 38100, 2210, 61, 15900, 'lumen'], ['Orla · Corta-vento · CBO', 'Meta', 'Orla · Principal', 11250, 301800, 4380, 74, 24100, 'orla'], ['Kova · Casa · Advantage+', 'Meta', 'Kova · EU', 8610, 198400, 2940, 41, 12900, 'kova'], ['Alto · Garrafas · ABO', 'Meta', 'Alto · Principal', 2280, 70100, 990, 9, 2400, 'alto']];
+      let rows = CAMP.filter(c => !q || c[0].toLowerCase().includes(q)).map(c => ({ c, sortv: { camp: c[0], gasto: c[3], imp: c[4], cli: c[5], comp: c[6], val: c[7], rp: c[7] / c[3] } }));
+      rows = ordenar(rows);
+      cols = [['camp', 'Campanha', 'left'], ['plat', 'Plataforma', 'left', false, true], ['gasto', 'Gasto'], ['imp', 'Impressões'], ['cli', 'Cliques'], ['comp', 'Compras (plataforma)'], ['val', 'Valor (plataforma)'], ['rp', 'ROAS da plataforma'], ['rl', 'ROAS real da loja', 'right', false, true]];
+      linhas = rows.map(({ c }) => { const base = { h: rowH, bg: 'var(--surface)' }; const lr = lojaRows.find(l => l.id === c[8]); return { cursor: 'default', bg: 'transparent', cells: [
+        { ...base, isLoja: true, v: c[0], sub: c[2], align: 'left', fw: 500, fg: 'var(--ink)', pos: 'sticky', z: 1, semClique: 'true', subFonte: 'inherit' },
+        { ...base, ...badge(c[1], c[1] === 'Meta' ? 'info' : 'neutral'), align: 'left' },
+        { ...base, ...cell(din(c[3] * 5.32)) }, { ...base, ...cell(num(c[4])) }, { ...base, ...cell(num(c[5])) }, { ...base, ...cell(num(c[6])) }, { ...base, ...cell(din(c[7] * 5.32)) },
+        { ...base, ...cell(xv(c[7] / c[3])) }, { ...base, ...cell(lr ? xv(lr.t.roas) : '—', { fw: 600 }) } ] }; });
+      cartoes = rows.map(({ c }) => ({ titulo: c[0], sub: `${c[1]} · ${c[2]}`, bg: 'var(--surface)', semClique: 'true', campos: [{ label: 'Gasto', v: din(c[3] * 5.32), fw: 600, fg: 'var(--ink)' }, { label: 'ROAS da plataforma', v: xv(c[7] / c[3]), fw: 400, fg: 'var(--ink)' }, { label: 'Compras (plataforma)', v: num(c[6]), fw: 400, fg: 'var(--ink)' }, { label: 'Cliques', v: num(c[5]), fw: 400, fg: 'var(--ink)' }] }));
+      rodape = 'O lucro por campanha depende de ligar cada pedido à campanha: ainda não existe.';
+    }
+    const colunasTabela = cols.map(([k, label, align = 'right', legenda = false, semSort = false], i) => {
+      const si = st.sorts.findIndex(s => s.k === k); const s = st.sorts[si];
+      const ind = s ? `${s.dir === 'desc' ? '↓' : '↑'}${st.sorts.length > 1 ? si + 1 : ''}` : null;
+      return { label, align, legenda, ind, ariaSort: s ? (s.dir === 'desc' ? 'descending' : 'ascending') : undefined, sort: semSort ? undefined : clickSort(k), semSort: semSort ? 'true' : undefined, pos: i === 0 ? 'sticky' : 'static', z: i === 0 ? 2 : 0, dir: align === 'right' ? 'row-reverse' : 'row' };
+    });
+    const ABAS = [['loja', 'Loja'], ['dia', 'Dia'], ['produto', 'Produto'], ['campanha', 'Campanha'], ['pais', 'País', 'Em breve']].filter(([id]) => !(id === 'loja' && st.loja !== 'todas'));
+    const abas = ABAS.map(([id, label, tag]) => { const on = id === aba; return { label, tag: tag || null, on, pick: () => this.setState({ aba: id, busca: '', sit: [], filtroAberto: false, sorts: id === 'dia' ? [] : [{ k: id === 'produto' ? 'lucro' : id === 'campanha' ? 'gasto' : 'lucro', dir: 'desc' }] }), borda: on ? 'var(--ink)' : 'transparent', fg: on ? 'var(--ink)' : 'var(--t2)', fw: on ? 600 : 400 }; });
+    const temTabela = !carregando && !(erro && aba === 'loja') && !semDados && aba !== 'pais';
+    const filtradoVazio = temTabela && linhas.length === 0;
+    const opcoesSit = Object.entries(SEM).map(([id, [label, tom]]) => { const on = st.sit.includes(id); return { label, on, fg: `var(--${tom})`, borda: on ? 'var(--solid)' : 'var(--control-border)', bg: on ? 'var(--solid)' : 'transparent', toggle: () => this.setState(s => ({ sit: s.sit.includes(id) ? s.sit.filter(x => x !== id) : [...s.sit, id] })) }; });
+    const sitAtivos = st.sit.map(id => SEM[id][0]);
+    const seg = (list, cur, fn) => list.map(([id, label]) => { const on = id === cur; return { label, on, pick: () => fn(id), bg: on ? 'var(--surface)' : 'transparent', fg: on ? 'var(--ink)' : 'var(--t2)', fw: on ? 600 : 400, sh: on ? '0 0 0 1px var(--border)' : 'none' }; });
+    const semAcesso = LOJAS.filter(l => l.ativa === false);
+    // guia
+    const caminhos = seg([['direto', 'Anúncio direto na loja'], ['vitrine', 'Com vitrine']], st.caminho, id => this.setState({ caminho: id }));
+    const PASSOS = [
+      ['Conectar a loja Shopify', true, 'Feito', 'A loja está conectada e o xcart lê os pedidos a cada 15 minutos.', 'Ver lojas', 'Lojas.dc.html'],
+      ['Ligar as contas de anúncio', false, 'Falta', 'Ligue as contas do Meta e do Google a cada loja para o gasto entrar no lucro.', 'Ligar contas', 'Integracoes.dc.html'],
+      ['Cadastrar custos e taxas', false, 'Falta', 'Informe o custo de cada SKU e a taxa do gateway. Dá para importar por CSV.', 'Cadastrar custos', 'Casca.dc.html'],
+      ['Ligar o rastreamento', false, 'Falta', 'Envie as compras ao Meta e ao Google pelo servidor, sem depender do navegador.', 'Configurar rastreamento', 'Saude%20dos%20pixels.dc.html'],
+      ['Primeira venda rastreada', false, 'Aguardando', 'Marca sozinho quando a primeira compra chegar ao Meta ou ao Google.', 'Ver eventos ao vivo', 'Eventos%20ao%20vivo.dc.html'],
+    ];
+    const VITRINE = [['Escolher a vitrine e as lojas de checkout', false, 'Falta', 'A vitrine recebe o tráfego; o checkout é feito nas lojas de checkout.', 'Ativar roteamento', 'Casca.dc.html'], ['Instalar o script na vitrine e testar', false, 'Falta', 'Sem o script a rota não funciona. O teste usa um carrinho real.', 'Abrir rotas', 'Casca.dc.html']];
+    const lista = st.caminho === 'vitrine' ? [...PASSOS.slice(0, 1), ...VITRINE, ...PASSOS.slice(1)] : PASSOS;
+    const passosGuia = lista.map(([titulo, feito, estado, texto, cta, href], i) => ({ titulo, feito, estado, texto, cta, href, aberto: st.passoAberto === i, toggle: () => this.setState(s => ({ passoAberto: s.passoAberto === i ? -1 : i })), borda: feito ? 'var(--ok)' : 'var(--control-border)', fundo: feito ? 'var(--ok)' : 'transparent', fg: feito ? 'var(--t2)' : 'var(--ink)', risco: feito ? 'line-through' : 'none' }));
+    const COMO = [
+      ['O lucro é estimado, não contábil', 'Faturamento menos custo do produto, frete do fornecedor, taxa de pagamento e gasto em anúncios. Ainda não entram a taxa real do Shopify Payments, custos fixos mensais e IOF do cartão.'],
+      ['O faturamento inclui o frete cobrado', 'Para bater com a Shopify, compare com “Vendas totais menos impostos”, não com “Vendas líquidas”.'],
+      ['ROAS de equilíbrio', 'É o ROAS em que o lucro fica em zero: faturamento dividido pelo que sobra depois de produto, frete e taxa. Abaixo dele, cada anúncio dá prejuízo.'],
+      ['De onde vêm os números e quando atualizam', 'Pedidos da Shopify a cada 15 minutos. Gasto do Meta a cada 15 minutos; do Google, de hora em hora. Câmbio quatro vezes por dia.'],
+      ['Histórico', 'A Shopify entrega os últimos 60 dias de pedidos. Antes disso, os períodos mostram “sem dado antes de 03/08/2026”, nunca zero.'],
+    ];
+    const comoCalculamos = COMO.map(([t, d], i) => { const ab = st.como.includes(i); return { t, d, aberto: ab, seta: ab ? 'rotate(90deg)' : 'none', toggle: () => this.setState(s => ({ como: s.como.includes(i) ? s.como.filter(x => x !== i) : [...s.como, i] })) }; });
+    // frame
+    const fw = mobile ? 375 : 1440, fh = mobile ? 812 : 900;
+    const escala = mobile ? 1 : Math.min(1, Math.max(0.4, (st.vw - 32) / fw));
+    const PER_LBL = { hoje: 'hoje', ontem: 'ontem', '7d': 'últimos 7 dias', '30d': 'últimos 30 dias', mes: 'este mês', mes_passado: 'mês passado', ano: 'este ano', custom: 'período personalizado' };
+    const lojaLbl = lojaSel ? lojaSel.nome : 'Todas as lojas';
+    const toast = st.toast;
+    return {
+      theme: st.theme, width: st.width, cenario: st.cenario, anot: st.anot,
+      cenarios: [{ id: 'dados', label: 'Operação' }, { id: 'nova', label: 'Conta nova' }, { id: 'carregando', label: 'Carregando' }, { id: 'erro', label: 'Erro numa seção' }],
+      setTheme: v => { try { localStorage.setItem('xcart-mock-tema', v); } catch (e) {} set({ theme: v }); },
+      setWidth: v => { try { localStorage.setItem('xcart-mock-largura', v); } catch (e) {} set({ width: v, hov: null }); },
+      setCenario: v => set({ cenario: v }), setAnot: v => set({ anot: v }),
+      desktop: !mobile, mobile, frameDir: mobile ? 'column' : 'row', frameW: `${fw}px`, frameH: `${fh}px`, escala, wrapW: `${fw * escala}px`, wrapH: `${fh * escala}px`, frameRaio: mobile ? '28px' : '10px',
+      pad: mobile ? '16px 16px 32px' : '24px 32px 48px', kpiFs: mobile ? 'var(--fs-page)' : 'var(--fs-kpi)', kpiPad: mobile ? '12px' : '16px', kpiMin: mobile ? '150px' : '240px', graficoCols: mobile ? 'minmax(0,1fr)' : 'minmax(0,2fr) minmax(0,1fr)',
+      lojasTopo: LOJAS.map(l => ({ ...l, ativa: l.ativa !== false })), loja: st.loja, periodo: st.periodo, comparar: st.comparar, moeda: st.moeda,
+      setCtx: (k, v) => this.setState({ [k]: v, hov: null, ...(k === 'loja' && v === 'todas' ? { aba: 'loja' } : {}) }),
+      aoAtualizar: () => { clearTimeout(this._tt); this.setState({ toast: { t: 'Números atualizados', d: '3 pedidos novos desde 14:17.\nGasto do Meta atualizado; Google sem novidade.' } }); this._tt = setTimeout(() => this.setState({ toast: null }), 6000); },
+      exportar: () => { clearTimeout(this._tt); this.setState({ toast: { t: 'CSV pronto', d: `lucro-${aba}-${ini}-a-${fim}.csv\nValores em ${st.moeda}, com o contexto no cabeçalho.` } }); this._tt = setTimeout(() => this.setState({ toast: null }), 6000); },
+      toast: !!toast, toastTitulo: toast ? toast.t : '', toastTexto: toast ? toast.d : '', fecharToast: () => set({ toast: null }),
+      toastDir: mobile ? '12px' : '24px', toastEsq: mobile ? '12px' : 'auto', toastBase: mobile ? '76px' : '24px',
+      guiaCompacto: !nova && !st.guiaDispensado && !carregando, guiaCompleto: nova, dispensarGuia: () => set({ guiaDispensado: true }), caminhos, passosGuia,
+      lojaSemAcesso, lojaNome: lojaSel ? lojaSel.nome : '', lojaMotivo: lojaSel ? lojaSel.motivo : '',
+      temPendencias: pendAtivas.length > 0 && !carregando, contagens, pendVisiveis, pendAberta: st.pendAberta, togglePend: () => set({ pendAberta: !st.pendAberta }),
+      pendBotao: st.pendAberta ? 'Recolher' : `Ver todas (${pendAtivas.length})`, pendSeta: st.pendAberta ? 'rotate(180deg)' : 'none',
+      temDispensadas: st.dispensadas.length > 0, dispensadasTexto: `${st.dispensadas.length} ${st.dispensadas.length === 1 ? 'informativa dispensada' : 'informativas dispensadas'}.`, restaurar: () => set({ dispensadas: [] }),
+      semBase, semBaseTexto: st.periodo === 'ano' || st.periodo === 'mes_passado' ? 'Sem base de comparação: o período anterior começa antes do histórico (03/08/2026).' : 'Sem comparação escolhida para este período.',
+      carregando, mostraKpis: !carregando, oito: [1, 2, 3, 4, 5, 6, 7, 8], seis: [1, 2, 3, 4, 5, 6], kpis,
+      graficoTitulo: metrica ? `${MET_LBL[metrica]}: atual e período anterior` : 'Faturamento, gasto e lucro',
+      graficoSub: `${lojaLbl} · ${PER_LBL[st.periodo]} · ${st.moeda}${semHistAtual ? ' · sem dado antes de 03/08' : ''}`,
+      metricaAtiva: !!metrica, voltarComposto: () => set({ metrica: null, hov: null }),
+      grans, legenda, graficoComDados: !carregando && !semDados, graficoCarregando: carregando, graficoVazio: !carregando && semDados,
+      graficoH: `${H}px`, graficoHVazio: `${H + 34}px`, vb: `0 0 ${W} ${H}`, graficoAria: `Gráfico de linhas: ${metrica ? MET_LBL[metrica] : 'faturamento, gasto e lucro'} por ${gran === 'dia' ? 'dia' : gran === 'semana' ? 'semana' : 'mês'}. Passe o mouse ou use Tab para ver cada ponto.`,
+      gaps, ticksY, ticksX, linhasGrafico, colunas, baseY, eixoW: `${(padL / W * 100).toFixed(2)}%`, parcialOn, parcialLeft: `${(X(n - 1) / W * 100).toFixed(2)}%`, sairGrafico: () => set({ hov: null }),
+      hovOn: hov !== null, hovX: hov !== null ? X(hov).toFixed(1) : 0, hovPontos,
+      tipLeft: hov !== null ? `${(X(hov) / W * 100).toFixed(1)}%` : '0', tipTrans: hov !== null && X(hov) > W * 0.6 ? 'translateX(calc(-100% - 12px))' : 'translateX(12px)',
+      tipTitulo: hov !== null ? `${buckets[hov].label}${buckets[hov].parcial ? ' · parcial' : ''}` : '', tipLinhas,
+      cascata, cascataSub: `${lojaLbl} · ${PER_LBL[st.periodo]}`, cascataComDados: !carregando && !semDados && r > 0, cascataCarregando: carregando, cascataVazia: !carregando && (semDados || r <= 0),
+      abas, abaErro: erro && aba === 'loja', abaCarregando: carregando, abaVazia: !carregando && semDados && aba !== 'pais', abaEmBreve: aba === 'pais', abaTabela: temTabela,
+      tentando: st.tentando, tentarRotulo: st.tentando ? 'Tentando…' : 'Tentar de novo', tentarDeNovo: () => { set({ tentando: true }); setTimeout(() => this.setState({ tentando: false, cenario: 'dados' }), 1100); },
+      avisoAba: aviso, anotAba,
+      busca: st.busca, digitarBusca: e => set({ busca: e.target.value }), buscaRotulo,
+      temFiltroSit: aba === 'loja', filtroAberto: st.filtroAberto, abrirFiltro: () => set({ filtroAberto: !st.filtroAberto }), opcoesSit,
+      filtroRotulo: sitAtivos.length ? `Situação: ${sitAtivos.join(', ')}` : '+ Situação', filtroEstilo: sitAtivos.length ? 'solid' : 'dashed',
+      filtroBorda: sitAtivos.length ? 'var(--info-border)' : 'var(--control-border)', filtroBg: sitAtivos.length ? 'var(--info-bg)' : 'transparent', filtroFg: sitAtivos.length ? 'var(--info)' : 'var(--t1)',
+      temFiltroAtivo: !!(st.busca || st.sit.length), limparFiltros: () => set({ busca: '', sit: [], filtroAberto: false }),
+      temOrdemProd: aba === 'produto', ordensProd: seg([['mais', 'Mais lucrativos'], ['menos', 'Menos lucrativos']], st.prodOrdem, id => set({ prodOrdem: id })),
+      densidades: seg([['compacta', 'Compacta'], ['confortavel', 'Confortável']], st.densidade, id => set({ densidade: id })),
+      filtradoVazio, tabelaDesktop: !mobile && !filtradoVazio, tabelaMobile: mobile && !filtradoVazio, tabelaCaption: caption,
+      colunasTabela, linhasTabela: linhas, cartoes, legendaAberta: st.legendaAberta, toggleLegenda: (e) => { e.stopPropagation(); set({ legendaAberta: !st.legendaAberta }); },
+      temSemAcesso: aba === 'loja' && st.loja === 'todas', semAcessoAberto: st.semAcessoAberto, toggleSemAcesso: () => set({ semAcessoAberto: !st.semAcessoAberto }), semAcessoSeta: st.semAcessoAberto ? 'rotate(90deg)' : 'none',
+      semAcessoTitulo: `${semAcesso.length} lojas sem acesso`, semAcesso,
+      rodapeTabela: rodape, moeda: st.moeda, comoCalculamos,
+    };
+  }
+  cru(d, ids) { const t = { ped: 0, r: 0, cmv: 0, tax: 0, meta: 0, google: 0 }; for (const id of ids) { const x = d.lojas[id]; if (!x) continue; t.ped += x.ped; t.r += x.r; t.cmv += x.cmv; t.tax += x.tax; t.meta += x.meta; t.google += x.google; } return t; }
+  somarLoja(dias, id) { const t = { ped: 0, r: 0, cmv: 0, tax: 0, meta: 0, google: 0 }; for (const d of dias) { const x = d.lojas[id]; t.ped += x.ped; t.r += x.r; t.cmv += x.cmv; t.tax += x.tax; t.meta += x.meta; t.google += x.google; } return this.deriv(t); }
+  deriv(t) {
+    const gasto = t.meta + t.google; const lucro = t.r - t.cmv - t.tax - gasto; const cm2 = t.r - t.cmv - t.tax;
+    return { ...t, gasto, lucro, roas: gasto > 0 ? t.r / gasto : null, eq: cm2 > 0 ? t.r / cm2 : null, margem: t.r > 0 ? lucro / t.r : null, cpa: t.ped > 0 && gasto > 0 ? gasto / t.ped : null, ticket: t.ped > 0 ? t.r / t.ped : null, lpp: t.ped > 0 ? lucro / t.ped : null, reenv: Math.round(t.ped * 0.007) };
+  }
+  semaforo(t) { if (t.gasto <= 0) return 'cinza'; if (t.lucro < 0) return 'vermelho'; if (t.roas !== null && t.eq !== null && t.roas < 1.2 * t.eq) return 'amarelo'; return 'verde'; }
+  passoBom(x) { const e = Math.pow(10, Math.floor(Math.log10(x))); const f = x / e; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e; }
+}
+</script>
+</body>
+</html>

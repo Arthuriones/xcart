@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <title>xcart · Proposta da Fase 0</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Public+Sans:wght@400;500;600;700&amp;display=swap">
+  <link rel="stylesheet" href="xcart-tokens.css">
+</helmet>
+<div style="min-height:100vh; background:#e9e8e5; display:flex; flex-direction:column;">
+  <dc-import name="Revisao" tela="Proposta da Fase 0" theme="{{ theme }}" width="{{ width }}" anot="{{ anot }}" onTheme="{{ setTheme }}" onWidth="{{ setWidth }}" onAnot="{{ setAnot }}" hint-size="100%,48px"></dc-import>
+  <div data-theme="{{ theme }}" style="flex:1; background:var(--bg); color:var(--ink);">
+    <div style="max-width:{{ maxW }}; margin:0 auto; padding:{{ pad }}; display:flex; flex-direction:column; gap:48px;">
+      <header style="display:flex; flex-direction:column; gap:10px;">
+        <span style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--t2);">Redesign do xcart · Fase 0 · 02/10/2026</span>
+        <h1 style="font-size:var(--fs-page); line-height:28px; font-weight:600;">Proposta para aprovação do Arthur</h1>
+        <p style="font-size:var(--fs-body); color:var(--t1); text-wrap:pretty;">Dinheiro e rastreamento no centro, roteamento como módulo. Esta página reúne o mapa de navegação, os links para os mockups, os arquivos de leitura que pedem aprovação e as decisões. Nenhum código de tela foi escrito: a Fase 1 começa depois do seu ok.</p>
+      </header>
+
+      <section aria-labelledby="m1" style="display:flex; flex-direction:column; gap:14px;">
+        <h2 id="m1" style="font-size:var(--fs-overlay); font-weight:600;">1. Mockups</h2>
+        <p style="font-size:var(--fs-dense); color:var(--t1); text-wrap:pretty;">Cada arquivo abre no navegador. A barra de revisão no topo troca tema, largura (1440 ou 375 px), cenário (com dados, vazio, carregando, erro) e mostra anotações com o número da função da seção 8 e o tipo de backend. A escolha de tema e largura vale para todos os arquivos. Dentro do app: ⌘K ou Ctrl K abre a busca, “g” + letra navega, “?” lista os atalhos.</p>
+        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax({{ cardMin }}, 1fr)); gap:12px;">
+          <sc-for list="{{ mockups }}" as="m" hint-placeholder-count="9">
+            <a href="{{ m.href }}" style="display:flex; flex-direction:column; gap:6px; padding:16px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); text-decoration:none; color:var(--ink);" style-hover="border-color:var(--border-strong); text-decoration:none; color:var(--ink);">
+              <span style="display:flex; justify-content:space-between; gap:8px; align-items:baseline;"><strong style="font-size:var(--fs-section); font-weight:600;">{{ m.t }}</strong><span style="font-size:var(--fs-label); color:var(--brand); white-space:nowrap;">Abrir →</span></span>
+              <span style="font-size:var(--fs-dense); color:var(--t1); text-wrap:pretty;">{{ m.d }}</span>
+              <span style="font-size:var(--fs-label); color:var(--t2);">{{ m.c }}</span>
+            </a>
+          </sc-for>
+        </div>
+      </section>
+
+      <section aria-labelledby="m2" style="display:flex; flex-direction:column; gap:14px;">
+        <h2 id="m2" style="font-size:var(--fs-overlay); font-weight:600;">2. Mapa de navegação</h2>
+        <p style="font-size:var(--fs-dense); color:var(--t1); text-wrap:pretty;">De 5 grupos, 15 itens e 3 telas órfãs para 6 grupos sem órfãs. Validado contra os fluxos da seção 7: “quanto lucrei” fica a 0 cliques (home), “o rastreamento funciona” a 1, “o que quebrou” a 1 pelo sino ou pelo menu.</p>
+        <div style="overflow-x:auto; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card);">
+          <table style="width:100%; border-collapse:collapse; font-size:var(--fs-dense);">
+            <caption style="position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);">Navegação proposta</caption>
+            <thead><tr><sc-for list="{{ cabNav }}" as="h" hint-placeholder-count="3"><th scope="col" style="height:40px; padding:0 12px; text-align:left; font-size:var(--fs-label); font-weight:600; color:var(--t1); background:var(--surface-2); border-bottom:1px solid var(--border);">{{ h }}</th></sc-for></tr></thead>
+            <tbody><sc-for list="{{ nav }}" as="n" hint-placeholder-count="6"><tr>
+              <td style="padding:12px; border-bottom:1px solid var(--border-subtle); vertical-align:top; font-weight:600; white-space:nowrap;">{{ n.g }}</td>
+              <td style="padding:12px; border-bottom:1px solid var(--border-subtle); vertical-align:top;">{{ n.itens }}</td>
+              <td style="padding:12px; border-bottom:1px solid var(--border-subtle); vertical-align:top; color:var(--t1); text-wrap:pretty;">{{ n.porque }}</td>
+            </tr></sc-for></tbody>
+          </table>
+        </div>
+        <div style="display:grid; grid-template-columns:{{ cols2 }}; gap:12px;">
+          <sc-for list="{{ navExtras }}" as="x" hint-placeholder-count="4">
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:6px;"><strong style="font-size:var(--fs-dense); font-weight:600;">{{ x.t }}</strong><span style="font-size:var(--fs-dense); color:var(--t1); text-wrap:pretty;">{{ x.d }}</span></div>
+          </sc-for>
+        </div>
+        <h3 style="font-size:var(--fs-section); font-weight:600; margin-top:8px;">URLs novas e redirecionamentos</h3>
+        <div style="overflow-x:auto; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card);">
+          <table style="width:100%; border-collapse:collapse; font-size:var(--fs-dense);">
+            <caption style="position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);">URLs</caption>
+            <thead><tr><sc-for list="{{ cabUrl }}" as="h" hint-placeholder-count="3"><th scope="col" style="height:40px; padding:0 12px; text-align:left; font-size:var(--fs-label); font-weight:600; color:var(--t1); background:var(--surface-2); border-bottom:1px solid var(--border);">{{ h }}</th></sc-for></tr></thead>
+            <tbody><sc-for list="{{ urls }}" as="u" hint-placeholder-count="10"><tr>
+              <td style="padding:10px 12px; border-bottom:1px solid var(--border-subtle); font-family:var(--font-mono); font-size:var(--fs-label); white-space:nowrap;">{{ u.de }}</td>
+              <td style="padding:10px 12px; border-bottom:1px solid var(--border-subtle); font-family:var(--font-mono); font-size:var(--fs-label);">{{ u.para }}</td>
+              <td style="padding:10px 12px; border-bottom:1px solid var(--border-subtle); color:var(--t1);">{{ u.obs }}</td>
+            </tr></sc-for></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section aria-labelledby="m3" style="display:flex; flex-direction:column; gap:14px;">
+        <h2 id="m3" style="font-size:var(--fs-overlay); font-weight:600;">3. Arquivos novos de leitura (pedem aprovação)</h2>
+        <p style="font-size:var(--fs-dense); color:var(--t1); text-wrap:pretty;">Todos são arquivos novos, só leem dado que já existe, sem migration. Ficam numa pasta nova, src/lib/leitura/, para não encostar nas pastas travadas (financeiro/calculo.ts, tracking, checkout-routes). Número de lucro sempre chama calcularFinanceiro sem alterá-lo.</p>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <sc-for list="{{ leituras }}" as="l" hint-placeholder-count="10">
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:14px 16px; display:grid; grid-template-columns:{{ leituraCols }}; gap:8px 20px; align-items:start;">
+              <span style="display:flex; flex-direction:column; gap:4px;"><span style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--ink); word-break:break-all;">{{ l.arq }}</span><span style="font-family:var(--font-mono); font-size:var(--fs-label); color:var(--t2);">{{ l.rota }}</span></span>
+              <span style="font-size:var(--fs-dense); color:var(--t1); text-wrap:pretty;">{{ l.le }}</span>
+              <span style="font-size:var(--fs-label); font-weight:600; color:var(--info); white-space:nowrap;">{{ l.n }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <section aria-labelledby="m4" style="display:flex; flex-direction:column; gap:14px;">
+        <h2 id="m4" style="font-size:var(--fs-overlay); font-weight:600;">4. Decisões para o Arthur</h2>
+        <ol style="list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px;">
+          <sc-for list="{{ decisoes }}" as="d" hint-placeholder-count="9">
+            <li style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; gap:14px; align-items:flex-start;">
+              <span aria-hidden="true" style="width:28px; height:28px; flex:none; border-radius:50%; display:grid; place-items:center; background:var(--track); font-size:var(--fs-label); font-weight:600; color:var(--t1);">{{ d.n }}</span>
+              <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
+                <strong style="font-size:var(--fs-section); font-weight:600;">{{ d.t }}</strong>
+                <span style="font-size:var(--fs-dense); color:var(--t1); text-wrap:pretty;">{{ d.d }}</span>
+                <span style="font-size:var(--fs-dense); text-wrap:pretty;"><strong style="font-weight:600; color:var(--ok);">Recomendação:</strong> {{ d.r }}</span>
+              </div>
+            </li>
+          </sc-for>
+        </ol>
+      </section>
+
+      <section aria-labelledby="m5" style="display:flex; flex-direction:column; gap:14px;">
+        <h2 id="m5" style="font-size:var(--fs-overlay); font-weight:600;">5. Separado por tipo de trabalho</h2>
+        <div style="display:grid; grid-template-columns:{{ cols3 }}; gap:12px;">
+          <sc-for list="{{ tipos }}" as="t" hint-placeholder-count="3">
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:8px;">
+              <span style="display:inline-flex; align-self:flex-start; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ t.borda }}; background:{{ t.bg }}; color:{{ t.fg }}; font-size:var(--fs-label); font-weight:600;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ t.tag }}</span>
+              <strong style="font-size:var(--fs-dense); font-weight:600;">{{ t.t }}</strong>
+              <ul style="margin:0; padding-left:18px; display:flex; flex-direction:column; gap:4px; font-size:var(--fs-dense); color:var(--t1);"><sc-for list="{{ t.itens }}" as="i" hint-placeholder-count="6"><li>{{ i }}</li></sc-for></ul>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <section aria-labelledby="m6" style="display:flex; flex-direction:column; gap:14px;">
+        <h2 id="m6" style="font-size:var(--fs-overlay); font-weight:600;">6. Bugs de front que o redesign resolve</h2>
+        <p style="font-size:var(--fs-dense); color:var(--t1);">Sem mudar API. Os marcados com • já aparecem resolvidos nos mockups.</p>
+        <ul style="margin:0; padding-left:18px; columns:{{ colunasBugs }}; column-gap:32px; font-size:var(--fs-dense); color:var(--t1);">
+          <sc-for list="{{ bugs }}" as="b" hint-placeholder-count="17"><li style="break-inside:avoid; margin-bottom:6px;">{{ b }}</li></sc-for>
+        </ul>
+      </section>
+
+      <section aria-labelledby="m7" style="display:flex; flex-direction:column; gap:10px;">
+        <h2 id="m7" style="font-size:var(--fs-overlay); font-weight:600;">7. Fora desta rodada</h2>
+        <p style="font-size:var(--fs-dense); color:var(--t1); text-wrap:pretty;">Custos, Importar, Roteamento (lista e detalhe), Atividade, Assinatura, paywall, login, admin, landing e páginas legais entram na Fase 3, na ordem do brief. A tela de Pedidos (#4) está só no menu como “Proposta” e espera a decisão 3. O texto da política de privacidade é jurídico: está sinalizado, não foi escrito.</p>
+      </section>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { theme: 'light', width: 'desktop', anot: false };
+  componentDidMount() { try { const t = localStorage.getItem('xcart-mock-tema'); const w = localStorage.getItem('xcart-mock-largura'); const s = {}; if (t) s.theme = t; if (w) s.width = w; this.setState(s); } catch (e) {} }
+  renderVals() {
+    const st = this.state; const mobile = st.width === 'mobile'; const set = o => this.setState(o);
+    const mockups = [
+      ['Fundação', 'Fundacao.dc.html', 'Tokens claro e escuro, tabela de contraste calculada, escala tipográfica, espaço, status, paleta de gráfico e componentes.', 'Regra de número A × B lado a lado'],
+      ['Casca', 'Casca.dc.html', 'Menu recolhível, barra de contexto, ⌘K, sino, “Mais” no celular, carregando, erro, 404 e roteamento desligado.', '5 cenários'],
+      ['Lucro (home)', 'Lucro.dc.html', 'Pendências por severidade, 8 KPIs com comparação, gráfico com tracejado, cascata, “Detalhar por” Loja · Dia · Produto · Campanha · País.', 'Clique num KPI para vê-lo no gráfico; clique numa loja para entrar no contexto dela'],
+      ['Saúde dos pixels', 'Saude%20dos%20pixels.dc.html', 'Lojas da mais urgente para a mais tranquila, um problema e um botão por loja, detalhe em painel lateral.', 'Resolver uma loja muda a lista na hora'],
+      ['Eventos ao vivo', 'Eventos%20ao%20vivo.dc.html', 'Ao vivo ou pausado, contadores clicáveis, visões salvas, filtros em chip e detalhe do evento.', 'Linha nova chega a cada 6 s com destaque'],
+      ['Alertas', 'Alertas.dc.html', 'Abertos com “Resolver” e silenciar, resolvidos, regras atuais e alerta por número “Em breve”.', 'Silenciar tem “Desfazer”'],
+      ['Lojas e detalhe da loja', 'Lojas.dc.html', 'Ativas e sem acesso separadas, ação sugerida por loja, remoção com inventário, detalhe com abas e “Conectar loja” em 4 passos.', 'Cenário “Voltou da Shopify” mostra os próximos passos'],
+      ['Integrações → Meta', 'Integracoes.dc.html', 'Ler o gasto e enviar as compras lado a lado, contas com loja, gasto e switch com “Desfazer”, modo manual em passos.', 'Cenário “Não conectado” mostra o assistente'],
+    ].map(([t, href, d, c]) => ({ t, href, d, c }));
+    const nav = [
+      ['Lucro (home)', 'Lucro · Pedidos (proposta) · Custos e taxas', 'É a primeira pergunta do lojista. Contas de anúncio sai daqui e vai para Integrações.'],
+      ['Rastreamento', 'Saúde dos pixels · Eventos ao vivo', 'Um nome só no menu e no título. Alertas sai daqui.'],
+      ['Alertas', 'Alertas, mais o sino no topo', 'O alerta cobre vendas, gasto e rastreamento: não é sub-item de Rastreamento.'],
+      ['Operação', 'Lojas (com detalhe) · Importar · Atividade', 'Importar junta /clone, /clone/shopify, /bulk e /multi-site com escolha de origem e uma fila.'],
+      ['Roteamento (módulo)', 'Rotas (lista e detalhe com abas Visão, Lojas e divisão, Vendas, Diagnóstico, Instalação)', 'Quem não usa vitrine vê só “Ativar roteamento”, sem checklist eterno nem “Sem rota”.'],
+      ['Configurações', 'Integrações · Assinatura e créditos · Conta (nova) · Guia de configuração', 'Integrações junta, por plataforma, gasto e conversão; Notificações e Claude/MCP (Avançado) ficam aqui.'],
+    ].map(([g, itens, porque]) => ({ g, itens, porque }));
+    const navExtras = [
+      ['Celular', 'Barra inferior: Lucro · Rastreamento · Alertas · Lojas · Mais. “Mais” abre o menu completo com conta, tema e Sair. Topo: logo, título, busca, sino e um botão de contexto que abre num painel.'],
+      ['Barra de contexto', 'Mesmo componente em toda tela com número: loja, período, comparação, moeda, fuso e “Atualizado às”. Cookie como memória e reflexo na URL. Tela que usa só a loja diz isso; tela com período fixo diz qual.'],
+      ['Busca e atalhos', '⌘K leva a telas, lojas e ações; operadores sku:, loja:, pedido:, status:, valor:>100. “g” + letra e “?” para a lista. Bloco “Atalhos” na barra lateral com visões salvas.'],
+      ['Admin (adm.*)', 'Navegação própria que também funciona no celular e link de volta para o app. Desenho na Fase 3.'],
+    ].map(([t, d]) => ({ t, d }));
+    const urls = [
+      ['/financeiro', 'mantém', 'Home oficial'], ['/financeiro/pedidos', 'nova', 'Só se a decisão 3 for sim'], ['/financeiro/anuncios', '→ /integracoes/meta', 'Redirect'],
+      ['—', '/integracoes, /integracoes/[meta|google|shopify|notificacoes|avancado]', 'Novas'], ['/claude', '→ /integracoes/avancado', 'Redirect'],
+      ['/stores', 'mantém', 'O retorno do OAuth cai em /stores?installed=1'], ['—', '/stores/[id]', 'Detalhe da loja, nova'],
+      ['/clone (exato), /clone/shopify/*, /bulk, /multi-site', '→ /importar?origem=…', 'Redirect; /clone/routed-checkout/* não é afetado'],
+      ['/overview', '→ /rotas/[primeira]?aba=visao', 'Redirect'], ['/sales', '→ /rotas/[primeira]?aba=vendas', 'Redirect, mantendo ?periodo'],
+      ['/clone/routed-checkout', '→ /rotas', 'Redirect'], ['/clone/routed-checkout/active-routes, /create-destination, /create-route, /map, /neutralize, /script', '→ console de rotas', 'Continuam redirecionando, como hoje'],
+      ['—', '/conta', 'Nova'], ['/setup', 'mantém', 'Vira o guia de configuração'], ['/billing, /no-access, /login, /set-password', 'mantém', 'Pós-login para /financeiro só com aprovação (decisão 6)'],
+    ].map(([de, para, obs]) => ({ de, para, obs }));
+    const leituras = [
+      ['src/lib/leitura/serie-diaria.ts', 'GET /api/leitura/serie', 'Série diária do período atual e do anterior, no total e por loja: chama calcularFinanceiro uma vez por intervalo (e por loja) e devolve porDia.', '#1'],
+      ['src/lib/leitura/por-produto.ts', 'GET /api/leitura/produtos', 'Agrega as linhas de fin_orders por SKU (unidades, receita) e aplica custoVigente para o lucro antes do anúncio.', '#3'],
+      ['src/lib/leitura/por-campanha.ts', 'GET /api/leitura/campanhas', 'Lê ad_spend_daily com nível campanha: gasto, impressões, cliques, compras e valor reportados.', '#6'],
+      ['src/lib/leitura/gasto-por-conta.ts', 'GET /api/leitura/contas-gasto', 'Lê ad_spend_daily com nível conta: gasto de hoje e do período por conta.', '#12'],
+      ['src/lib/leitura/sku-shopify.ts', 'GET /api/leitura/skus?loja=', 'Busca nome, variante e imagem por SKU na Shopify com a credencial que a loja já tem. Cache só em memória.', '#34'],
+      ['src/lib/leitura/notificacoes.ts', 'GET /api/leitura/notificacoes', 'Alertas abertos e resolvidos para o sino. Lido e adiar precisam de coluna nova: ficam fora.', '#13'],
+      ['src/lib/leitura/busca.ts', 'GET /api/leitura/busca?q=', 'Lojas, rotas, pedidos (número em fin_orders) e SKUs para o ⌘K.', '#18'],
+      ['src/lib/leitura/comparativo-envio.ts', 'GET /api/leitura/comparativo', 'Pedidos × compras enviadas (fila de envio) × compras reportadas por conta de anúncio, por loja e dia.', '#8'],
+      ['src/lib/leitura/resumo-lojas.ts', 'GET /api/leitura/lojas', 'Faturamento e lucro do período por loja (calcularFinanceiro) e estado do rastreamento (diagnóstico atual) para a lista de Lojas.', '#26'],
+      ['src/lib/leitura/pedidos.ts', 'GET /api/leitura/pedidos', 'Lista paginada de fin_orders sem dado pessoal, com o status de envio de cada pedido pelo feed.', '#4 e #5, só com a decisão 3'],
+    ].map(([arq, rota, le, n]) => ({ arq, rota, le, n }));
+    const decisoes = [
+      ['A nova arquitetura', 'Integrações une Contas de anúncio com a configuração Meta e Google do rastreamento; Alertas sai de Rastreamento; Roteamento vira módulo recolhido.', 'aprovar como está nos mockups.'],
+      ['Uma lista única de benefícios e o teste grátis', 'Landing, paywall e /billing usam a mesma lista. Hoje nenhuma cita Lucro nem rastreamento, e a landing não diz que não há teste.', 'a lista começa por Lucro por loja, Rastreamento pelo servidor e Alertas; o texto e a política de teste são seus.'],
+      ['Catálogo e lista pedido a pedido', 'O HANDOFF disse não às duas. Agora fin_orders tem os pedidos sem dado pessoal.', 'sim para Pedidos (lista sem dado pessoal, com lucro estimado e envio ao Meta e ao Google); não para catálogo.'],
+      ['Biblioteca de gráfico e regra de número', 'Detalhes em Fundação, seções 3 e 6.', 'Recharts e Public Sans com algarismos tabulares em todo número; mono só para identificadores.'],
+      ['Prioridade das funções com backend novo', 'OAuth Meta e Google, Telegram em 1 clique, e-mail e push, regras configuráveis, país, qualidade de correspondência, metas, custos avançados, resumo diário, admin, “Perguntar ao xcart” e app instalável.', 'primeiro OAuth (#11) e Telegram em 1 clique (#14), porque são as configurações mais difíceis hoje; depois regras (#15) e custos avançados (#23), alinhados ao “Depois” do plano.md.'],
+      ['Pós-login e instrução do script', 'Ir para /financeiro depois do login muda redirect em callback/route.ts, no login e em set-password. A instrução do script diz </head> num lugar e </body> no outro.', 'aprovar /financeiro; o dev confirma qual posição o script exige e o design mostra só essa.'],
+      ['Mudanças que mexem em consulta ou lógica', 'Período escolhível em Saúde dos pixels e Vendas, filtros no servidor em Eventos, intervalo de datas livre e guia com dois caminhos.', 'aprovar primeiro o intervalo livre (#2) e o guia com dois caminhos (#17), que mudam a home; depois os filtros de Eventos (#33).'],
+      ['Os arquivos de leitura', 'A lista da seção 3.', 'aprovar #1, #3, #6, #12, #13, #26 e #34 para a Fase 4; #4/#5 dependem da decisão 3.'],
+      ['Texto da política de privacidade', 'O texto atual descreve o produto antigo e não cita dados de rastreamento e de anúncios.', 'revisão jurídica sua; o design só entrega o layout com índice e data.'],
+    ].map(([t, d, r], i) => ({ n: String(i + 1), t, d, r }));
+    const tipos = [
+      ['ok', 'Só front', 'Faço na Fase 1 a 3', ['Tokens, primitivos e casca', 'Integrações por plataforma (#10)', 'Exportar CSV (#19)', 'KPI fixado (#22)', 'Detalhe do evento com o que o feed já traz (#25)', 'Loja vinda da barra global em Saúde dos pixels e Vendas']],
+      ['info', 'Leitura nova de dado que existe', 'Espera a aprovação da seção 3', ['Série do período anterior e por loja (#1)', 'Lucro por produto (#3) e nome e foto por SKU (#34)', 'Campanhas (#6) e gasto por conta (#12)', 'Sino com alertas (#13) e busca de objetos (#18)', 'Comparativo enviada × contada (#8)']],
+      ['neutral', 'Backend novo', 'Desenhado com “Em breve”', ['OAuth Meta e Google (#11)', 'Telegram em 1 clique, e-mail e push (#14)', 'Regras e alerta por número (#15)', 'Lucro por país (#7), qualidade de correspondência (#9)', 'Resposta da plataforma e reenviar evento (#25)', 'Metas (#21) e custos avançados (#23)']],
+    ].map(([tom, tag, t, itens]) => ({ tag, t, itens, fg: `var(--${tom})`, bg: `var(--${tom}-bg)`, borda: `var(--${tom}-border)` }));
+    const bugs = ['• Toast perdendo as quebras de linha', '• .skeleton invisível no tema claro', 'Largura do DialogContent e “Close” em inglês', '“Atualizar” travado em /bulk e /multi-site', '• Remover loja sem tirar a linha', 'Rota nova sem aparecer no console', '“Parar/Voltar” sem conferir a resposta', '% da divisão gravando a cada tecla', 'AddStorePanel ignorando needsInstall', 'Avançar a Seleção sem catálogo', '/billing engolindo a falha', 'Login sem ler ?error=', '+20/+100 do admin fechando o modal', '<tr> sem teclado no admin', '<Button> dentro de <a>', 'Importação sem aviso ao sair', '• Falha de uma loja derrubando /tracking'];
+    return {
+      theme: st.theme, width: st.width, anot: st.anot,
+      setTheme: v => { try { localStorage.setItem('xcart-mock-tema', v); } catch (e) {} set({ theme: v }); },
+      setWidth: v => { try { localStorage.setItem('xcart-mock-largura', v); } catch (e) {} set({ width: v }); }, setAnot: v => set({ anot: v }),
+      maxW: mobile ? '375px' : '1080px', pad: mobile ? '24px 16px 64px' : '40px 32px 80px', cardMin: mobile ? '100%' : '300px', cols2: mobile ? '1fr' : 'repeat(2, minmax(0,1fr))', cols3: mobile ? '1fr' : 'repeat(3, minmax(0,1fr))',
+      leituraCols: mobile ? '1fr' : 'minmax(0,1.1fr) minmax(0,1.6fr) 120px', colunasBugs: mobile ? 1 : 2,
+      mockups, cabNav: ['Grupo', 'Itens', 'Por quê'], nav, navExtras, cabUrl: ['De', 'Para', 'Observação'], urls, leituras, decisoes, tipos, bugs,
+    };
+  }
+}
+</script>
+</body>
+</html>
