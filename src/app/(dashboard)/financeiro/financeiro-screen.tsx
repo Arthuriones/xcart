@@ -307,25 +307,41 @@ export function FinanceiroScreen({ dados }: { dados: Dados }) {
       acao: { rotulo: sincronizando ? "Atualizando…" : "Atualizar agora", onClick: atualizarAgora },
     });
   }
-  for (const e of dados.estados) {
-    const loja = lojaPorId.get(e.store_id);
-    const nome = loja ? rotuloLoja(loja) : e.store_id;
-    if (e.ultimo_erro_tipo === "negado") {
-      avisos.push({
-        chave: `negado-${e.store_id}`,
-        tom: "err",
-        titulo: `A loja ${nome} não liberou leitura de pedidos (read_orders). Reconecte em Lojas.`,
-        detalhe: "Sem essa permissão, o faturamento dela não entra no lucro.",
-        acao: { rotulo: "Abrir Lojas", href: "/stores" },
-      });
-    } else if (e.ultimo_erro) {
-      avisos.push({
-        chave: `erro-${e.store_id}`,
-        tom: "warn",
-        titulo: `Os pedidos de ${nome} não atualizaram na última rodada.`,
-        detalhe: e.ultimo_erro,
-      });
-    }
+  // UM aviso por tipo de erro, com as lojas listadas -- nao um por loja. A
+  // conta do Arthur tinha 7 lojas antigas cadastradas (pausada, app
+  // desinstalado, token velho), e a home virava uma parede de caixas
+  // vermelhas por lojas que ele nem usa mais.
+  const nomeDe = (id: string) => {
+    const loja = lojaPorId.get(id);
+    return loja ? rotuloLoja(loja) : id;
+  };
+  const negadas = dados.estados.filter((e) => e.ultimo_erro_tipo === "negado");
+  const falharam = dados.estados.filter(
+    (e) => e.ultimo_erro_tipo !== "negado" && e.ultimo_erro
+  );
+  if (negadas.length > 0) {
+    avisos.push({
+      chave: "negado",
+      tom: "warn",
+      titulo:
+        negadas.length === 1
+          ? `A Shopify não deixa ler os pedidos de ${nomeDe(negadas[0].store_id)}.`
+          : `A Shopify não deixa ler os pedidos de ${negadas.length} lojas: ${negadas.map((e) => nomeDe(e.store_id)).join(", ")}.`,
+      detalhe:
+        "Loja pausada ou sem plano, app desinstalado, token vencido ou sem a permissão de pedidos. O faturamento delas fica de fora. Se não usa mais, desconecte em Lojas; se usa, reconecte.",
+      acao: { rotulo: "Abrir Lojas", href: "/stores" },
+    });
+  }
+  if (falharam.length > 0) {
+    avisos.push({
+      chave: "falhou",
+      tom: "warn",
+      titulo:
+        falharam.length === 1
+          ? `Os pedidos de ${nomeDe(falharam[0].store_id)} não atualizaram na última rodada.`
+          : `Os pedidos de ${falharam.length} lojas não atualizaram na última rodada: ${falharam.map((e) => nomeDe(e.store_id)).join(", ")}.`,
+      detalhe: falharam[0].ultimo_erro,
+    });
   }
 
   if (dados.contas.total === 0 || dados.contas.semLoja > 0) {
