@@ -5,12 +5,16 @@ import { textos } from "@/lib/textos";
 import {
   Radar,
   Activity,
+  Bell,
+  Calculator,
   ChevronDown,
+  CircleDollarSign,
   CreditCard,
   Download,
   LayoutGrid,
   ListChecks,
   LogOut,
+  Megaphone,
   Store,
   TrendingUp,
   Terminal,
@@ -29,7 +33,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LogoXcart } from "@/components/layout/logo";
+import { hrefAtivo } from "@/components/layout/nav-ativo";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { APP_HOME } from "@/lib/app-home";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -46,40 +52,60 @@ interface NavSection {
   items: NavItem[];
 }
 
-// A ordem e a do design: o que se configura uma vez em cima, a operacao no
-// meio, a conta embaixo.
+// Cinco grupos, na ordem do que o lojista olha: dinheiro primeiro (Lucro e a
+// home), depois se o rastreamento esta chegando, a operacao do dia a dia, a
+// rota (so para quem usa vitrine) e a conta.
 const NAV: NavSection[] = [
   {
+    label: "finance",
     items: [
-      { href: "/setup", label: "setup", icon: ListChecks },
-      { href: "/overview", label: "overview", icon: LayoutGrid },
+      { href: "/financeiro", label: "profit", icon: CircleDollarSign },
+      { href: "/financeiro/custos", label: "costs", icon: Calculator },
+      { href: "/financeiro/anuncios", label: "adAccounts", icon: Megaphone },
+    ],
+  },
+  {
+    label: "trackingGroup",
+    items: [
+      { href: "/tracking", label: "trackingHealth", icon: Radar },
+      { href: "/alertas", label: "alerts", icon: Bell },
     ],
   },
   {
     label: "operations",
     items: [
       { href: "/stores", label: "connectedStores", icon: Store, counter: "stores" },
-      { href: "/sales", label: "sales", icon: TrendingUp },
-      { href: "/tracking", label: "tracking", icon: Radar },
-      { href: "/clone/routed-checkout", label: "routing", icon: Waypoints },
       { href: "/clone/shopify", label: "importProducts", icon: Download },
+      { href: "/activity", label: "activity", icon: Activity },
     ],
   },
   {
+    label: "routingGroup",
     items: [
-      { href: "/activity", label: "activity", icon: Activity },
+      { href: "/overview", label: "routeOverview", icon: LayoutGrid },
+      { href: "/clone/routed-checkout", label: "routing", icon: Waypoints },
+      { href: "/sales", label: "salesByRoute", icon: TrendingUp },
+    ],
+  },
+  {
+    label: "system",
+    items: [
+      { href: "/setup", label: "setup", icon: ListChecks },
       { href: "/billing", label: "billing", icon: CreditCard, counter: "credits" },
       { href: "/claude", label: "claude", icon: Terminal },
     ],
   },
 ];
 
-const MOBILE = [
-  NAV[1].items[1], // roteamento
-  NAV[1].items[0], // lojas
-  NAV[1].items[2], // importar
-  NAV[0].items[1], // visao geral
-];
+const TODOS_OS_ITENS = NAV.flatMap((secao) => secao.items);
+const TODOS_OS_HREFS = TODOS_OS_ITENS.map((item) => item.href);
+
+// Barra de baixo no celular: buscada por HREF. O acesso por indice de NAV
+// apontava para o item errado em silencio sempre que o menu mudava de ordem.
+const HREFS_MOBILE = ["/financeiro", "/tracking", "/alertas", "/stores"];
+const MOBILE = HREFS_MOBILE.map((href) => TODOS_OS_ITENS.find((item) => item.href === href)).filter(
+  (item): item is NavItem => item !== undefined
+);
 
 function initial(nome: string) {
   return (nome.trim()[0] || "?").toUpperCase();
@@ -106,9 +132,8 @@ export function Sidebar({ dados }: { dados: SidebarData }) {
     dados.percent < 100 ? { pct: dados.percent, next: dados.nextLabel } : null;
 
 
-  function ativo(href: string) {
-    return pathname === href || pathname.startsWith(`${href}/`);
-  }
+  // Um item aceso por vez: vence o href mais longo (ver nav-ativo.ts).
+  const atual = hrefAtivo(pathname, TODOS_OS_HREFS);
 
   async function sair() {
     // Rota de API em vez do cliente Supabase: ver src/app/api/auth/logout.
@@ -120,7 +145,7 @@ export function Sidebar({ dados }: { dados: SidebarData }) {
     <>
       <aside className="fixed left-0 top-0 z-40 hidden h-screen w-[216px] flex-col border-r border-border bg-surface md:flex">
         <div className="flex h-14 shrink-0 flex-col justify-center gap-1 px-4">
-          <Link href="/overview" aria-label="xcart" className="w-fit">
+          <Link href={APP_HOME} aria-label="xcart" className="w-fit">
             <LogoXcart altura={18} prioridade />
           </Link>
           <span className="block truncate text-[10.5px] leading-tight text-t3">
@@ -140,7 +165,7 @@ export function Sidebar({ dados }: { dados: SidebarData }) {
               )}
               <div className="flex flex-col gap-px">
                 {secao.items.map((item) => {
-                  const on = ativo(item.href);
+                  const on = item.href === atual;
                   const valor = item.counter ? contadores[item.counter] : null;
                   return (
                     <Link
@@ -237,7 +262,7 @@ export function Sidebar({ dados }: { dados: SidebarData }) {
 
       <nav className="fixed inset-x-0 bottom-0 z-50 flex h-14 items-center justify-around border-t border-border bg-surface px-2 md:hidden">
         {MOBILE.map((item) => {
-          const on = ativo(item.href);
+          const on = item.href === atual;
           return (
             <Link
               key={item.href}
@@ -248,7 +273,7 @@ export function Sidebar({ dados }: { dados: SidebarData }) {
               )}
             >
               <item.icon className="h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden />
-              <span className="text-[9.5px] font-medium">{t(item.label)}</span>
+              <span className="max-w-[84px] truncate text-[9.5px] font-medium">{t(item.label)}</span>
             </Link>
           );
         })}

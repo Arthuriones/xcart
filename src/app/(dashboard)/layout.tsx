@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { SidebarData, SidebarSkeleton } from "@/components/layout/sidebar-data";
 import { TopNav } from "@/components/layout/top-nav";
+import { SeletorGlobalDados } from "@/components/layout/seletor-global-dados";
 import { Toaster } from "@/components/ui/sonner";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { userHasAccess } from "@/lib/billing/access";
@@ -23,7 +24,15 @@ export default async function DashboardLayout({
 
   return (
     <div className="min-h-screen font-sans bg-background">
-      <TopNav />
+      {/* O seletor de loja/periodo/moeda le banco: dentro de Suspense, para
+          o layout nao esperar por ele (mesmo motivo de SidebarData). */}
+      <TopNav
+        acoes={
+          <Suspense fallback={null}>
+            <SeletorGlobalDados />
+          </Suspense>
+        }
+      />
       <Suspense fallback={<SidebarSkeleton />}>
         <SidebarData />
       </Suspense>
