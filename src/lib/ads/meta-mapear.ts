@@ -186,6 +186,10 @@ export const REPROCESSO_A_CADA_MS = 20 * 60 * 60 * 1000;
  * e congela depois de 28 dias. A rodada de 15 min pega ontem e hoje; uma vez a
  * cada ~20 h relemos os 28 dias inteiros. "Hoje" e no fuso DA CONTA, porque e
  * nele que o Meta corta o dia.
+ *
+ * A PRIMEIRA rodada vai 62 dias para tras: o mesmo horizonte dos pedidos (60
+ * dias do read_orders) mais folga de fuso. Com 28, "Mes passado" e o periodo
+ * anterior teriam receita inteira e gasto pela metade -- lucro inflado.
  */
 export function janelaDeSync(
   conta: { fuso: string | null; ultimo_reprocesso_em: string | null },
@@ -193,10 +197,10 @@ export function janelaDeSync(
 ): { desde: string; ate: string; reprocesso: boolean } {
   const hoje = diaNoFuso(agora, conta.fuso);
   const ultimo = conta.ultimo_reprocesso_em ? Date.parse(conta.ultimo_reprocesso_em) : NaN;
-  const reprocesso =
-    !Number.isFinite(ultimo) || agora.getTime() - ultimo > REPROCESSO_A_CADA_MS;
+  const primeira = !Number.isFinite(ultimo);
+  const reprocesso = primeira || agora.getTime() - ultimo > REPROCESSO_A_CADA_MS;
   return {
-    desde: reprocesso ? somarDias(hoje, -27) : somarDias(hoje, -1),
+    desde: primeira ? somarDias(hoje, -61) : reprocesso ? somarDias(hoje, -27) : somarDias(hoje, -1),
     ate: hoje,
     reprocesso,
   };

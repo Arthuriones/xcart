@@ -158,12 +158,12 @@ describe("preencherDiasConta", () => {
 describe("janelaDeSync", () => {
   const agora = new Date("2026-10-02T15:00:00Z");
 
-  it("sem reprocesso anterior: 28 dias com reprocesso true", () => {
+  it("primeira rodada: 62 dias (o horizonte dos pedidos) com reprocesso true", () => {
     const j = janelaDeSync({ fuso: "UTC", ultimo_reprocesso_em: null }, agora);
     expect(j.reprocesso).toBe(true);
     expect(j.ate).toBe("2026-10-02");
-    expect(j.desde).toBe("2026-09-05");
-    expect(diasNoIntervalo(j)).toBe(28);
+    expect(j.desde).toBe("2026-08-02");
+    expect(diasNoIntervalo(j)).toBe(62);
   });
 
   it("reprocesso de 2 h atras: ontem..hoje", () => {
@@ -180,6 +180,8 @@ describe("janelaDeSync", () => {
       agora
     );
     expect(j.reprocesso).toBe(true);
+    expect(j.desde).toBe("2026-09-05");
+    expect(diasNoIntervalo(j)).toBe(28);
   });
 
   it("fuso America/Los_Angeles muda o 'hoje' perto da meia-noite UTC", () => {

@@ -2,10 +2,12 @@
 // O Google Ads Script que o lojista cola em CADA conta.
 //
 // Ele roda dentro da conta (Ferramentas > Acoes em massa > Scripts), le o
-// gasto dos ultimos 30 dias por campanha e por dia e manda por POST para
-// ROTAS.apiGoogleIngest. 30 dias, nao so hoje: o Google corrige custo para
+// gasto dos ultimos 62 dias por campanha e por dia e manda por POST para
+// ROTAS.apiGoogleIngest. 62 dias, nao so hoje: o Google corrige custo para
 // tras (clique invalido estornado) e o reenvio da janela inteira mantem o
-// historico certo sem um segundo agendamento.
+// historico certo sem um segundo agendamento. 62 e o horizonte dos pedidos
+// (60 dias do read_orders) mais folga de fuso: com menos, o periodo anterior
+// e "Mes passado" teriam receita inteira e gasto faltando.
 //
 // O segredo vai DENTRO do texto: e a senha da conta no xcart. Por isso a tela
 // mostra o script uma vez so, e "Gerar novo script" invalida o anterior.
@@ -24,7 +26,7 @@ const TEMPLATE = `/**
  */
 var URL_XCART = '__URL__';
 var SEGREDO = '__SEGREDO__';
-var DIAS = 30;
+var DIAS = 62;
 
 function main() {
   var conta = AdsApp.currentAccount();

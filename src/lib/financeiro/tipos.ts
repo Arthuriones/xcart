@@ -281,6 +281,12 @@ export interface FinSyncStateRow {
   ultimo_erro_tipo: "negado" | "falhou" | null;
   carga_inicial_ok: boolean;
   pedidos_total: number;
+  /**
+   * Retomada da paginacao (053): a busca e o endCursor da rodada que parou no
+   * meio. Opcionais porque so existem depois da 053 -- ver sincronizarLoja.
+   */
+  retomar_busca?: string | null;
+  retomar_cursor?: string | null;
   updated_at?: string;
 }
 
@@ -593,11 +599,13 @@ export function pedidoTemCusto(p: Pick<FinOrderRow, "tipo">): boolean {
 /**
  * Unidades que custam: as que continuam no pedido OU as ja enviadas
  * (reembolso depois de enviar nao devolve o custo do fornecedor). Pedido
- * cancelado so custa o que ja tinha sido enviado.
+ * cancelado so custa o que ja tinha sido enviado. Venda sem nada recebido
+ * (PIX/boleto pendente, expirado) tambem so custa o que ja foi enviado: o
+ * abandonado nao gera custo, e o COD enviado antes de pagar gera.
  */
-export function qtdParaCusto(l: LinhaPedido, cancelado = false): number {
+export function qtdParaCusto(l: LinhaPedido, cancelado = false, semPagamento = false): number {
   const enviadas = Math.max(0, paraNumero(l.qtd) - paraNumero(l.qtd_nao_enviada));
-  if (cancelado) return enviadas;
+  if (cancelado || semPagamento) return enviadas;
   return Math.max(0, paraNumero(l.qtd_atual), enviadas);
 }
 

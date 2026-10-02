@@ -337,7 +337,13 @@ export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
           ? paraNumero(cfg.custo_padrao_pct)
           : null;
       for (const l of Array.isArray(p.linhas) ? p.linhas : []) {
-        const q = qtdParaCusto(l, Boolean(p.cancelado_em));
+        // recebido, nao liquido_pago: pago e reembolsado depois tem liquido 0
+        // e o custo dele e real.
+        const q = qtdParaCusto(
+          l,
+          Boolean(p.cancelado_em),
+          p.tipo === "venda" && paraNumero(p.recebido) <= 0
+        );
         if (q <= 0) continue;
         const base = paraNumero(l.preco) * q;
         const versao = custoVigente(

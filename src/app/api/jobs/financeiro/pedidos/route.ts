@@ -183,6 +183,9 @@ async function executar(request: NextRequest) {
           ultimo_sync_em: fim,
           ultimo_erro: mensagem,
           ultimo_erro_tipo: ehNegado(e) ? "negado" : "falhou",
+          // Falha numa rodada que retomava (a Shopify pode recusar o cursor
+          // salvo): a proxima recomeca pelo caminho normal, nao falha sempre.
+          ...(estado?.retomar_cursor ? { retomar_busca: null, retomar_cursor: null } : {}),
           sincronizando_desde: null,
           updated_at: fim,
         })

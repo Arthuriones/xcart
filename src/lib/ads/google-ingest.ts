@@ -32,8 +32,8 @@ import {
 // Arquivo puro (sem banco, sem rede): testado em tests/ads-google-ingest.test.ts.
 // ============================================================================
 
-/** Maximo de dias num envio. O script manda 30; folga para o fuso. */
-export const MAX_DIAS_INGEST = 40;
+/** Maximo de dias num envio. O script manda 62; folga para o fuso. */
+export const MAX_DIAS_INGEST = 70;
 /** Quanto para tras o inicio pode ir, a partir de hoje no fuso da conta. */
 export const MAX_DIAS_PARA_TRAS = 95;
 export const MAX_LINHAS_INGEST = 20000;

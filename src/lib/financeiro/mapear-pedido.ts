@@ -190,8 +190,10 @@ export async function paginarPedidos(opts: {
   nInicial?: number;
   /** Orcamento de tempo: true = pare antes da proxima pagina. */
   deveParar?: () => boolean;
+  /** endCursor de uma rodada anterior com a MESMA busca: continua dali. */
+  cursorInicial?: string | null;
 }): Promise<{ paginas: number; terminou: boolean; n: number }> {
-  let cursor: string | null = null;
+  let cursor: string | null = opts.cursorInicial ?? null;
   let n = opts.nInicial ?? PEDIDOS_POR_PAGINA;
   let paginas = 0;
 

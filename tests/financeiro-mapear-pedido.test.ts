@@ -290,6 +290,23 @@ describe("paginarPedidos", () => {
     expect(r).toEqual({ paginas: 2, terminou: true, n: 8 });
   });
 
+  it("cursorInicial retoma de onde a rodada anterior parou", async () => {
+    // Acao em massa maior que uma rodada: recomecar do zero releria sempre as
+    // mesmas paginas. Com o endCursor salvo, a primeira chamada ja e "c25".
+    const chamadas: Array<string | null> = [];
+    const r = await paginarPedidos({
+      maxPaginas: 25,
+      cursorInicial: "c25",
+      buscar: async (cursor) => {
+        chamadas.push(cursor);
+        return cursor === "c25" ? pagina([201, 202], "c26") : pagina([203], null);
+      },
+      aoReceber: async () => {},
+    });
+    expect(chamadas).toEqual(["c25", "c26"]);
+    expect(r.terminou).toBe(true);
+  });
+
   it("erro MAX_COST_EXCEEDED reduz n e repete o cursor", async () => {
     const chamadas: Array<[string | null, number]> = [];
     const r = await paginarPedidos({

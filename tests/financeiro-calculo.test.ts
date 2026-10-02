@@ -313,6 +313,62 @@ describe("custo do produto", () => {
     expect(r.atual.receita).toBe(0);
     expect(r.atual.pedidos).toBe(0);
   });
+
+  it("PIX/boleto pendente, nada recebido e nada enviado: sem custo", () => {
+    const r = calcularFinanceiro(
+      entrada({
+        custos: [custo({ sku: "CIL-01", valido_desde: "2026-09-01", custo_unitario: 30, frete_unitario: 10 })],
+        pedidos: [
+          pedido({
+            dia_local: "2026-09-29",
+            status_financeiro: "pending",
+            recebido: 0,
+            liquido_pago: 0,
+            linhas: [linha("CIL-01", 2, 50, { qtd_nao_enviada: 2 })],
+          }),
+        ],
+      })
+    );
+    expect(r.atual.cmv).toBe(0);
+    expect(r.atual.receita).toBe(0);
+    expect(r.atual.coberturaCusto).toBeNull();
+  });
+
+  it("COD enviado antes de receber: custo cheio", () => {
+    const r = calcularFinanceiro(
+      entrada({
+        custos: [custo({ sku: "CIL-01", valido_desde: "2026-09-01", custo_unitario: 30, frete_unitario: 10 })],
+        pedidos: [
+          pedido({
+            dia_local: "2026-09-29",
+            status_financeiro: "pending",
+            recebido: 0,
+            liquido_pago: 0,
+            linhas: [linha("CIL-01", 2, 50, { qtd_nao_enviada: 0 })],
+          }),
+        ],
+      })
+    );
+    expect(r.atual.cmv).toBe(80);
+  });
+
+  it("pago, enviado e reembolsado depois: custo cheio", () => {
+    const r = calcularFinanceiro(
+      entrada({
+        custos: [custo({ sku: "CIL-01", valido_desde: "2026-09-01", custo_unitario: 30, frete_unitario: 10 })],
+        pedidos: [
+          pedido({
+            dia_local: "2026-09-29",
+            recebido: 100,
+            reembolsado: 100,
+            liquido_pago: 0,
+            linhas: [linha("CIL-01", 2, 50, { qtd_atual: 0, qtd_nao_enviada: 0 })],
+          }),
+        ],
+      })
+    );
+    expect(r.atual.cmv).toBe(80);
+  });
 });
 
 describe("pedidos", () => {

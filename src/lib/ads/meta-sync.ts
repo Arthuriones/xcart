@@ -2,13 +2,8 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AdAccountRow, AdSpendDailyRow } from "@/lib/financeiro/tipos";
 import { RE_MOEDA } from "@/lib/financeiro/tipos";
+import { buscarConta, buscarInsightsDetalhado } from "@/lib/ads/meta-graph";
 import {
-  ErroGraph,
-  buscarConta,
-  buscarInsightsDetalhado,
-} from "@/lib/ads/meta-graph";
-import {
-  classificarErroMeta,
   deduplicarLinhas,
   deveBuscarCampanha,
   janelaDeSync,
@@ -78,14 +73,12 @@ export async function sincronizarContaMeta(
       rowsCampanha = (
         await buscarInsightsDetalhado(conta.external_id, token, janela.desde, janela.ate, "campaign")
       ).rows;
-    } catch (e) {
-      // Limite no detalhe nao pode custar o total que ja chegou.
-      if (e instanceof ErroGraph && classificarErroMeta(e.codigo) === "limite") {
-        campanhaBuscada = false;
-        rowsCampanha = [];
-      } else {
-        throw e;
-      }
+    } catch {
+      // Falha no detalhe (limite, timeout, codigo 1 "reduce the amount of
+      // data"...) nao pode custar o total que ja chegou. Token ou permissao
+      // ruim ja teria falhado no level=account acima, com o mesmo token.
+      campanhaBuscada = false;
+      rowsCampanha = [];
     }
   }
 

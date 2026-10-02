@@ -94,9 +94,14 @@ describe("validarIngest", () => {
     expect(validarIngest(corpo({ customer_id: "123-456-789" }), AGORA).ok).toBe(false);
   });
 
-  it("recusa intervalo maior que 40 dias", () => {
-    const r = validarIngest(corpo({ inicio: "2026-08-01", linhas: [] }), AGORA);
+  it("recusa intervalo maior que 70 dias", () => {
+    const r = validarIngest(corpo({ inicio: "2026-07-01", linhas: [] }), AGORA);
     expect(r.ok).toBe(false);
+  });
+
+  it("aceita os 62 dias que o script manda", () => {
+    const r = validarIngest(corpo({ inicio: "2026-08-02", linhas: [] }), AGORA);
+    expect(r.ok).toBe(true);
   });
 
   it("recusa data de linha fora de [inicio, fim]", () => {

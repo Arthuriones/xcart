@@ -267,12 +267,13 @@ export async function coletarCondicoesDetalhado(
     ultimo_erro: string | null;
     ultimo_sync_ok_em: string | null;
     updated_at: string | null;
+    carga_inicial_ok: boolean | null;
   };
   let syncs: Sync[] | null = null;
   await rodar("pedidos_sync_erro", async () => {
     const { data, error } = await admin
       .from("fin_sync_state")
-      .select("store_id, user_id, fuso, ultimo_erro, ultimo_sync_ok_em, updated_at");
+      .select("store_id, user_id, fuso, ultimo_erro, ultimo_sync_ok_em, updated_at, carga_inicial_ok");
     if (error) throw new Error(error.message);
     syncs = (data || []) as Sync[];
     const limite = agora.getTime() - 2 * HORA;
@@ -416,7 +417,7 @@ export async function coletarCondicoesDetalhado(
     if (!syncs) {
       const { data, error: e2 } = await admin
         .from("fin_sync_state")
-        .select("store_id, user_id, fuso, ultimo_erro, ultimo_sync_ok_em, updated_at");
+        .select("store_id, user_id, fuso, ultimo_erro, ultimo_sync_ok_em, updated_at, carga_inicial_ok");
       if (e2) throw new Error(e2.message);
       estados = (data || []) as Sync[];
     }
@@ -432,7 +433,9 @@ export async function coletarCondicoesDetalhado(
       if (!acima) continue;
 
       const sync = syncDa.get(storeId);
-      if (!sync?.ultimo_sync_ok_em) continue;
+      // Carga inicial em curso: os pedidos de hoje sao os ultimos a chegar
+      // (ordem por updated_at), entao "sem venda hoje" ainda nao quer dizer nada.
+      if (!sync?.carga_inicial_ok || !sync.ultimo_sync_ok_em) continue;
       if (agora.getTime() - Date.parse(sync.ultimo_sync_ok_em) > 45 * MIN) continue;
 
       const hojeDaLoja = diaNoFuso(agora, sync.fuso);

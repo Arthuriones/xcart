@@ -290,7 +290,9 @@ export function FinanceiroScreen({ dados }: { dados: Dados }) {
   const estadoPorLoja = new Map(dados.estados.map((e) => [e.store_id, e]));
   const carregando = dados.lojaIds.filter((id) => {
     const e = estadoPorLoja.get(id);
-    return !e || (!e.carga_inicial_ok && e.ultimo_erro_tipo !== "negado");
+    // Loja com erro (negado ou falhou) fica so com o aviso de erro dela: uma
+    // loja morta nao pode prender o "ainda puxando" para sempre.
+    return !e || (!e.carga_inicial_ok && !e.ultimo_erro);
   });
   if (carregando.length > 0) {
     avisos.push({

@@ -94,8 +94,19 @@ export async function sincronizarLoja(
     clientSecret: loja.client_secret,
     accessToken: loja.access_token,
   };
+  // Retomada: uma acao em massa que atualiza mais pedidos do que cabem numa
+  // rodada dentro da folga de 2 min prenderia o cursor -- recomecando em
+  // cursor - folga, as mesmas primeiras paginas voltariam sempre. A rodada que
+  // para no meio guarda busca + endCursor e a seguinte continua dali.
+  // `in`: sem a migration 053 a coluna nao vem no select("*") e grava-la
+  // derrubaria o sync; ai fica o comportamento antigo.
+  const temRetomada = estado != null && "retomar_cursor" in estado;
+  const retomando = Boolean(temRetomada && estado?.retomar_busca && estado?.retomar_cursor);
   // Aspas simples: o valor tem ":" e a busca da Shopify quebraria nele.
-  const busca = `updated_at:>='${inicioDaBusca(estado, new Date())}'`;
+  const busca =
+    retomando && estado?.retomar_busca
+      ? estado.retomar_busca
+      : `updated_at:>='${inicioDaBusca(estado, new Date())}'`;
 
   let cursorGravado = estado?.cursor_atualizado ?? null;
   let pedidos = 0;
@@ -103,6 +114,7 @@ export async function sincronizarLoja(
   const r = await paginarPedidos({
     maxPaginas,
     deveParar: limiteEm ? () => Date.now() > limiteEm : undefined,
+    cursorInicial: retomando ? (estado?.retomar_cursor ?? null) : null,
     buscar: async (cursor, n) =>
       (await shopifyGraphQL(creds, QUERY_PEDIDOS, { busca, cursor, n })) as PaginaPedidos,
     aoReceber: async (pagina) => {
@@ -128,9 +140,15 @@ export async function sincronizarLoja(
       // Cursor por pagina e seguro porque a ordem e UPDATED_AT crescente: se a
       // proxima pagina falhar, a proxima rodada continua daqui sem buraco.
       cursorGravado = maiorAtualizado(cursorGravado, nos);
+      const info = pagina.orders?.pageInfo;
+      const retomar = !temRetomada
+        ? {}
+        : info?.hasNextPage && info.endCursor
+          ? { retomar_busca: busca, retomar_cursor: info.endCursor }
+          : { retomar_busca: null, retomar_cursor: null };
       const { error } = await admin
         .from("fin_sync_state")
-        .update({ fuso, moeda, cursor_atualizado: cursorGravado, updated_at: agoraIso })
+        .update({ fuso, moeda, cursor_atualizado: cursorGravado, ...retomar, updated_at: agoraIso })
         .eq("store_id", loja.id);
       if (error) throw new Error(`gravar cursor: ${error.message}`);
     },

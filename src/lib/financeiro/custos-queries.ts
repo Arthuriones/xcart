@@ -117,18 +117,23 @@ export async function carregarCustos(storeId: string): Promise<DadosCustos> {
   // Pedidos da janela. So as colunas que a agregacao usa: a linha inteira traz
   // valores que esta tela nao mostra.
   const desde = somarDias(hoje, -DIAS_JANELA);
-  const pedidos: { tipo: string; cancelado_em: string | null; linhas: unknown }[] = [];
+  const pedidos: { tipo: string; cancelado_em: string | null; recebido: number | null; linhas: unknown }[] = [];
   for (let i = 0; ; i += PAGINA) {
     const { data, error } = await supabase
       .from("fin_orders")
-      .select("tipo, cancelado_em, linhas")
+      .select("tipo, cancelado_em, recebido, linhas")
       .eq("store_id", storeId)
       .gte("dia_local", desde)
       .order("dia_local", { ascending: true })
       .order("shopify_order_id", { ascending: true })
       .range(i, i + PAGINA - 1);
     if (error) throw new Error(`Falha ao ler os pedidos: ${error.message}`);
-    const lote = (data || []) as { tipo: string; cancelado_em: string | null; linhas: unknown }[];
+    const lote = (data || []) as {
+      tipo: string;
+      cancelado_em: string | null;
+      recebido: number | null;
+      linhas: unknown;
+    }[];
     pedidos.push(...lote);
     if (lote.length < PAGINA) break;
   }
@@ -139,8 +144,9 @@ export async function carregarCustos(storeId: string): Promise<DadosCustos> {
     if (!pedidoTemCusto({ tipo: p.tipo as TipoPedido })) continue;
     const linhas = Array.isArray(p.linhas) ? (p.linhas as LinhaPedido[]) : [];
     const cancelado = Boolean(p.cancelado_em);
+    const semPagamento = p.tipo === "venda" && paraNumero(p.recebido) <= 0;
     for (const l of linhas) {
-      const q = qtdParaCusto(l, cancelado);
+      const q = qtdParaCusto(l, cancelado, semPagamento);
       if (q <= 0) continue;
       const sku = chaveSku(l.sku);
       if (!sku) {
