@@ -220,6 +220,9 @@ const CONTEXTOS: Record<string, ModoContexto> = {
   "/tracking": { tipo: "fixo", texto: "Últimos 7 dias · período fixo desta tela" },
   "/tracking/eventos": { tipo: "loja" },
   "/alertas": { tipo: "loja" },
+  // Gasto de hoje e do periodo por conta: loja, periodo e moeda da barra.
+  "/integracoes/meta": { tipo: "completo" },
+  "/integracoes/google": { tipo: "completo" },
 };
 const PREFIXOS_CONTEXTO = Object.keys(CONTEXTOS);
 
