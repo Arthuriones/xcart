@@ -89,8 +89,8 @@ export const ITENS: Record<IdItem, ItemNav> = {
     rotulo: t("import"),
     icone: Download,
     atalho: "m",
-    // /clone/shopify ja casa por prefixo; /bulk e /multi-site vao virar
-    // origens do Importar e, ate la, acendem o mesmo item.
+    // /clone/shopify ja casa por prefixo; /bulk e /multi-site sao origens do
+    // Importar com endereco proprio e acendem o mesmo item.
     tambem: ["/bulk", "/multi-site"],
   },
   atividade: { id: "atividade", href: "/activity", rotulo: t("activity"), icone: History, atalho: "t" },
@@ -196,10 +196,12 @@ const TITULOS: Record<string, string> = {
   "/alertas": t("alerts"),
   "/stores": t("stores"),
   "/clone": t("import"),
+  "/clone/shopify": `${t("import")} da Shopify`,
   "/bulk": t("import"),
   "/multi-site": t("import"),
   "/activity": t("activity"),
-  "/clone/routed-checkout": t("routing"),
+  // O mesmo nome do item do menu e do PageHeader do console.
+  "/clone/routed-checkout": t("routes"),
   "/overview": t("routeOverview"),
   "/sales": t("salesByRoute"),
   "/integracoes": t("integrations"),
@@ -217,10 +219,11 @@ export function tituloDaRota(pathname: string): string {
 // ---------------------------------------------------------------------------
 // Contexto da barra do topo, por tela.
 //
-// So entra aqui a tela que LE o filtro global. Uma tela com filtro proprio
-// (Vendas, hoje) que ganhasse o seletor faria o lojista achar que trocou de
-// loja e continuar vendo a outra. Saude dos pixels le a loja da barra; a
-// janela de 7 dias mora em src/lib/tracking e por isso e fixa.
+// So entra aqui a tela que LE o filtro global: "loja" e "fixo" mostram o
+// seletor de loja, e uma tela que o ignorasse faria o lojista achar que
+// trocou de loja e continuar vendo a outra. Saude dos pixels le a loja da
+// barra; a janela de 7 dias mora em src/lib/tracking e por isso e fixa.
+// Vendas le a loja da barra; o periodo (7, 30 ou 60 dias) continua na tela.
 // ---------------------------------------------------------------------------
 
 const CONTEXTOS: Record<string, ModoContexto> = {
@@ -230,6 +233,8 @@ const CONTEXTOS: Record<string, ModoContexto> = {
   "/tracking": { tipo: "fixo", texto: "Últimos 7 dias · período fixo desta tela" },
   "/tracking/eventos": { tipo: "loja" },
   "/alertas": { tipo: "loja" },
+  "/activity": { tipo: "loja" },
+  "/sales": { tipo: "loja" },
   // Gasto de hoje e do periodo por conta: loja, periodo e moeda da barra.
   "/integracoes/meta": { tipo: "completo" },
   "/integracoes/google": { tipo: "completo" },

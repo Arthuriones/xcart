@@ -327,8 +327,9 @@ async function ultimoSinalDaRota(
 
 // ---------------------------------------------------------------------------
 // O guia pronto: os dois caminhos montados, o escolhido e se foi dispensado.
-// A tela /setup usa tudo; o menu lateral e o topo do Lucro podem usar so o
-// caminho escolhido (feitos, total, proximo, completo).
+// A tela /setup usa tudo; o menu lateral (sidebar-data.tsx) usa so o caminho
+// escolhido (feitos, total, proximo, completo), e o topo do Lucro pode usar o
+// mesmo.
 // ---------------------------------------------------------------------------
 
 export interface GuiaDaConta {

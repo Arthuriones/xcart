@@ -15,8 +15,8 @@ import { getCurrentUser } from "@/lib/supabase/current-user";
 //                          resto devolve null na parte que falhou, e a tela
 //                          mostra "—" ali, nunca zero.
 //
-// Diferente de src/lib/overview/queries.ts (que lia so a primeira rota e
-// engolia erro), aqui cada rota pode ser escolhida e erro nunca vira "nada
+// Diferente da leitura antiga (getOverview, ja removida, que lia so a
+// primeira rota e engolia erro), aqui cada rota pode ser escolhida e erro nunca vira "nada
 // acontecendo".
 // ============================================================================
 

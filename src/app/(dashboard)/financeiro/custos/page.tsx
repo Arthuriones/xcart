@@ -26,8 +26,8 @@ export const dynamic = "force-dynamic";
 // Le so o banco (carregarCustos, sem mudar nada). As rotas que gravam sao as
 // de sempre: POST/DELETE /api/financeiro/custos e POST /api/financeiro/config.
 //
-// ?situacao=semCusto abre a tabela ja filtrada (o link do aviso do Lucro pode
-// usar). O resto do filtro e do cliente.
+// ?situacao=semCusto abre a tabela ja filtrada (e o link "Cadastrar custos"
+// dos avisos do Lucro). O resto do filtro e do cliente.
 // ============================================================================
 
 function mensagem(e: unknown): string {

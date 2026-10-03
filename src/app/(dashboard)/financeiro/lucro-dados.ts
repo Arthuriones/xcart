@@ -441,6 +441,9 @@ export interface EntradaPendencias {
 
 const ORDEM_TOM: Record<TomPendencia, number> = { err: 0, warn: 1, info: 2 };
 
+/** Custos e taxas ja filtrado nos SKUs sem custo (a tela le ?situacao=). */
+const CUSTOS_SEM_CUSTO = `${ROTAS.custos}?situacao=semCusto`;
+
 function listar(nomes: string[]): string {
   if (nomes.length <= 1) return nomes.join("");
   return `${nomes.slice(0, -1).join(", ")} e ${nomes[nomes.length - 1]}`;
@@ -470,7 +473,7 @@ export function montarPendencias(d: EntradaPendencias): Pendencia[] {
         tom: "err",
         titulo: `Lucro inflado: ${falta} da receita vendeu sem custo cadastrado`,
         detalhe: `${listar(d.avisos.lojasSemCustoPadraoComFalta)} ${d.avisos.lojasSemCustoPadraoComFalta.length === 1 ? "vendeu" : "venderam"} SKU sem custo e sem custo padrão. O produto entrou como zero.`,
-        acao: { rotulo: "Cadastrar custos", href: ROTAS.custos },
+        acao: { rotulo: "Cadastrar custos", href: CUSTOS_SEM_CUSTO },
       });
     } else {
       saida.push({
@@ -478,7 +481,7 @@ export function montarPendencias(d: EntradaPendencias): Pendencia[] {
         tom: "info",
         titulo: `${falta} da receita usa o custo padrão, não o custo do SKU`,
         detalhe: "O lucro dessas vendas é uma estimativa pelo percentual da loja.",
-        acao: { rotulo: "Cadastrar custos", href: ROTAS.custos },
+        acao: { rotulo: "Cadastrar custos", href: CUSTOS_SEM_CUSTO },
         dispensavel: true,
       });
     }

@@ -24,8 +24,12 @@ export interface DadosMenu {
   alertas: number;
   /** Tem rota de checkout? Sem rota, Roteamento vira "Ativar roteamento". */
   temRota: boolean;
-  /** Guia de configuracao: so enquanto incompleto e so para quem usa rota. */
-  guia: { feitos: number; total: number; proximo: string } | null;
+  /**
+   * Guia de configuracao no caminho escolhido (direto ou com vitrine): so
+   * enquanto incompleto e nao dispensado. proximo null = o que falta nao deu
+   * para conferir agora.
+   */
+  guia: { feitos: number; total: number; proximo: string | null } | null;
   /** Menu recolhido, do cookie: a largura certa ja no primeiro desenho. */
   recolhido: boolean;
 }
@@ -203,7 +207,9 @@ export function Sidebar({ dados }: { dados: DadosMenu }) {
             >
               <span className="block h-full rounded-full bg-ink" style={{ width: `${pct}%` }} />
             </span>
-            <span className="truncate text-label text-t2">Próximo: {dados.guia.proximo}</span>
+            <span className="truncate text-label text-t2">
+              {dados.guia.proximo ? `Próximo: ${dados.guia.proximo}` : "Falta conferir o que ficou de fora"}
+            </span>
           </Link>
         )}
 

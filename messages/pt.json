@@ -97,24 +97,6 @@
     "daysAgo": "{n} d atrás",
     "you": "você"
   },
-  "auth": {
-    "tagline": "Automatize sua loja com IA",
-    "login": "Entrar",
-    "signup": "Criar Conta",
-    "email": "Email",
-    "password": "Senha",
-    "forgotPassword": "Esqueci a senha",
-    "sendAccessLink": "Enviar link de acesso",
-    "wait": "Aguarde {seconds}s",
-    "recoverySent": "Link de recuperação enviado",
-    "checkEmail": "Verifique",
-    "backToLogin": "Voltar ao Login",
-    "genericError": "Ocorreu um erro. Tente novamente.",
-    "tooManyAttempts": "Muitas tentativas. Aguarde {seconds}s e tente novamente.",
-    "invalidCredentials": "Credenciais inválidas. Se você acessava por link mágico ou não configurou senha, clique em 'Esqueci a senha'.",
-    "confirmEmailSent": "Confirme seu e-mail para ativar a conta",
-    "alreadyRegistered": "Este e-mail já tem conta. Entre com sua senha ou use \"Esqueci a senha\"."
-  },
   "bulk": {
     "title": "Importação em lote",
     "subtitle": "Cole links de produtos, domínios Shopify, AliExpress ou outros sites. O backend importa e publica com histórico em jobs; tradução por IA é opcional.",

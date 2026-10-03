@@ -29,7 +29,7 @@ import {
 // Leitura da tela Atividade (redesign). So leitura, pela sessao (RLS), e
 // sempre com user_id explicito onde a tabela tem a coluna.
 //
-// Diferente de src/lib/activity/queries.ts (que fica como esta), cada fonte
+// Diferente da leitura antiga (getActivity, ja removida), cada fonte
 // devolve o proprio erro: a que falhou entra em `falhas` e a tela avisa
 // "parte nao veio", em vez de mostrar a conta vazia. E pagina por cursor
 // (?antes=), sem o teto fixo de 40.

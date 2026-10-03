@@ -16,8 +16,8 @@ import { quandoFoi } from "@/lib/leitura/lojas-estado";
 // (ver guia-configuracao.ts). Leitura que falhou NAO vira "falta": o passo fica
 // "nao conferido" e nao entra na conta de feitos -- erro nunca vira zero.
 //
-// src/lib/setup/status.ts continua com a regra antiga (so vitrine, papel pela
-// contagem de lojas, so a primeira rota) porque o menu lateral ainda le de la.
+// O menu lateral le daqui tambem (sidebar-data.tsx, via lerGuiaDaConta): o
+// cartao do guia mostra o mesmo numero da tela, no caminho escolhido.
 // ============================================================================
 
 export type CaminhoGuia = "direto" | "vitrine";

@@ -1,10 +1,10 @@
 import { cookies } from "next/headers";
-import { getSetupStatus } from "@/lib/setup/status";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { contarAlertasAbertos } from "@/lib/leitura/notificacoes";
+import { lerFotoGuia, lerGuiaDaConta } from "@/lib/leitura/guia-configuracao";
 import { COOKIE_MENU } from "./contexto";
-import { Sidebar } from "./sidebar";
+import { Sidebar, type DadosMenu } from "./sidebar";
 
 /**
  * Busca os dados do menu no servidor e entrega prontos.
@@ -18,9 +18,13 @@ import { Sidebar } from "./sidebar";
  * melhor que sem menu.
  */
 export async function SidebarData() {
-  const [user, status, alertas, rotas, jar] = await Promise.all([
+  // lerGuiaDaConta e lerFotoGuia sao cache() por requisicao: a foto e lida uma
+  // vez so, e de novo nenhuma quando a pagina aberta e o proprio /setup.
+  const [user, guiaDaConta, foto, creditos, alertas, rotas, jar] = await Promise.all([
     getCurrentUser(),
-    getSetupStatus(),
+    lerGuiaDaConta().catch(() => null),
+    lerFotoGuia().catch(() => null),
+    lerCreditos(),
     contarAlertasAbertos().catch(() => 0),
     contarRotas(),
     cookies(),
@@ -29,30 +33,51 @@ export async function SidebarData() {
   // Leitura que falhou (null) nao vira "Ativar roteamento" para quem tem rota.
   const temRota = rotas !== 0;
 
-  // O guia de hoje so conhece a operacao com vitrine: para quem anuncia direto
-  // na loja de checkout ele nunca chega a 100% e virava um cartao eterno. Fica
-  // so para quem tem rota, e some quando completa.
-  const passos = status.steps.length;
-  const feitos = status.steps.filter((s) => s.done).length;
-  const guia =
-    temRota && passos > 0 && feitos < passos && status.next
-      ? { feitos, total: passos, proximo: status.next.title.toLowerCase() }
-      : null;
-
   return (
     <Sidebar
       dados={{
         nome: meta.full_name || meta.name || user?.email || "",
         email: user?.email || "",
-        lojas: status.storeCount,
-        creditos: status.credits,
+        lojas: foto?.lojas?.length ?? 0,
+        creditos,
         alertas,
         temRota,
-        guia,
+        guia: cartaoDoGuia(guiaDaConta),
         recolhido: jar.get(COOKIE_MENU)?.value === "1",
       }}
     />
   );
+}
+
+/**
+ * O cartao do guia: a mesma regra e o mesmo numero da tela /setup, no caminho
+ * escolhido (direto ou com vitrine). Some quando completa ou quando o lojista
+ * dispensou -- e o que o aviso "Ele sai do menu e do Lucro" promete.
+ */
+function cartaoDoGuia(conta: Awaited<ReturnType<typeof lerGuiaDaConta>> | null): DadosMenu["guia"] {
+  if (!conta || conta.dispensado) return null;
+  const guia = conta.guias[conta.caminho];
+  if (guia.completo || guia.total === 0) return null;
+  const titulo = guia.proximo?.titulo ?? null;
+  return {
+    feitos: guia.feitos,
+    total: guia.total,
+    // So a primeira letra, como na tela: "Shopify" e "SKU" continuam como sao.
+    proximo: titulo ? `${titulo.charAt(0).toLowerCase()}${titulo.slice(1)}` : null,
+  };
+}
+
+/** Saldo de creditos pela sessao; falha vira 0 (contador vazio). */
+async function lerCreditos(): Promise<number> {
+  const user = await getCurrentUser();
+  if (!user) return 0;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("ai_credits")
+    .eq("id", user.id)
+    .maybeSingle();
+  return error ? 0 : Number(data?.ai_credits ?? 0);
 }
 
 /** Quantas rotas de checkout o usuario tem; null quando a leitura falha. */

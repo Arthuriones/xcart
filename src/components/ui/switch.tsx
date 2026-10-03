@@ -18,8 +18,21 @@ type SwitchProps = SwitchPrimitive.Root.Props & {
  * Liga/desliga (role="switch", Espaco alterna). Trilho verde ligado, cinza
  * desligado; o estado tambem esta na posicao da bolinha, nao so na cor.
  *   <Switch rotulo="Usar no lucro" checked={x} onCheckedChange={setX} />
+ *
+ * O controle e um <span role="switch">, e span nao herda o nome do <label>
+ * que o envolve: o rotulo e a descricao entram por aria-labelledby e
+ * aria-describedby. Um aria-label ou aria-labelledby passado por quem usa
+ * continua valendo.
  */
 function Switch({ tamanho = "md", rotulo, descricao, className, ...props }: SwitchProps) {
+  const id = React.useId()
+  const idRotulo = `${id}-rotulo`
+  const idDescricao = `${id}-descricao`
+  const nomeProprio = props["aria-label"] !== undefined || props["aria-labelledby"] !== undefined
+  const descritoPor =
+    [props["aria-describedby"], rotulo && descricao ? idDescricao : null].filter(Boolean).join(" ") ||
+    undefined
+
   const controle = (
     <SwitchPrimitive.Root
       data-slot="switch"
@@ -29,6 +42,8 @@ function Switch({ tamanho = "md", rotulo, descricao, className, ...props }: Swit
         className
       )}
       {...props}
+      aria-labelledby={rotulo && !nomeProprio ? idRotulo : props["aria-labelledby"]}
+      aria-describedby={descritoPor}
     >
       <SwitchPrimitive.Thumb
         className={cn(
@@ -45,8 +60,12 @@ function Switch({ tamanho = "md", rotulo, descricao, className, ...props }: Swit
     <label className="inline-flex cursor-pointer items-start gap-2.5 text-dense text-ink has-data-disabled:cursor-not-allowed">
       {controle}
       <span className={cn("flex flex-col gap-0.5", tamanho === "lg" ? "pt-1" : "pt-0.5")}>
-        <span>{rotulo}</span>
-        {descricao ? <span className="text-label text-t2">{descricao}</span> : null}
+        <span id={idRotulo}>{rotulo}</span>
+        {descricao ? (
+          <span id={idDescricao} className="text-label text-t2">
+            {descricao}
+          </span>
+        ) : null}
       </span>
     </label>
   )

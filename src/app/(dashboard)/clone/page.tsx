@@ -1,6 +1,5 @@
 import { lerLojasDestino, type LojaDestino } from "@/lib/leitura/importar";
 import { CentralImportacao } from "./central-importacao";
-import { EncaminharClone } from "./encaminhar";
 
 export const dynamic = "force-dynamic";
 
@@ -15,16 +14,10 @@ async function carregarLojas(): Promise<LojaDestino[] | null> {
 }
 
 /**
- * /clone: a central do Importar (de onde importar + a fila). As rotas de
- * /clone/shopify reexportam esta pagina e recebem o assistente -- ver
- * encaminhar.tsx. As lojas sao lidas uma vez e servem aos dois.
+ * /clone: a central do Importar (de onde importar + a fila). O assistente da
+ * loja Shopify tem pagina propria em /clone/shopify.
  */
 export default async function ClonePage() {
   const lojas = await carregarLojas();
-  return (
-    <EncaminharClone
-      central={<CentralImportacao lojas={lojas} />}
-      lojas={(lojas ?? []).map((l) => ({ id: l.id, name: l.nome, shop_domain: l.dominio }))}
-    />
-  );
+  return <CentralImportacao lojas={lojas} />;
 }

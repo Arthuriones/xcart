@@ -124,15 +124,21 @@ describe("contexto e titulo do topo", () => {
       tipo: "fixo",
       texto: "Últimos 7 dias · período fixo desta tela",
     });
-    // Vendas ainda tem filtro proprio: sem barra.
-    expect(contextoDaRota("/sales").tipo).toBe("nenhum");
+    // Vendas e Atividade leem a loja da barra (o periodo de Vendas fica na tela).
+    expect(contextoDaRota("/sales").tipo).toBe("loja");
+    expect(contextoDaRota("/activity").tipo).toBe("loja");
+    // O console de rotas nao le o filtro global: sem barra, para o seletor de
+    // loja nao fingir que filtra.
+    expect(contextoDaRota("/clone/routed-checkout").tipo).toBe("nenhum");
     expect(contextoDaRota("/stores").tipo).toBe("nenhum");
   });
 
   it("titulo pelo prefixo mais longo", () => {
     expect(tituloDaRota("/tracking/eventos")).toBe("Eventos ao vivo");
-    expect(tituloDaRota("/clone/shopify/individual")).toBe("Importar");
-    expect(tituloDaRota("/clone/routed-checkout/map")).toBe("Roteamento");
+    expect(tituloDaRota("/clone")).toBe("Importar");
+    expect(tituloDaRota("/clone/shopify/individual")).toBe("Importar da Shopify");
+    // O mesmo nome do item do menu.
+    expect(tituloDaRota("/clone/routed-checkout/map")).toBe("Rotas");
     expect(tituloDaRota("/nao-existe")).toBe("xcart");
   });
 });

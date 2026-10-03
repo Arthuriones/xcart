@@ -6,6 +6,7 @@ import { CheckIcon, ExternalLinkIcon, PlusIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -525,18 +526,16 @@ function Tarefa({
   const id = `cn-tarefa-${i}`;
   return (
     <li className="flex gap-2.5">
-      <input
+      <Checkbox
         id={id}
-        type="checkbox"
+        aria-labelledby={`${id}-texto`}
         checked={feitas[i]}
-        onChange={(e) => {
-          const marcado = e.target.checked;
-          setFeitas((f) => f.map((v, k) => (k === i ? marcado : v)));
-        }}
-        className="mt-0.5 size-4 shrink-0 accent-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        onCheckedChange={(marcado) => setFeitas((f) => f.map((v, k) => (k === i ? marcado : v)))}
+        className="mt-0.5"
       />
       <div className="flex min-w-0 flex-1 flex-col gap-2">
-        <label htmlFor={id} className={cn("text-dense", feitas[i] ? "text-t2" : "text-ink")}>
+        {/* O label aponta para o botao: clicar no texto tambem marca. */}
+        <label id={`${id}-texto`} htmlFor={id} className={cn("text-dense", feitas[i] ? "text-t2" : "text-ink")}>
           {texto}
         </label>
         {children}
