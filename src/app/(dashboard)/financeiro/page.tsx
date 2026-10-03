@@ -1,108 +1,105 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { CircleAlert } from "lucide-react";
-import { lerFiltroGlobal } from "@/lib/filtro-global";
+import { Store } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
+import { buttonVariants } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { lerComparacao, lerFiltroGlobal } from "@/lib/filtro-global";
+import { TODAS } from "@/lib/financeiro/tipos";
 import { getFinanceiro } from "@/lib/financeiro/queries";
-import { TOM } from "@/app/(dashboard)/tracking/selo";
-import { FinanceiroScreen } from "./financeiro-screen";
+import { lerBaseLucro } from "@/lib/leitura/base-lucro";
+import { montarPorCampanha } from "@/lib/leitura/por-campanha";
+import { montarPorProduto } from "@/lib/leitura/por-produto";
+import { montarSerieDiaria } from "@/lib/leitura/serie-diaria";
+import { ErroLucro } from "./erro-lucro";
+import { EsqueletoLucro } from "./esqueleto";
+import { FinanceiroScreen, type ExtrasLucro } from "./financeiro-screen";
 
 export const dynamic = "force-dynamic";
 
-/**
- * A tela le so o banco (pedidos e gasto ja copiados pelos crons), mas sao seis
- * leituras paginadas: fica dentro do Suspense, com o titulo FORA para aparecer
- * na hora. A key do Suspense e o filtro -- trocar loja/periodo/moeda no seletor
- * mostra o esqueleto de novo em vez de deixar o numero velho na tela.
- */
-async function Conteudo() {
-  let dados: Awaited<ReturnType<typeof getFinanceiro>>;
-  try {
-    dados = await getFinanceiro();
-  } catch (e) {
-    // Erro de banco aparece; nunca vira zero. Zero diria "nao vendeu".
-    const mensagem = e instanceof Error ? e.message : String(e);
-    return <Erro mensagem={mensagem} />;
-  }
-
-  if (dados.vazio) return <SemLojas />;
-  return <FinanceiroScreen dados={dados} />;
+function mensagem(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
 }
 
-function Erro({ mensagem }: { mensagem: string }) {
-  const t = TOM.err;
-  return (
-    <div
-      className="flex flex-wrap items-start gap-x-3 gap-y-1.5 rounded-lg border px-3.5 py-2.5"
-      style={{ borderColor: t.borda, background: t.fundo }}
-    >
-      <CircleAlert aria-hidden className="mt-px h-4 w-4 shrink-0" style={{ color: t.cor }} />
-      <div className="min-w-0 flex-1">
-        <div className="text-[12.5px] font-medium text-ink">Não deu para calcular o lucro agora</div>
-        <p className="mt-0.5 break-words text-[12px] text-t2">{mensagem}</p>
-      </div>
-      {/* <a> e nao <Link>: recarrega a pagina inteira, inclusive o layout. */}
-      <a
-        href="/financeiro"
-        className="w-full shrink-0 rounded-md border bg-surface px-2.5 py-1 text-center text-[12px] font-medium text-ink hover:border-[var(--border-strong)] sm:ml-auto sm:w-auto"
-        style={{ borderColor: t.borda }}
-      >
-        Tentar de novo
-      </a>
-    </div>
-  );
+/**
+ * Le tudo no servidor, numa ida so: o calculo de sempre (getFinanceiro) e, em
+ * paralelo, as linhas cruas para as leituras novas (serie do periodo anterior,
+ * produto, campanha). Se as novas falharem, a tela abre igual e so as partes
+ * que dependem delas mostram o erro.
+ */
+async function Conteudo() {
+  const comparacao = await lerComparacao();
+  const [principal, base] = await Promise.allSettled([getFinanceiro(), lerBaseLucro()]);
+
+  if (principal.status === "rejected") {
+    console.error("[lucro] calculo", principal.reason);
+    // Erro de banco aparece; nunca vira zero. Zero diria "nao vendeu".
+    return <ErroLucro detalhe={mensagem(principal.reason)} />;
+  }
+  const dados = principal.value;
+  if (dados.vazio) return <SemLojas />;
+
+  let extras: ExtrasLucro | null = null;
+  let erroExtras: string | null = null;
+  if (base.status === "rejected") {
+    console.error("[lucro] leituras novas", base.reason);
+    erroExtras = mensagem(base.reason);
+  } else if (base.value) {
+    try {
+      const b = base.value;
+      extras = {
+        serie: montarSerieDiaria(b.entrada, {
+          porLoja: dados.filtro.lojaId === TODAS && dados.lojaIds.length >= 2,
+        }),
+        produtos: montarPorProduto(b.entrada),
+        campanhas: montarPorCampanha({
+          contas: b.contas,
+          gastos: b.gastosCampanha,
+          cambio: b.entrada.cambio,
+          moeda: b.entrada.moeda,
+          intervalo: b.entrada.intervalos.atual,
+          lojaIds: b.lojaIds,
+        }),
+      };
+    } catch (e) {
+      console.error("[lucro] montagem", e);
+      erroExtras = mensagem(e);
+    }
+  }
+
+  return <FinanceiroScreen dados={dados} comparacao={comparacao} extras={extras} erroExtras={erroExtras} />;
 }
 
 function SemLojas() {
   return (
-    <div className="rounded-lg border border-dashed border-[var(--border-strong)] bg-surface px-6 py-11 text-center">
-      <div className="text-[15px] font-semibold text-ink">Conecte uma loja para ver o lucro</div>
-      <p className="mx-auto mb-4 mt-1.5 max-w-[420px] text-[12.5px] text-t2">
-        O xcart lê os pedidos da Shopify e cruza com o gasto do Meta e do Google. Assim que
-        a primeira loja estiver conectada, o faturamento, o custo e o lucro de cada dia
-        aparecem aqui.
-      </p>
-      <Link
-        href="/stores"
-        className="inline-flex h-[30px] items-center rounded-md bg-[var(--solid)] px-[13px] text-[12.5px] font-semibold text-[var(--on-solid)] transition-colors hover:bg-[var(--solid-hover)]"
-      >
-        Conectar loja
-      </Link>
-    </div>
-  );
-}
-
-function Esqueleto() {
-  // Blocos parados, sem pulsar: e leitura de banco, coisa de um segundo.
-  return (
-    <div className="flex flex-col gap-[18px]" aria-busy="true" aria-label="Carregando">
-      <div aria-hidden className="h-[30px] w-full max-w-[520px] rounded-md bg-surface-2" />
-      <div aria-hidden className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border lg:grid-cols-4">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="h-[96px] bg-surface" />
-        ))}
-      </div>
-      <div aria-hidden className="h-[46px] rounded-lg border border-border bg-surface" />
-      <div aria-hidden className="h-[260px] rounded-lg border border-border bg-surface" />
-    </div>
+    <EmptyState
+      icone={<Store />}
+      titulo="Conecte uma loja para ver o lucro"
+      descricao="O xcart lê os pedidos da Shopify e cruza com o gasto do Meta e do Google. O lucro de cada dia aparece aqui."
+      acao={
+        <Link href="/stores" className={buttonVariants({})}>
+          Conectar loja
+        </Link>
+      }
+      className="min-h-80"
+    />
   );
 }
 
 export default async function FinanceiroPage() {
-  // So o cookie (sem banco): serve de key para o Suspense.
-  const filtro = await lerFiltroGlobal();
+  // So cookies (sem banco): servem de key para o Suspense. Trocar loja,
+  // periodo, moeda ou comparacao mostra o esqueleto de novo em vez de deixar o
+  // numero velho na tela.
+  const [filtro, comparacao] = await Promise.all([lerFiltroGlobal(), lerComparacao()]);
   return (
-    <div className="flex flex-col gap-[18px]">
-      <div>
-        <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.02em] text-ink">
-          Lucro
-        </h1>
-        <p className="mt-1 max-w-[62ch] text-[13px] leading-relaxed text-t2">
-          Quanto cada loja deixou depois de produto, frete do fornecedor, taxa e anúncio.
-        </p>
-      </div>
-      <Suspense key={JSON.stringify(filtro)} fallback={<Esqueleto />}>
+    <>
+      <PageHeader
+        title="Lucro"
+        description="Lucro estimado por loja, já descontados produto, frete do fornecedor, taxa de pagamento e anúncios."
+      />
+      <Suspense key={JSON.stringify({ filtro, comparacao })} fallback={<EsqueletoLucro />}>
         <Conteudo />
       </Suspense>
-    </div>
+    </>
   );
 }
