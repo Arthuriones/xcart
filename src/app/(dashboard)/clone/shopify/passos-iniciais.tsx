@@ -178,8 +178,8 @@ export function PassoOrigem({
             onKeyDown={(e) => {
               if (e.key !== "Enter") return;
               setTocado(true);
-              if (escopo === "colecao") lerColecoes();
-              else aoEnter();
+              if (escopo !== "colecao") aoEnter();
+              else if (pareceEndereco(origem)) lerColecoes();
             }}
             placeholder={
               escopo === "produto" ? "https://loja-origem.com/products/nome-do-produto" : "https://loja-origem.com"
