@@ -4,7 +4,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Section } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErroAdmin } from "./estados-admin";
-import { hora, inteiro, plural, reais } from "./formato";
+import { hora, inteiro, plural, reais, reaisKpi } from "./formato";
 import type { FaturamentoAdmin } from "@/lib/sales/admin-types";
 import { lerFaturamento } from "./ler-api";
 
@@ -86,7 +86,7 @@ export function VistaBlocoFaturamento({ g }: { g: FaturamentoAdmin }) {
         <>
           <div className="flex flex-col gap-1">
             <span className="num text-kpi text-ink">
-              {ninguemRespondeu ? "—" : reais(g.totalRevenueBrlCents / 100)}
+              {ninguemRespondeu ? "—" : reaisKpi(g.totalRevenueBrlCents / 100)}
             </span>
             <span className="num text-label text-t2">
               {ninguemRespondeu

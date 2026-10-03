@@ -14,6 +14,7 @@ import {
   periodoDaUrl,
   plural,
   reais,
+  reaisKpi,
   rotuloAcao,
   rotuloMes,
   rotuloPlano,
@@ -32,6 +33,13 @@ describe("moeda e numero", () => {
     expect(limpo(reais(1234.5))).toBe("R$ 1.234,50");
     expect(limpo(reais(1234.5, 0))).toBe("R$ 1.235");
     expect(limpo(naMoeda(12, "USD"))).toBe("US$ 12,00");
+  });
+
+  it("KPI sem centavos a partir de R$ 10 mil (cabe no cartao do celular)", () => {
+    expect(limpo(reaisKpi(9999.5))).toBe("R$ 9.999,50");
+    expect(limpo(reaisKpi(91663))).toBe("R$ 91.663");
+    expect(limpo(reaisKpi(-12000.4))).toBe("-R$ 12.000");
+    expect(reaisKpi(null)).toBe("—");
   });
 
   it("numero que nao se sabe vira travessao, nao zero", () => {

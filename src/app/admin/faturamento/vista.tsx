@@ -4,7 +4,7 @@ import { KpiCard } from "@/components/ui/kpi-card";
 import { Section } from "@/components/ui/section";
 import type { FaturamentoAdmin } from "@/lib/sales/admin-types";
 import { BotaoAtualizar } from "../estados-admin";
-import { hora, inteiro, plural, reais, type PeriodoFaturamento } from "../formato";
+import { hora, inteiro, plural, reaisKpi, type PeriodoFaturamento } from "../formato";
 import { TabelaFaturamento } from "./tabela-faturamento";
 
 /** O faturamento pronto, so com dados (a leitura fica no page.tsx). */
@@ -39,10 +39,11 @@ export function Faturamento({ g, periodo }: { g: FaturamentoAdmin; periodo: Peri
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <KpiCard
           rotulo="Faturamento no período"
-          valor={ninguem ? null : reais(g.totalRevenueBrlCents / 100)}
+          valor={ninguem ? null : reaisKpi(g.totalRevenueBrlCents / 100)}
           motivoSemDado="Nenhuma loja respondeu"
           detalhe={incompleto && !ninguem ? "Parcial: falta loja ou moeda" : "Convertido para real"}
           definicao="Soma dos pedidos pagos nas lojas de checkout com rota ligada, sem teste e sem cancelado. Moeda de fora vira real pela taxa de relatório."
+          className="col-span-2 lg:col-span-1"
         />
         <KpiCard
           rotulo="Pedidos pagos"
@@ -54,7 +55,6 @@ export function Faturamento({ g, periodo }: { g: FaturamentoAdmin; periodo: Peri
           rotulo="Lojas que responderam"
           valor={`${inteiro(responderam)} de ${inteiro(g.storeCount)}`}
           detalhe={semResposta > 0 ? plural(semResposta, "ficou de fora", "ficaram de fora") : "Todas responderam"}
-          className="col-span-2 lg:col-span-1"
         />
       </div>
 

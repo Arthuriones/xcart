@@ -19,6 +19,11 @@ export function reais(v: number | null | undefined, casas = 2): string {
   return finito(v) ? formatarDinheiro(v, "BRL", casas) : "—";
 }
 
+/** Real no KPI: sem centavos a partir de R$ 10 mil, para caber no cartao do celular. */
+export function reaisKpi(v: number | null | undefined): string {
+  return reais(v, finito(v) && Math.abs(v) >= 10000 ? 0 : 2);
+}
+
 /** Dolar, com casas extras para custo de IA de centavo ("US$ 0,012"). */
 export function dolares(v: number | null | undefined, casas = 2): string {
   return finito(v) ? formatarDinheiro(v, "USD", casas) : "—";

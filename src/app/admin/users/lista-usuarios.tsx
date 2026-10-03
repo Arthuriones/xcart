@@ -150,7 +150,7 @@ export function ListaUsuarios({
       className: "min-w-56",
       celula: (l) => (
         <span className="flex min-w-0 items-center gap-2">
-          <Link href={`/admin/users/${l.id}`} className={LINK}>
+          <Link href={`/admin/users/${l.id}`} className={`${LINK} min-w-0 max-w-60 truncate`}>
             {l.email}
           </Link>
           {l.u.isAdmin ? <StatusBadge tom="info" texto="Admin" ponto={false} /> : null}
@@ -197,7 +197,9 @@ export function ListaUsuarios({
       titulo: "Lojas",
       ordenarPor: "lojasQtd",
       direcaoInicial: "desc",
-      className: "max-w-56",
+      // Abaixo de 1536 px a coluna sai (as lojas estao no detalhe): com o menu
+      // ao lado, a tabela inteira nao cabe sem rolar de lado.
+      className: "hidden max-w-56 2xl:table-cell",
       celula: (l) =>
         l.u.stores.length === 0 ? (
           <span className="text-t2">
@@ -227,7 +229,7 @@ export function ListaUsuarios({
     },
     {
       chave: "custoTexto",
-      titulo: "Custo de IA no mês",
+      titulo: "Custo de IA",
       alinhar: "direita",
       ordenarPor: "custo",
       celula: (l) => reais(l.custo),
@@ -251,13 +253,23 @@ export function ListaUsuarios({
         return (
           <span className="inline-flex items-center justify-end gap-2">
             {semAcesso ? (
-              <Button size="sm" variant="secondary" pending={acesso.pendente === u.id} onClick={() => void acesso.liberar(g)}>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="max-sm:h-ctl-lg max-sm:px-4"
+                pending={acesso.pendente === u.id}
+                onClick={() => void acesso.liberar(g)}
+              >
                 Liberar
                 <span className="sr-only"> o acesso de {u.email}</span>
               </Button>
             ) : null}
             <DropdownMenu>
-              <DropdownMenuTrigger render={<Button size="icon-sm" variant="ghost" aria-label={`Ações de ${u.email}`} />}>
+              <DropdownMenuTrigger
+                render={
+                  <Button size="icon-sm" variant="ghost" className="max-sm:size-ctl-lg" aria-label={`Ações de ${u.email}`} />
+                }
+              >
                 <MoreHorizontalIcon aria-hidden />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-60">
@@ -371,7 +383,7 @@ export function ListaUsuarios({
 
         <p className="num border-t border-border-subtle px-4 py-2.5 text-label text-t2">
           {filtrando ? `${inteiro(linhas.length)} de ${inteiro(todos.length)} usuários · ` : ""}
-          Custo de IA em reais, pelo câmbio de relatório · atualizado às {hora(lidoEm)}
+          Custo de IA do mês corrente, em reais pelo câmbio de relatório · atualizado às {hora(lidoEm)}
         </p>
       </section>
 

@@ -15,13 +15,16 @@ import {
   naMoeda,
   plural,
   reais,
+  reaisKpi,
   rotuloMes,
   rotuloPlano,
 } from "./formato";
 import type { VisaoAdmin } from "./tipos";
 
+// E-mail comprido corta com reticencias (o texto inteiro continua no link,
+// para leitor de tela): a tabela de meia largura nao rola de lado por causa dele.
 const LINK =
-  "rounded-sm font-medium text-ink underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
+  "block max-w-64 truncate rounded-sm font-medium text-ink underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
 const LINK_ACAO =
   "rounded-sm text-dense font-medium text-brand underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
 
@@ -65,7 +68,8 @@ export function Visao({ d, lidoEm, faturamento }: { d: VisaoAdmin; lidoEm: numbe
 
   const compras = d.recentPurchases.map((c, i) => ({
     id: `${c.createdAt}-${i}`,
-    quem: c.email,
+    quem: <span className="block max-w-64 truncate">{c.email}</span>,
+    quemTexto: c.email,
     creditos: c.credits,
     creditosTexto: inteiro(c.credits),
     valor: c.amountBrl,
@@ -114,28 +118,28 @@ export function Visao({ d, lidoEm, faturamento }: { d: VisaoAdmin; lidoEm: numbe
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <KpiCard
             rotulo="Receita do mês"
-            valor={reais(receitaMes)}
+            valor={reaisKpi(receitaMes)}
             detalhe={`Assinaturas ${reais(s.mrrBrl, 0)} · créditos ${reais(s.creditRevenueMonthBrl, 0)}`}
             definicao="Assinantes Pro × preço do plano, mais os pacotes de crédito pagos no mês. A parte da assinatura é estimada: não desconta cupom nem atraso."
             href="/admin/usage"
           />
           <KpiCard
             rotulo="Custo de IA"
-            valor={reais(s.aiCostThisMonthBrl)}
+            valor={reaisKpi(s.aiCostThisMonthBrl)}
             detalhe={`${naMoeda(s.aiCostThisMonthUsd, "USD")} · câmbio ${s.usdBrlRate.toLocaleString("pt-BR")}`}
             definicao="O que a IA custou no mês. É cobrado em dólar e convertido pelo câmbio de relatório."
             href="/admin/usage"
           />
           <KpiCard
             rotulo="Margem do mês"
-            valor={reais(margem)}
+            valor={reaisKpi(margem)}
             estado={margem < 0 ? STATUS.lucro.prejuizo : STATUS.lucro.lucro}
             detalhe="Receita menos custo de IA"
             definicao="Receita do mês (assinatura estimada + créditos) menos o custo de IA. Não inclui outros custos."
           />
           <KpiCard
             rotulo="Créditos vendidos"
-            valor={reais(s.creditRevenueMonthBrl)}
+            valor={reaisKpi(s.creditRevenueMonthBrl)}
             detalhe={mesAtual ? plural(mesAtual.compras, "compra no mês", "compras no mês") : undefined}
             comparacao={mesPassado ? `Mês passado inteiro: ${reais(mesPassado.creditoBrl, 0)}` : undefined}
             serie={porMes.map((m) => m.creditoBrl)}
@@ -215,7 +219,7 @@ export function Visao({ d, lidoEm, faturamento }: { d: VisaoAdmin; lidoEm: numbe
 
       <Section
         titulo="Maiores consumidores de IA no mês"
-        descricao="Os 10 clientes que mais gastaram IA no mês, em reais"
+        descricao="Quem mais gastou IA no mês (até 10), em reais"
         acoes={
           <Link href="/admin/usage" className={LINK_ACAO}>
             Ver uso e custos
@@ -245,16 +249,16 @@ export function Visao({ d, lidoEm, faturamento }: { d: VisaoAdmin; lidoEm: numbe
         />
       </Section>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-4 2xl:grid-cols-2">
         <Section
           titulo="Vendas de crédito recentes"
-          descricao="As 12 compras de pacote mais novas"
+          descricao="As compras de pacote mais novas (até 12)"
           espaco="nenhum"
         >
           <DataTable
             legenda="Vendas de crédito recentes"
             colunas={[
-              { chave: "quem", titulo: "Quem", className: "min-w-48" },
+              { chave: "quem", titulo: "Quem", ordenarPor: "quemTexto", className: "min-w-48" },
               { chave: "creditosTexto", titulo: "Créditos", alinhar: "direita", ordenarPor: "creditos" },
               { chave: "valorTexto", titulo: "Valor", alinhar: "direita", ordenarPor: "valor" },
               { chave: "quandoTexto", titulo: "Quando", ordenarPor: "quando", direcaoInicial: "desc" },
@@ -273,7 +277,7 @@ export function Visao({ d, lidoEm, faturamento }: { d: VisaoAdmin; lidoEm: numbe
 
         <Section
           titulo="Cadastros recentes"
-          descricao="As 8 contas criadas por último"
+          descricao="As contas criadas por último (até 8)"
           acoes={
             <Link href="/admin/users" className={LINK_ACAO}>
               Ver todos os usuários

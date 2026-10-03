@@ -5,7 +5,7 @@ import { LineChart } from "@/components/ui/line-chart";
 import { Section } from "@/components/ui/section";
 import { STATUS } from "@/components/ui/status-badge";
 import { BotaoAtualizar } from "../estados-admin";
-import { diaMes, dolares, hora, inteiro, naMoeda, plural, reais, rotuloAcao, rotuloMes } from "../formato";
+import { diaMes, dolares, hora, inteiro, naMoeda, plural, reais, reaisKpi, rotuloAcao, rotuloMes } from "../formato";
 import type { AnaliseAdmin } from "../tipos";
 
 /** Uso e custos prontos, so com dados (a leitura fica no page.tsx). */
@@ -30,19 +30,19 @@ export function Uso({ a, lidoEm }: { a: AnaliseAdmin; lidoEm: number }) {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard
           rotulo="Receita do mês"
-          valor={reais(a.revenue.revenueThisMonthBrl)}
+          valor={reaisKpi(a.revenue.revenueThisMonthBrl)}
           detalhe={`Assinaturas ${reais(a.revenue.mrrBrl, 0)} · créditos ${reais(a.revenue.creditSalesThisMonthBrl, 0)}`}
           definicao="Assinantes Pro × preço do plano (estimado) mais os pacotes de crédito pagos no mês, em reais."
         />
         <KpiCard
           rotulo="Custo de IA no mês"
-          valor={reais(a.cost.thisMonthBrl)}
+          valor={reaisKpi(a.cost.thisMonthBrl)}
           detalhe={`${naMoeda(a.cost.thisMonthUsd, "USD")} · câmbio ${a.usdBrlRate.toLocaleString("pt-BR")}`}
           definicao="A IA é cobrada em dólar; o valor em reais usa o câmbio de relatório."
         />
         <KpiCard
           rotulo="Margem do mês"
-          valor={reais(a.marginBrl)}
+          valor={reaisKpi(a.marginBrl)}
           estado={a.marginBrl < 0 ? STATUS.lucro.prejuizo : STATUS.lucro.lucro}
           detalhe="Receita menos custo de IA, em reais"
           definicao="Receita do mês menos o custo de IA convertido para real. Não inclui outros custos."

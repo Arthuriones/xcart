@@ -25,8 +25,8 @@ import { CartaoGerenciar } from "./cartao-gerenciar";
 import { Trilha } from "./trilha";
 
 // Link com cara de botao passa pelo cn: o cva sozinho deixa border-transparent junto.
-const LINK_EXTERNO = cn(buttonVariants({ variant: "secondary", size: "sm" }));
-const LINK_SHOPIFY = cn(buttonVariants({ variant: "ghost", size: "sm" }));
+const LINK_EXTERNO = cn(buttonVariants({ variant: "secondary", size: "sm" }), "max-sm:h-ctl-lg");
+const LINK_SHOPIFY = cn(buttonVariants({ variant: "ghost", size: "sm" }), "max-sm:h-ctl-lg");
 
 /** O detalhe pronto, so com dados (a leitura fica no page.tsx). */
 export function Detalhe({
@@ -228,11 +228,7 @@ export function Detalhe({
 
       <Section
         titulo="Recargas"
-        descricao={
-          recargas.length === 0
-            ? "Pacotes de crédito comprados"
-            : `As ${plural(recargas.length, "compra mais nova", "compras mais novas")} de pacote de crédito`
-        }
+        descricao="Pacotes de crédito comprados, do mais novo para o mais antigo (até 20)"
         espaco="nenhum"
       >
         <DataTable
@@ -256,7 +252,7 @@ export function Detalhe({
 
       <Section
         titulo="Uso de IA"
-        descricao="As últimas 50 ações · custo em dólar, a moeda em que a IA é cobrada"
+        descricao="Da ação mais nova para a mais antiga (até 50) · custo em dólar, a moeda em que a IA é cobrada"
         espaco="nenhum"
       >
         <DataTable
