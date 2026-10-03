@@ -52,15 +52,19 @@ async function Conteudo() {
           porLoja: dados.filtro.lojaId === TODAS && dados.lojaIds.length >= 2,
         }),
         produtos: montarPorProduto(b.entrada),
-        campanhas: montarPorCampanha({
-          contas: b.contas,
-          gastos: b.gastosCampanha,
-          cambio: b.entrada.cambio,
-          moeda: b.entrada.moeda,
-          intervalo: b.entrada.intervalos.atual,
-          lojaIds: b.lojaIds,
-        }),
+        // Falha so no gasto por campanha: so a aba Campanha mostra o erro.
+        campanhas: b.erroCampanha
+          ? null
+          : montarPorCampanha({
+              contas: b.contas,
+              gastos: b.gastosCampanha,
+              cambio: b.entrada.cambio,
+              moeda: b.entrada.moeda,
+              intervalo: b.entrada.intervalos.atual,
+              lojaIds: b.lojaIds,
+            }),
       };
+      if (b.erroCampanha) erroExtras = b.erroCampanha;
     } catch (e) {
       console.error("[lucro] montagem", e);
       erroExtras = mensagem(e);

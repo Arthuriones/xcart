@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { getStoresWithRoles } from "@/lib/stores/queries";
+import { deriveStoreRoles } from "@/lib/checkout-routes/store-roles";
 import { lerComparacao, lerFiltroGlobal } from "@/lib/filtro-global";
 import { calcularFinanceiro, type ResultadoFinanceiro } from "@/lib/financeiro/calculo";
 import {
@@ -369,6 +370,42 @@ export type LojaBase = {
   } | null;
 };
 
+/**
+ * O papel da loja no roteamento, so com os ids das rotas.
+ *
+ * Antes vinha de getStoresWithRoles(), que baixa o sku_map de todo destino
+ * -- ate 600 KB por usuario, medido -- a cada clique de aba do detalhe, para
+ * usar so o papel de uma loja. Aqui sao duas consultas com colunas de id.
+ */
+async function papelDaLoja(supabase: Cliente, userId: string, id: string): Promise<StoreRole> {
+  const { data: rotas, error } = await supabase
+    .from("routed_checkout_configs")
+    .select("id, source_store_id, target_store_id")
+    .eq("user_id", userId);
+  if (error) throw new Error(`Falha ao ler as rotas: ${error.message}`);
+  if (!rotas?.length) return "unassigned";
+
+  const { data: destinos, error: erroDestinos } = await supabase
+    .from("routed_checkout_targets")
+    .select("route_id, target_store_id")
+    .in("route_id", rotas.map((r) => r.id));
+  if (erroDestinos) throw new Error(`Falha ao ler os destinos das rotas: ${erroDestinos.message}`);
+
+  const porRota = new Map<string, string[]>();
+  for (const d of destinos ?? []) {
+    porRota.set(d.route_id, [...(porRota.get(d.route_id) ?? []), d.target_store_id]);
+  }
+  // Mesma regra de getStoresWithRoles: rota sem linha de destino (anterior a
+  // migration 025) cai no destino legado da propria rota.
+  const papeis = deriveStoreRoles(
+    rotas.map((r) => ({
+      sourceStoreId: r.source_store_id,
+      targetStoreIds: porRota.get(r.id) || [r.target_store_id].filter(Boolean),
+    }))
+  );
+  return papeis.get(id) ?? "unassigned";
+}
+
 /** A loja, se for do usuario. null = nao existe ou e de outro (404 na tela). */
 export async function lerLojaBase(id: string): Promise<LojaBase | null> {
   if (!ehUuid(id)) return null;
@@ -384,9 +421,11 @@ export async function lerLojaBase(id: string): Promise<LojaBase | null> {
   if (error) throw new Error(`Falha ao ler a loja: ${error.message}`);
   if (!loja) return null;
 
-  const [estados, todas] = await Promise.all([lerEstados(supabase, [id]), getStoresWithRoles()]);
+  const [estados, papel] = await Promise.all([
+    lerEstados(supabase, [id]),
+    papelDaLoja(supabase, user.id, id),
+  ]);
   const s = estados.get(id);
-  const papel = todas.find((l) => l.id === id)?.role ?? "unassigned";
 
   return {
     id: String(loja.id),

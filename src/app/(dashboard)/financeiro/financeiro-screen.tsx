@@ -29,7 +29,8 @@ export type DadosLucro = Extract<DadosFinanceiro, { vazio: false }>;
 export interface ExtrasLucro {
   serie: SerieDiaria;
   produtos: PorProduto;
-  campanhas: LinhaCampanha[];
+  /** null = o gasto por campanha nao foi lido (so a aba Campanha mostra o erro). */
+  campanhas: LinhaCampanha[] | null;
 }
 
 export function FinanceiroScreen({

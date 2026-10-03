@@ -11,6 +11,8 @@ import {
   somarDias,
   type AdAccountRow,
   type AdSpendDailyRow,
+  type FiltroGlobal,
+  type LojaDoSeletor,
   type FinOrderRow,
   type FinStoreSettingsRow,
   type FinSyncStateRow,
@@ -19,15 +21,16 @@ import {
 } from "@/lib/financeiro/tipos";
 
 // ============================================================================
-// As linhas cruas do Lucro, para as leituras NOVAS da tela (serie diaria, por
-// produto, por campanha). So leitura, pela sessao (RLS), so banco.
+// A leitura do Lucro, UMA por requisicao. So leitura, pela sessao (RLS).
 //
-// E a mesma leitura de getFinanceiro (src/lib/financeiro/queries.ts): mesmas
-// tabelas, mesmos filtros, mesmo intervalo. Ela nao devolve as linhas, so o
-// resultado, e mexer nela esta fora do combinado -- dai esta copia, que
-// acrescenta so o gasto no nivel campanha. Se a leitura de la mudar, mude aqui.
+// getFinanceiro (src/lib/financeiro/queries.ts) e as leituras novas da tela
+// (serie diaria, por produto, por campanha) usam esta mesma funcao, memorizada
+// com cache(): a home le o banco uma vez so. Antes eram duas copias da mesma
+// leitura, 15 consultas onde bastavam 8.
 //
-// Erro de banco LANCA: quem chama mostra o erro da secao, nunca zero.
+// Erro de banco LANCA: quem chama mostra o erro, nunca zero. O gasto por
+// campanha e a excecao: so a aba Campanha depende dele, entao a falha dele
+// vira `erroCampanha` em vez de derrubar a tela inteira.
 // ============================================================================
 
 const PAGINA = 1000;
@@ -51,11 +54,19 @@ async function lerTudo<T>(
 export interface BaseLucro {
   /** Pronta para calcularFinanceiro e as montagens de src/lib/leitura. */
   entrada: EntradaFinanceiro;
+  filtro: FiltroGlobal;
+  /** Todas as lojas do usuario (o seletor), nao so as do filtro. */
+  lojas: LojaDoSeletor[];
   lojaIds: string[];
+  estados: FinSyncStateRow[];
+  /** Fuso do relatorio: o da loja, quando o filtro tem uma so. */
+  fuso: string;
   /** Todas as contas de anuncio do usuario. */
   contas: AdAccountRow[];
   /** ad_spend_daily no nivel campanha, so do periodo atual. */
   gastosCampanha: AdSpendDailyRow[];
+  /** Falha ao ler o gasto por campanha: so a aba Campanha fica sem dado. */
+  erroCampanha: string | null;
 }
 
 /** null = usuario sem loja (ou sem sessao). Memorizado por requisicao. */
@@ -128,6 +139,7 @@ export const lerBaseLucro = cache(async (): Promise<BaseLucro | null> => {
   const lojaSet = new Set(lojaIds);
   const contaIds = contas.filter((c) => c.store_id && lojaSet.has(c.store_id)).map((c) => c.id);
 
+  let erroCampanha: string | null = null;
   const [gastos, gastosCampanha] = contaIds.length
     ? await Promise.all([
         lerTudo<AdSpendDailyRow>("o gasto de anúncio", (de, a) =>
@@ -154,7 +166,10 @@ export const lerBaseLucro = cache(async (): Promise<BaseLucro | null> => {
             .order("data", { ascending: true })
             .order("campanha_id", { ascending: true })
             .range(de, a)
-        ),
+        ).catch((e: unknown) => {
+          erroCampanha = e instanceof Error ? e.message : String(e);
+          return [] as AdSpendDailyRow[];
+        }),
       ])
     : [[], []];
 
@@ -197,8 +212,13 @@ export const lerBaseLucro = cache(async (): Promise<BaseLucro | null> => {
       moeda: filtro.moeda,
       hoje,
     },
+    filtro,
+    lojas,
     lojaIds,
+    estados,
+    fuso: fusoRef,
     contas,
     gastosCampanha,
+    erroCampanha,
   };
 });
