@@ -1,56 +1,113 @@
 "use client";
 
-import type { ReactNode } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { textos } from "@/lib/textos";
-import { hrefAtivo } from "@/components/layout/nav-ativo";
-
-// Onde cada rota aparece na trilha do topo. Chave de traducao do namespace nav.
-const TRILHA: { prefixo: string; chave: string }[] = [
-  { prefixo: "/financeiro", chave: "profit" },
-  { prefixo: "/financeiro/custos", chave: "costs" },
-  { prefixo: "/financeiro/anuncios", chave: "adAccounts" },
-  { prefixo: "/setup", chave: "setup" },
-  { prefixo: "/overview", chave: "routeOverview" },
-  { prefixo: "/stores", chave: "connectedStores" },
-  { prefixo: "/sales", chave: "salesByRoute" },
-  { prefixo: "/tracking", chave: "trackingHealth" },
-  { prefixo: "/tracking/eventos", chave: "liveEvents" },
-  { prefixo: "/alertas", chave: "alerts" },
-  { prefixo: "/activity", chave: "activity" },
-  { prefixo: "/clone/routed-checkout", chave: "routing" },
-  { prefixo: "/clone/shopify", chave: "importProducts" },
-  { prefixo: "/clone", chave: "importProducts" },
-  { prefixo: "/billing", chave: "billing" },
-  { prefixo: "/claude", chave: "claude" },
-];
-
-const PREFIXOS = TRILHA.map((item) => item.prefixo);
+import { Search } from "lucide-react";
+import { LogoXcart } from "@/components/layout/logo";
+import { APP_HOME } from "@/lib/app-home";
+import { contextoDaRota, tituloDaRota } from "./navegacao";
+import { PaletaComandos, abrirBusca } from "./paleta-comandos";
+import {
+  Atualizado,
+  BarraContexto,
+  ContextoCelular,
+  useContexto,
+  type DadosContexto,
+} from "./seletor-global";
+import { Sino, SinoCelular } from "./sino";
 
 /**
- * `acoes` vem do layout (servidor): o seletor global de loja/periodo/moeda,
- * ja dentro de Suspense. Chega pronto como prop porque este componente e
- * client e nao pode buscar as lojas sozinho.
+ * O topo da casca.
+ *
+ * Desktop: barra de contexto (loja, periodo, comparacao, moeda), "Atualizado
+ * as", busca e sino. O titulo da tela fica no PageHeader da propria pagina --
+ * um titulo por tela, sem repetir aqui.
+ *
+ * Celular: logo, titulo, busca e sino; o contexto vira um botao que abre num
+ * painel. Entre 768 e 1023 px o desktop usa o mesmo botao: a barra inteira
+ * nao cabe ao lado do menu.
+ *
+ * `contexto` chega pronto do servidor (topo-dados.tsx); null = a leitura
+ * falhou, e o topo segue sem a barra.
  */
-export function TopNav({ acoes }: { acoes?: ReactNode } = {}) {
+export function TopNav({
+  contexto,
+  alertasAbertos,
+}: {
+  contexto: DadosContexto | null;
+  alertasAbertos: number | null;
+}) {
   const pathname = usePathname();
-  const t = textos("nav");
-
-  // O prefixo mais longo ganha, e so casa com fronteira de "/": /tracking/eventos
-  // antes de /tracking, e /clonex nao vira "Importar produtos".
-  const prefixo = hrefAtivo(pathname, PREFIXOS);
-  const atual = prefixo ? TRILHA.find((item) => item.prefixo === prefixo) : undefined;
+  const modo = contextoDaRota(pathname);
+  const titulo = tituloDaRota(pathname);
+  const ctx = useContexto(contexto);
+  const temContexto = !!contexto && modo.tipo !== "nenhum";
 
   return (
-    <header className="fixed inset-x-0 top-0 z-30 h-[52px] border-b border-border bg-[var(--header-bg)] backdrop-blur-md md:left-[216px]">
-      <div className="flex h-full items-center gap-2.5 px-4 sm:px-5">
-        {atual && (
-          <span className="min-w-0 truncate text-[13px] font-semibold tracking-[-0.005em] text-ink">
-            {t(atual.chave)}
-          </span>
+    <>
+      <header className="sticky top-0 z-30 hidden h-15 shrink-0 items-center gap-2 border-b border-border bg-surface px-6 md:flex">
+        {contexto && temContexto && (
+          <>
+            <div className="hidden min-w-0 lg:flex">
+              <BarraContexto dados={contexto} ctx={ctx} modo={modo} />
+            </div>
+            <div className="min-w-0 max-w-90 flex-1 lg:hidden">
+              <ContextoCelular dados={contexto} ctx={ctx} modo={modo} chaveTela={pathname} />
+            </div>
+          </>
         )}
-        <div className="ml-auto flex min-w-0 items-center gap-1.5">{acoes}</div>
-      </div>
-    </header>
+        <div className="flex-1" />
+        {contexto && temContexto && (
+          <>
+            <div className="hidden lg:block">
+              <Atualizado ctx={ctx} fuso={contexto.fuso} chaveTela={pathname} />
+            </div>
+            <span aria-hidden className="mx-1 hidden h-6 w-px bg-border lg:block" />
+          </>
+        )}
+        <button
+          type="button"
+          onClick={abrirBusca}
+          aria-label="Buscar ou ir para (Ctrl K)"
+          className="flex h-ctl-md items-center gap-2 whitespace-nowrap rounded-control border border-border-strong bg-surface-2 px-2.5 text-dense text-t2 hover:border-control-border hover:text-ink"
+        >
+          <Search className="size-4" strokeWidth={1.75} aria-hidden />
+          <span className="hidden lg:inline">Buscar</span>
+          <kbd className="hidden rounded-control border border-border bg-surface px-1.5 font-mono text-label text-t2 min-[1360px]:inline">
+            Ctrl K
+          </kbd>
+        </button>
+        <Sino total={alertasAbertos} />
+      </header>
+
+      <header className="sticky top-0 z-30 border-b border-border bg-surface md:hidden">
+        <div className="flex h-14 items-center gap-1 pl-4 pr-1">
+          <Link href={APP_HOME} aria-label="xcart, ir para o Lucro" className="mr-2 shrink-0">
+            <LogoXcart altura={14} />
+          </Link>
+          <h1 className="min-w-0 flex-1 truncate text-section font-semibold text-ink">{titulo}</h1>
+          <button
+            type="button"
+            onClick={abrirBusca}
+            aria-label="Buscar ou ir para"
+            className="grid size-ctl-lg shrink-0 place-items-center rounded-control text-t1 hover:text-ink"
+          >
+            <Search className="size-5" strokeWidth={1.75} aria-hidden />
+          </button>
+          <SinoCelular total={alertasAbertos} />
+        </div>
+        {contexto && temContexto && (
+          <div className="px-4 pb-3">
+            <ContextoCelular dados={contexto} ctx={ctx} modo={modo} chaveTela={pathname} />
+          </div>
+        )}
+      </header>
+
+      <PaletaComandos
+        lojas={contexto?.lojas ?? []}
+        onEscolherLoja={contexto ? (id) => ctx.gravar({ lojaId: id }) : undefined}
+        onAtualizar={ctx.atualizar}
+      />
+    </>
   );
 }

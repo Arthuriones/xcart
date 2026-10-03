@@ -1,292 +1,378 @@
 "use client";
 
-import { usePathname } from "next/navigation";
-import { textos } from "@/lib/textos";
-import {
-  Radar,
-  Activity,
-  Bell,
-  Calculator,
-  ChevronDown,
-  CircleDollarSign,
-  CreditCard,
-  Download,
-  LayoutGrid,
-  ListChecks,
-  LogOut,
-  Megaphone,
-  RadioTower,
-  Store,
-  TrendingUp,
-  Terminal,
-  Waypoints,
-  type LucideIcon,
-} from "lucide-react";
+import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { usePathname, useRouter } from "next/navigation";
+import { ChevronUp, Keyboard, LogOut, Menu, PanelLeft } from "lucide-react";
+import clsx from "clsx";
 import { LogoXcart } from "@/components/layout/logo";
-import { hrefAtivo } from "@/components/layout/nav-ativo";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { APP_HOME } from "@/lib/app-home";
-import { cn } from "@/lib/utils";
+import { textos } from "@/lib/textos";
+import { COOKIE_MENU, gravarCookie } from "./contexto";
+import { BARRA_CELULAR, gruposNav, itemAtivo, type ItemNav } from "./navegacao";
+import { Folha, Pop } from "./sobreposicao";
+import { SeletorTema } from "./tema";
 
-interface NavItem {
-  href: string;
-  label: string;
-  icon: LucideIcon;
-  /** Numero a direita: quantas lojas, quantos creditos. */
-  counter?: "stores" | "credits";
+const t = textos("nav");
+
+/** O que o menu mostra alem dos links. Tudo lido no servidor (sidebar-data). */
+export interface DadosMenu {
+  nome: string;
+  email: string;
+  lojas: number;
+  creditos: number;
+  alertas: number;
+  /** Tem rota de checkout? Sem rota, Roteamento vira "Ativar roteamento". */
+  temRota: boolean;
+  /** Guia de configuracao: so enquanto incompleto e so para quem usa rota. */
+  guia: { feitos: number; total: number; proximo: string } | null;
+  /** Menu recolhido, do cookie: a largura certa ja no primeiro desenho. */
+  recolhido: boolean;
 }
 
-interface NavSection {
-  /** Chave de traducao; ausente = grupo sem cabecalho. */
-  label?: string;
-  items: NavItem[];
-}
-
-// Cinco grupos, na ordem do que o lojista olha: dinheiro primeiro (Lucro e a
-// home), depois se o rastreamento esta chegando, a operacao do dia a dia, a
-// rota (so para quem usa vitrine) e a conta.
-const NAV: NavSection[] = [
-  {
-    label: "finance",
-    items: [
-      { href: "/financeiro", label: "profit", icon: CircleDollarSign },
-      { href: "/financeiro/custos", label: "costs", icon: Calculator },
-      { href: "/financeiro/anuncios", label: "adAccounts", icon: Megaphone },
-    ],
-  },
-  {
-    label: "trackingGroup",
-    items: [
-      { href: "/tracking", label: "trackingHealth", icon: Radar },
-      { href: "/tracking/eventos", label: "liveEvents", icon: RadioTower },
-      { href: "/alertas", label: "alerts", icon: Bell },
-    ],
-  },
-  {
-    label: "operations",
-    items: [
-      { href: "/stores", label: "connectedStores", icon: Store, counter: "stores" },
-      { href: "/clone/shopify", label: "importProducts", icon: Download },
-      { href: "/activity", label: "activity", icon: Activity },
-    ],
-  },
-  {
-    label: "routingGroup",
-    items: [
-      { href: "/overview", label: "routeOverview", icon: LayoutGrid },
-      { href: "/clone/routed-checkout", label: "routing", icon: Waypoints },
-      { href: "/sales", label: "salesByRoute", icon: TrendingUp },
-    ],
-  },
-  {
-    label: "system",
-    items: [
-      { href: "/setup", label: "setup", icon: ListChecks },
-      { href: "/billing", label: "billing", icon: CreditCard, counter: "credits" },
-      { href: "/claude", label: "claude", icon: Terminal },
-    ],
-  },
-];
-
-const TODOS_OS_ITENS = NAV.flatMap((secao) => secao.items);
-const TODOS_OS_HREFS = TODOS_OS_ITENS.map((item) => item.href);
-
-// Barra de baixo no celular: buscada por HREF. O acesso por indice de NAV
-// apontava para o item errado em silencio sempre que o menu mudava de ordem.
-const HREFS_MOBILE = ["/financeiro", "/tracking", "/alertas", "/stores"];
-const MOBILE = HREFS_MOBILE.map((href) => TODOS_OS_ITENS.find((item) => item.href === href)).filter(
-  (item): item is NavItem => item !== undefined
-);
-
-function initial(nome: string) {
+function inicial(nome: string) {
   return (nome.trim()[0] || "?").toUpperCase();
 }
 
-export interface SidebarData {
-  nome: string;
-  email: string;
-  stores: number;
-  credits: number;
-  percent: number;
-  nextLabel: string;
+/** Abre a lista de atalhos (ela mora no topo, junto da busca). */
+export function abrirAtalhos() {
+  window.dispatchEvent(new Event("xcart:atalhos"));
 }
 
-export function Sidebar({ dados }: { dados: SidebarData }) {
+async function sair(router: ReturnType<typeof useRouter>) {
+  // Rota de API em vez do cliente Supabase: ver src/app/api/auth/logout.
+  await fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
+  router.push("/login");
+  router.refresh();
+}
+
+function Contador({ item, dados }: { item: ItemNav; dados: DadosMenu }) {
+  if (!item.contador) return null;
+  const valor = { lojas: dados.lojas, creditos: dados.creditos, alertas: dados.alertas }[
+    item.contador
+  ];
+  if (!valor) return null;
+  if (item.contador === "alertas") {
+    return (
+      <span className="num rounded-full bg-err-bg px-1.5 text-label font-medium leading-4.5 text-err">
+        {valor}
+        <span className="sr-only"> abertos</span>
+      </span>
+    );
+  }
+  return <span className="num text-label text-t2">{valor.toLocaleString("pt-BR")}</span>;
+}
+
+export function Sidebar({ dados }: { dados: DadosMenu }) {
   const pathname = usePathname();
   const router = useRouter();
-  const t = textos("nav");
+  const [recolhido, setRecolhido] = useState(dados.recolhido);
+  const [mais, setMais] = useState(false);
+  const [conta, setConta] = useState(false);
 
-  const contadores = { stores: dados.stores, credits: dados.credits };
-  // O medidor some quando a operacao esta pronta: cravado em 100% vira ruido
-  // permanente.
-  const progresso =
-    dados.percent < 100 ? { pct: dados.percent, next: dados.nextLabel } : null;
+  const ativo = itemAtivo(pathname);
+  const grupos = gruposNav(dados.temRota);
+  const aberto = !recolhido;
 
-
-  // Um item aceso por vez: vence o href mais longo (ver nav-ativo.ts).
-  const atual = hrefAtivo(pathname, TODOS_OS_HREFS);
-
-  async function sair() {
-    // Rota de API em vez do cliente Supabase: ver src/app/api/auth/logout.
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
+  function alternar() {
+    const proximo = !recolhido;
+    setRecolhido(proximo);
+    setConta(false);
+    gravarCookie(COOKIE_MENU, proximo ? "1" : "0");
   }
+
+  const pct = dados.guia ? Math.round((dados.guia.feitos / dados.guia.total) * 100) : 0;
+  const ativoNaBarra = BARRA_CELULAR.find((b) => ativo && b.acende.includes(ativo));
 
   return (
     <>
-      <aside className="fixed left-0 top-0 z-40 hidden h-screen w-[216px] flex-col border-r border-border bg-surface md:flex">
-        <div className="flex h-14 shrink-0 flex-col justify-center gap-1 px-4">
-          <Link href={APP_HOME} aria-label="xcart" className="w-fit">
-            <LogoXcart altura={18} prioridade />
-          </Link>
-          <span className="block truncate text-[10.5px] leading-tight text-t3">
-            {contadores.stores === 1
-              ? "1 loja conectada"
-              : `${contadores.stores} lojas conectadas`}
-          </span>
+      {/* ---------------- Desktop: menu lateral recolhivel ---------------- */}
+      <aside
+        aria-label={t("mainMenu")}
+        className={clsx(
+          "sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-150 md:flex",
+          aberto ? "w-58" : "w-15"
+        )}
+      >
+        <div
+          className={clsx(
+            "flex h-14 shrink-0 items-center gap-2",
+            aberto ? "justify-between pl-4 pr-3" : "justify-center"
+          )}
+        >
+          {aberto && (
+            <Link href={APP_HOME} aria-label="xcart, ir para o Lucro" className="w-fit">
+              <LogoXcart altura={18} prioridade />
+            </Link>
+          )}
+          <button
+            type="button"
+            onClick={alternar}
+            aria-label={aberto ? t("collapseMenu") : t("expandMenu")}
+            aria-expanded={aberto}
+            className="grid size-ctl-sm place-items-center rounded-control text-t2 hover:bg-hover hover:text-ink"
+          >
+            <PanelLeft className="size-4" strokeWidth={1.75} aria-hidden />
+          </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-2 py-2.5">
-          {NAV.map((secao, i) => (
-            <div key={secao.label ?? `s${i}`} className={i === 0 ? "" : "mt-1.5"}>
-              {secao.label && (
-                <div
-                  className={cn(
-                    "px-2 pb-[5px] font-mono text-[9.5px] uppercase tracking-[0.14em] text-t4",
-                    // Cinco grupos com cabecalho: o espaco vem do cabecalho, nao
-                    // de margem somada, senao o menu nao cabe em tela de notebook.
-                    i === 0 ? "pt-1" : "pt-3"
-                  )}
-                >
-                  {t(secao.label)}
-                </div>
+        <nav
+          aria-label={t("screens")}
+          className={clsx(
+            "flex flex-1 flex-col gap-4 px-2 pb-3 pt-1",
+            // Recolhido, a dica do item sai para a direita: overflow visivel
+            // para ela nao ser cortada.
+            aberto ? "overflow-y-auto" : "overflow-visible"
+          )}
+        >
+          {grupos.map((g) => (
+            <div key={g.id} className="flex flex-col gap-0.5">
+              {g.rotulo && aberto && (
+                <div className="px-2 pb-1 text-label font-medium text-t3">{g.rotulo}</div>
               )}
-              <div className="flex flex-col gap-px">
-                {secao.items.map((item) => {
-                  const on = item.href === atual;
-                  const valor = item.counter ? contadores[item.counter] : null;
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={cn(
-                        "group flex items-center gap-[9px] rounded-md px-2 py-1.5 text-[13px] transition-colors",
-                        on
-                          ? "bg-[var(--nav-active)] font-medium text-ink"
-                          : "text-t2 hover:bg-hover hover:text-ink"
-                      )}
-                    >
-                      <item.icon
-                        className={cn("h-[15px] w-[15px] shrink-0", on ? "text-ink" : "text-t3")}
-                        strokeWidth={1.75}
-                        aria-hidden
-                      />
-                      <span className="min-w-0 flex-1 truncate">{t(item.label)}</span>
-                      {valor ? (
-                        <span className="font-mono text-[10px] tabular-nums text-t4">
-                          {valor}
+              {g.itens.map((item) => {
+                const on = item.id === ativo;
+                return (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    aria-current={on ? "page" : undefined}
+                    aria-label={
+                      aberto
+                        ? undefined
+                        : item.contador === "alertas" && dados.alertas > 0
+                          ? `${item.rotulo}, ${dados.alertas} abertos`
+                          : item.rotulo
+                    }
+                    className={clsx(
+                      "group relative flex h-8 items-center gap-2.5 rounded-control px-2 text-dense",
+                      on
+                        ? "bg-nav-active font-semibold text-ink"
+                        : item.convite
+                          ? "text-t3 hover:bg-hover hover:text-ink"
+                          : "text-t1 hover:bg-hover hover:text-ink"
+                    )}
+                  >
+                    <item.icone className="size-4 shrink-0" strokeWidth={1.75} aria-hidden />
+                    {aberto ? (
+                      <>
+                        <span className="min-w-0 flex-1 truncate">{item.rotulo}</span>
+                        <Contador item={item} dados={dados} />
+                      </>
+                    ) : (
+                      <>
+                        {item.contador === "alertas" && dados.alertas > 0 && (
+                          <span
+                            aria-hidden
+                            className="absolute right-1 top-1 size-2 rounded-full bg-err"
+                          />
+                        )}
+                        <span
+                          aria-hidden
+                          className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 hidden -translate-y-1/2 whitespace-nowrap rounded-control bg-solid px-2 py-1 text-label font-normal text-on-solid group-hover:block group-focus-visible:block"
+                        >
+                          {item.rotulo}
                         </span>
-                      ) : null}
-                    </Link>
-                  );
-                })}
-              </div>
+                      </>
+                    )}
+                  </Link>
+                );
+              })}
             </div>
           ))}
         </nav>
 
-        {/* Progresso da configuracao. Some quando a operacao esta pronta --
-            um medidor cravado em 100% vira ruido permanente. */}
-        {progresso && (
+        {dados.guia && aberto && (
           <Link
             href="/setup"
-            className="mx-2.5 mb-2 shrink-0 rounded-lg border border-border bg-surface-2 px-3 py-2.5 transition-colors hover:border-[var(--border-strong)]"
+            className="mx-3 mb-3 flex shrink-0 flex-col gap-2 rounded-card border border-border bg-surface-2 p-3 text-ink hover:border-border-strong"
           >
             <span className="flex items-baseline justify-between gap-2">
-              <span className="text-[11.5px] font-medium text-ink">{t("setup")}</span>
-              <span className="font-mono text-[11px] tabular-nums text-t2">
-                {progresso.pct}%
+              <span className="text-label font-semibold">{t("setupGuide")}</span>
+              <span className="num text-label text-t2">
+                {dados.guia.feitos} de {dados.guia.total}
               </span>
             </span>
-            <span className="mt-1.5 block h-[3px] overflow-hidden rounded-full bg-[var(--track)]">
-              <span
-                className="block h-full rounded-full bg-[var(--brand)] transition-[width] duration-500"
-                style={{ width: `${progresso.pct}%` }}
-              />
+            <span
+              role="progressbar"
+              aria-label="Progresso do guia"
+              aria-valuemin={0}
+              aria-valuemax={dados.guia.total}
+              aria-valuenow={dados.guia.feitos}
+              className="block h-1 overflow-hidden rounded-full bg-track"
+            >
+              <span className="block h-full rounded-full bg-ink" style={{ width: `${pct}%` }} />
             </span>
-            <span className="mt-1.5 block truncate text-[10.5px] text-t3">
-              {progresso.next}
-            </span>
+            <span className="truncate text-label text-t2">Próximo: {dados.guia.proximo}</span>
           </Link>
         )}
 
-        <div className="shrink-0 border-t border-border px-2.5 py-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-hover focus-visible:outline-none">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--track)] text-[10.5px] font-semibold text-t1">
-                {initial(dados.nome)}
+        <div className="shrink-0 border-t border-border p-2">
+          <Pop
+            rotulo="Conta"
+            aberto={conta}
+            aoMudar={setConta}
+            lado="top"
+            className="w-56 p-1.5"
+            gatilho={
+              <button
+                type="button"
+                aria-label={`Conta de ${dados.nome || dados.email}`}
+                className={clsx(
+                  "flex h-10 w-full items-center gap-2.5 rounded-control px-2 text-left hover:bg-hover",
+                  !aberto && "justify-center"
+                )}
+              >
+                <span
+                  aria-hidden
+                  className="grid size-6 shrink-0 place-items-center rounded-full bg-track text-label font-semibold text-t1"
+                >
+                  {inicial(dados.nome || dados.email)}
+                </span>
+                {aberto && (
+                  <>
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-dense font-medium text-ink">
+                        {dados.nome || "—"}
+                      </span>
+                      <span className="truncate text-label text-t3">{dados.email}</span>
+                    </span>
+                    <ChevronUp className="size-3.5 shrink-0 text-t3" strokeWidth={1.75} aria-hidden />
+                  </>
+                )}
+              </button>
+            }
+          >
+            <div className="truncate px-2 py-1.5 text-label text-t3">{dados.email}</div>
+            <div className="flex flex-col gap-1.5 px-2 pb-2 pt-1">
+              <span className="text-label text-t2">{t("theme")}</span>
+              <SeletorTema />
+            </div>
+            <div className="my-0.5 h-px bg-border" />
+            <button
+              type="button"
+              onClick={() => {
+                setConta(false);
+                abrirAtalhos();
+              }}
+              className="flex h-8 w-full items-center justify-between gap-2 rounded-control px-2 text-dense text-ink hover:bg-hover"
+            >
+              <span className="flex items-center gap-2">
+                <Keyboard className="size-4 text-t2" strokeWidth={1.75} aria-hidden />
+                {t("shortcuts")}
               </span>
-              <span className="min-w-0 flex-1 truncate text-[12px] text-ink">
-                {dados.nome || "—"}
-              </span>
-              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-t4" aria-hidden />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" side="top" className="w-[206px]">
-              {/* O Group NAO e decoracao: DropdownMenuLabel renderiza
-                  Menu.GroupLabel do Base UI, que LANCA se nao achar um
-                  Menu.Group acima. Sem ele, abrir este menu derrubava a
-                  pagina inteira. */}
-              <DropdownMenuGroup>
-                <DropdownMenuLabel className="truncate text-[11px] font-normal text-t3">
-                  {dados.email}
-                </DropdownMenuLabel>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onClick={sair}>
-                <LogOut className="mr-2 h-3.5 w-3.5" />
-                {t("logout")}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <div className="mt-1.5 flex items-center justify-between px-2">
-            <span className="text-[9.5px] font-semibold uppercase tracking-[0.13em] text-t4">
-              {t("theme")}
-            </span>
-            <ThemeToggle />
-          </div>
+              <kbd className="rounded-control border border-border px-1.5 font-mono text-label text-t2">?</kbd>
+            </button>
+            <button
+              type="button"
+              onClick={() => sair(router)}
+              className="flex h-8 w-full items-center gap-2 rounded-control px-2 text-dense text-err hover:bg-err-bg"
+            >
+              <LogOut className="size-4" strokeWidth={1.75} aria-hidden />
+              {t("logout")}
+            </button>
+          </Pop>
         </div>
       </aside>
 
-      <nav className="fixed inset-x-0 bottom-0 z-50 flex h-14 items-center justify-around border-t border-border bg-surface px-2 md:hidden">
-        {MOBILE.map((item) => {
-          const on = item.href === atual;
+      {/* ---------------- Celular: barra de baixo + "Mais" ---------------- */}
+      <nav
+        aria-label={t("mainMenu")}
+        className="fixed inset-x-0 bottom-0 z-40 flex h-16 items-stretch justify-around border-t border-border bg-surface px-1 pb-[env(safe-area-inset-bottom)] md:hidden"
+      >
+        {BARRA_CELULAR.map((b) => {
+          const on = b === ativoNaBarra;
+          const alertas = b.item.contador === "alertas" ? dados.alertas : 0;
           return (
             <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex h-full min-w-[56px] flex-col items-center justify-center gap-1 transition-colors",
-                on ? "text-ink" : "text-t3"
+              key={b.item.id}
+              href={b.item.href}
+              aria-current={on ? "page" : undefined}
+              className={clsx(
+                "relative flex min-w-11 flex-1 flex-col items-center justify-center gap-1 text-label",
+                on ? "font-semibold text-ink" : "text-t2 hover:text-ink"
               )}
             >
-              <item.icon className="h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden />
-              <span className="max-w-[84px] truncate text-[9.5px] font-medium">{t(item.label)}</span>
+              <b.item.icone className="size-5" strokeWidth={1.75} aria-hidden />
+              <span>{b.rotulo}</span>
+              {alertas > 0 && (
+                <span className="num absolute left-[calc(50%+6px)] top-2 h-4.5 min-w-4.5 rounded-full bg-err px-1 text-center text-label font-semibold leading-4.5 text-surface">
+                  {alertas}
+                  <span className="sr-only"> alertas abertos</span>
+                </span>
+              )}
             </Link>
           );
         })}
+        <button
+          type="button"
+          onClick={() => setMais(true)}
+          aria-haspopup="dialog"
+          className={clsx(
+            "flex min-w-11 flex-1 flex-col items-center justify-center gap-1 text-label",
+            !ativoNaBarra ? "font-semibold text-ink" : "text-t2 hover:text-ink"
+          )}
+        >
+          <Menu className="size-5" strokeWidth={1.75} aria-hidden />
+          <span>{t("more")}</span>
+        </button>
       </nav>
+
+      <Folha aberto={mais} aoMudar={setMais} titulo={t("menu")} rotuloFechar="Fechar menu">
+        <div className="flex flex-col gap-4 px-3 pb-4 pt-2">
+          {grupos.map((g) => (
+            <div key={g.id} className="flex flex-col">
+              {g.rotulo && <div className="px-2 py-1 text-label font-medium text-t3">{g.rotulo}</div>}
+              {g.itens.map((item) => {
+                const on = item.id === ativo;
+                return (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    onClick={() => setMais(false)}
+                    aria-current={on ? "page" : undefined}
+                    className={clsx(
+                      "flex min-h-ctl-lg items-center gap-3 rounded-control px-2 text-body",
+                      on
+                        ? "bg-nav-active font-semibold text-ink"
+                        : item.convite
+                          ? "text-t3 hover:bg-hover"
+                          : "text-t1 hover:bg-hover hover:text-ink"
+                    )}
+                  >
+                    <item.icone className="size-5 shrink-0" strokeWidth={1.75} aria-hidden />
+                    <span className="flex-1">{item.rotulo}</span>
+                    <Contador item={item} dados={dados} />
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
+
+          <div className="flex flex-col gap-3 border-t border-border px-2 pt-3">
+            <div className="flex items-center gap-2.5">
+              <span
+                aria-hidden
+                className="grid size-8 place-items-center rounded-full bg-track font-semibold text-t1"
+              >
+                {inicial(dados.nome || dados.email)}
+              </span>
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate text-body font-medium text-ink">{dados.nome || "—"}</span>
+                <span className="truncate text-label text-t3">{dados.email}</span>
+              </span>
+            </div>
+            <SeletorTema grande />
+            <button
+              type="button"
+              onClick={() => sair(router)}
+              className="h-ctl-lg rounded-control border border-err-border text-body font-medium text-err hover:bg-err-bg"
+            >
+              {t("logoutAccount")}
+            </button>
+          </div>
+        </div>
+      </Folha>
     </>
   );
 }

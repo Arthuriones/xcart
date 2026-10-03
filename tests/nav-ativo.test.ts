@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { hrefAtivo } from "../src/components/layout/nav-ativo";
+import {
+  ATALHOS_G,
+  contextoDaRota,
+  gruposNav,
+  itemAtivo,
+  tituloDaRota,
+} from "../src/components/layout/navegacao";
 
 /**
  * /tracking e /tracking/eventos estao no mesmo menu. Com o teste antigo
@@ -41,6 +48,89 @@ describe("hrefAtivo", () => {
   });
 });
 
+/**
+ * O menu do redesign (6 grupos) junta telas antigas em itens novos: /bulk e
+ * /multi-site acendem Importar, /overview e /sales acendem Rotas, Contas de
+ * anuncio e Claude acendem Integracoes. Um item aceso por vez, sempre.
+ */
+describe("itemAtivo (menu de 6 grupos)", () => {
+  it("cada tela do menu acende o proprio item", () => {
+    expect(itemAtivo("/financeiro")).toBe("lucro");
+    expect(itemAtivo("/financeiro/custos")).toBe("custos");
+    expect(itemAtivo("/tracking")).toBe("saude");
+    expect(itemAtivo("/tracking/eventos")).toBe("eventos");
+    expect(itemAtivo("/alertas")).toBe("alertas");
+    expect(itemAtivo("/stores")).toBe("lojas");
+    expect(itemAtivo("/clone")).toBe("importar");
+    expect(itemAtivo("/activity")).toBe("atividade");
+    expect(itemAtivo("/clone/routed-checkout")).toBe("rotas");
+    expect(itemAtivo("/billing")).toBe("assinatura");
+    expect(itemAtivo("/setup")).toBe("guia");
+  });
+
+  it("telas antigas acendem o item que vai recebe-las", () => {
+    expect(itemAtivo("/clone/shopify/bulk")).toBe("importar");
+    expect(itemAtivo("/bulk")).toBe("importar");
+    expect(itemAtivo("/multi-site")).toBe("importar");
+    expect(itemAtivo("/clone/routed-checkout/map")).toBe("rotas");
+    expect(itemAtivo("/overview")).toBe("rotas");
+    expect(itemAtivo("/sales")).toBe("rotas");
+    expect(itemAtivo("/financeiro/anuncios")).toBe("integracoes");
+    expect(itemAtivo("/claude")).toBe("integracoes");
+  });
+
+  it("rota fora do menu nao acende nada", () => {
+    expect(itemAtivo("/qualquer-coisa")).toBeNull();
+    expect(itemAtivo("/clonex")).toBeNull();
+  });
+
+  it("os seis grupos, com Roteamento recolhido para quem nao tem rota", () => {
+    const sem = gruposNav(false);
+    expect(sem.map((g) => g.id)).toEqual([
+      "lucro",
+      "rastreamento",
+      "alertas",
+      "operacao",
+      "roteamento",
+      "configuracoes",
+    ]);
+    const rotaSem = sem.find((g) => g.id === "roteamento")!.itens;
+    expect(rotaSem).toHaveLength(1);
+    expect(rotaSem[0].rotulo).toBe("Ativar roteamento");
+    expect(rotaSem[0].href).toBe("/clone/routed-checkout");
+    const rotaCom = gruposNav(true).find((g) => g.id === "roteamento")!.itens;
+    expect(rotaCom[0].rotulo).toBe("Rotas");
+  });
+
+  it("atalhos g + letra sem letra repetida e sem o proprio g", () => {
+    const teclas = ATALHOS_G.map((a) => a.tecla);
+    expect(new Set(teclas).size).toBe(teclas.length);
+    expect(teclas).not.toContain("g");
+    expect(ATALHOS_G.find((a) => a.tecla === "l")?.item.href).toBe("/financeiro");
+  });
+});
+
+describe("contexto e titulo do topo", () => {
+  it("so a tela que le o filtro global ganha a barra", () => {
+    expect(contextoDaRota("/financeiro").tipo).toBe("completo");
+    expect(contextoDaRota("/financeiro/custos").tipo).toBe("loja");
+    expect(contextoDaRota("/financeiro/anuncios").tipo).toBe("nenhum");
+    expect(contextoDaRota("/tracking/eventos").tipo).toBe("loja");
+    expect(contextoDaRota("/alertas").tipo).toBe("loja");
+    // Saude dos pixels e Vendas ainda tem filtro proprio: sem barra.
+    expect(contextoDaRota("/tracking").tipo).toBe("nenhum");
+    expect(contextoDaRota("/sales").tipo).toBe("nenhum");
+    expect(contextoDaRota("/stores").tipo).toBe("nenhum");
+  });
+
+  it("titulo pelo prefixo mais longo", () => {
+    expect(tituloDaRota("/tracking/eventos")).toBe("Eventos ao vivo");
+    expect(tituloDaRota("/clone/shopify/individual")).toBe("Importar");
+    expect(tituloDaRota("/clone/routed-checkout/map")).toBe("Roteamento");
+    expect(tituloDaRota("/nao-existe")).toBe("xcart");
+  });
+});
+
 describe("messages/pt.json", () => {
   const bruto = readFileSync(path.join(__dirname, "..", "messages", "pt.json"), "utf8");
 
@@ -59,6 +149,17 @@ describe("messages/pt.json", () => {
       "routeOverview",
       "salesByRoute",
       "system",
+      // Menu do redesign
+      "operation",
+      "settings",
+      "stores",
+      "import",
+      "routes",
+      "enableRouting",
+      "integrations",
+      "setupGuide",
+      "more",
+      "skipToContent",
     ];
     for (const chave of novas) {
       expect(typeof pt.nav[chave], chave).toBe("string");

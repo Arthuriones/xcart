@@ -12,6 +12,11 @@ import {
   type FiltroGlobal,
   type LojaDoSeletor,
 } from "@/lib/financeiro/tipos";
+import {
+  COOKIE_COMPARAR,
+  comparacaoDeCookie,
+  type Comparacao,
+} from "@/components/layout/contexto";
 
 // ============================================================================
 // O filtro global (loja, periodo, moeda) mora em COOKIE, nao na URL.
@@ -29,6 +34,16 @@ export async function lerFiltroGlobal(): Promise<FiltroGlobal> {
     periodo: c.get(COOKIE_PERIODO)?.value,
     moeda: c.get(COOKIE_MOEDA)?.value,
   });
+}
+
+/**
+ * "Comparar com" da barra do topo. Fica fora de FiltroGlobal de proposito:
+ * quem ja le o filtro continua igual, e so a tela que mostra comparacao
+ * (Lucro) precisa pedir este valor.
+ */
+export async function lerComparacao(): Promise<Comparacao> {
+  const c = await cookies();
+  return comparacaoDeCookie(c.get(COOKIE_COMPARAR)?.value);
 }
 
 /** Lojas do usuario da sessao, para seletor e nomes. Erro de banco LANCA. */
