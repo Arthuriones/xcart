@@ -109,10 +109,11 @@ function DialogFooter({
       className={cn("flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end", className)}
       {...props}
     >
-      {children}
+      {/* "Fechar" antes: fica a esquerda da acao principal (e embaixo no celular). */}
       {showCloseButton && (
         <DialogPrimitive.Close render={<Button variant="secondary" />}>Fechar</DialogPrimitive.Close>
       )}
+      {children}
     </div>
   )
 }

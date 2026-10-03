@@ -28,7 +28,7 @@ const tabsListVariants = cva(
     variants: {
       variant: {
         default: "gap-0.5 rounded-control bg-track p-0.5",
-        line: "max-w-full gap-4 overflow-x-auto border-b border-border group-data-vertical/tabs:border-r group-data-vertical/tabs:border-b-0",
+        line: "max-w-full gap-4 border-b border-border group-data-vertical/tabs:border-r group-data-vertical/tabs:border-b-0",
       },
     },
     defaultVariants: {
@@ -59,7 +59,7 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
       className={cn(
         "relative inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-t2 transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:pointer-events-none disabled:text-t4 aria-disabled:pointer-events-none aria-disabled:text-t4 data-active:text-ink group-data-vertical/tabs:justify-start [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         // trilho
-        "group-data-[variant=default]/tabs-list:h-7 group-data-[variant=default]/tabs-list:rounded-sm group-data-[variant=default]/tabs-list:px-3 group-data-[variant=default]/tabs-list:text-label group-data-[variant=default]/tabs-list:data-active:bg-surface group-data-[variant=default]/tabs-list:data-active:font-semibold group-data-[variant=default]/tabs-list:data-active:ring-1 group-data-[variant=default]/tabs-list:data-active:ring-border",
+        "group-data-[variant=default]/tabs-list:h-6 group-data-[variant=default]/tabs-list:rounded-sm group-data-[variant=default]/tabs-list:px-3 group-data-[variant=default]/tabs-list:text-label group-data-[variant=default]/tabs-list:data-active:bg-surface group-data-[variant=default]/tabs-list:data-active:font-semibold group-data-[variant=default]/tabs-list:data-active:ring-1 group-data-[variant=default]/tabs-list:data-active:ring-border",
         // sublinhada: 2px de tinta embaixo da ativa
         "group-data-[variant=line]/tabs-list:-mb-px group-data-[variant=line]/tabs-list:h-10 group-data-[variant=line]/tabs-list:border-b-2 group-data-[variant=line]/tabs-list:border-transparent group-data-[variant=line]/tabs-list:text-dense group-data-[variant=line]/tabs-list:font-medium group-data-[variant=line]/tabs-list:data-active:border-ink",
         className

@@ -40,7 +40,8 @@ function Section({
       aria-labelledby={`${id}-t`}
       className={cn(
         "flex min-w-0 flex-col gap-3 rounded-card border border-border bg-surface",
-        espaco === "normal" ? "p-4" : "pt-4",
+        // "nenhum": tabela encosta nas bordas; overflow-hidden mantem os cantos.
+        espaco === "normal" ? "p-4" : "overflow-hidden pt-4",
         className
       )}
       {...props}

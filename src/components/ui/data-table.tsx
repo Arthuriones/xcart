@@ -246,7 +246,7 @@ function DataTable<T extends Record<string, unknown>>({
       </div>
 
       {cartoes ? (
-        <ul aria-label={legenda} className="flex flex-col gap-2 sm:hidden">
+        <ul aria-label={legenda} className="flex flex-col gap-2 px-3 pb-3 sm:hidden">
           {ordenadas.map((l, li) => (
             <li key={chaveDe(l, li)} className="rounded-card border border-border bg-surface p-3">
               <div className="text-body font-semibold text-ink">{conteudo(primeira, l)}</div>

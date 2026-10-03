@@ -82,7 +82,6 @@ function Segmented<V extends string>({
             role="radio"
             aria-checked={marcado}
             aria-disabled={o.desabilitado || undefined}
-            aria-description={o.desabilitado ? o.motivo : undefined}
             tabIndex={focavel ? 0 : -1}
             onClick={() => !o.desabilitado && onValorChange(o.valor)}
             onKeyDown={(e) => aoTeclar(e, i)}
@@ -96,6 +95,7 @@ function Segmented<V extends string>({
             )}
           >
             {o.rotulo}
+            {o.desabilitado && o.motivo ? <span className="sr-only">{`, ${o.motivo}`}</span> : null}
           </button>
         )
       })}

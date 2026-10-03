@@ -139,11 +139,18 @@ function LineChart({
   const buracos = lacunas(principal.valores).map(([a, b]) => {
     const x0 = a > 0 ? x(a - 1) : 0
     const x1 = b < n - 1 ? x(b + 1) : W
-    return { x0, x1, rotulo: x1 - x0 >= 120 }
+    // Lacuna no comeco (antes do historico) ancora o rotulo na esquerda; no fim,
+    // na direita; no meio, centraliza. Assim o texto nunca sai do grafico.
+    const ancora = a === 0 ? "esq" : b === n - 1 ? "dir" : "centro"
+    return { x0, x1, ancora, rotulo: x1 - x0 >= 100 }
   })
 
   const mostrarLegenda = legenda ?? series.length > 1
+  // Sem medir a largura: 6 rotulos no desktop, 3 no celular (os demais somem
+  // abaixo de sm). Datas "12/09" tem uns 40px.
   const ticksX = indicesRotulosX(n, 6)
+  const ticksCelular = new Set(indicesRotulosX(n, 3))
+  const ticksTodos = [...new Set([...ticksX, ...ticksCelular])].sort((a, b) => a - b)
   const parcial = parcialUltimo && n > 1
   const ativo = idx !== null && idx < n ? idx : null
 
@@ -251,7 +258,8 @@ function LineChart({
             style={{ height: altura }}
             onPointerMove={aoMover}
             onPointerDown={aoMover}
-            onPointerLeave={() => setIdx(null)}
+            // No toque o "leave" vem logo depois do toque: o ponto fica ate tocar fora (blur).
+            onPointerLeave={(e) => e.pointerType !== "touch" && setIdx(null)}
             onKeyDown={aoTeclar}
             onFocus={() => {
               setViaTeclado(true)
@@ -339,8 +347,15 @@ function LineChart({
                 <span
                   key={i}
                   aria-hidden="true"
-                  className="pointer-events-none absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-border bg-surface px-2 py-0.5 text-label whitespace-nowrap text-t1"
-                  style={{ left: `${((b.x0 + b.x1) / 2 / W) * 100}%` }}
+                  className={cn(
+                    "pointer-events-none absolute top-1/2 max-w-full -translate-y-1/2 truncate rounded-sm border border-border bg-surface px-2 py-0.5 text-label text-t1",
+                    b.ancora === "esq" && "left-1",
+                    b.ancora === "dir" && "right-1",
+                    b.ancora === "centro" && "-translate-x-1/2"
+                  )}
+                  style={
+                    b.ancora === "centro" ? { left: `${((b.x0 + b.x1) / 2 / W) * 100}%` } : undefined
+                  }
                 >
                   {rotuloLacuna}
                 </span>
@@ -396,12 +411,14 @@ function LineChart({
 
           {/* eixo X */}
           <div aria-hidden="true" className="relative mt-1.5 h-4">
-            {ticksX.map((i) => (
+            {ticksTodos.map((i) => (
               <span
                 key={i}
                 className={cn(
                   "num absolute top-0 text-label whitespace-nowrap text-t2",
-                  i === 0 ? "" : i === n - 1 ? "-translate-x-full" : "-translate-x-1/2"
+                  i === 0 ? "" : i === n - 1 ? "-translate-x-full" : "-translate-x-1/2",
+                  !ticksCelular.has(i) && "hidden sm:inline",
+                  !ticksX.includes(i) && "sm:hidden"
                 )}
                 style={{ left: `${pctX(i)}%` }}
               >
