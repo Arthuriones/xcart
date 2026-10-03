@@ -300,20 +300,19 @@ export function FormularioAcesso({
           tom="warn"
           role="alert"
           titulo={aviso.titulo}
-          acao={
-            pedeLink(modo) ? undefined : (
-              <Button size="sm" variant="secondary" onClick={() => trocarModo("link")}>
-                Pedir outro link
-              </Button>
-            )
-          }
           dispensar={
             <Button size="icon-sm" variant="ghost" aria-label="Fechar aviso" onClick={fecharAviso}>
               <XIcon aria-hidden />
             </Button>
           }
         >
-          {aviso.texto}
+          <p>{aviso.texto}</p>
+          {/* Embaixo do texto, nao ao lado: a coluna do formulario e estreita. */}
+          {pedeLink(modo) ? null : (
+            <Button size="sm" variant="secondary" className="mt-2" onClick={() => trocarModo("link")}>
+              Pedir outro link
+            </Button>
+          )}
         </Callout>
       ) : null}
 

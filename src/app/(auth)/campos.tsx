@@ -177,7 +177,7 @@ export function AvisoDeErro({
   acao?: React.ReactNode;
 }) {
   return (
-    <Callout tom="err" role="alert" titulo={titulo} acao={acao}>
+    <Callout tom="err" role="alert" titulo={titulo}>
       <p>{texto}</p>
       {detalhe ? (
         <details className="mt-1 text-label text-t2">
@@ -185,6 +185,8 @@ export function AvisoDeErro({
           <p className="mt-1 font-mono break-all">{detalhe}</p>
         </details>
       ) : null}
+      {/* Embaixo do texto: na coluna estreita do formulario, ao lado espreme a frase. */}
+      {acao ? <div className="mt-2">{acao}</div> : null}
     </Callout>
   );
 }
