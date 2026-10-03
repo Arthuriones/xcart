@@ -13,7 +13,7 @@ import { cn } from "@/components/ui/cn";
 import { getPublicAppUrl } from "@/lib/public-url";
 import { normalizeShopDomain } from "@/lib/shopify/domain";
 import { SHOPIFY_SCOPES_STRING } from "@/lib/shopify/scopes";
-import { mensagemConexao } from "@/lib/leitura/lojas-estado";
+import { MENSAGEM_CONEXAO_PADRAO, mensagemConexao } from "@/lib/leitura/lojas-estado";
 
 // ============================================================================
 // "Conectar loja" em 4 passos: dominio, criar o app na Shopify, credenciais e
@@ -216,8 +216,11 @@ function Assistente({
       } catch {
         // corpo vazio: o status diz o que houve
       }
-      if (!res.ok) {
-        setErro({ texto: mensagemConexao(dados.error, res.status), detalhe: dados.error ?? null });
+      if (!res.ok || res.redirected) {
+        // redirected = sessao vencida: o proxy mandou para /login.
+        const texto = mensagemConexao(dados.error, res.redirected ? 401 : res.status);
+        // O texto cru so aparece (recolhido) quando nao ha frase para ele.
+        setErro({ texto, detalhe: texto === MENSAGEM_CONEXAO_PADRAO ? (dados.error ?? null) : null });
         return;
       }
       // App ainda nao instalado: a Shopify pede a autorizacao e volta em
@@ -555,14 +558,14 @@ function CampoCopiar({ rotulo, valor }: { rotulo: string; valor: string }) {
     }
   }
   return (
-    <div className="flex items-start gap-2">
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
       <code
         aria-label={rotulo}
         className="max-h-24 min-w-0 flex-1 overflow-y-auto rounded-control border border-border bg-surface-2 px-3 py-2 font-mono text-label break-all text-ink"
       >
         {valor}
       </code>
-      <Button variant="secondary" onClick={copiar} className="min-w-22">
+      <Button variant="secondary" onClick={copiar} className="min-w-22 self-start">
         {copiado ? "Copiado" : "Copiar"}
         <span className="sr-only"> {rotulo}</span>
       </Button>

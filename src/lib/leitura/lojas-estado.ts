@@ -344,7 +344,7 @@ export function itensInventario(inv: InventarioLoja): { apaga: string[]; fica: s
   const fica: string[] = [];
   if (inv.contasAnuncio > 0) {
     fica.push(
-      `${plural(inv.contasAnuncio, "conta de anúncio continua", "contas de anúncio continuam")} no xcart, sem loja ligada — o gasto dela sai do lucro até você ligar a outra loja`
+      `${plural(inv.contasAnuncio, "conta de anúncio continua", "contas de anúncio continuam")} no xcart, sem loja ligada — o gasto sai do lucro até você ligar outra loja`
     );
   }
   return { apaga, fica };
@@ -360,6 +360,9 @@ export function itensInventario(inv: InventarioLoja): { apaga: string[]; fica: s
  * invalida"). Isto traduz para o que o lojista pode fazer. O texto cru fica
  * para o "Ver detalhe".
  */
+export const MENSAGEM_CONEXAO_PADRAO =
+  "Não deu para conectar a loja agora. Tente de novo; se continuar, confira o domínio e as credenciais.";
+
 export function mensagemConexao(erro: string | null | undefined, status?: number): string {
   const e = String(erro || "");
   if (status === 401 || /^unauthorized$/i.test(e.trim())) {
@@ -395,5 +398,5 @@ export function mensagemConexao(erro: string | null | undefined, status?: number
   if (/failed to save|falha ao salvar/i.test(e)) {
     return "Não deu para salvar a loja agora. Tente de novo em instantes.";
   }
-  return "Não deu para conectar a loja agora. Tente de novo; se continuar, confira o domínio e as credenciais.";
+  return MENSAGEM_CONEXAO_PADRAO;
 }

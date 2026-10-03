@@ -68,7 +68,7 @@ export function EditorPerfil({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: nome.trim(), target_language: idioma }),
       });
-      if (!res.ok) throw new Error(String(res.status));
+      if (!res.ok || res.redirected) throw new Error(String(res.status));
       toast.success("Perfil salvo", { description: "O nome novo já aparece no menu e nos alertas." });
       router.refresh();
     } catch {
@@ -161,7 +161,7 @@ async function enviarArquivo(lojaId: string, arquivo: File, bucket: string, rotu
   form.append("file", arquivo);
   if (rotulo) form.append("label", rotulo);
   const res = await fetch("/api/store-assets", { method: "POST", body: form });
-  if (!res.ok) throw new Error(String(res.status));
+  if (!res.ok || res.redirected) throw new Error(String(res.status));
   const dados = (await res.json()) as { path: string };
   return dados.path;
 }
@@ -246,7 +246,7 @@ export function EditorMarca({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ logo_path: caminhoLogo }),
         });
-        if (!res.ok) throw new Error(String(res.status));
+        if (!res.ok || res.redirected) throw new Error(String(res.status));
         setLogoNovo(null);
       }
       // Cada arquivo sai da fila assim que sobe: se o envio parar no meio,
@@ -277,7 +277,7 @@ export function EditorMarca({
       `/api/store-assets?id=${encodeURIComponent(m.id)}&filePath=${encodeURIComponent(m.file_path)}`,
       { method: "DELETE" }
     );
-    if (!res.ok) throw new Error(String(res.status));
+    if (!res.ok || res.redirected) throw new Error(String(res.status));
     setRemovidos((s) => new Set(s).add(m.id));
     toast.success("Material removido");
     router.refresh();
@@ -409,7 +409,7 @@ function GradeArquivos({
       <h3 className="text-dense font-semibold text-ink">
         {titulo}{" "}
         <span className="font-normal text-t2">
-          · {salvos.length} {salvos.length === 1 ? "salva" : "salvas"}
+          · {salvos.length === 0 ? "vazio" : `${salvos.length} no xcart`}
         </span>
       </h3>
       <p className="text-label text-t2">{ajuda}</p>

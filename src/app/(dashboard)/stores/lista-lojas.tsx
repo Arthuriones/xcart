@@ -138,15 +138,16 @@ export function ListaLojas({ resumo }: { resumo: ResumoLojas }) {
       chave: "loja",
       titulo: "Loja",
       ordenarPor: "nome",
+      className: "min-w-52",
       celula: (l) => (
-        <span className="flex min-w-0 flex-col gap-0.5 whitespace-normal">
+        <span className="flex min-w-0 flex-col gap-0.5">
           <Link
             href={`/stores/${l.id}`}
             className="rounded-sm font-semibold text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
           >
             {l.nome}
           </Link>
-          <span className="flex flex-wrap items-center gap-x-2.5 text-label">
+          <span className="flex items-center gap-x-2.5 text-label font-normal">
             <span className="font-mono text-t2">{l.dominio.replace(/\.myshopify\.com$/i, "")}</span>
             <a
               href={`https://${l.dominio}`}
@@ -186,11 +187,13 @@ export function ListaLojas({ resumo }: { resumo: ResumoLojas }) {
       celula: (l) => (
         <span className="flex flex-col items-start gap-1">
           <StatusBadge {...SELO_CONEXAO[l.loja.conexao.chave]} />
-          <span className="text-label text-t2">{l.loja.conexao.detalhe}</span>
+          <span className="max-w-40 text-label whitespace-normal text-t2">{l.loja.conexao.detalhe}</span>
         </span>
       ),
     },
-    { chave: "moedaIdioma", titulo: "Moeda · idioma", ocultarNoCartao: true },
+    // Abaixo de 1536 px a coluna sai (esta tambem no detalhe): com o menu ao
+    // lado, a tabela inteira nao cabe sem rolar de lado.
+    { chave: "moedaIdioma", titulo: "Moeda · idioma", ocultarNoCartao: true, className: "hidden 2xl:table-cell" },
     {
       chave: "faturamento",
       titulo: "Faturamento",
@@ -228,7 +231,7 @@ export function ListaLojas({ resumo }: { resumo: ResumoLojas }) {
     },
     {
       chave: "sync",
-      titulo: "Última sincronização",
+      titulo: "Sincronização",
       ordenarPor: "syncValor",
       direcaoInicial: "desc",
       ocultarNoCartao: true,
@@ -249,7 +252,9 @@ export function ListaLojas({ resumo }: { resumo: ResumoLojas }) {
       alinhar: "direita",
       ordenavel: false,
       celula: (l) => {
-        const s = l.loja.conexao.sugestao;
+        // Na tabela, a acao sugerida aparece para quem esta sem acesso; a falha
+        // de sincronizacao de uma loja ativa fica no menu e no detalhe.
+        const s = l.semAcesso ? l.loja.conexao.sugestao : null;
         const desinstalada = l.loja.conexao.chave === "appDesinstalado";
         return (
           <span className="inline-flex items-center justify-end gap-2">

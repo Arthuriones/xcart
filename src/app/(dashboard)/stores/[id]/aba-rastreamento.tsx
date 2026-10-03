@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/components/ui/cn";
 import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Section } from "@/components/ui/section";
 import { STATUS, StatusBadge, StatusDot, type TomStatus } from "@/components/ui/status-badge";
-import { lerRastreamentoDaLoja, type LojaBase } from "@/lib/leitura/resumo-lojas";
+import { lerRastreamentoDaLoja, type LojaBase, type RastreamentoDaLoja } from "@/lib/leitura/resumo-lojas";
 import type { DestinoNaTela, LojaTracking } from "@/lib/tracking/queries";
 import type { DiagnosticoLoja } from "@/lib/tracking/diagnostico";
 import {
@@ -40,6 +41,7 @@ function comprasDo(d: DestinoNaTela, loja: LojaTracking, diag: DiagnosticoLoja |
   const v = vereditoDoDestino(d, loja, diag);
   if (v.tipo === "sem-contagem") return "—";
   if (v.tipo === "sem-pedidos") return plural(v.compras, "compra enviada", "compras enviadas");
+  if (v.esperados === 0) return "Nenhum pedido em 7 dias";
   return `${v.chegaram.toLocaleString("pt-BR")} de ${plural(v.esperados, "pedido", "pedidos")}`;
 }
 
@@ -80,7 +82,8 @@ function checagens(loja: LojaTracking, diag: DiagnosticoLoja | null): Checagem[]
   ];
 }
 
-const LINK_TRACKING = buttonVariants({ variant: "secondary", size: "sm" });
+// cn por cima: o cva sozinho deixa "border-transparent" junto com a borda da variante.
+const LINK_TRACKING = cn(buttonVariants({ variant: "secondary", size: "sm" }));
 
 /**
  * Rastreamento da loja pela regra da Saude dos pixels, desta vez conferindo
@@ -88,7 +91,7 @@ const LINK_TRACKING = buttonVariants({ variant: "secondary", size: "sm" });
  * aba entra por Suspense com uma frase dizendo o que esta acontecendo.
  */
 export async function AbaRastreamento({ base }: { base: LojaBase }) {
-  let r: Awaited<ReturnType<typeof lerRastreamentoDaLoja>>;
+  let r: RastreamentoDaLoja;
   try {
     r = await lerRastreamentoDaLoja(base.id, true);
   } catch (e) {
@@ -101,6 +104,11 @@ export async function AbaRastreamento({ base }: { base: LojaBase }) {
     );
   }
 
+  return <RastreamentoLoja r={r} />;
+}
+
+/** O conteudo da aba, so com dados. */
+export function RastreamentoLoja({ r }: { r: RastreamentoDaLoja }) {
   const loja = r.loja;
   if (!loja || !loja.ligado) {
     return (
@@ -108,7 +116,7 @@ export async function AbaRastreamento({ base }: { base: LojaBase }) {
         titulo="Rastreamento desligado nesta loja"
         descricao="Ligue em Saúde dos pixels para mandar as vendas desta loja ao Meta e ao Google pelo servidor."
         acao={
-          <Link href="/tracking" className={buttonVariants({ variant: "primary" })}>
+          <Link href="/tracking" className={cn(buttonVariants({ variant: "primary" }))}>
             Abrir Saúde dos pixels
           </Link>
         }

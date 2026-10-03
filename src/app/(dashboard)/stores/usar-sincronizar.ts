@@ -28,7 +28,8 @@ export function useSincronizarLoja() {
         } catch {
           // sem corpo: o status basta
         }
-        if (!res.ok) throw new Error(String(res.status));
+        // Sessao vencida: o proxy redireciona para /login e a resposta "da certo".
+        if (!res.ok || res.redirected) throw new Error(String(res.status));
         const erros = Array.isArray(corpo.erros) ? corpo.erros : [];
         if (erros.length > 0) {
           toast.error(`Não deu para sincronizar ${loja.nome}`, {

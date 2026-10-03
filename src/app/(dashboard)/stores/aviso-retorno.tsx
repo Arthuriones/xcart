@@ -5,7 +5,7 @@ import Link from "next/link";
 import { XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
-import { mensagemConexao } from "@/lib/leitura/lojas-estado";
+import { MENSAGEM_CONEXAO_PADRAO, mensagemConexao } from "@/lib/leitura/lojas-estado";
 import { useConectarLoja } from "./conectar-loja";
 
 const LINK = "font-medium text-brand underline underline-offset-2 hover:text-ink";
@@ -49,10 +49,12 @@ export function AvisoRetorno({ instalado, erro }: { instalado: boolean; erro: st
         }
       >
         <p>{mensagemConexao(falha)}</p>
-        <details className="mt-1 text-label text-t2">
-          <summary className="cursor-pointer">Ver detalhe</summary>
-          <p className="mt-1 font-mono break-all">{falha}</p>
-        </details>
+        {mensagemConexao(falha) === MENSAGEM_CONEXAO_PADRAO ? (
+          <details className="mt-1 text-label text-t2">
+            <summary className="cursor-pointer">Ver detalhe</summary>
+            <p className="mt-1 font-mono break-all">{falha}</p>
+          </details>
+        ) : null}
       </Callout>
     );
   }

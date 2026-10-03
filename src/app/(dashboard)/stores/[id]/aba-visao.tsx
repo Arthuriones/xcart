@@ -9,7 +9,10 @@ import {
   lerAlertasDaLoja,
   lerFinanceiroDaLoja,
   lerRastreamentoDaLoja,
+  type AlertaDaLoja,
+  type FinanceiroDaLoja,
   type LojaBase,
+  type RastreamentoDaLoja,
 } from "@/lib/leitura/resumo-lojas";
 import { SELO_CONEXAO, diaDe, plural, quandoFoi } from "@/lib/leitura/lojas-estado";
 import { quando, type Saude } from "@/app/(dashboard)/tracking/saude";
@@ -37,9 +40,31 @@ export async function AbaVisao({ base }: { base: LojaBase }) {
   if (rast.status === "rejected") console.error("[loja] rastreamento", rast.reason);
 
   return (
+    <VisaoGeral
+      base={base}
+      fin={fin.status === "fulfilled" ? fin.value : null}
+      alertas={alertas.status === "fulfilled" ? alertas.value : null}
+      rast={rast.status === "fulfilled" ? rast.value : null}
+    />
+  );
+}
+
+/** O conteudo da aba, so com dados (null = a leitura daquele bloco falhou). */
+export function VisaoGeral({
+  base,
+  fin,
+  alertas,
+  rast,
+}: {
+  base: LojaBase;
+  fin: FinanceiroDaLoja | null;
+  alertas: { total: number; itens: AlertaDaLoja[] } | null;
+  rast: Pick<RastreamentoDaLoja, "saude" | "motivos"> | null;
+}) {
+  return (
     <div className="flex flex-col gap-4">
-      {fin.status === "fulfilled" ? (
-        <Numeros dados={fin.value} lojaId={base.id} />
+      {fin ? (
+        <Numeros dados={fin} lojaId={base.id} />
       ) : (
         <Callout tom="warn" titulo="Não deu para calcular os números desta loja agora">
           Faturamento e lucro voltam quando a leitura responder. Recarregue a página em instantes.
@@ -48,18 +73,18 @@ export async function AbaVisao({ base }: { base: LojaBase }) {
 
       <div className="grid gap-3 md:grid-cols-3">
         <Section titulo="Rastreamento" nivel={2} className="min-h-40">
-          {rast.status === "fulfilled" ? (
+          {rast ? (
             <>
-              <StatusBadge {...SELO_SAUDE[rast.value.saude]} />
-              {rast.value.saude === "desligado" ? (
+              <StatusBadge {...SELO_SAUDE[rast.saude]} />
+              {rast.saude === "desligado" ? (
                 <p className="text-dense text-t1">O rastreamento não está ligado nesta loja.</p>
-              ) : rast.value.motivos.length > 0 ? (
+              ) : rast.motivos.length > 0 ? (
                 <ul className="flex flex-col gap-1 text-dense text-t1">
-                  {rast.value.motivos.slice(0, 2).map((m) => (
+                  {rast.motivos.slice(0, 2).map((m) => (
                     <li key={m.texto}>{m.texto}</li>
                   ))}
-                  {rast.value.motivos.length > 2 ? (
-                    <li className="text-label text-t2">e mais {rast.value.motivos.length - 2}</li>
+                  {rast.motivos.length > 2 ? (
+                    <li className="text-label text-t2">e mais {rast.motivos.length - 2}</li>
                   ) : null}
                 </ul>
               ) : (
@@ -75,12 +100,12 @@ export async function AbaVisao({ base }: { base: LojaBase }) {
         </Section>
 
         <Section titulo="Alertas abertos" nivel={2} className="min-h-40">
-          {alertas.status === "fulfilled" ? (
-            alertas.value.total === 0 ? (
+          {alertas ? (
+            alertas.total === 0 ? (
               <p className="text-dense text-t1">Nenhum alerta aberto nesta loja.</p>
             ) : (
               <ul className="flex flex-col gap-2 text-dense">
-                {alertas.value.itens.map((a) => (
+                {alertas.itens.map((a) => (
                   <li key={a.id} className="flex flex-col gap-0.5">
                     <span>
                       <strong className={a.severidade === "critico" ? "font-semibold text-err" : "font-semibold text-warn"}>
@@ -91,9 +116,9 @@ export async function AbaVisao({ base }: { base: LojaBase }) {
                     <span className="text-label text-t2">Aberto {quando(a.abertoEm)}</span>
                   </li>
                 ))}
-                {alertas.value.total > alertas.value.itens.length ? (
+                {alertas.total > alertas.itens.length ? (
                   <li className="text-label text-t2">
-                    e mais {alertas.value.total - alertas.value.itens.length}
+                    e mais {alertas.total - alertas.itens.length}
                   </li>
                 ) : null}
               </ul>
@@ -127,13 +152,7 @@ export async function AbaVisao({ base }: { base: LojaBase }) {
   );
 }
 
-function Numeros({
-  dados,
-  lojaId,
-}: {
-  dados: Awaited<ReturnType<typeof lerFinanceiroDaLoja>>;
-  lojaId: string;
-}) {
+function Numeros({ dados, lojaId }: { dados: FinanceiroDaLoja; lojaId: string }) {
   const { resultado: r, filtro, comparacao, fuso } = dados;
   const moeda = r.moeda;
   const a = r.atual;

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BarList, type ItemBarra } from "@/components/ui/bar-list";
 import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/components/ui/cn";
 import { Callout } from "@/components/ui/callout";
 import { EmptyState } from "@/components/ui/empty-state";
 import { KpiCard } from "@/components/ui/kpi-card";
@@ -9,16 +10,19 @@ import { Section } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { calcularVariacao } from "@/components/ui/variacao";
 import { ROTULO_PERIODO, diaCurto, rotuloFuso, rotuloIntervalo } from "@/components/layout/contexto";
-import { formatarDinheiro } from "@/lib/financeiro/tipos";
+import { formatarDinheiro, type FinStoreSettingsRow } from "@/lib/financeiro/tipos";
 import {
   lerConfigFinanceiraDaLoja,
   lerFinanceiroDaLoja,
+  type ContaDaLoja,
+  type FinanceiroDaLoja,
   type LojaBase,
 } from "@/lib/leitura/resumo-lojas";
 import { LinkComLoja } from "./acoes-loja";
 import { ESTADO_LUCRO, dinheiro, dinheiroKpi, porcento } from "./formato";
 
-const BOTAO = buttonVariants({ variant: "secondary", size: "sm" });
+// cn por cima: o cva sozinho deixa "border-transparent" junto com a borda da variante.
+const BOTAO = cn(buttonVariants({ variant: "secondary", size: "sm" }));
 
 /** Financeiro da loja: KPIs do periodo, composicao do lucro, dia a dia, custos e taxas. */
 export async function AbaFinanceiro({ base }: { base: LojaBase }) {
@@ -29,7 +33,26 @@ export async function AbaFinanceiro({ base }: { base: LojaBase }) {
   if (fin.status === "rejected") console.error("[loja] financeiro", fin.reason);
   if (cfg.status === "rejected") console.error("[loja] config financeira", cfg.reason);
 
-  if (fin.status === "rejected") {
+  return (
+    <FinanceiroLoja
+      base={base}
+      fin={fin.status === "fulfilled" ? fin.value : null}
+      config={cfg.status === "fulfilled" ? cfg.value : null}
+    />
+  );
+}
+
+/** O conteudo da aba, so com dados (null = a leitura falhou). */
+export function FinanceiroLoja({
+  base,
+  fin,
+  config,
+}: {
+  base: LojaBase;
+  fin: FinanceiroDaLoja | null;
+  config: { taxa: FinStoreSettingsRow | null; contas: ContaDaLoja[] } | null;
+}) {
+  if (!fin) {
     return (
       <EmptyState
         titulo="Não deu para calcular os números desta loja agora"
@@ -39,7 +62,7 @@ export async function AbaFinanceiro({ base }: { base: LojaBase }) {
     );
   }
 
-  const { resultado: r, filtro, comparacao, fuso, hoje } = fin.value;
+  const { resultado: r, filtro, comparacao, fuso, hoje } = fin;
   const moeda = r.moeda;
   const a = r.atual;
   const p = r.anterior;
@@ -76,7 +99,6 @@ export async function AbaFinanceiro({ base }: { base: LojaBase }) {
       : null,
   ].filter((t): t is string => Boolean(t));
 
-  const config = cfg.status === "fulfilled" ? cfg.value : null;
   const moedaLoja = base.moeda || moeda;
 
   return (

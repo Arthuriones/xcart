@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ExternalLinkIcon, RefreshCwIcon } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/components/ui/cn";
 import { Callout } from "@/components/ui/callout";
 import { COOKIE_LOJA } from "@/lib/financeiro/tipos";
 import { gravarCookie } from "@/components/layout/contexto";
@@ -15,9 +16,11 @@ import { useSincronizarLoja } from "../usar-sincronizar";
 
 type LojaAcoes = { id: string; nome: string; dominio: string; chave: ChaveConexao; semAcesso: boolean };
 
-/** Botoes do cabecalho do detalhe: admin da Shopify, Reconectar e Sincronizar. */
+/**
+ * Botoes do cabecalho do detalhe: admin da Shopify e Sincronizar. Reconectar e
+ * Remover ficam no aviso de conexao logo abaixo, quando a loja esta sem acesso.
+ */
 export function AcoesLoja({ loja, sincronizando }: { loja: LojaAcoes; sincronizando: boolean }) {
-  const { abrir } = useConectarLoja();
   const { sincronizar, emCurso } = useSincronizarLoja();
   const desinstalada = loja.chave === "appDesinstalado";
 
@@ -27,15 +30,12 @@ export function AcoesLoja({ loja, sincronizando }: { loja: LojaAcoes; sincroniza
         href={`https://${loja.dominio}/admin`}
         target="_blank"
         rel="noopener noreferrer"
-        className={buttonVariants({ variant: "secondary" })}
+        className={cn(buttonVariants({ variant: "secondary" }))}
       >
         Admin da Shopify
         <ExternalLinkIcon aria-hidden className="size-3.5" />
         <span className="sr-only">(abre em outra aba)</span>
       </a>
-      {loja.semAcesso ? (
-        <Button onClick={() => abrir({ dominio: loja.dominio, reconectar: true })}>Reconectar</Button>
-      ) : null}
       {!desinstalada ? (
         <Button
           variant={loja.semAcesso ? "secondary" : "primary"}

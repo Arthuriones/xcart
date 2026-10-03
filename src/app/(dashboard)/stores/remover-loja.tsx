@@ -12,9 +12,6 @@ type Estado =
   | { tipo: "pronto"; inventario: InventarioLoja }
   | { tipo: "falhou" };
 
-/** O resultado guarda de qual loja e: abrir outra loja mostra "carregando" sem reset no efeito. */
-type Lido = { para: string; estado: Estado };
-
 /**
  * "Remover do xcart" com o inventario do que some, contado de verdade antes
  * de confirmar. Substitui o confirm() nativo de 6 linhas.
@@ -22,6 +19,9 @@ type Lido = { para: string; estado: Estado };
  * Quem apaga continua sendo DELETE /api/stores/[id] com `confirmar: true`.
  * As contagens vem de GET /api/leitura/lojas/inventario: a sondagem do DELETE
  * (sem confirmar) apagaria uma loja vazia na hora, antes da pergunta.
+ *
+ * O dialogo monta a cada abertura: conta de novo (a loja pode ter mudado) e
+ * nunca mostra o resultado de uma abertura anterior.
  */
 export function RemoverLoja({
   loja,
@@ -35,47 +35,54 @@ export function RemoverLoja({
   /** Chamado depois que o servidor confirmou: tire a linha da lista na hora. */
   aoRemover: (id: string) => void;
 }) {
-  const [lido, setLido] = React.useState<Lido | null>(null);
-  const id = loja?.id;
-  const estado: Estado = lido && lido.para === id ? lido.estado : { tipo: "carregando" };
+  if (!aberto || !loja) return null;
+  return <Dialogo key={loja.id} loja={loja} aoMudar={aoMudar} aoRemover={aoRemover} />;
+}
 
-  // Conta de novo a cada abertura: o que a loja tem pode ter mudado.
+function Dialogo({
+  loja,
+  aoMudar,
+  aoRemover,
+}: {
+  loja: LojaParaRemover;
+  aoMudar: (aberto: boolean) => void;
+  aoRemover: (id: string) => void;
+}) {
+  const [estado, setEstado] = React.useState<Estado>({ tipo: "carregando" });
+
   React.useEffect(() => {
-    if (!aberto || !id) return;
     const controle = new AbortController();
-    fetch(`/api/leitura/lojas/inventario?loja=${encodeURIComponent(id)}`, { signal: controle.signal })
+    fetch(`/api/leitura/lojas/inventario?loja=${encodeURIComponent(loja.id)}`, { signal: controle.signal })
       .then(async (r) => {
-        if (!r.ok) throw new Error(String(r.status));
+        // Sessao vencida: o proxy manda para /login e a resposta "da certo".
+        if (!r.ok || r.redirected) throw new Error(String(r.status));
         const dados = (await r.json()) as { inventario: InventarioLoja };
-        setLido({ para: id, estado: { tipo: "pronto", inventario: dados.inventario } });
+        setEstado({ tipo: "pronto", inventario: dados.inventario });
       })
       .catch(() => {
-        if (!controle.signal.aborted) setLido({ para: id, estado: { tipo: "falhou" } });
+        if (!controle.signal.aborted) setEstado({ tipo: "falhou" });
       });
     return () => controle.abort();
-  }, [aberto, id]);
+  }, [loja.id]);
 
   async function remover() {
-    if (!loja) return;
     const res = await fetch(`/api/stores/${encodeURIComponent(loja.id)}`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ confirmar: true }),
     });
-    if (!res.ok) throw new Error(String(res.status));
+    if (!res.ok || res.redirected) throw new Error(String(res.status));
     aoRemover(loja.id);
     toast.success(`${loja.nome} removida do xcart`, {
       description: "A lista já foi atualizada. Nada mudou na Shopify.",
     });
   }
 
-  if (!loja) return null;
-
   const itens = estado.tipo === "pronto" ? itensInventario(estado.inventario) : null;
 
   return (
     <ConfirmDialog
-      open={aberto}
+      open
       onOpenChange={aoMudar}
       titulo={`Remover ${loja.nome} do xcart?`}
       confirmar="Remover do xcart"
