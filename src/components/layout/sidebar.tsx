@@ -119,7 +119,7 @@ export function Sidebar({ dados }: { dados: DadosMenu }) {
         <nav
           aria-label={t("screens")}
           className={clsx(
-            "flex flex-1 flex-col gap-4 px-2 pb-3 pt-1",
+            "flex flex-1 flex-col gap-4 px-2 pb-3 pt-1 [scrollbar-width:thin]",
             // Recolhido, a dica do item sai para a direita: overflow visivel
             // para ela nao ser cortada.
             aberto ? "overflow-y-auto" : "overflow-visible"

@@ -24,7 +24,7 @@ import { Sino, SinoCelular } from "./sino";
  * um titulo por tela, sem repetir aqui.
  *
  * Celular: logo, titulo, busca e sino; o contexto vira um botao que abre num
- * painel. Entre 768 e 1023 px o desktop usa o mesmo botao: a barra inteira
+ * painel. Entre 768 e 1279 px o desktop usa o mesmo botao: a barra inteira
  * nao cabe ao lado do menu.
  *
  * `contexto` chega pronto do servidor (topo-dados.tsx); null = a leitura
@@ -48,10 +48,10 @@ export function TopNav({
       <header className="sticky top-0 z-30 hidden h-15 shrink-0 items-center gap-2 border-b border-border bg-surface px-6 md:flex">
         {contexto && temContexto && (
           <>
-            <div className="hidden min-w-0 lg:flex">
+            <div className="hidden min-w-0 xl:flex">
               <BarraContexto dados={contexto} ctx={ctx} modo={modo} />
             </div>
-            <div className="min-w-0 max-w-90 flex-1 lg:hidden">
+            <div className="min-w-0 max-w-90 flex-1 xl:hidden">
               <ContextoCelular dados={contexto} ctx={ctx} modo={modo} chaveTela={pathname} />
             </div>
           </>
@@ -59,10 +59,10 @@ export function TopNav({
         <div className="flex-1" />
         {contexto && temContexto && (
           <>
-            <div className="hidden lg:block">
+            <div className="hidden xl:block">
               <Atualizado ctx={ctx} fuso={contexto.fuso} chaveTela={pathname} />
             </div>
-            <span aria-hidden className="mx-1 hidden h-6 w-px bg-border lg:block" />
+            <span aria-hidden className="mx-1 hidden h-6 w-px bg-border xl:block" />
           </>
         )}
         <button
@@ -72,8 +72,8 @@ export function TopNav({
           className="flex h-ctl-md items-center gap-2 whitespace-nowrap rounded-control border border-border-strong bg-surface-2 px-2.5 text-dense text-t2 hover:border-control-border hover:text-ink"
         >
           <Search className="size-4" strokeWidth={1.75} aria-hidden />
-          <span className="hidden lg:inline">Buscar</span>
-          <kbd className="hidden rounded-control border border-border bg-surface px-1.5 font-mono text-label text-t2 min-[1360px]:inline">
+          <span className="hidden xl:inline">Buscar</span>
+          <kbd className="hidden rounded-control border border-border bg-surface px-1.5 font-mono text-label text-t2 2xl:inline">
             Ctrl K
           </kbd>
         </button>
@@ -82,7 +82,7 @@ export function TopNav({
 
       <header className="sticky top-0 z-30 border-b border-border bg-surface md:hidden">
         <div className="flex h-14 items-center gap-1 pl-4 pr-1">
-          <Link href={APP_HOME} aria-label="xcart, ir para o Lucro" className="mr-2 shrink-0">
+          <Link href={APP_HOME} aria-label="xcart, ir para o Lucro" className="mr-2 flex h-ctl-lg shrink-0 items-center">
             <LogoXcart altura={14} />
           </Link>
           <h1 className="min-w-0 flex-1 truncate text-section font-semibold text-ink">{titulo}</h1>

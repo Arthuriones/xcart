@@ -83,6 +83,9 @@ export function useContexto(dados: DadosContexto | null) {
     : null;
   const [valores, setValores] = useState<Valores | null>(doServidor);
   const [anterior, setAnterior] = useState<Valores | null>(doServidor);
+  // Cada leitura nova (trocar o contexto, "Atualizar agora") conta uma rodada:
+  // e ela que renova o "Atualizado as".
+  const [rodada, setRodada] = useState(0);
   if (doServidor && JSON.stringify(doServidor) !== JSON.stringify(anterior)) {
     setAnterior(doServidor);
     setValores(doServidor);
@@ -99,14 +102,16 @@ export function useContexto(dados: DadosContexto | null) {
     }
     if (!mudou) return;
     setValores(proximo);
+    setRodada((r) => r + 1);
     startTransition(() => router.refresh());
   }
 
   function atualizar() {
+    setRodada((r) => r + 1);
     startTransition(() => router.refresh());
   }
 
-  return { valores, gravar, atualizar, pendente };
+  return { valores, gravar, atualizar, pendente, rodada };
 }
 
 export type Contexto = ReturnType<typeof useContexto>;
@@ -538,22 +543,19 @@ export function Atualizado({
   chaveTela: string;
   compacto?: boolean;
 }) {
-  const [rodada, setRodada] = useState(0);
+  const chave = `${chaveTela}|${ctx.rodada}`;
   if (compacto) {
-    return <Hora key={`${chaveTela}|${rodada}`} fuso={fuso} pendente={ctx.pendente} curto />;
+    return <Hora key={chave} fuso={fuso} pendente={ctx.pendente} curto />;
   }
   return (
     <div className="flex items-center gap-2.5 whitespace-nowrap text-label text-t2">
       <span className="flex flex-col items-end leading-4">
-        <Hora key={`${chaveTela}|${rodada}`} fuso={fuso} pendente={ctx.pendente} />
+        <Hora key={chave} fuso={fuso} pendente={ctx.pendente} />
         <span>{rotuloFuso(fuso)}</span>
       </span>
       <button
         type="button"
-        onClick={() => {
-          setRodada((r) => r + 1);
-          ctx.atualizar();
-        }}
+        onClick={ctx.atualizar}
         disabled={ctx.pendente}
         aria-busy={ctx.pendente}
         aria-label="Atualizar agora"
