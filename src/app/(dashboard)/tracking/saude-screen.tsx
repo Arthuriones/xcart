@@ -121,8 +121,10 @@ export function SaudeScreen({
 
   function verEventos(storeId: string) {
     // A loja vai para a barra do topo: Eventos ao vivo abre filtrado nela.
+    // Navegacao inteira de proposito: a barra mora no layout, que a navegacao
+    // do App Router reaproveita -- ela continuaria mostrando a loja antiga.
     gravarCookie(COOKIE_LOJA, storeId);
-    router.push("/tracking/eventos");
+    window.location.assign("/tracking/eventos");
   }
 
   async function rechecar(l: LojaTracking) {
