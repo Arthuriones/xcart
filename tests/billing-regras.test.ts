@@ -197,6 +197,11 @@ describe("mensagemDeErro: nada de ingles nem nome de fornecedor na tela", () => 
     expect(e.detalhe).toBe("Pagou respondeu 502");
     expect(mensagemDeErro(422, "card: declined", ERRO_PADRAO.cartao).texto).toBe(ERRO_PADRAO.cartao);
   });
+  it("mensagens do formulario de cartao passam", () => {
+    expect(
+      mensagemDeErro(null, "Não foi possível carregar o formulário de pagamento.", ERRO_PADRAO.cartao).texto
+    ).toBe("Não foi possível carregar o formulário de pagamento.");
+  });
   it("sessao expirada", () => {
     expect(mensagemDeErro(401, "Unauthorized", ERRO_PADRAO.pix).texto).toBe(
       "Sua sessão expirou. Entre de novo para continuar."

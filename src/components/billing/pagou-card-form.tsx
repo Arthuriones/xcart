@@ -197,12 +197,7 @@ export function PagouCardForm({
 
   // O texto cru (do SDK ou do processador) pode vir em ingles ou com nome de
   // fornecedor: a tela mostra a versao em portugues e guarda o cru recolhido.
-  const autenticacao = erro === "O banco pediu autenticação adicional. Tente outro cartão.";
-  const erroNaTela = erro
-    ? autenticacao
-      ? { texto: erro, detalhe: null }
-      : mensagemDeErro(null, erro, ERRO_PADRAO.cartao)
-    : null;
+  const erroNaTela = erro ? mensagemDeErro(null, erro, ERRO_PADRAO.cartao) : null;
 
   if (semChave) {
     return (

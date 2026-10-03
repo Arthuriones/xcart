@@ -396,6 +396,9 @@ const MENSAGENS_NOSSAS = new Set([
   "Token de cartão inválido.",
   "Esta assinatura foi criada no provedor anterior. Fale com o suporte para cancelar.",
   "Nenhuma assinatura ativa.",
+  // Do formulario de cartao (pagou-card-form.tsx), tambem nossas.
+  "Não foi possível carregar o formulário de pagamento.",
+  "O banco pediu autenticação adicional. Tente outro cartão.",
 ]);
 
 export interface ErroNaTela {
