@@ -434,7 +434,7 @@ export function PaletaComandos({
         </div>
       </Janela>
 
-      <Janela aberto={atalhos} aoMudar={setAtalhos} titulo="Atalhos de teclado" className="max-w-120">
+      <Janela aberto={atalhos} aoMudar={setAtalhos} titulo="Atalhos de teclado" estreita>
         <ul className="grid gap-x-6 overflow-y-auto px-4 pb-3 pt-1">
           {[
             { t: "Abrir a busca", k: "Ctrl K ou ⌘K" },

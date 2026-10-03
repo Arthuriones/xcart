@@ -127,7 +127,7 @@ export function Janela({
   titulo,
   tituloVisivel = true,
   focoInicial,
-  className,
+  estreita = false,
   children,
 }: {
   aberto: boolean;
@@ -136,7 +136,8 @@ export function Janela({
   /** false: o titulo vai so para o leitor de tela (a busca abre direto no campo). */
   tituloVisivel?: boolean;
   focoInicial?: RefObject<HTMLElement | null>;
-  className?: string;
+  /** 480px em vez de 640px (lista de atalhos). */
+  estreita?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -147,8 +148,8 @@ export function Janela({
           initialFocus={focoInicial}
           className={clsx(
             CAIXA,
-            "fixed left-1/2 top-2 z-50 flex max-h-[calc(100dvh-16px)] w-[calc(100vw-16px)] max-w-160 -translate-x-1/2 flex-col overflow-hidden md:top-22 animate-xc-in",
-            className
+            "fixed left-1/2 top-2 z-50 flex max-h-[calc(100dvh-16px)] w-[calc(100vw-16px)] -translate-x-1/2 flex-col overflow-hidden md:top-22 animate-xc-in",
+            estreita ? "max-w-120" : "max-w-160"
           )}
         >
           {tituloVisivel ? (

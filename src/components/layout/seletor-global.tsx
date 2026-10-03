@@ -120,8 +120,10 @@ export type Contexto = ReturnType<typeof useContexto>;
 // Pecas
 // ---------------------------------------------------------------------------
 
+// Sem cor de fundo nem de texto aqui: quem usa escolhe. clsx nao resolve
+// conflito (bg-surface + bg-info-bg ficariam os dois, e vence a ordem do CSS).
 const GATILHO =
-  "flex h-ctl-md items-center gap-2 rounded-control border bg-surface px-3 text-dense text-ink hover:border-control-border";
+  "flex h-ctl-md items-center gap-2 rounded-control border px-3 text-dense hover:border-control-border";
 
 function nomeDaLoja(lojas: LojaContexto[], id: string): string | null {
   const loja = lojas.find((l) => l.id === id);
@@ -388,8 +390,8 @@ export function BarraContexto({
               type="button"
               className={clsx(
                 GATILHO,
-                "min-w-0 max-w-70",
-                filtrada ? "border-info-border bg-info-bg" : "border-border-strong"
+                "min-w-0 max-w-70 text-ink",
+                filtrada ? "border-info-border bg-info-bg" : "border-border-strong bg-surface"
               )}
             >
               <Store className="size-4 shrink-0 text-t2" strokeWidth={1.75} aria-hidden />
@@ -449,7 +451,7 @@ export function BarraContexto({
             {...pop("periodo")}
             className="w-72 p-1"
             gatilho={
-              <button type="button" className={clsx(GATILHO, "border-border-strong")}>
+              <button type="button" className={clsx(GATILHO, "border-border-strong bg-surface text-ink")}>
                 <Calendar className="size-4 shrink-0 text-t2" strokeWidth={1.75} aria-hidden />
                 <span className="whitespace-nowrap">{ROTULO_PERIODO[v.periodo]}</span>
                 <span className="num hidden whitespace-nowrap text-t2 min-[1360px]:inline">
@@ -483,7 +485,7 @@ export function BarraContexto({
             {...pop("comparar")}
             className="w-72 p-1"
             gatilho={
-              <button type="button" className={clsx(GATILHO, "border-border-strong text-t1")}>
+              <button type="button" className={clsx(GATILHO, "border-border-strong bg-surface text-t1")}>
                 <span className="text-t2">vs.</span>
                 <span className="whitespace-nowrap">
                   {v.comparacao === "anterior" ? "período anterior" : "sem comparação"}
