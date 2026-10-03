@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Section } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { chamar } from "../api";
+import { chamar, type Resultado } from "../api";
 
 // ============================================================================
 // Claude (MCP): gerar um token e configurar o Claude Code ou o Claude Desktop
@@ -38,6 +38,10 @@ interface TokenRow {
 }
 
 const FUSO = "America/Sao_Paulo";
+
+function lerTokens() {
+  return chamar<{ tokens?: TokenRow[] }>("/api/mcp-tokens", { method: "GET" });
+}
 
 function diasAte(iso: string) {
   return Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000);
@@ -113,8 +117,7 @@ export function ClaudeMcp() {
     () => ""
   );
 
-  const carregar = useCallback(async () => {
-    const r = await chamar<{ tokens?: TokenRow[] }>("/api/mcp-tokens", { method: "GET" });
+  const aplicar = useCallback((r: Resultado<{ tokens?: TokenRow[] }>) => {
     if (r.ok) {
       setTokens(r.tokens ?? []);
       setErroLista(null);
@@ -124,9 +127,18 @@ export function ClaudeMcp() {
     setCarregando(false);
   }, []);
 
+  const carregar = useCallback(async () => aplicar(await lerTokens()), [aplicar]);
+
+  // Primeira leitura: o estado so muda na volta da rede, nunca no corpo do efeito.
   useEffect(() => {
-    void carregar();
-  }, [carregar]);
+    let vivo = true;
+    void lerTokens().then((r) => {
+      if (vivo) aplicar(r);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [aplicar]);
 
   async function criar() {
     setCriando(true);
