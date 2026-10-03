@@ -1,63 +1,96 @@
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/components/ui/cn"
+import { Spinner } from "@/components/ui/spinner"
 
+/*
+ * Um botao so, 3 alturas (28 / 36 / 44) e estas variantes:
+ *   primary  -- preto solido, a acao principal do bloco (uma por bloco)
+ *   secondary-- contorno, acao comum
+ *   ghost    -- sem contorno, acao terciaria e botao de icone
+ *   danger   -- vermelho solido, so na confirmacao de algo destrutivo
+ *   destructive -- vermelho suave, para abrir a confirmacao ("Remover loja")
+ *   link     -- texto terracota sublinhado
+ * "default" e "outline" continuam existindo porque as telas antigas usam:
+ * default = primary, outline = secondary.
+ *
+ * `pending` mostra o spinner, poe aria-busy e bloqueia novo clique sem tirar
+ * o foco do botao (duplo envio nao passa).
+ */
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-clip-padding text-sm font-semibold whitespace-nowrap transition-all duration-200 outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:scale-[0.98] active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button relative inline-flex shrink-0 items-center justify-center gap-2 rounded-control border border-transparent bg-clip-padding text-dense font-medium whitespace-nowrap transition-colors duration-150 select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus data-disabled:cursor-not-allowed aria-busy:cursor-progress [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        // Um acento so para acao. O gradiente de marca perdia para um verde
-        // escrito a mao em 82 lugares -- quem escrevia a tela queria uma cor
-        // de acao, nao um gradiente. Ele volta a ser identidade (sidebar,
-        // logo) em vez de enfeite de botao.
+        primary:
+          "bg-solid text-on-solid hover:bg-solid-hover data-disabled:not-aria-busy:bg-track data-disabled:not-aria-busy:text-t2",
         default:
-          "bg-action text-action-foreground shadow-sm shadow-action/20 hover:brightness-[1.05] hover:shadow-md hover:shadow-action/25",
-        outline:
-          "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+          "bg-solid text-on-solid hover:bg-solid-hover data-disabled:not-aria-busy:bg-track data-disabled:not-aria-busy:text-t2",
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80 aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
+          "border-border-strong bg-surface text-ink hover:border-control-border hover:bg-hover aria-expanded:bg-hover data-disabled:not-aria-busy:text-t3 data-disabled:not-aria-busy:hover:border-border-strong data-disabled:not-aria-busy:hover:bg-surface",
+        outline:
+          "border-border-strong bg-surface text-ink hover:border-control-border hover:bg-hover aria-expanded:bg-hover data-disabled:not-aria-busy:text-t3 data-disabled:not-aria-busy:hover:border-border-strong data-disabled:not-aria-busy:hover:bg-surface",
         ghost:
-          "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
+          "bg-transparent text-ink hover:bg-hover aria-expanded:bg-hover data-disabled:not-aria-busy:text-t3 data-disabled:not-aria-busy:hover:bg-transparent",
+        danger:
+          "bg-err font-semibold text-surface hover:brightness-95 data-disabled:not-aria-busy:bg-track data-disabled:not-aria-busy:text-t2",
         destructive:
-          "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
-        link: "text-primary underline-offset-4 hover:underline",
+          "border-err-border bg-err-bg text-err hover:border-err data-disabled:not-aria-busy:text-t3",
+        link: "h-auto! px-1! text-brand underline underline-offset-4 hover:text-ink data-disabled:not-aria-busy:text-t3",
       },
       size: {
-        default:
-          "h-10 gap-2 px-4 has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
-        xs: "h-7 gap-1 rounded-md px-2.5 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-9 gap-1.5 rounded-md px-3 text-[0.86rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5 [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "h-11 gap-2 px-5 text-sm has-data-[icon=inline-end]:pr-4 has-data-[icon=inline-start]:pl-4",
-        icon: "size-10",
-        "icon-xs":
-          "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
-        "icon-sm":
-          "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
-        "icon-lg": "size-9",
+        sm: "h-ctl-sm gap-1.5 px-2.5 [&_svg:not([class*='size-'])]:size-3.5",
+        md: "h-ctl-md px-4",
+        default: "h-ctl-md px-4",
+        lg: "h-ctl-lg px-5 text-body",
+        // legado: "xs" virou o pequeno (28)
+        xs: "h-ctl-sm gap-1.5 px-2.5 [&_svg:not([class*='size-'])]:size-3.5",
+        "icon-sm": "size-ctl-sm [&_svg:not([class*='size-'])]:size-3.5",
+        "icon-xs": "size-ctl-sm [&_svg:not([class*='size-'])]:size-3.5",
+        icon: "size-ctl-md",
+        "icon-md": "size-ctl-md",
+        "icon-lg": "size-ctl-lg",
       },
     },
     defaultVariants: {
-      variant: "default",
-      size: "default",
+      variant: "primary",
+      size: "md",
     },
   }
 )
 
+type ButtonProps = ButtonPrimitive.Props &
+  VariantProps<typeof buttonVariants> & {
+    /** Acao em andamento: spinner, aria-busy e clique bloqueado. */
+    pending?: boolean
+  }
+
 function Button({
   className,
-  variant = "default",
-  size = "default",
+  variant = "primary",
+  size = "md",
+  pending = false,
+  disabled,
+  focusableWhenDisabled,
+  children,
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+}: ButtonProps) {
   return (
     <ButtonPrimitive
       data-slot="button"
+      disabled={disabled || pending}
+      // Pendente continua focavel: o foco nao pula para o <body> no meio do envio.
+      focusableWhenDisabled={pending || focusableWhenDisabled}
+      aria-busy={pending || undefined}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
-    />
+    >
+      {pending ? <Spinner size={size === "sm" || size === "xs" ? 12 : 14} /> : null}
+      {children}
+    </ButtonPrimitive>
   )
 }
 
 export { Button, buttonVariants }
+export type { ButtonProps }

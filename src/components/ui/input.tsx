@@ -1,7 +1,16 @@
 import * as React from "react"
 import { Input as InputPrimitive } from "@base-ui/react/input"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/components/ui/cn"
+
+/*
+ * Campo de texto. Contorno control-border (3:1), foco terracota, erro por
+ * aria-invalid (ligue a mensagem com aria-describedby, abaixo do campo).
+ * Numero: inputMode="decimal" e className="num text-right".
+ * Tamanho: 36px; use className="h-ctl-sm" na tabela ou "h-ctl-lg" no celular.
+ */
+const campoBase =
+  "w-full min-w-0 max-w-full rounded-control border border-control-border bg-surface text-body text-ink transition-colors placeholder:text-t3 focus-visible:border-focus focus-visible:outline-1 focus-visible:outline-offset-0 focus-visible:outline-focus disabled:cursor-not-allowed disabled:bg-track disabled:text-t3 aria-invalid:border-err aria-invalid:focus-visible:outline-err read-only:bg-surface-2"
 
 function Input({ className, type, ...props }: React.ComponentProps<"input">) {
   return (
@@ -9,7 +18,8 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
       type={type}
       data-slot="input"
       className={cn(
-        "h-10 w-full min-w-0 max-w-full rounded-md border border-input bg-card px-3 py-2 text-sm font-medium transition-colors outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:border-primary/60 focus-visible:ring-3 focus-visible:ring-primary/15 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20",
+        campoBase,
+        "h-ctl-md px-3 file:mr-2 file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-dense file:font-medium file:text-ink",
         className
       )}
       {...props}
@@ -17,4 +27,4 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
   )
 }
 
-export { Input }
+export { Input, campoBase }
