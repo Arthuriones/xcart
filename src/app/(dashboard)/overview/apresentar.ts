@@ -307,14 +307,17 @@ export function eventoNaTela(ev: EventoDaRota, destinos: DestinoNaTela[]): Event
     tom: "warn" as const,
     descricao: "",
   };
-  const destino = ev.destinoId ? destinos.find((d) => d.id === ev.destinoId) : undefined;
+  // Script antigo nao grava a loja do evento: o dominio do detalhe acha ela.
+  const dominio = /->\s*([a-z0-9.-]+)\s*$/i.exec(ev.detalhe ?? "")?.[1]?.toLowerCase();
+  const destino =
+    (ev.destinoId ? destinos.find((d) => d.id === ev.destinoId) : undefined) ??
+    (dominio ? destinos.find((d) => d.dominio.toLowerCase() === dominio) : undefined);
   const loja = destino ? { id: destino.lojaId, nome: destino.nome } : null;
 
   let descricao = tipo.descricao;
   if (ev.motivo === "routed_ok") {
     const itens = /^\s*(\d+)\s+itens?/i.exec(ev.detalhe ?? "");
-    const dominio = /->\s*([a-z0-9.-]+)\s*$/i.exec(ev.detalhe ?? "")?.[1];
-    const para = loja?.nome ?? (dominio && dominio !== "?" ? dominio : null);
+    const para = loja?.nome ?? dominio ?? null;
     const qtd = itens ? plural(Number(itens[1]), "item", "itens") : "Carrinho";
     descricao = para ? `${qtd} para ${para}.` : `${qtd} para a loja de checkout.`;
   }

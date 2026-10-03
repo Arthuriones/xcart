@@ -247,7 +247,12 @@ describe("eventoNaTela", () => {
     expect(e).toMatchObject({ rotulo: "Carrinho roteado", tom: "ok", descricao: "3 itens para Checkout 1." });
     expect(e.loja).toEqual({ id: "c1", nome: "Checkout 1" });
   });
-  it("sem destino gravado: o dominio do detalhe; singular certo", () => {
+  it("sem destino gravado: o dominio do detalhe acha a loja da rota", () => {
+    const e = eventoNaTela(ev({ detalhe: "2 itens -> C1.myshopify.com" }), destinos);
+    expect(e.descricao).toBe("2 itens para Checkout 1.");
+    expect(e.loja?.id).toBe("c1");
+  });
+  it("dominio fora da rota: o dominio mesmo; singular certo", () => {
     expect(eventoNaTela(ev({ detalhe: "1 itens -> outra.myshopify.com" }), destinos).descricao).toBe(
       "1 item para outra.myshopify.com."
     );

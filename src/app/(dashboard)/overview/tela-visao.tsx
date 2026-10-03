@@ -109,9 +109,16 @@ export function TelaVisao({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex min-w-0 flex-wrap items-end gap-3">
+        <div className="flex w-full min-w-0 flex-col gap-1 sm:w-80">
+          <span className="flex items-center gap-2">
+            <span id="seletor-rota-rotulo" className="text-label font-medium text-t1">
+              Rota
+            </span>
+            <StatusBadge {...seloRota} />
+          </span>
           {rotas.length > 1 ? (
             <SeletorRota
+              rotuloId="seletor-rota-rotulo"
               atual={rota.id}
               rotas={rotas.map((r) => ({
                 id: r.id,
@@ -120,12 +127,8 @@ export function TelaVisao({
               }))}
             />
           ) : (
-            <div className="flex min-w-0 flex-col gap-1">
-              <span className="text-label font-medium text-t1">Rota</span>
-              <span className="text-section text-ink wrap-anywhere">{nomeDaRota(rota)}</span>
-            </div>
+            <span className="text-section text-ink wrap-anywhere">{nomeDaRota(rota)}</span>
           )}
-          <StatusBadge {...seloRota} tamanho="md" className="mb-1" />
         </div>
         <Atualizar texto={`Atualizado às ${hora} (${rotuloFuso(FUSO_RELATORIO_PADRAO)})`} />
       </div>
@@ -177,9 +180,17 @@ export function TelaVisao({
           estado={
             nProblemas > 0
               ? { tom: temCritico ? "err" : "warn", texto: "Requer ação" }
-              : { tom: "ok", texto: "Tudo certo" }
+              : detalhe.falhas === null
+                ? { tom: "warn", texto: "Parcial" }
+                : { tom: "ok", texto: "Tudo certo" }
           }
-          detalhe={nProblemas > 0 ? "O que fazer está logo abaixo" : "Nada pedindo ação nesta rota"}
+          detalhe={
+            detalhe.falhas === null
+              ? "Sem a contagem de falhas, que não veio agora"
+              : nProblemas > 0
+                ? "O que fazer está logo abaixo"
+                : "Nada pedindo ação nesta rota"
+          }
           href={nProblemas > 0 ? "#requer-atencao" : undefined}
         />
       </section>
@@ -229,7 +240,10 @@ export function TelaVisao({
         titulo="Caminho do comprador"
         descricao={`Da vitrine, o xcart leva o carrinho para uma loja de checkout pela divisão do rodízio. Carrinhos dos últimos ${DIAS_CARRINHOS} dias.`}
         acoes={
-          <Link href="/sales" className={buttonVariants({ variant: "link", size: "sm" })}>
+          <Link
+            href="/sales"
+            className={cn(buttonVariants({ variant: "link", size: "sm" }), "min-h-ctl-lg sm:min-h-0")}
+          >
             Receita de cada loja em Vendas
           </Link>
         }
@@ -405,7 +419,7 @@ function ListaCheckout({ destinos }: { destinos: DestinoNaTela[] }) {
                   <span
                     className={cn(
                       "absolute inset-y-0 left-0 rounded-xs",
-                      d.estado === "ok" ? "bg-chart-2" : "bg-t4"
+                      d.estado === "ok" ? "bg-chart-2" : d.estado === "attention" ? "bg-warn" : "bg-t4"
                     )}
                     style={{ width: `${d.fatia}%` }}
                   />
