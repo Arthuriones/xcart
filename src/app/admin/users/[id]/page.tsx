@@ -1,434 +1,315 @@
-"use client";
-
-import { use, useEffect, useState } from "react";
-import Link from "next/link";
+import { notFound } from "next/navigation";
+import { buttonVariants } from "@/components/ui/button";
+import { BarList } from "@/components/ui/bar-list";
+import { DataTable } from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
+import { KpiCard } from "@/components/ui/kpi-card";
+import { Section } from "@/components/ui/section";
+import { STATUS, StatusBadge } from "@/components/ui/status-badge";
+import { accessControlEnabled } from "@/lib/billing/access";
+import { lerDestinosDoUsuario, type DestinoAdmin } from "@/lib/leitura/admin-rotas";
+import { ErroAdmin } from "../../estados-admin";
 import {
-  ArrowLeft,
-  ExternalLink,
-  Loader2,
-  Package,
-  Route as RouteIcon,
-  Settings as SettingsIcon,
-  Store as StoreIcon,
-} from "lucide-react";
-import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  custoIa,
+  dataCurta,
+  dataHora,
+  divisaoDestinos,
+  inteiro,
+  naMoeda,
+  plural,
+  rotuloAcao,
+  rotuloPlano,
+  seloAcesso,
+  statusAssinatura,
+} from "../../formato";
+import { lerUsuario } from "../../ler-api";
+import type { DetalheUsuarioAdmin } from "../../tipos";
+import { CartaoGerenciar } from "./cartao-gerenciar";
+import { Trilha } from "./trilha";
 
-interface Detail {
-  profile: {
-    id: string;
-    email: string;
-    plan: string;
-    subscription_status: string | null;
-    ai_credits: number;
-    current_period_end: string | null;
-    access_granted: boolean;
-    is_admin: boolean;
-    hasAccess: boolean;
-    created_at: string;
-  };
-  stores: {
-    id: string;
-    shop_domain: string;
-    name: string;
-    niche: string | null;
-    target_language: string | null;
-    created_at: string;
-    productCount: number;
-  }[];
-  routes: {
-    id: string;
-    name: string;
-    public_token: string;
-    enabled: boolean;
-    sourceName: string;
-    targetName: string;
-  }[];
-  totals: { stores: number; products: number; routes: number };
-  usage: {
-    action: string;
-    cost_usd: number;
-    credits_used: number;
-    created_at: string;
-  }[];
-  purchases: {
-    credits: number;
-    amount_cents: number;
-    currency: string;
-    created_at: string;
-  }[];
+export const dynamic = "force-dynamic";
+
+/**
+ * /admin/users/[id]: tudo de um cliente. Perfil, lojas, rotas, recargas e uso
+ * de IA vem de GET /api/admin/users/[id]; os destinos de cada rota, com a
+ * divisao do rodizio, de uma leitura nova (src/lib/leitura/admin-rotas.ts).
+ */
+export default async function DetalheUsuarioPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const [r, destinos] = await Promise.all([lerUsuario(id), lerDestinosDoUsuario(id)]);
+
+  if (!r.ok && r.status === 404) notFound();
+  if (!r.ok) {
+    return (
+      <>
+        <Trilha atual="Cliente" />
+        <ErroAdmin titulo="Não deu para carregar este cliente" detalhe={r.detalhe} />
+      </>
+    );
+  }
+  return <Detalhe d={r.dados} destinos={destinos} travaLigada={accessControlEnabled()} />;
 }
 
-const ACTION_LABEL: Record<string, string> = {
-  neutralize_image: "Imagem",
-  neutralize_text: "Texto",
-  translate: "Tradução",
-  clone: "Clonagem",
-  optimize: "Otimização",
-  other: "Outro",
-};
+const LINK_EXTERNO = buttonVariants({ variant: "secondary", size: "sm" });
+const LINK_SHOPIFY = buttonVariants({ variant: "ghost", size: "sm" });
 
-export default function UserDetailPage({
-  params,
+function Detalhe({
+  d,
+  destinos,
+  travaLigada,
 }: {
-  params: Promise<{ id: string }>;
+  d: DetalheUsuarioAdmin;
+  destinos: Record<string, DestinoAdmin[]> | null;
+  travaLigada: boolean;
 }) {
-  const { id } = use(params);
-  const [data, setData] = useState<Detail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [plan, setPlan] = useState("free");
-  const [credits, setCredits] = useState("0");
-  const [saving, setSaving] = useState(false);
+  const p = d.profile;
+  const gerenciavel = {
+    id: p.id,
+    email: p.email,
+    plan: p.plan,
+    aiCredits: p.ai_credits,
+    accessGranted: p.access_granted === true,
+    isAdmin: p.is_admin === true,
+  };
+  const selo = seloAcesso(gerenciavel);
+  const status = statusAssinatura(p.subscription_status);
+  const nomeLoja = new Map(d.stores.map((s) => [s.id, s.name || s.shop_domain]));
 
-  async function load() {
-    try {
-      const res = await fetch(`/api/admin/users/${id}`);
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || "Falha.");
-      setData(body);
-      setPlan(body.profile.plan);
-      setCredits(String(body.profile.ai_credits));
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Falha.");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const recargas = d.purchases.map((c, i) => ({
+    id: `${c.created_at}-${i}`,
+    quando: Date.parse(c.created_at),
+    quandoTexto: dataCurta(c.created_at),
+    creditos: c.credits,
+    creditosTexto: `+${inteiro(c.credits)}`,
+    valor: c.amount_cents / 100,
+    valorTexto: naMoeda(c.amount_cents / 100, c.currency),
+  }));
 
-  useEffect(() => {
-    // A funcao abaixo e async e TODO setState dela acontece depois do primeiro
-    // await: nao ha atualizacao sincrona no corpo deste efeito, entao nao ha o
-    // render em cascata que a regra combate. O compilador nao consegue provar
-    // isso ao atravessar a funcao, e assume o pior.
-    //
-    // O conserto que a regra realmente quer aqui e nao buscar dados em efeito:
-    // esta pagina e client component e busca da propria API. Mover para o
-    // servidor e mudanca de arquitetura por pagina, nao ajuste de lint.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
-
-  async function patch(payload: object, label: string) {
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/admin/users/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || "Falha.");
-      toast.success(label);
-      await load();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Carregando…
-      </div>
-    );
-  }
-  if (error || !data) {
-    return (
-      <div className="rounded-lg border border-destructive/30 bg-destructive/8 p-4 text-sm text-destructive">
-        {error || "Não encontrado."}
-      </div>
-    );
-  }
-
-  const p = data.profile;
+  const uso = d.usage.map((u, i) => ({
+    id: `${u.created_at}-${i}`,
+    acao: rotuloAcao(u.action),
+    creditos: Number(u.credits_used) || 0,
+    creditosTexto: inteiro(Number(u.credits_used) || 0),
+    custo: Number(u.cost_usd) || 0,
+    custoTexto: custoIa(Number(u.cost_usd)),
+    quando: Date.parse(u.created_at),
+    quandoTexto: dataHora(u.created_at),
+  }));
 
   return (
-    <div className="space-y-6">
-      <Link
-        href="/admin/users"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" /> Usuários
-      </Link>
-
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold text-foreground">{p.email}</h1>
-        {p.is_admin && <Badge variant="secondary">admin</Badge>}
-        {p.hasAccess ? (
-          <Badge className="bg-primary/15 text-primary">com acesso</Badge>
-        ) : (
-          <Badge variant="outline">bloqueado</Badge>
-        )}
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3">
+        <Trilha atual={p.email} />
+        <div className="flex min-w-0 flex-col gap-2">
+          <h1 className="text-page font-semibold break-all text-ink">{p.email}</h1>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-label text-t1">
+            {p.is_admin ? <StatusBadge tom="info" texto="Admin" ponto={false} /> : null}
+            <StatusBadge tom={selo.tom} texto={selo.texto} />
+            <span>{selo.motivo}</span>
+            <span aria-hidden className="text-t3">
+              ·
+            </span>
+            <span>Cadastro em {dataCurta(p.created_at)}</span>
+          </div>
+        </div>
       </div>
 
-      {/* Resumo */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-        {[
-          { label: "Plano", value: p.plan },
-          { label: "Créditos", value: p.ai_credits },
-          { label: "Lojas", value: data.totals.stores },
-          { label: "Produtos", value: data.totals.products },
-          { label: "Rotas", value: data.totals.routes },
-        ].map((c) => (
-          <Card key={c.label}>
-            <CardContent className="p-3">
-              <p className="text-xs text-muted-foreground">{c.label}</p>
-              <p className="mt-0.5 text-xl font-semibold text-foreground">
-                {c.value}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <KpiCard
+          rotulo="Plano"
+          valor={rotuloPlano(p.plan)}
+          detalhe={
+            [status, p.current_period_end ? `vale até ${dataCurta(p.current_period_end)}` : null]
+              .filter(Boolean)
+              .join(" · ") || undefined
+          }
+        />
+        <KpiCard rotulo="Créditos" valor={inteiro(p.ai_credits)} detalhe="Saldo atual" />
+        <KpiCard rotulo="Lojas" valor={inteiro(d.totals.stores)} />
+        <KpiCard rotulo="Produtos" valor={inteiro(d.totals.products)} detalhe="Somando as lojas" />
+        <KpiCard rotulo="Rotas" valor={inteiro(d.totals.routes)} className="col-span-2 sm:col-span-1" />
       </div>
 
-      {/* Gestão */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Gerenciar</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Acesso</Label>
-            <Button
-              variant={p.access_granted ? "outline" : "default"}
-              className="w-full"
-              disabled={saving || p.is_admin}
-              onClick={() =>
-                patch(
-                  { accessGranted: !p.access_granted },
-                  p.access_granted ? "Acesso revogado." : "Acesso liberado."
-                )
-              }
-            >
-              {p.access_granted ? "Revogar acesso" : "Liberar acesso"}
-            </Button>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Plano</Label>
-            <Select value={plan} onValueChange={(v) => setPlan(v || "free")}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="free">Free</SelectItem>
-                <SelectItem value="pro">Pro</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Créditos</Label>
-            <div className="flex gap-2">
-              <Input
-                type="number"
-                min={0}
-                value={credits}
-                onChange={(e) => setCredits(e.target.value)}
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+        <div className="flex min-w-0 flex-col gap-4">
+          <Section titulo="Lojas" descricao={plural(d.stores.length, "loja conectada", "lojas conectadas")}>
+            {d.stores.length === 0 ? (
+              <EmptyState
+                variante="simples"
+                titulo="Nenhuma loja conectada"
+                descricao="As lojas aparecem quando o cliente conectar a primeira."
               />
-              <Button
-                variant="outline"
-                onClick={() => patch({ addCredits: 100 }, "+100 créditos")}
-                disabled={saving}
-              >
-                +100
-              </Button>
-            </div>
-          </div>
-          <div className="flex items-end">
-            <Button
-              className="w-full"
-              disabled={saving}
-              onClick={() =>
-                patch({ plan, aiCredits: Number(credits) || 0 }, "Salvo")
-              }
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Salvar
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Lojas */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <StoreIcon className="h-4 w-4" /> Lojas ({data.stores.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {data.stores.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhuma loja conectada.</p>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2">
-              {data.stores.map((s) => (
-                <div
-                  key={s.id}
-                  className="rounded-lg border border-border/60 bg-background/45 p-3"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-foreground">
-                        {s.name || s.shop_domain}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {s.shop_domain}
-                      </p>
-                    </div>
-                    <span className="flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground">
-                      <Package className="h-3 w-3" />
-                      {s.productCount}
-                    </span>
-                  </div>
-                  <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
-                    {s.niche && <span>{s.niche}</span>}
-                    {s.target_language && <span>· {s.target_language}</span>}
-                  </div>
-                  <div className="mt-2 flex gap-2">
-                    <a
-                      href={`https://${s.shop_domain}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <Button variant="outline" size="sm">
-                        <ExternalLink className="h-3.5 w-3.5" />
-                        Abrir loja
-                      </Button>
-                    </a>
-                    <a
-                      href={`https://${s.shop_domain}/admin`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <Button variant="ghost" size="sm">
-                        <SettingsIcon className="h-3.5 w-3.5" />
-                        Shopify admin
-                      </Button>
-                    </a>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Rotas de checkout */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <RouteIcon className="h-4 w-4" /> Rotas de checkout ({data.routes.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {data.routes.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhuma rota.</p>
-          ) : (
-            <ul className="space-y-2 text-sm">
-              {data.routes.map((r) => (
-                <li
-                  key={r.id}
-                  className="flex items-center justify-between gap-2 rounded-md border border-border/50 px-3 py-2"
-                >
-                  <span className="text-foreground">
-                    {r.sourceName} → {r.targetName}
-                  </span>
-                  <Badge
-                    variant={r.enabled ? "secondary" : "outline"}
-                    className="rounded-md"
-                  >
-                    {r.enabled ? "ativa" : "pausada"}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* Compras */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Recargas ({data.purchases.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {data.purchases.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhuma recarga.</p>
             ) : (
-              <ul className="space-y-1 text-sm">
-                {data.purchases.map((pur, i) => (
-                  <li key={i} className="flex justify-between">
-                    <span className="text-foreground">+{pur.credits} créditos</span>
-                    <span className="text-xs text-muted-foreground">
-                      R${(pur.amount_cents / 100).toFixed(2)} ·{" "}
-                      {new Date(pur.created_at).toLocaleDateString("pt-BR")}
-                    </span>
+              <ul className="grid gap-3 sm:grid-cols-2">
+                {d.stores.map((s) => (
+                  <li key={s.id} className="flex min-w-0 flex-col gap-2 rounded-card border border-border p-3">
+                    <div className="flex min-w-0 items-start justify-between gap-2">
+                      <div className="flex min-w-0 flex-col">
+                        <span className="truncate text-dense font-semibold text-ink">{s.name || s.shop_domain}</span>
+                        <span className="truncate font-mono text-label text-t2">{s.shop_domain}</span>
+                      </div>
+                      <span className="num shrink-0 text-label text-t1">
+                        {plural(s.productCount, "produto", "produtos")}
+                      </span>
+                    </div>
+                    {s.niche || s.target_language ? (
+                      <span className="text-label text-t2">
+                        {[s.niche, s.target_language ? `idioma ${s.target_language}` : null].filter(Boolean).join(" · ")}
+                      </span>
+                    ) : null}
+                    <div className="mt-auto flex flex-wrap gap-2">
+                      <a
+                        href={`https://${s.shop_domain}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={LINK_EXTERNO}
+                        aria-label={`Abrir a loja ${s.name || s.shop_domain} (outra aba)`}
+                      >
+                        Abrir loja ↗
+                      </a>
+                      <a
+                        href={`https://${s.shop_domain}/admin`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={LINK_SHOPIFY}
+                        aria-label={`Abrir ${s.name || s.shop_domain} no admin da Shopify (outra aba)`}
+                      >
+                        Admin da Shopify ↗
+                      </a>
+                    </div>
                   </li>
                 ))}
               </ul>
             )}
-          </CardContent>
-        </Card>
+          </Section>
+
+          <Section
+            titulo="Rotas de checkout"
+            descricao={
+              d.routes.length === 0
+                ? "Este cliente não usa roteamento"
+                : "Vitrine, lojas de checkout e a parte de cada uma no rodízio"
+            }
+          >
+            {d.routes.length === 0 ? (
+              <EmptyState
+                variante="simples"
+                titulo="Nenhuma rota"
+                descricao="Quem anuncia direto na loja de checkout não precisa de rota."
+              />
+            ) : (
+              <ul className="flex flex-col gap-3">
+                {d.routes.map((rota) => {
+                  const lista = destinos?.[rota.id] ?? null;
+                  const partes = lista ? divisaoDestinos(lista) : {};
+                  return (
+                    <li key={rota.id} className="flex flex-col gap-3 rounded-card border border-border p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="flex min-w-0 flex-col">
+                          <span className="text-dense font-semibold text-ink">{rota.name || "Rota sem nome"}</span>
+                          <span className="text-label text-t2">
+                            Vitrine:{" "}
+                            {(rota.source_store_id && nomeLoja.get(rota.source_store_id)) || rota.sourceName}
+                          </span>
+                        </div>
+                        <StatusBadge {...(rota.enabled === false ? STATUS.rota.pausada : STATUS.rota.ativa)} />
+                      </div>
+                      {lista && lista.length > 0 ? (
+                        <BarList
+                          rotulo={`Lojas de checkout da rota ${rota.name || ""}`.trim()}
+                          maximo={100}
+                          itens={lista.map((dest) => {
+                            const parte = partes[dest.id] ?? null;
+                            return {
+                              id: dest.id,
+                              rotulo: dest.nome,
+                              valor: parte ?? 0,
+                              valorTexto: parte === null ? "fora do rodízio" : `${parte}%`,
+                              cor: parte === null ? "t4" : "chart-2",
+                            };
+                          })}
+                        />
+                      ) : (
+                        <p className="text-dense text-t1">
+                          Loja de checkout: {rota.targetName}
+                          {lista === null ? (
+                            <span className="block text-label text-t2">
+                              Não deu para ler a divisão do rodízio agora.
+                            </span>
+                          ) : null}
+                        </p>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Section>
+        </div>
+
+        <CartaoGerenciar usuario={gerenciavel} travaLigada={travaLigada} />
       </div>
 
-      {/* Histórico de uso */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Uso de IA (últimas 50 ações)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {data.usage.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sem uso registrado.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border/60 text-left text-xs text-muted-foreground">
-                    <th className="py-2 pr-3">Ação</th>
-                    <th className="py-2 pr-3">Créditos</th>
-                    <th className="py-2 pr-3">Custo</th>
-                    <th className="py-2 pr-3">Data</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.usage.map((row, i) => (
-                    <tr key={i} className="border-b border-border/40">
-                      <td className="py-1.5 pr-3 text-foreground">
-                        {ACTION_LABEL[row.action] || row.action}
-                      </td>
-                      <td className="py-1.5 pr-3 text-foreground">
-                        {row.credits_used}
-                      </td>
-                      <td className="py-1.5 pr-3 text-muted-foreground">
-                        US${Number(row.cost_usd).toFixed(3)}
-                      </td>
-                      <td className="py-1.5 pr-3 text-muted-foreground">
-                        {new Date(row.created_at).toLocaleString("pt-BR")}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <Section
+        titulo="Recargas"
+        descricao={
+          recargas.length === 0
+            ? "Pacotes de crédito comprados"
+            : `As ${plural(recargas.length, "compra mais nova", "compras mais novas")} de pacote de crédito`
+        }
+        espaco="nenhum"
+      >
+        <DataTable
+          legenda={`Recargas de ${p.email}`}
+          colunas={[
+            { chave: "quandoTexto", titulo: "Data", ordenarPor: "quando", direcaoInicial: "desc" },
+            { chave: "creditosTexto", titulo: "Créditos", alinhar: "direita", ordenarPor: "creditos" },
+            { chave: "valorTexto", titulo: "Valor pago", alinhar: "direita", ordenarPor: "valor" },
+          ]}
+          linhas={recargas}
+          vazio={
+            <EmptyState
+              variante="simples"
+              className="min-h-32"
+              titulo="Nenhuma recarga"
+              descricao="As compras de pacote aparecem aqui."
+            />
+          }
+        />
+      </Section>
+
+      <Section
+        titulo="Uso de IA"
+        descricao="As últimas 50 ações · custo em dólar, a moeda em que a IA é cobrada"
+        espaco="nenhum"
+      >
+        <DataTable
+          legenda={`Uso de IA de ${p.email}`}
+          colunas={[
+            { chave: "acao", titulo: "Ação" },
+            { chave: "creditosTexto", titulo: "Créditos", alinhar: "direita", ordenarPor: "creditos" },
+            { chave: "custoTexto", titulo: "Custo", alinhar: "direita", ordenarPor: "custo" },
+            { chave: "quandoTexto", titulo: "Quando", ordenarPor: "quando", direcaoInicial: "desc" },
+          ]}
+          linhas={uso}
+          alturaMaxima={480}
+          vazio={
+            <EmptyState
+              variante="simples"
+              className="min-h-32"
+              titulo="Sem uso de IA registrado"
+              descricao="Cada imagem, texto ou tradução feita com IA aparece aqui."
+            />
+          }
+        />
+      </Section>
+
+      <EmptyState
+        variante="tracejado"
+        selo="Em breve"
+        titulo="Notas internas e linha do tempo do cliente"
+        descricao="Depende de dado novo no servidor; ainda não existe."
+      />
     </div>
   );
 }
