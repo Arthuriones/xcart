@@ -122,17 +122,6 @@ function instante(iso: string): number | null {
   return Number.isNaN(ms) ? null : ms;
 }
 
-/** Fuso IANA valido? (o que vier do banco e conferido antes de usar). */
-export function fusoValido(fuso: unknown): fuso is string {
-  if (typeof fuso !== "string" || !fuso) return false;
-  try {
-    new Intl.DateTimeFormat("pt-BR", { timeZone: fuso });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /** "14:32:05" no fuso. */
 export function horaDoEvento(iso: string, fuso: string): string {
   const ms = instante(iso);
