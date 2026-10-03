@@ -243,12 +243,14 @@ export function situacaoDoPlano(p: PerfilAssinatura, agora: number): SituacaoPla
   }
 
   if (forma === "pix") {
-    const faltam = temFim ? Math.ceil((fimMs - agora) / DIA_MS) : null;
+    // Arredonda para cima: 12 h viram "em 1 dia" (nunca "amanha" para o que
+    // vence hoje, nem "0 dias").
+    const faltam = temFim ? Math.max(1, Math.ceil((fimMs - agora) / DIA_MS)) : null;
     const perto = faltam !== null && faltam <= AVISO_PIX_DIAS;
     return {
       ...base,
       selo: perto
-        ? { tom: "warn", texto: faltam === 1 ? "Vence amanhã" : `Vence em ${dias(faltam)}` }
+        ? { tom: "warn", texto: `Vence em ${dias(faltam)}` }
         : { tom: "ok", texto: "Ativa" },
       linha: fim
         ? `Pago por Pix: acesso até ${fim}. Não renova sozinho.`
@@ -256,7 +258,7 @@ export function situacaoDoPlano(p: PerfilAssinatura, agora: number): SituacaoPla
       aviso: perto
         ? {
             tom: "warn",
-            titulo: faltam === 1 ? "Seu acesso vence amanhã" : `Seu acesso vence em ${dias(faltam)}`,
+            titulo: `Seu acesso vence em ${dias(faltam)}`,
             texto:
               "Pague mais 30 dias por Pix para não perder o acesso. Os dias que ainda faltam são somados.",
           }
