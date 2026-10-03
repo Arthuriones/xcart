@@ -1,482 +1,330 @@
-"use client";
-
-import { useEffect, useState } from "react";
+import { Suspense } from "react";
 import Link from "next/link";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { BarList } from "@/components/ui/bar-list";
+import { DataTable } from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
+import { KpiCard } from "@/components/ui/kpi-card";
+import { Section } from "@/components/ui/section";
+import { STATUS, StatusBadge } from "@/components/ui/status-badge";
+import { BlocoFaturamento, EsqueletoBlocoFaturamento } from "./bloco-faturamento";
+import { BotaoAtualizar, ErroAdmin } from "./estados-admin";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import type { FaturamentoAdmin } from "@/lib/sales/admin-types";
+  cadastrosPorMes,
+  dataCurta,
+  hora,
+  inteiro,
+  naMoeda,
+  plural,
+  reais,
+  rotuloMes,
+  rotuloPlano,
+} from "./formato";
+import { lerVisao } from "./ler-api";
+import { CabecalhoVisao, EsqueletoVisao } from "./visao-partes";
+import type { VisaoAdmin } from "./tipos";
 
-interface AdminUser {
-  id: string;
-  email: string;
-  plan: string;
-  hasAccess: boolean;
-  createdAt: string | null;
-  usageThisMonth: { costUsd: number; costBrl: number; credits: number };
-  stores: { domain: string; name: string }[];
-}
+export const dynamic = "force-dynamic";
+// O bloco de faturamento pergunta a cada loja de checkout na Shopify (a rota
+// de API tem o mesmo teto).
+export const maxDuration = 120;
 
-interface Purchase {
-  email: string;
-  credits: number;
-  amountBrl: number;
-  currency: string;
-  createdAt: string;
-}
+const LINK =
+  "rounded-sm font-medium text-ink underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
+const LINK_ACAO =
+  "rounded-sm text-dense font-medium text-brand underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
 
-interface Overview {
-  summary: {
-    totalUsers: number;
-    proUsers: number;
-    withAccess: number;
-    newUsersThisMonth: number;
-    mrrBrl: number;
-    aiCostThisMonthUsd: number;
-    aiCostThisMonthBrl: number;
-    usdBrlRate: number;
-    totalStores: number;
-    creditRevenueMonthBrl: number;
-    creditRevenueTotalBrl: number;
-    creditPurchasesTotal: number;
-    grossMarginMonthBrl: number;
-    payingUsers: number;
-  };
-  recentPurchases: Purchase[];
-  revenueByMonth: { mes: string; creditoBrl: number; compras: number }[];
-  users: AdminUser[];
-}
-
-const brl = (v: number) =>
-  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-// Antes o nome da loja era texto puro: dava para ver que o cliente tinha loja,
-// mas nao para abrir. Agora vai direto para a vitrine, e o icone ao lado leva
-// ao admin da Shopify daquela loja.
-function LojasDoUsuario({ lojas }: { lojas: { domain: string; name: string }[] }) {
-  if (!lojas?.length) return <span className="text-muted-foreground">—</span>;
+/**
+ * /admin: receita (assinatura e credito), custo de IA, margem, base, o
+ * faturamento dos clientes e as listas recentes. Os numeros do mes vem de
+ * GET /api/admin/overview; o faturamento dos clientes pergunta a cada loja na
+ * Shopify e chega depois, no proprio Suspense, sem segurar o resto.
+ */
+export default function AdminVisaoPage() {
   return (
-    <div className="flex flex-col gap-0.5">
-      {lojas.slice(0, 3).map((loja) => (
-        <span key={loja.domain} className="flex items-center gap-1.5 text-xs">
-          <a
-            href={`https://${loja.domain}`}
-            target="_blank"
-            rel="noreferrer noopener"
-            title={loja.domain}
-            className="truncate text-foreground hover:text-primary hover:underline"
-          >
-            {loja.name}
-          </a>
-          <a
-            href={`https://${loja.domain}/admin`}
-            target="_blank"
-            rel="noreferrer noopener"
-            title="Abrir admin da Shopify"
-            className="shrink-0 text-muted-foreground hover:text-primary"
-          >
-            <ExternalLink className="h-3 w-3" />
-          </a>
-        </span>
-      ))}
-      {lojas.length > 3 && (
-        <span className="text-xs text-muted-foreground">+{lojas.length - 3}</span>
-      )}
-    </div>
+    <>
+      <CabecalhoVisao />
+      <Suspense fallback={<EsqueletoVisao />}>
+        <Conteudo />
+      </Suspense>
+    </>
   );
 }
 
-function fmt(iso: string | null) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
+async function Conteudo() {
+  const r = await lerVisao();
+  if (!r.ok) {
+    return <ErroAdmin titulo="Não deu para carregar a visão geral" detalhe={r.detalhe} />;
+  }
+  return <Visao d={r.dados} lidoEm={r.lidoEm} />;
 }
 
-export default function AdminOverviewPage() {
-  const [data, setData] = useState<Overview | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+function Visao({ d, lidoEm }: { d: VisaoAdmin; lidoEm: number }) {
+  const s = d.summary;
+  const porMes = d.revenueByMonth;
+  const meses = porMes.map((m) => m.mes);
+  const mesAtual = porMes.at(-1);
+  const mesPassado = porMes.at(-2);
+  const cadastros = cadastrosPorMes(
+    d.users.map((u) => u.createdAt),
+    meses
+  );
+  const receitaMes = s.mrrBrl + s.creditRevenueMonthBrl;
+  const margem = s.grossMarginMonthBrl;
+  const contasComLoja = d.users.filter((u) => u.stores.length > 0).length;
 
-  // Faturamento dos clientes vem em outra chamada de proposito: ela pergunta
-  // a cada loja de checkout na Shopify e leva alguns segundos. Junto com o
-  // overview, seguraria o painel inteiro nesse tempo.
-  const [gmv, setGmv] = useState<FaturamentoAdmin | null>(null);
-  const [gmvErro, setGmvErro] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch("/api/admin/overview")
-      .then(async (res) => {
-        const body = await res.json();
-        if (!res.ok) throw new Error(body.error || "Falha.");
-        setData(body);
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    fetch("/api/admin/revenue?period=30")
-      .then(async (res) => {
-        const body = await res.json();
-        if (!res.ok) throw new Error(body.error || "Falha.");
-        setGmv(body);
-      })
-      .catch((e) => setGmvErro(e instanceof Error ? e.message : "Falha."));
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Carregando…
-      </div>
-    );
-  }
-  if (error) {
-    return (
-      <div className="rounded-lg border border-destructive/30 bg-destructive/8 p-4 text-sm text-destructive">
-        {error}
-      </div>
-    );
-  }
-
-  const s = data?.summary;
-  const margem = s?.grossMarginMonthBrl ?? 0;
-
-  // Separado em dois blocos: dinheiro primeiro, base depois. Antes eram sete
-  // cards na mesma fileira misturando receita, custo e contagem de usuario —
-  // dava para olhar e nao saber se o mes tinha sido bom.
-  const cardsDinheiro = [
-    { label: "MRR (assinaturas)", value: brl(s?.mrrBrl ?? 0) },
-    { label: "Créditos (mês)", value: brl(s?.creditRevenueMonthBrl ?? 0) },
-    {
-      label: "Receita do mês",
-      value: brl((s?.mrrBrl ?? 0) + (s?.creditRevenueMonthBrl ?? 0)),
-      highlight: true,
-    },
-    {
-      label: "Custo de IA (mês)",
-      value: `-${brl(s?.aiCostThisMonthBrl ?? 0)}`,
-      // O Gemini cobra em dolar; convertemos para o painel nao misturar moeda.
-      nota: `US$ ${(s?.aiCostThisMonthUsd ?? 0).toFixed(2)} · câmbio ${(s?.usdBrlRate ?? 0).toFixed(2)}`,
-    },
-    {
-      label: "Margem do mês",
-      value: `${margem < 0 ? "-" : ""}${brl(Math.abs(margem))}`,
-      tone: margem < 0 ? "ruim" : "bom",
-    },
-  ];
-
-  const cardsBase = [
-    { label: "Usuários", value: s?.totalUsers ?? 0 },
-    { label: "Pagantes", value: s?.payingUsers ?? 0 },
-    { label: "Pro ativos", value: s?.proUsers ?? 0 },
-    { label: "Com acesso", value: s?.withAccess ?? 0 },
-    { label: "Novos no mês", value: s?.newUsersThisMonth ?? 0 },
-    { label: "Lojas", value: s?.totalStores ?? 0 },
-  ];
-
-  const compras = data?.recentPurchases ?? [];
-  const porMes = data?.revenueByMonth ?? [];
-  const maxMes = Math.max(1, ...porMes.map((m) => m.creditoBrl));
-
-  const topUsers = (data?.users || [])
+  const consumidores = d.users
     .filter((u) => u.usageThisMonth.costUsd > 0)
-    .slice(0, 10);
+    .slice(0, 10)
+    .map((u) => ({
+      id: u.id,
+      usuario: (
+        <Link href={`/admin/users/${u.id}`} className={LINK}>
+          {u.email}
+        </Link>
+      ),
+      email: u.email,
+      plano: rotuloPlano(u.plan),
+      lojas: u.stores.length,
+      creditos: u.usageThisMonth.credits,
+      creditosTexto: inteiro(u.usageThisMonth.credits),
+      custo: u.usageThisMonth.costBrl,
+      custoTexto: reais(u.usageThisMonth.costBrl),
+    }));
 
-  const recentUsers = (data?.users || [])
+  const compras = d.recentPurchases.map((c, i) => ({
+    id: `${c.createdAt}-${i}`,
+    quem: c.email,
+    creditos: c.credits,
+    creditosTexto: inteiro(c.credits),
+    valor: c.amountBrl,
+    valorTexto: naMoeda(c.amountBrl, c.currency),
+    quando: Date.parse(c.createdAt),
+    quandoTexto: dataCurta(c.createdAt),
+  }));
+
+  const recentes = d.users
     .filter((u) => u.createdAt)
-    .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())
-    .slice(0, 8);
+    .sort((a, b) => Date.parse(b.createdAt!) - Date.parse(a.createdAt!))
+    .slice(0, 8)
+    .map((u) => ({
+      id: u.id,
+      usuario: (
+        <Link href={`/admin/users/${u.id}`} className={LINK}>
+          {u.email}
+        </Link>
+      ),
+      email: u.email,
+      plano: rotuloPlano(u.plan),
+      acesso: u.hasAccess ? (
+        <StatusBadge tom="ok" texto="Com acesso" />
+      ) : (
+        <StatusBadge tom="neutral" texto="Sem acesso" />
+      ),
+      acessoOrdem: u.hasAccess ? 0 : 1,
+      cadastro: Date.parse(u.createdAt!),
+      cadastroTexto: dataCurta(u.createdAt),
+    }));
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">Visão geral</h1>
-        <p className="text-sm text-muted-foreground">
-          Usuários, receita e custo de IA. Tudo em reais.
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <p className="text-label text-t2">
+          {mesAtual ? `Mês de ${rotuloMes(mesAtual.mes, "longo")}, até agora` : "Mês corrente"} · em reais ·
+          câmbio de relatório US$ 1 = {reais(s.usdBrlRate)} · atualizado às {hora(lidoEm)}
         </p>
+        <BotaoAtualizar />
       </div>
 
-      <div className="space-y-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Dinheiro</p>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-          {cardsDinheiro.map((c) => (
-            <Card key={c.label} className={c.highlight ? "border-primary/40" : ""}>
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">{c.label}</p>
-                <p
-                  className={`mt-1 text-2xl font-semibold ${
-                    c.tone === "ruim"
-                      ? "text-destructive"
-                      : c.tone === "bom"
-                        ? "text-emerald-500"
-                        : c.highlight
-                          ? "text-primary"
-                          : "text-foreground"
-                  }`}
-                >
-                  {c.value}
-                </p>
-                {"nota" in c && c.nota ? (
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">{c.nota}</p>
-                ) : null}
-              </CardContent>
-            </Card>
-          ))}
+      <section aria-labelledby="t-dinheiro" className="flex flex-col gap-3">
+        <h2 id="t-dinheiro" className="text-section text-ink">
+          Receita e custo do mês
+        </h2>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <KpiCard
+            rotulo="Receita do mês"
+            valor={reais(receitaMes)}
+            detalhe={`Assinaturas ${reais(s.mrrBrl, 0)} · créditos ${reais(s.creditRevenueMonthBrl, 0)}`}
+            definicao="Assinantes Pro × preço do plano, mais os pacotes de crédito pagos no mês. A parte da assinatura é estimada: não desconta cupom nem atraso."
+            href="/admin/usage"
+          />
+          <KpiCard
+            rotulo="Custo de IA"
+            valor={reais(s.aiCostThisMonthBrl)}
+            detalhe={`${naMoeda(s.aiCostThisMonthUsd, "USD")} · câmbio ${s.usdBrlRate.toLocaleString("pt-BR")}`}
+            definicao="O que a IA custou no mês. É cobrado em dólar e convertido pelo câmbio de relatório."
+            href="/admin/usage"
+          />
+          <KpiCard
+            rotulo="Margem do mês"
+            valor={reais(margem)}
+            estado={margem < 0 ? STATUS.lucro.prejuizo : STATUS.lucro.lucro}
+            detalhe="Receita menos custo de IA"
+            definicao="Receita do mês (assinatura estimada + créditos) menos o custo de IA. Não inclui outros custos."
+          />
+          <KpiCard
+            rotulo="Créditos vendidos"
+            valor={reais(s.creditRevenueMonthBrl)}
+            detalhe={mesAtual ? plural(mesAtual.compras, "compra no mês", "compras no mês") : undefined}
+            comparacao={mesPassado ? `Mês passado inteiro: ${reais(mesPassado.creditoBrl, 0)}` : undefined}
+            serie={porMes.map((m) => m.creditoBrl)}
+            definicao="Pacotes de crédito pagos no mês. A linha mostra os últimos 6 meses."
+          />
         </div>
+      </section>
+
+      <section aria-labelledby="t-base" className="flex flex-col gap-3">
+        <h2 id="t-base" className="text-section text-ink">
+          Base de clientes
+        </h2>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <KpiCard
+            rotulo="Usuários"
+            valor={inteiro(s.totalUsers)}
+            detalhe={plural(s.newUsersThisMonth, "novo no mês", "novos no mês")}
+            comparacao={
+              cadastros.length > 1 ? `Mês passado: ${plural(cadastros.at(-2) ?? 0, "cadastro", "cadastros")}` : undefined
+            }
+            serie={cadastros}
+            definicao="Contas criadas no xcart. A linha mostra os cadastros por mês nos últimos 6 meses."
+            href="/admin/users"
+          />
+          <KpiCard
+            rotulo="Pagantes"
+            valor={inteiro(s.payingUsers)}
+            detalhe={`${inteiro(s.proUsers)} no plano Pro`}
+            definicao="Quem está no plano Pro ou já comprou crédito alguma vez."
+            href="/admin/users?plano=pro"
+          />
+          <KpiCard
+            rotulo="Com acesso"
+            valor={inteiro(s.withAccess)}
+            detalhe={`de ${plural(s.totalUsers, "usuário", "usuários")}`}
+            definicao="Administrador, plano Pro ou liberado à mão no admin."
+            href="/admin/users?acesso=com"
+          />
+          <KpiCard
+            rotulo="Lojas conectadas"
+            valor={inteiro(s.totalStores)}
+            detalhe={`em ${plural(contasComLoja, "conta", "contas")}`}
+            definicao="Lojas Shopify conectadas por todos os clientes, ativas ou não."
+          />
+        </div>
+      </section>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Section
+          titulo="Receita de crédito"
+          descricao={`Últimos 6 meses · ${plural(s.creditPurchasesTotal, "compra", "compras")} e ${reais(s.creditRevenueTotalBrl, 0)} desde o início`}
+        >
+          {porMes.every((m) => m.compras === 0) ? (
+            <EmptyState
+              variante="tracejado"
+              className="min-h-56"
+              titulo="Nenhuma venda de crédito em 6 meses"
+              descricao="As barras aparecem com a primeira compra de pacote."
+            />
+          ) : (
+            <BarList
+              rotulo="Receita de crédito por mês"
+              itens={porMes.map((m, i) => ({
+                id: m.mes,
+                rotulo: i === porMes.length - 1 ? `${rotuloMes(m.mes)} · até agora` : rotuloMes(m.mes),
+                valor: m.creditoBrl,
+                valorTexto: reais(m.creditoBrl, 0),
+                detalhe: `· ${plural(m.compras, "compra", "compras")}`,
+                cor: "chart-2",
+              }))}
+            />
+          )}
+        </Section>
+
+        <Suspense fallback={<EsqueletoBlocoFaturamento />}>
+          <BlocoFaturamento />
+        </Suspense>
       </div>
 
-      {/* Dinheiro do CLIENTE, nao nosso. Fica em bloco separado de proposito:
-          misturar GMV de terceiro com MRR na mesma fileira faz olhar o painel e
-          nao saber qual parte e receita nossa. */}
-      <div className="space-y-3">
-        <div className="flex items-baseline justify-between gap-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Faturamento dos clientes · 30 dias
-          </p>
-          <Link
-            href="/admin/faturamento"
-            className="text-xs text-muted-foreground hover:text-primary hover:underline"
-          >
-            ver detalhe →
+      <Section
+        titulo="Maiores consumidores de IA no mês"
+        descricao="Os 10 clientes que mais gastaram IA no mês, em reais"
+        acoes={
+          <Link href="/admin/usage" className={LINK_ACAO}>
+            Ver uso e custos
           </Link>
-        </div>
+        }
+        espaco="nenhum"
+      >
+        <DataTable
+          legenda="Maiores consumidores de IA no mês"
+          colunas={[
+            { chave: "usuario", titulo: "Usuário", ordenarPor: "email", className: "min-w-56" },
+            { chave: "plano", titulo: "Plano" },
+            { chave: "lojas", titulo: "Lojas", alinhar: "direita" },
+            { chave: "creditosTexto", titulo: "Créditos usados", alinhar: "direita", ordenarPor: "creditos" },
+            { chave: "custoTexto", titulo: "Custo de IA", alinhar: "direita", ordenarPor: "custo" },
+          ]}
+          linhas={consumidores}
+          ordenacaoInicial={[{ chave: "custoTexto", direcao: "desc" }]}
+          vazio={
+            <EmptyState
+              variante="simples"
+              className="min-h-40"
+              titulo="Nenhum uso de IA neste mês"
+              descricao="A lista aparece quando um cliente usar a IA."
+            />
+          }
+        />
+      </Section>
 
-        {gmvErro ? (
-          <Card>
-            <CardContent className="p-4 text-sm text-muted-foreground">{gmvErro}</CardContent>
-          </Card>
-        ) : !gmv ? (
-          <Card>
-            <CardContent className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Perguntando a cada loja de checkout na Shopify…
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-            <Card className="border-emerald-500/40">
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">Total faturado pelos clientes</p>
-                <p className="mt-1 text-2xl font-semibold text-emerald-500">
-                  {brl(gmv.totalRevenueBrlCents / 100)}
-                </p>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">
-                  {gmv.totalOrders} pedidos pagos · {gmv.storeCount} lojas de checkout
-                </p>
-                {(gmv.deniedCount > 0 || gmv.failedCount > 0) && (
-                  <p className="mt-1 text-[10px] text-amber-600">
-                    parcial: {gmv.deniedCount + gmv.failedCount} de {gmv.storeCount} lojas não
-                    responderam
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Section
+          titulo="Vendas de crédito recentes"
+          descricao="As 12 compras de pacote mais novas"
+          espaco="nenhum"
+        >
+          <DataTable
+            legenda="Vendas de crédito recentes"
+            colunas={[
+              { chave: "quem", titulo: "Quem", className: "min-w-48" },
+              { chave: "creditosTexto", titulo: "Créditos", alinhar: "direita", ordenarPor: "creditos" },
+              { chave: "valorTexto", titulo: "Valor", alinhar: "direita", ordenarPor: "valor" },
+              { chave: "quandoTexto", titulo: "Quando", ordenarPor: "quando", direcaoInicial: "desc" },
+            ]}
+            linhas={compras}
+            vazio={
+              <EmptyState
+                variante="simples"
+                className="min-h-40"
+                titulo="Nenhuma compra de crédito ainda"
+                descricao="As compras aparecem aqui assim que o pagamento cai."
+              />
+            }
+          />
+        </Section>
 
-            <Card>
-              <CardContent className="p-4">
-                <p className="mb-2 text-xs text-muted-foreground">Quem mais fatura</p>
-                {gmv.usuarios.filter((u) => u.lojasComDados > 0).length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Nenhuma loja de checkout entregou números ainda.
-                  </p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {gmv.usuarios
-                      .filter((u) => u.lojasComDados > 0)
-                      .slice(0, 5)
-                      .map((u, i) => (
-                        <div key={u.userId} className="flex items-center gap-2 text-sm">
-                          <span className="w-4 shrink-0 text-xs text-muted-foreground">
-                            {i + 1}º
-                          </span>
-                          <Link
-                            href={`/admin/users/${u.userId}`}
-                            className="truncate text-foreground hover:text-primary hover:underline"
-                          >
-                            {u.email}
-                          </Link>
-                          <span className="shrink-0 text-xs text-muted-foreground">
-                            {u.orders} ped.
-                          </span>
-                          <span className="ml-auto shrink-0 font-medium text-foreground">
-                            {brl(u.revenueBrlCents / 100)}
-                          </span>
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        )}
-      </div>
-
-      <div className="space-y-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Base</p>
-        <div className="grid grid-cols-3 gap-3 md:grid-cols-6">
-          {cardsBase.map((c) => (
-            <Card key={c.label}>
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">{c.label}</p>
-                <p className="mt-1 text-2xl font-semibold text-foreground">{c.value}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Vendas de crédito</CardTitle>
-            <CardDescription>
-              {s?.creditPurchasesTotal ?? 0} compras, {brl(s?.creditRevenueTotalBrl ?? 0)} no total
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {compras.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhuma compra de crédito ainda.</p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border/60 text-left text-xs text-muted-foreground">
-                    <th className="py-2 pr-3">Quem</th>
-                    <th className="py-2 pr-3">Créditos</th>
-                    <th className="py-2 pr-3">Valor</th>
-                    <th className="py-2">Quando</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {compras.map((c, i) => (
-                    <tr key={`${c.email}-${c.createdAt}-${i}`} className="border-b border-border/40">
-                      <td className="py-2 pr-3 text-foreground">{c.email}</td>
-                      <td className="py-2 pr-3 text-muted-foreground">{c.credits}</td>
-                      <td className="py-2 pr-3 font-medium text-foreground">
-                        {brl(c.amountBrl)}
-                      </td>
-                      <td className="py-2 text-muted-foreground">{fmt(c.createdAt)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Receita de crédito por mês</CardTitle>
-            <CardDescription>Últimos 6 meses</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {porMes.map((m) => (
-              <div key={m.mes} className="flex items-center gap-3 text-sm">
-                <span className="w-16 shrink-0 text-xs text-muted-foreground">{m.mes}</span>
-                <div className="h-5 flex-1 overflow-hidden rounded bg-muted/40">
-                  <div
-                    className="h-full rounded bg-primary/70"
-                    style={{ width: `${Math.max(m.creditoBrl > 0 ? 4 : 0, (m.creditoBrl / maxMes) * 100)}%` }}
-                  />
-                </div>
-                <span className="w-24 shrink-0 text-right text-xs text-foreground">
-                  {brl(m.creditoBrl)}
-                  <span className="ml-1 text-muted-foreground">({m.compras})</span>
-                </span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Top AI consumers */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Top AI consumers (month)</CardTitle>
-            <CardDescription>
-              <Link href="/admin/users" className="underline">
-                View and manage all users
-              </Link>
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {topUsers.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No AI usage recorded this month.</p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border/60 text-left text-xs text-muted-foreground">
-                    <th className="py-2 pr-3">Email</th>
-                    <th className="py-2 pr-3">Plano</th>
-                    <th className="py-2 pr-3">Lojas</th>
-                    <th className="py-2 pr-3">Créditos</th>
-                    <th className="py-2 pr-3">Custo de IA</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {topUsers.map((u) => (
-                    <tr key={u.id} className="border-b border-border/40">
-                      <td className="py-2 pr-3 text-foreground">
-                        <Link href={`/admin/users/${u.id}`} className="hover:underline">
-                          {u.email}
-                        </Link>
-                      </td>
-                      <td className="py-2 pr-3 text-muted-foreground">{u.plan}</td>
-                      <td className="py-2 pr-3">
-                        <LojasDoUsuario lojas={u.stores} />
-                      </td>
-                      <td className="py-2 pr-3 text-foreground">{u.usageThisMonth.credits}</td>
-                      <td className="py-2 pr-3 text-foreground">
-                        {brl(u.usageThisMonth.costBrl)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Recent signups */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent signups</CardTitle>
-            <CardDescription>Latest accounts created</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {recentUsers.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No users yet.</p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border/60 text-left text-xs text-muted-foreground">
-                    <th className="py-2 pr-3">Email</th>
-                    <th className="py-2 pr-3">Plano</th>
-                    <th className="py-2 pr-3">Cadastro</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentUsers.map((u) => (
-                    <tr key={u.id} className="border-b border-border/40">
-                      <td className="py-2 pr-3 text-foreground">
-                        <Link href={`/admin/users/${u.id}`} className="hover:underline">
-                          {u.email}
-                        </Link>
-                      </td>
-                      <td className="py-2 pr-3 text-muted-foreground">{u.plan}</td>
-                      <td className="py-2 pr-3 text-muted-foreground">{fmt(u.createdAt)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </CardContent>
-        </Card>
+        <Section
+          titulo="Cadastros recentes"
+          descricao="As 8 contas criadas por último"
+          acoes={
+            <Link href="/admin/users" className={LINK_ACAO}>
+              Ver todos os usuários
+            </Link>
+          }
+          espaco="nenhum"
+        >
+          <DataTable
+            legenda="Cadastros recentes"
+            colunas={[
+              { chave: "usuario", titulo: "Usuário", ordenarPor: "email", className: "min-w-48" },
+              { chave: "plano", titulo: "Plano" },
+              { chave: "acesso", titulo: "Acesso", ordenarPor: "acessoOrdem" },
+              { chave: "cadastroTexto", titulo: "Cadastro", ordenarPor: "cadastro", direcaoInicial: "desc" },
+            ]}
+            linhas={recentes}
+            vazio={
+              <EmptyState variante="simples" className="min-h-40" titulo="Nenhum cadastro ainda" />
+            }
+          />
+        </Section>
       </div>
     </div>
   );

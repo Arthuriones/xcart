@@ -1,30 +1,28 @@
+import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { ShieldCheck } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { ShieldAlert } from "lucide-react";
+import { LogoXcart } from "@/components/layout/logo";
 import { Toaster } from "@/components/ui/sonner";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/supabase/current-user";
+import { CascaAdmin } from "./casca-admin";
 import { AdminLogout } from "./logout";
-import { AdminNav } from "./admin-nav";
+import { linkDoApp } from "./navegacao-admin";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export const metadata: Metadata = { title: "xcart admin" };
+
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const admin = createAdminClient();
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("is_admin")
-    .eq("id", user.id)
-    .single();
+  const [{ data: profile }, cabecalhos] = await Promise.all([
+    createAdminClient().from("profiles").select("is_admin").eq("id", user.id).single(),
+    headers(),
+  ]);
+  const linkApp = linkDoApp(cabecalhos.get("host"), process.env.NEXT_PUBLIC_APP_URL);
 
   // Conta logada sem permissao de admin: mostra um aviso explicito em vez de
   // redirecionar para /login. O redirect criava um loop infinito (login ->
@@ -33,46 +31,44 @@ export default async function AdminLayout({
   // conta errada.
   if (!profile?.is_admin) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
-        <div className="w-full max-w-md rounded-xl border border-border/60 bg-card p-6 text-center">
-          <ShieldCheck className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
-          <h1 className="mb-2 text-lg font-semibold">Acesso restrito</h1>
-          <p className="mb-1 text-sm text-muted-foreground">
-            A conta <span className="font-medium text-foreground">{user.email}</span>{" "}
-            nao tem permissao de administrador.
+      <main className="flex min-h-dvh items-center justify-center bg-bg px-4 py-12 font-sans text-ink">
+        <div className="flex w-full max-w-md flex-col items-center gap-3 rounded-card border border-border bg-surface p-6 text-center">
+          <LogoXcart altura={18} prioridade />
+          <span
+            aria-hidden
+            className="mt-2 grid size-11 place-items-center rounded-full border border-warn-border bg-warn-bg text-warn"
+          >
+            <ShieldAlert className="size-5" strokeWidth={1.75} />
+          </span>
+          <h1 className="text-page font-semibold text-ink">Acesso restrito</h1>
+          <p className="text-body text-t1 text-pretty">
+            A conta <strong className="font-semibold break-all text-ink">{user.email}</strong> não tem
+            permissão de administrador.
           </p>
-          <p className="mb-5 text-sm text-muted-foreground">
-            Saia e entre com a conta de administrador.
+          <p className="text-body text-t1 text-pretty">
+            Saia e entre com a conta de administrador, ou volte para o painel da sua loja.
           </p>
-          <AdminLogout />
+          <div className="mt-2 flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row">
+            <a
+              href={linkApp}
+              className="inline-flex h-ctl-md items-center justify-center rounded-control border border-border-strong bg-surface px-4 text-dense font-medium text-ink hover:border-control-border hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            >
+              Ir para o app
+            </a>
+            <AdminLogout rotulo="Sair e trocar de conta" variant="primary" size="md" />
+          </div>
         </div>
         <Toaster />
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-30 border-b border-border/60 bg-card">
-        <div className="flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-primary" />
-            <span className="font-semibold">Xcart Admin</span>
-          </div>
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <span className="hidden sm:inline">{user.email}</span>
-            <AdminLogout />
-          </div>
-        </div>
-      </header>
-
-      <div className="flex">
-        <aside className="hidden w-56 shrink-0 border-r border-border/60 p-3 md:block">
-          <AdminNav />
-        </aside>
-        <main className="min-w-0 flex-1 p-4 sm:p-6">{children}</main>
-      </div>
+    <>
+      <CascaAdmin email={user.email ?? "—"} linkApp={linkApp}>
+        {children}
+      </CascaAdmin>
       <Toaster />
-    </div>
+    </>
   );
 }
