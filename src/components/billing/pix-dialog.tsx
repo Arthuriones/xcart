@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CircleCheck, Copy, Check, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -55,40 +55,37 @@ export function PixDialog({
   // "Quando o modal abriu": inicializador preguicoso roda uma vez so.
   const [inicio] = useState(() => Date.now());
   const [agora, setAgora] = useState(inicio);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
   const ehPro = cobranca.kind === "pro_month";
   const restante = Math.max(0, inicio + LIMITE_MS - agora);
 
   // Renderiza o QR no proprio canvas, sem enviar o payload para fora.
-  useEffect(() => {
-    const codigo = cobranca.pix.qrCode;
-    if (!codigo || !canvasRef.current || status !== "aguardando") return;
-    let vivo = true;
-    import("qrcode").then((QR) => {
-      const canvas = canvasRef.current;
-      if (!vivo || !canvas) return;
-      QR.toCanvas(canvas, codigo, {
-        width: LADO_QR * 2, // 2x para nao serrilhar em tela retina
-        margin: 1,
-        // QR precisa de contraste maximo para o leitor do banco: preto no
-        // branco nos dois temas (a moldura branca vem do box em volta).
-        color: { dark: "#000000", light: "#ffffff" },
-      })
-        .then(() => {
-          // A lib grava width/height inline no canvas; tirando, vale o
-          // tamanho da classe (240px) e ele nao estoura o modal.
-          canvas.style.removeProperty("width");
-          canvas.style.removeProperty("height");
+  // Ref de callback, nao efeito: o Dialog monta o conteudo num portal depois
+  // do primeiro render, e um efeito rodava com o canvas ainda nulo.
+  const desenharQr = useCallback(
+    (canvas: HTMLCanvasElement | null) => {
+      const codigo = cobranca.pix.qrCode;
+      if (!canvas || !codigo) return;
+      import("qrcode").then((QR) =>
+        QR.toCanvas(canvas, codigo, {
+          width: LADO_QR * 2, // 2x para nao serrilhar em tela retina
+          margin: 1,
+          // QR precisa de contraste maximo para o leitor do banco: preto no
+          // branco nos dois temas (a moldura branca vem do box em volta).
+          color: { dark: "#000000", light: "#ffffff" },
         })
-        .catch(() => {
-          /* se falhar, o copia-e-cola abaixo continua servindo */
-        });
-    });
-    return () => {
-      vivo = false;
-    };
-  }, [cobranca.pix.qrCode, status]);
+          .then(() => {
+            // A lib grava width/height inline no canvas; tirando, vale o
+            // tamanho da classe (240px) e ele nao estoura o modal.
+            canvas.style.removeProperty("width");
+            canvas.style.removeProperty("height");
+          })
+          .catch(() => {
+            /* se falhar, o copia-e-cola abaixo continua servindo */
+          })
+      );
+    },
+    [cobranca.pix.qrCode]
+  );
 
   // Relogio do contador (1 s). O estado so muda no callback do intervalo.
   useEffect(() => {
@@ -162,7 +159,7 @@ export function PixDialog({
         if (!aberto) pedirFechar();
       }}
     >
-      <DialogContent size="sm" className="gap-4">
+      <DialogContent size="sm" className="grid-cols-[minmax(0,1fr)] gap-4">
         {status === "pago" ? (
           <div role="status" className="flex flex-col items-center gap-3 py-2 text-center">
             <span
@@ -228,7 +225,7 @@ export function PixDialog({
                       para um gerador de terceiro vazaria a cobranca. */}
                   <div className="rounded-control border border-border bg-white p-3">
                     <canvas
-                      ref={canvasRef}
+                      ref={desenharQr}
                       role="img"
                       aria-label="QR code do Pix"
                       className="block size-60 max-w-full"

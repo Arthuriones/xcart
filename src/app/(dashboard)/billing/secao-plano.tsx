@@ -104,6 +104,7 @@ export function SecaoPlano({
   }
 
   const fim = dataCurta(noBanco.fimPeriodo);
+  const botaoRenovarNoAviso = situacao.podeRenovarPix && !!situacao.aviso && !renovando;
 
   return (
     <Section
@@ -138,17 +139,23 @@ export function SecaoPlano({
       </div>
 
       {situacao.aviso ? (
-        <Callout tom={situacao.aviso.tom} titulo={situacao.aviso.titulo}>
+        <Callout
+          tom={situacao.aviso.tom}
+          titulo={situacao.aviso.titulo}
+          // Pix perto do fim: a saida fica no proprio aviso.
+          acao={
+            botaoRenovarNoAviso ? (
+              <Button variant="secondary" size="sm" onClick={() => setRenovando(true)}>
+                Pagar mais 30 dias
+              </Button>
+            ) : undefined
+          }
+        >
           {situacao.aviso.texto}
         </Callout>
       ) : null}
 
-      {situacao.podeAssinar ? (
-        <AssinarPro
-          onPronto={atualizar}
-          temDocumento={temDocumento}
-        />
-      ) : null}
+      {situacao.podeAssinar ? <AssinarPro onPronto={atualizar} temDocumento={temDocumento} /> : null}
 
       {situacao.podeRenovarPix ? (
         renovando ? (
@@ -167,7 +174,7 @@ export function SecaoPlano({
               Agora não
             </Button>
           </div>
-        ) : (
+        ) : botaoRenovarNoAviso ? null : (
           <Button variant="secondary" className="self-start" onClick={() => setRenovando(true)}>
             Pagar mais 30 dias por Pix
           </Button>

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { RadioGroup } from "@base-ui/react/radio-group";
 import { Radio } from "@base-ui/react/radio";
 import { cn } from "@/components/ui/cn";
@@ -38,6 +38,7 @@ export function Escolha<V extends string>({
   className?: string;
   desabilitado?: boolean;
 }) {
+  const id = useId();
   return (
     <RadioGroup
       aria-label={rotulo}
@@ -54,6 +55,11 @@ export function Escolha<V extends string>({
         <Radio.Root
           key={o.valor}
           value={o.valor}
+          // Nome e descricao explicitos: o radio e um span, e nem todo leitor
+          // de tela monta o nome pelo conteudo.
+          // O canto (preco, selo) entra no nome: "50 créditos R$ 25,00".
+          aria-labelledby={o.extra ? `${id}-${o.valor}-t ${id}-${o.valor}-e` : `${id}-${o.valor}-t`}
+          aria-describedby={o.descricao ? `${id}-${o.valor}-d` : undefined}
           className={cn(
             "group/opcao flex min-h-ctl-lg cursor-pointer items-start gap-3 rounded-card border border-border bg-surface p-3 text-left transition-colors",
             "hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
@@ -73,10 +79,20 @@ export function Escolha<V extends string>({
             </span>
           ) : null}
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="text-dense font-semibold text-ink">{o.titulo}</span>
-            {o.descricao ? <span className="text-label text-t2">{o.descricao}</span> : null}
+            <span id={`${id}-${o.valor}-t`} className="text-dense font-semibold text-ink">
+              {o.titulo}
+            </span>
+            {o.descricao ? (
+              <span id={`${id}-${o.valor}-d`} className="text-label text-t2">
+                {o.descricao}
+              </span>
+            ) : null}
           </span>
-          {o.extra ? <span className="shrink-0 text-right">{o.extra}</span> : null}
+          {o.extra ? (
+            <span id={`${id}-${o.valor}-e`} className="shrink-0 text-right">
+              {o.extra}
+            </span>
+          ) : null}
         </Radio.Root>
       ))}
     </RadioGroup>

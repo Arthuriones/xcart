@@ -135,7 +135,7 @@ export function AssinarPro({
 
       {!somentePix ? (
         <div className="flex flex-col gap-2">
-          <p id="forma-pagamento" className="text-dense font-medium text-ink">
+          <p className="text-dense font-medium text-ink">
             Como você prefere pagar?
           </p>
           <Escolha<Via>
