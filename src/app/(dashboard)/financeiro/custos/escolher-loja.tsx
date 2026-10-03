@@ -93,7 +93,7 @@ export function EscolherLoja({ lojas }: { lojas: LojaParaEscolher[] }) {
             />
             <span>
               <strong className="font-semibold text-ink">{plural(semAcesso.length, "loja sem acesso", "lojas sem acesso")}</strong>{" "}
-              · o custo delas ainda vale para os pedidos já lidos
+              · o custo {semAcesso.length === 1 ? "dela" : "delas"} ainda vale para os pedidos já lidos
             </span>
           </button>
           {(verSemAcesso || ativas.length === 0) && (

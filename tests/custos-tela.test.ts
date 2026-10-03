@@ -51,7 +51,9 @@ function sku(nome: string, unidades: number, versoes: ProductCostRow[] = []): Sk
 describe("edicao de uma linha", () => {
   it("valor inicial com virgula e data de hoje", () => {
     const s = sku("A", 3, [versao("1", "2026-09-01", 12.5, 3.2)]);
-    expect(edicaoInicial(s, "BRL", HOJE)).toEqual({ custo: "12,5", frete: "3,2", moeda: "USD", desde: HOJE });
+    expect(edicaoInicial(s, "BRL", HOJE)).toEqual({ custo: "12,50", frete: "3,20", moeda: "USD", desde: HOJE });
+    const miudo = sku("M", 1, [versao("m", "2026-09-01", 1234.125)]);
+    expect(edicaoInicial(miudo, "BRL", HOJE).custo).toBe("1234,125"); // sem milhar: volta igual pelo leitor
     expect(edicaoInicial(sku("B", 1), "BRL", HOJE)).toEqual({ custo: "", frete: "", moeda: "BRL", desde: HOJE });
   });
 
@@ -69,7 +71,7 @@ describe("edicao de uma linha", () => {
     const erros = errosDaEdicao({ custo: "abc", frete: "-1", moeda: "USD", desde: "2026-02-30" });
     expect(erros).toEqual({ custo: "Não é um número", frete: "Não pode ser negativo", desde: "Data inválida" });
     expect(errosDaEdicao({ custo: "", frete: "", moeda: "USD", desde: HOJE }).custo).toBe("Informe o custo");
-    expect(errosDaEdicao({ custo: "4.990", frete: "", moeda: "USD", desde: HOJE }).custo).toMatch(/^Ambíguo: escreva 4990/);
+    expect(errosDaEdicao({ custo: "4.990", frete: "", moeda: "USD", desde: HOJE }).custo).toBe("Use 4990 ou 4,99");
   });
 
   it("vira o mesmo corpo que a rota sempre recebeu", () => {

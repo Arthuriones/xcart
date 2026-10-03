@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
+import { cn } from "@/components/ui/cn";
 import { gravarCookie } from "@/components/layout/contexto";
 import { COOKIE_LOJA, TODAS, type LojaDoSeletor } from "@/lib/financeiro/tipos";
 import type { DadosCustos } from "@/lib/financeiro/custos-queries";
@@ -134,7 +135,10 @@ export function CustosScreen({
           tom="warn"
           titulo="A Shopify não deixa o xcart ler os pedidos desta loja"
           acao={
-            <Link href={`/stores/${loja.id}`} className={buttonVariants({ variant: "secondary", size: "sm" })}>
+            <Link
+              href={`/stores/${loja.id}`}
+              className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "h-ctl-lg sm:h-ctl-sm")}
+            >
               Ver a conexão
             </Link>
           }

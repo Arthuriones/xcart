@@ -329,7 +329,13 @@ export function SecaoSkus({
   ];
 
   const lerPedidos = (
-    <Button variant="secondary" size="sm" pending={emCurso === loja.id} onClick={() => void sincronizar(loja)}>
+    <Button
+      variant="secondary"
+      size="sm"
+      className="h-ctl-lg sm:h-ctl-sm"
+      pending={emCurso === loja.id}
+      onClick={() => void sincronizar(loja)}
+    >
       Ler pedidos agora
     </Button>
   );
@@ -400,7 +406,7 @@ export function SecaoSkus({
                     href={`https://${loja.dominio}/admin/products`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
+                    className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "h-ctl-lg sm:h-ctl-sm")}
                   >
                     Abrir produtos na Shopify
                     <ExternalLinkIcon aria-hidden />
@@ -650,7 +656,6 @@ function CampoValor({
         inputMode="decimal"
         autoComplete="off"
         spellCheck={false}
-        placeholder="0,00"
         aria-label={rotulo}
         aria-invalid={erro ? true : undefined}
         aria-describedby={erro ? id : undefined}

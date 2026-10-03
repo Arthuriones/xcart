@@ -44,6 +44,12 @@ export function paraCampo(n: number | null | undefined): string {
   return String(n).replace(".", ",");
 }
 
+/** Valor no campo da tabela: 2 a 4 casas, sem milhar ("1,60", "0,125", "1234,50"). */
+export function paraCampoValor(n: number | null | undefined): string {
+  if (n === null || n === undefined || !Number.isFinite(n)) return "";
+  return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 4, useGrouping: false });
+}
+
 export function fmtInteiro(n: number): string {
   return n.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
 }
@@ -100,8 +106,8 @@ export interface ErrosEdicao {
 
 export function edicaoInicial(s: SkuVendido, moedaLoja: string | null, hoje: string): Edicao {
   return {
-    custo: s.vigente ? paraCampo(s.vigente.custo_unitario) : "",
-    frete: s.vigente ? paraCampo(s.vigente.frete_unitario) : "",
+    custo: s.vigente ? paraCampoValor(s.vigente.custo_unitario) : "",
+    frete: s.vigente ? paraCampoValor(s.vigente.frete_unitario) : "",
     moeda: s.vigente?.moeda ?? moedaLoja ?? "USD",
     desde: hoje,
   };
@@ -127,8 +133,9 @@ export function mudou(e: Edicao, inicial: Edicao): boolean {
 /** Motivo da validacao (minusculo, com o valor) -> frase curta para baixo do campo. */
 export function motivoCurto(motivo: string): string {
   if (/vazio/.test(motivo)) return motivo.startsWith("frete") ? "Informe o frete" : "Informe o custo";
-  const ambiguo = motivo.match(/ambíguo: (.*)$/);
-  if (ambiguo) return `Ambíguo: ${ambiguo[1]}`;
+  // "escreva 4990 (milhar) ou 4,99 (decimal)" -> "Use 4990 ou 4,99": cabe embaixo do campo estreito.
+  const ambiguo = motivo.match(/ambíguo: escreva (\S+) \(milhar\) ou (\S+) \(decimal\)/);
+  if (ambiguo) return `Use ${ambiguo[1]} ou ${ambiguo[2]}`;
   if (/não é número/.test(motivo)) return "Não é um número";
   if (/negativo/.test(motivo)) return "Não pode ser negativo";
   if (/alto demais/.test(motivo)) return "Alto demais: confira as casas decimais";
