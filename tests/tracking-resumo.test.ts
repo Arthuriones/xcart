@@ -3,7 +3,6 @@ import type { DestinoNaTela, LojaTracking } from "../src/lib/tracking/queries";
 import type { DiagnosticoLoja } from "../src/lib/tracking/diagnostico";
 import { saudeDaLoja } from "../src/app/(dashboard)/tracking/saude";
 import {
-  coberturaDaLoja,
   colunaDaPlataforma,
   formatarFracao,
   linhaDaLoja,
@@ -11,9 +10,11 @@ import {
   problemasDaLoja,
   proximoPassoDesligada,
   resumoDaTela,
+  textoCobertura,
   textoDaColuna,
   textoPrecisam,
 } from "../src/app/(dashboard)/tracking/resumo";
+import { respostaJson } from "../src/app/(dashboard)/tracking/resposta";
 
 // A tela nova mostra UM problema por loja, com UM botao. A regra de saude e a
 // de saude.ts; o que este teste trava e que a traducao nao descola dela: cada
@@ -313,10 +314,26 @@ describe("ordem e numeros do topo", () => {
       lojasSemPedidos: 0,
       paradas: 1,
       atencao: 1,
-      cobertura: { chegaram: 7, esperados: 9, lojas: 3 },
+      pedidosComparaveis: 9,
+      porPlataforma: { google: { chegaram: 7, esperados: 9, lojas: 3 }, meta: null },
       lojasForaDaCobertura: 0,
     });
     expect(textoPrecisam(r)).toBe("1 parada · 1 com atenção");
+    expect(textoCobertura(r.porPlataforma)).toBe("Google 77,8% dos pedidos");
+  });
+
+  it("uma plataforma recebendo tudo nao esconde a outra sem receber nada", () => {
+    const l = linhaDaLoja(
+      loja({
+        destinos: [destino(), meta({ contagem: { pedidosComCompra: [] } as never })],
+      }),
+      diag(),
+      true
+    );
+    const r = resumoDaTela([l], { s1: diag() });
+    expect(r.porPlataforma.meta).toEqual({ chegaram: 0, esperados: 3, lojas: 1 });
+    expect(r.porPlataforma.google).toEqual({ chegaram: 3, esperados: 3, lojas: 1 });
+    expect(textoCobertura(r.porPlataforma)).toBe("Meta 0% · Google 100% dos pedidos");
   });
 
   it("vendas enviadas usam o maior destino, nao a soma", () => {
@@ -334,14 +351,43 @@ describe("ordem e numeros do topo", () => {
     expect(r.lojasForaDaCobertura).toBe(1);
   });
 
-  it("loja ligada sem destino recebendo conta os pedidos como perdidos", () => {
-    expect(coberturaDaLoja(loja({ destinos: [] }), diag())).toEqual({ chegaram: 0, esperados: 3 });
-    expect(coberturaDaLoja(loja({ ligado: false }), diag())).toBeNull();
+  it("loja ligada sem destino recebendo entra nos pedidos e em nenhuma plataforma", () => {
+    const r = resumoDaTela([linhaDaLoja(loja({ destinos: [] }), diag(), true)], { s1: diag() });
+    expect(r.pedidosComparaveis).toBe(3);
+    expect(r.porPlataforma).toEqual({ meta: null, google: null });
+    expect(textoCobertura(r.porPlataforma)).toBeNull();
   });
 
   it("formata como o lojista le", () => {
     expect(formatarFracao(0.745)).toBe("74,5%");
     expect(textoPrecisam({ paradas: 0, atencao: 0 })).toBe("nenhuma loja");
     expect(textoPrecisam({ paradas: 2, atencao: 0 })).toBe("2 paradas");
+  });
+
+  it("varias contas sem perda nao falam em pior", () => {
+    const l = loja({ destinos: [destino({ id: "a" }), destino({ id: "b" })] });
+    expect(textoDaColuna(colunaDaPlataforma(l, diag(), "google"), "google").sub).toBe(
+      "todas chegaram · 2 contas"
+    );
+  });
+});
+
+describe("respostaJson", () => {
+  it("sessao vencida (pagina de login em HTML) vira erro legivel, nunca sucesso", async () => {
+    const html = new Response("<html>login</html>", { status: 200 });
+    Object.defineProperty(html, "redirected", { value: true });
+    await expect(respostaJson(html, "falhou")).rejects.toThrow("Sua sessão expirou");
+  });
+
+  it("erro da rota passa a mensagem dela adiante", async () => {
+    const r = new Response(JSON.stringify({ error: "Invalid OAuth access token" }), { status: 400 });
+    await expect(respostaJson(r, "falhou")).rejects.toThrow("Invalid OAuth access token");
+    const s = new Response(JSON.stringify({}), { status: 500 });
+    await expect(respostaJson(s, "Não deu para salvar.")).rejects.toThrow("Não deu para salvar.");
+  });
+
+  it("sucesso devolve o corpo", async () => {
+    const r = new Response(JSON.stringify({ ok: true, codigo: "x" }), { status: 200 });
+    await expect(respostaJson(r, "falhou")).resolves.toEqual({ ok: true, codigo: "x" });
   });
 });

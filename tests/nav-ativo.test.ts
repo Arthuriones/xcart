@@ -117,8 +117,12 @@ describe("contexto e titulo do topo", () => {
     expect(contextoDaRota("/financeiro/anuncios").tipo).toBe("nenhum");
     expect(contextoDaRota("/tracking/eventos").tipo).toBe("loja");
     expect(contextoDaRota("/alertas").tipo).toBe("loja");
-    // Saude dos pixels e Vendas ainda tem filtro proprio: sem barra.
-    expect(contextoDaRota("/tracking").tipo).toBe("nenhum");
+    // Saude dos pixels le a loja da barra; a janela de 7 dias e fixa.
+    expect(contextoDaRota("/tracking")).toEqual({
+      tipo: "fixo",
+      texto: "Últimos 7 dias · período fixo desta tela",
+    });
+    // Vendas ainda tem filtro proprio: sem barra.
     expect(contextoDaRota("/sales").tipo).toBe("nenhum");
     expect(contextoDaRota("/stores").tipo).toBe("nenhum");
   });

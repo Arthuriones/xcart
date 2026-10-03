@@ -1,19 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import {
-  AlertTriangle,
-  CircleAlert,
-  Loader2,
-  MoreHorizontal,
-  Pencil,
-  Plus,
-  Power,
-  Trash2,
-} from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { CircleAlert, MoreHorizontal, Pencil, Power, Trash2, TriangleAlert } from "lucide-react";
+import clsx from "clsx";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/components/ui/cn";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { STATUS, StatusBadge } from "@/components/ui/status-badge";
 import { EVENTOS } from "@/lib/tracking/eventos";
 import {
   TEMPLATE_PADRAO,
@@ -38,12 +32,12 @@ import {
   validarTemplate,
 } from "@/lib/tracking/id-produto";
 import type { DestinoNaTela } from "@/lib/tracking/queries";
-import { cn } from "@/lib/utils";
-import { NOME_DA_PLATAFORMA, oQueFalta, type Plataforma } from "./saude";
-import { Ponto, Selo } from "./selo";
+import { NOME_DA_PLATAFORMA, oQueFalta, plural, type Plataforma, type VereditoDestino } from "./saude";
+import { NOME_CURTO } from "./resumo";
+import { respostaJson } from "./resposta";
 
 // ============================================================================
-// Os destinos de conversao de uma loja, na tela.
+// Os destinos de conversao de uma loja, no detalhe da Saude dos pixels.
 //
 // POR QUE UMA LISTA, E NAO DOIS CAMPOS
 //
@@ -55,27 +49,21 @@ import { Ponto, Selo } from "./selo";
 // DESCARTADA pelo Google -- a conta dona do clique conta, as outras ignoram.
 // Entao nao existe roteamento por produto a configurar aqui, e e de proposito
 // que a tela nao pede um.
+//
+// As chamadas (POST/PATCH/DELETE /api/tracking/destinos) e os corpos enviados
+// sao os mesmos de antes; mudou a apresentacao.
 // ============================================================================
 
-/**
- * Cabecalho curto de cada coluna do funil. O nome inteiro do evento ("Adicionar
- * ao carrinho") nao cabe em 60px; a chave vem de EVENTOS, entao evento novo sem
- * entrada aqui cai no nome completo em vez de sumir.
- */
+/** Nome curto de cada evento no cartao do destino. */
 const ROTULO_CURTO: Record<string, string> = {
-  view_item: "Produto",
+  view_item: "Ver produto",
   add_to_cart: "Carrinho",
   begin_checkout: "Checkout",
   payment_info: "Pagamento",
   purchase: "Compra",
 };
 
-// Uma grade so para o cabecalho e as linhas: as colunas do funil alinham como
-// tabela no desktop. No celular a linha empilha e a grade nao vale.
-const GRADE = "sm:grid-cols-[minmax(0,1fr)_repeat(5,60px)_32px]";
-
-const FOCO =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40";
+const NUMERO = new Intl.NumberFormat("pt-BR");
 
 /**
  * O formulario de um destino: cadastro e edicao no mesmo lugar.
@@ -85,12 +73,13 @@ const FOCO =
  * vazio e como dizer "nao quero este evento". No Meta um pixel cobre todos os
  * eventos, e o que separa funcionar de nao funcionar e o token.
  */
-function FormularioDestino({
+export function FormularioDestino({
   storeId,
   plataforma,
   destino,
   aberto,
   onFechar,
+  aoSalvar,
 }: {
   storeId: string;
   plataforma: Plataforma;
@@ -98,8 +87,9 @@ function FormularioDestino({
   destino?: DestinoNaTela;
   aberto: boolean;
   onFechar: () => void;
+  /** Depois de gravar: a tela busca os numeros de novo. */
+  aoSalvar: () => void;
 }) {
-  const router = useRouter();
   const editando = Boolean(destino);
 
   const [nome, setNome] = useState(destino?.nome ?? "");
@@ -112,9 +102,7 @@ function FormularioDestino({
   // Comeca vazio SEMPRE, mesmo com token gravado: o valor nunca sai do servidor.
   const [token, setToken] = useState("");
   const [codigoTeste, setCodigoTeste] = useState(destino?.testEventCode ?? "");
-  const [idTemplate, setIdTemplate] = useState(
-    destino?.idTemplate ?? TEMPLATE_PADRAO
-  );
+  const [idTemplate, setIdTemplate] = useState(destino?.idTemplate ?? TEMPLATE_PADRAO);
   const [salvando, setSalvando] = useState(false);
 
   async function salvar() {
@@ -136,44 +124,40 @@ function FormularioDestino({
           editando ? { ...corpo, id: destino!.id } : { ...corpo, storeId, plataforma }
         ),
       });
-      const j = await r.json();
       // Token recusado pelo Meta volta 400 com a mensagem DELE ("Invalid OAuth
       // access token", "...does not have permission"): e o que diz ao lojista o
-      // que consertar no Events Manager, entao vai inteira para o toast.
-      if (!r.ok) throw new Error(j.error || "Falha ao salvar.");
+      // que consertar no Events Manager, entao vai inteira para o aviso.
+      const j = await respostaJson(r, "Não deu para salvar o destino.");
 
       // Compras que tinham caido pelo token antigo voltaram para a fila. Dizer
-      // quantas e o que tira a duvida "e as vendas do fim de semana?" -- sem
-      // isto, o "falharam" da linha so some sozinho, sem explicacao.
+      // quantas tira a duvida "e as vendas do fim de semana?".
       // `requeued` conta todo evento devolvido a fila (funil incluido);
-      // `requeuedPurchases` so as compras, que e o numero que importa ao lojista.
+      // `requeuedPurchases` so as compras, que e o numero que importa.
       const total = typeof j.requeued === "number" ? j.requeued : 0;
       const compras = typeof j.requeuedPurchases === "number" ? j.requeuedPurchases : 0;
       if (compras > 0) {
-        toast.success(
-          `Token atualizado. ${compras} ${
+        toast.success("Token atualizado", {
+          description:
             compras === 1
-              ? "compra que tinha falhado vai ser reenviada"
-              : "compras que tinham falhado vão ser reenviadas"
-          }.`
-        );
+              ? "1 compra que tinha falhado vai ser reenviada."
+              : `${compras} compras que tinham falhado vão ser reenviadas.`,
+        });
       } else if (total > 0) {
-        toast.success(
-          `Token atualizado. ${total} ${
+        toast.success("Token atualizado", {
+          description:
             total === 1
-              ? "evento que tinha falhado vai ser reenviado"
-              : "eventos que tinham falhado vão ser reenviados"
-          }.`
-        );
+              ? "1 evento que tinha falhado vai ser reenviado."
+              : `${total} eventos que tinham falhado vão ser reenviados.`,
+        });
       } else {
-        toast.success(editando ? "Destino atualizado." : "Destino adicionado.");
+        toast.success(editando ? "Destino atualizado" : "Destino adicionado");
       }
       onFechar();
-      // A contagem e o veredito vem do servidor; sem isto a linha nova apareceria
-      // sem nenhum numero e pareceria quebrada.
-      router.refresh();
+      // A contagem e o veredito vem do servidor; sem isto o destino novo
+      // apareceria sem nenhum numero e pareceria quebrado.
+      aoSalvar();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha ao salvar.");
+      toast.error(e instanceof Error ? e.message : "Não deu para salvar o destino.");
     } finally {
       setSalvando(false);
     }
@@ -191,9 +175,11 @@ function FormularioDestino({
       ? Boolean(conta.trim()) && quantosRotulos > 0
       : Boolean(conta.trim()) && (editando ? true : Boolean(token.trim())));
 
+  const idCampo = (s: string) => `destino-${destino?.id ?? "novo"}-${s}`;
+
   return (
-    <Dialog open={aberto} onOpenChange={(v) => !v && onFechar()}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+    <Dialog open={aberto} onOpenChange={(v) => !v && !salvando && onFechar()}>
+      <DialogContent size="md" className="max-h-[88dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {editando ? "Editar" : "Adicionar"} {NOME_DA_PLATAFORMA[plataforma]}
@@ -201,321 +187,273 @@ function FormularioDestino({
           <DialogDescription>
             {plataforma === "google"
               ? "O ID da conta mais o rótulo de cada evento que você quer medir."
-              : "O ID do pixel mais o token do CAPI. Um pixel cobre todos os eventos."}
+              : "O ID do pixel mais o token de conversões. Um pixel cobre todos os eventos."}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="flex flex-col gap-5">
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label className="text-[11px] text-t2">Apelido</Label>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={idCampo("nome")}>Apelido</Label>
               <Input
+                id={idCampo("nome")}
                 value={nome}
                 onChange={(e) => setNome(e.target.value)}
                 placeholder={plataforma === "google" ? "Conta principal" : "Pixel 1"}
-                className="h-8 text-xs"
+                aria-describedby={idCampo("nome-dica")}
               />
               {/* Com duas contas da mesma plataforma, o numero sozinho nao diz
                   qual e qual quando chega a hora de desativar uma. */}
-              <p className="text-[10.5px] text-t3">só para você reconhecer na lista</p>
+              <p id={idCampo("nome-dica")} className="text-label text-t2">
+                Só para você reconhecer na lista.
+              </p>
             </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] text-t2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={idCampo("conta")}>
                 {plataforma === "google" ? "ID de conversão" : "ID do pixel"}
               </Label>
               <Input
+                id={idCampo("conta")}
                 value={conta}
                 onChange={(e) => setConta(e.target.value)}
                 placeholder={plataforma === "google" ? "AW-123456789" : "1234567890123456"}
-                className="h-8 font-mono text-xs"
+                className="font-mono"
+                autoComplete="off"
               />
             </div>
           </div>
 
           {plataforma === "google" && (
-            <div className="space-y-2.5">
-              <div>
-                <Label className="text-[11px] text-t2">Rótulo por evento</Label>
-                <p className="text-[11px] text-t3">
-                  Google Ads → Objetivos → Conversões. Uma ação por evento; copie o
-                  rótulo de cada uma. Deixe <strong className="text-t1">compra</strong>{" "}
-                  como principal e as outras como{" "}
-                  <strong className="text-t1">secundárias</strong>, senão o lance passa
-                  a otimizar para carrinho em vez de venda.
-                </p>
-              </div>
+            <fieldset className="flex flex-col gap-3">
+              <legend className="mb-1 flex flex-col gap-1">
+                <span className="text-dense font-medium text-ink">Rótulo por evento</span>
+                <span className="text-label text-t2">
+                  No Google Ads, em Objetivos › Conversões, cada evento é uma ação de
+                  conversão com o seu rótulo (a parte depois da barra em AW-…/rótulo).
+                  Deixe <strong className="font-medium text-ink">Compra</strong> como
+                  principal e as outras como{" "}
+                  <strong className="font-medium text-ink">secundárias</strong>, senão o
+                  lance passa a otimizar para carrinho em vez de venda.
+                </span>
+              </legend>
 
               {EVENTOS.map((ev) => (
                 <div
                   key={ev.chave}
-                  className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,13rem)] sm:items-center"
+                  className="grid gap-1.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,14rem)] sm:items-center sm:gap-3"
                 >
-                  <div className="min-w-0">
-                    <span className="text-[12.5px] text-ink">{ev.nome}</span>
-                    <p className="text-[11px] text-t3">{ev.descricao}</p>
-                  </div>
+                  <label htmlFor={idCampo(`rotulo-${ev.chave}`)} className="min-w-0">
+                    <span className="block text-dense text-ink">{ev.nome}</span>
+                    <span className="block text-label text-t2">{ev.descricao}</span>
+                  </label>
                   <Input
+                    id={idCampo(`rotulo-${ev.chave}`)}
                     value={rotulos[ev.chave] ?? ""}
                     onChange={(e) =>
                       setRotulos((atual) => ({ ...atual, [ev.chave]: e.target.value }))
                     }
-                    placeholder="vazio não rastreia"
-                    className="h-8 font-mono text-xs"
-                    aria-label={`Rótulo de ${ev.nome}`}
+                    placeholder="vazio: não medir"
+                    className="font-mono"
+                    autoComplete="off"
                   />
                 </div>
               ))}
 
               {/* Isto confunde todo mundo uma vez, entao esta escrito. */}
-              <p className="flex items-start gap-1.5 text-[11px] text-t3">
-                <CircleAlert aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <p className="flex items-start gap-1.5 text-label text-t2">
+                <CircleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" />
                 <span>
-                  Estes rótulos são <strong className="text-t1">conversão</strong>, não
-                  remarketing. Público o Google só monta com a tag no navegador — é a
-                  checagem &quot;Tag de remarketing&quot; no card da loja.
+                  Estes rótulos são de <strong className="font-medium text-ink">conversão</strong>,
+                  não de remarketing. O público de remarketing o Google só monta com a tag no
+                  navegador: é a linha “Remarketing do Google” no detalhe da loja.
                 </span>
               </p>
-            </div>
+            </fieldset>
           )}
 
-
           {/* ---- id do produto ---- */}
-          <div className="space-y-1.5 rounded-md border border-dashed border-[var(--border-strong)] p-2.5">
-            <Label className="text-[11px] text-t2">Formato do ID de produto</Label>
-            <p className="text-[11px] text-t3">
-              Tem que ser <strong className="text-t1">idêntico</strong> ao ID do{" "}
+          <div className="flex flex-col gap-2 rounded-card border border-dashed border-border-strong p-3">
+            <Label htmlFor={idCampo("template")}>Formato do ID de produto</Label>
+            <p className="text-label text-t2">
+              Tem que ser <strong className="font-medium text-ink">idêntico</strong> ao ID do{" "}
               {plataforma === "google"
                 ? "seu feed no Merchant Center"
                 : "seu catálogo no Commerce Manager"}
-              . Se não bater, o evento é aceito normalmente e o anúncio dinâmico
-              simplesmente não serve aquele produto — sem erro nenhum em lugar nenhum.
+              . Se não bater, o evento é aceito normalmente e o anúncio dinâmico simplesmente
+              não mostra aquele produto, sem erro em lugar nenhum.
             </p>
 
             <Input
+              id={idCampo("template")}
               value={idTemplate}
               onChange={(e) => setIdTemplate(e.target.value)}
               placeholder={TEMPLATE_PADRAO}
-              className="h-8 font-mono text-xs"
-              aria-label="Formato do ID de produto"
+              className="font-mono"
+              aria-invalid={erroDoTemplate ? true : undefined}
+              aria-describedby={idCampo("template-dica")}
+              autoComplete="off"
             />
 
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Formatos sugeridos">
               {TEMPLATES_SUGERIDOS.map((t) => {
                 const ativo = idTemplate.trim() === t.template;
                 return (
-                  <button
+                  <Button
                     key={t.template}
                     type="button"
-                    title={t.dica}
+                    size="sm"
+                    variant={ativo ? "primary" : "secondary"}
                     aria-pressed={ativo}
                     onClick={() => setIdTemplate(t.template)}
-                    className={cn(
-                      "h-6 rounded-md border px-2 text-[11px] font-medium transition-colors",
-                      FOCO,
-                      ativo
-                        ? "border-[var(--solid)] bg-[var(--solid)] text-[var(--on-solid)]"
-                        : "border-border bg-surface text-t2 hover:border-[var(--border-strong)]"
-                    )}
                   >
                     {t.rotulo}
-                  </button>
+                  </Button>
                 );
               })}
             </div>
 
             {erroDoTemplate ? (
-              <p className="text-[11px] text-[var(--err)]">{erroDoTemplate}</p>
+              <p id={idCampo("template-dica")} className="text-label text-err">
+                {erroDoTemplate}
+              </p>
             ) : (
-              <p className="text-[10.5px] text-t3">
-                Marcadores: <code>{"{variant_id}"}</code> <code>{"{product_id}"}</code>{" "}
-                <code>{"{sku}"}</code>
+              <p id={idCampo("template-dica")} className="text-label text-t2">
+                Marcadores: <code className="font-mono">{"{variant_id}"}</code> = id da variante,{" "}
+                <code className="font-mono">{"{product_id}"}</code> = id do produto,{" "}
+                <code className="font-mono">{"{sku}"}</code> = SKU.
               </p>
             )}
 
             {plataforma === "google" && (
               /* O remarketing monta o id no NAVEGADOR, a partir da tag do tema --
                  trocar aqui nao alcanca quem ja tem a tag antiga instalada. */
-              <p className="flex items-start gap-1.5 rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] p-2.5 text-[11px] text-[var(--warn)]">
-                <AlertTriangle aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                {/* O texto vai dentro de um span: sem ele, cada trecho vira um
-                    item do flex e a frase quebra em colunas. */}
+              <p className="flex items-start gap-1.5 rounded-control border border-warn-border bg-warn-bg p-2.5 text-label text-ink">
+                <TriangleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0 text-warn" />
                 <span>
-                  Depois de mudar, clique em{" "}
-                  <strong>&quot;Reinstalar com remarketing&quot;</strong> no card da
-                  loja: a tag do tema carrega este formato e só muda quando o tema é
-                  gravado de novo.
+                  Depois de mudar, clique em <strong className="font-medium">Reinstalar</strong>{" "}
+                  na linha “Remarketing do Google” do detalhe da loja: a tag do tema leva este
+                  formato e só muda quando o tema é gravado de novo.
                 </span>
               </p>
             )}
           </div>
 
           {plataforma === "meta" && (
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <Label className="text-[11px] text-t2">Token do CAPI</Label>
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor={idCampo("token")}>Token de conversões</Label>
                 <Input
+                  id={idCampo("token")}
                   type="password"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
-                  placeholder={
-                    destino?.temToken ? "gravado — vazio mantém" : "EAA..."
-                  }
-                  className="h-8 font-mono text-xs"
+                  placeholder={destino?.temToken ? "gravado; vazio mantém" : "EAA…"}
+                  className="font-mono"
                   autoComplete="off"
+                  aria-describedby={idCampo("token-dica")}
                 />
-                <p className="text-[10.5px] text-t3">
-                  Events Manager → Configurações → API de Conversões → gerar token.
+                <p id={idCampo("token-dica")} className="text-label text-t2">
+                  No Gerenciador de Eventos do Meta: Configurações › API de Conversões › Gerar
+                  token.
                   {destino?.temToken
                     ? " Um token novo substitui o anterior; vazio mantém o que está gravado."
                     : ""}
                 </p>
               </div>
 
-              <div className="space-y-1">
-                <Label className="text-[11px] text-t2">Código de teste (opcional)</Label>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor={idCampo("teste")}>Código de teste (opcional)</Label>
                 <Input
+                  id={idCampo("teste")}
                   value={codigoTeste}
                   onChange={(e) => setCodigoTeste(e.target.value)}
                   placeholder="TEST12345"
-                  className="h-8 max-w-[12rem] font-mono text-xs"
+                  className="max-w-48 font-mono"
+                  autoComplete="off"
+                  aria-describedby={idCampo("teste-dica")}
                 />
-                <p className="text-[10.5px] text-t3">
-                  Joga os eventos para a aba de teste do Events Manager. Preenchido, eles
-                  param de contar como conversão de verdade — tire quando terminar.
+                <p id={idCampo("teste-dica")} className="text-label text-t2">
+                  Manda os eventos para a aba de teste do Gerenciador de Eventos. Preenchido, eles
+                  param de contar como conversão de verdade: tire quando terminar.
                 </p>
               </div>
 
-              <p className="text-[11px] text-t3">
-                O pixel cobre os {EVENTOS.length} eventos — não precisa rótulo por
-                evento.
+              <p className="text-label text-t2">
+                O pixel cobre os {EVENTOS.length} eventos; não precisa de rótulo por evento.
               </p>
             </div>
           )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" size="sm" onClick={onFechar} disabled={salvando}>
+          <Button variant="secondary" onClick={onFechar} disabled={salvando}>
             Cancelar
           </Button>
-          <Button size="sm" onClick={salvar} disabled={salvando || !podeSalvar}>
-            {salvando ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : editando ? (
-              "Salvar"
-            ) : (
-              "Adicionar"
-            )}
+          <Button onClick={salvar} pending={salvando} disabled={!podeSalvar}>
+            {editando ? "Salvar destino" : "Adicionar destino"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** O estado do destino em uma palavra (mapa unico da fundacao). */
+function estadoDoDestino(d: DestinoNaTela, faltam: number) {
+  if (!d.ativo) return STATUS.destino.desativado;
+  if (oQueFalta(d) !== null) return STATUS.destino.incompleto;
+  if (d.testEventCode) return STATUS.destino.modoTeste;
+  if (faltam > 0) return STATUS.destino.erro;
+  return STATUS.destino.enviando;
+}
+
+type TomNota = "err" | "warn" | "info" | "neutral";
+const PONTO: Record<TomNota, string> = {
+  err: "bg-err",
+  warn: "bg-warn",
+  info: "bg-info",
+  neutral: "bg-t3",
+};
+
+function Nota({ tom, children }: { tom: TomNota; children: ReactNode }) {
+  return (
+    <li className="flex items-start gap-2 text-label text-t1">
+      <span aria-hidden className={cn("mt-1.5 size-1.5 shrink-0 rounded-full", PONTO[tom])} />
+      <span className="min-w-0 break-words text-pretty">{children}</span>
+    </li>
   );
 }
 
 /**
- * Confirmacao de remocao.
+ * Um destino: a conta, o que saiu por ela em 7 dias, e o menu.
  *
- * Existe porque remover leva o HISTORICO junto: `tracking_events.destination_id`
- * tem `on delete cascade`, entao os envios daquela conta saem da contagem. Quem
- * so quer parar de enviar deve DESATIVAR, e o dialogo diz isso em vez de deixar
- * o lojista descobrir depois.
+ * Por conta, nao por plataforma: com cinco contas de Google, a mesma venda gera
+ * cinco envios, e somados dariam "5 compras" para 1 pedido -- a comparacao com
+ * pedidos, que e o alarme, nunca mais acusaria falta.
  */
-function ConfirmarRemocao({
+export function CartaoDestino({
   destino,
-  aberto,
-  onFechar,
+  veredito,
+  destacado,
+  onEditar,
+  aoMudar,
 }: {
   destino: DestinoNaTela;
-  aberto: boolean;
-  onFechar: () => void;
+  /** Compras x pedidos deste destino. null = nao recebe a compra (ou loja desligada). */
+  veredito: VereditoDestino | null;
+  destacado?: boolean;
+  onEditar: () => void;
+  aoMudar: () => void;
 }) {
-  const router = useRouter();
-  const [removendo, setRemovendo] = useState(false);
-
-  async function remover() {
-    setRemovendo(true);
-    try {
-      const r = await fetch(`/api/tracking/destinos?id=${destino.id}`, {
-        method: "DELETE",
-      });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error || "Falha ao remover.");
-      toast.success("Destino removido.");
-      onFechar();
-      router.refresh();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha ao remover.");
-    } finally {
-      setRemovendo(false);
-    }
-  }
-
-  const enviados = destino.contagem.enviados;
-
-  return (
-    <Dialog open={aberto} onOpenChange={(v) => !v && onFechar()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Remover {NOME_DA_PLATAFORMA[destino.plataforma]}?</DialogTitle>
-          <DialogDescription>
-            <span className="font-mono">{destino.conta}</span>
-            {destino.nome ? ` — ${destino.nome}` : ""}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-2 text-xs">
-          {enviados > 0 && (
-            <p className="flex items-start gap-1.5 rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] p-2.5 text-[var(--warn)]">
-              <AlertTriangle aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>
-                O histórico vai junto: <strong>{enviados}</strong> envio(s) dos últimos 7
-                dias saem da contagem desta tela.
-              </span>
-            </p>
-          )}
-          <p className="text-t2">
-            Se a intenção é só parar de enviar, <strong className="text-ink">desative</strong>{" "}
-            em vez de remover — assim o que já saiu continua aparecendo aqui.
-          </p>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" size="sm" onClick={onFechar} disabled={removendo}>
-            Cancelar
-          </Button>
-          <Button
-            size="sm"
-            variant="destructive"
-            onClick={remover}
-            disabled={removendo}
-          >
-            {removendo ? <Loader2 className="h-4 w-4 animate-spin" /> : "Remover"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/** Uma linha da lista: a conta, o que saiu por ela, e o que fazer com ela. */
-function LinhaDestino({
-  storeId,
-  destino,
-  faltam,
-}: {
-  storeId: string;
-  destino: DestinoNaTela;
-  /** Pedidos sem compra enviada por este destino (so com a loja ligada). */
-  faltam?: number;
-}) {
-  const router = useRouter();
-  const [editando, setEditando] = useState(false);
-  const [removendo, setRemovendo] = useState(false);
   const [alternando, setAlternando] = useState(false);
+  const [removendo, setRemovendo] = useState(false);
 
-  const falta = oQueFalta(destino);
   const nome = destino.nome || NOME_DA_PLATAFORMA[destino.plataforma];
   const c = destino.contagem;
+  const faltam = veredito?.tipo === "razao" ? veredito.faltam : 0;
+  const estado = estadoDoDestino(destino, faltam);
+  const falta = destino.ativo ? oQueFalta(destino) : null;
+  const semCliqueCompra = c.semAtribPorEvento.purchase ?? 0;
 
   async function alternar() {
     setAlternando(true);
@@ -525,335 +463,206 @@ function LinhaDestino({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: destino.id, ativo: !destino.ativo }),
       });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error || "Falha ao salvar.");
-      router.refresh();
+      await respostaJson(r, "Não deu para salvar.");
+      toast.success(destino.ativo ? "Envio desativado" : "Envio ativado", {
+        description: destino.ativo
+          ? `${nome} parou de receber eventos. O histórico continua aqui.`
+          : `${nome} volta a receber eventos a partir de agora.`,
+      });
+      aoMudar();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha ao salvar.");
+      toast.error(e instanceof Error ? e.message : "Não deu para salvar.");
     } finally {
       setAlternando(false);
     }
   }
 
-  const perdendo = faltam !== undefined && faltam >= 1;
-  const temSubLinha =
-    perdendo ||
-    (falta && destino.ativo) ||
-    Boolean(destino.testEventCode) ||
-    c.pendentes > 0 ||
-    c.falharam > 0 ||
-    c.semAtribuicao > 0;
+  async function remover() {
+    const r = await fetch(`/api/tracking/destinos?id=${encodeURIComponent(destino.id)}`, {
+      method: "DELETE",
+    });
+    await respostaJson(r, "Não deu para remover.");
+    toast.success("Destino removido", { description: "O envio para esse destino parou." });
+    aoMudar();
+  }
+
+  const notas: { tom: TomNota; texto: ReactNode }[] = [];
+  if (faltam > 0) {
+    notas.push({
+      tom: "err",
+      texto: `${plural(faltam, "pedido", "pedidos")} sem compra enviada nos últimos 7 dias.`,
+    });
+  }
+  if (falta) {
+    notas.push({
+      tom: "warn",
+      texto:
+        destino.plataforma === "meta"
+          ? "Falta o token de conversões: sem ele nenhum evento sai."
+          : "Falta o rótulo de pelo menos um evento: sem rótulo não há o que enviar.",
+    });
+  }
+  if (destino.testEventCode) {
+    notas.push({
+      tom: "info",
+      texto:
+        "Em modo teste: os eventos vão para a aba de teste do Gerenciador de Eventos e não contam como conversão.",
+    });
+  }
+  if (c.falharam > 0) {
+    notas.push({
+      tom: "err",
+      texto: (
+        <>
+          {c.falharam === 1 ? "1 envio falhou." : `${NUMERO.format(c.falharam)} envios falharam.`}
+          {c.ultimoErro ? ` A plataforma respondeu: “${c.ultimoErro}”` : ""}
+        </>
+      ),
+    });
+  }
+  if (c.pendentes > 0) {
+    notas.push({
+      tom: "neutral",
+      texto:
+        c.pendentes === 1
+          ? "1 envio na fila, aguardando nova tentativa."
+          : `${NUMERO.format(c.pendentes)} envios na fila, aguardando nova tentativa.`,
+    });
+  }
+  if (semCliqueCompra > 0) {
+    notas.push({
+      tom: "neutral",
+      texto: `${plural(semCliqueCompra, "compra chegou", "compras chegaram")} sem o clique do ${NOME_CURTO[destino.plataforma]}. Contam como venda, mas sem ligação com um anúncio.`,
+    });
+  }
 
   return (
-    <div
+    <article
       id={`destino-${destino.id}`}
+      aria-label={`${NOME_CURTO[destino.plataforma]} ${nome}`}
       className={cn(
-        "relative scroll-mt-20 border-t border-[var(--border-subtle)] px-3.5 py-2.5 first:border-t-0",
-        !destino.ativo && "opacity-70"
+        "flex scroll-mt-4 flex-col gap-3 rounded-card border border-border p-3",
+        !destino.ativo && "bg-surface-2",
+        destacado && "animate-xc-flash"
       )}
     >
-      <div className={`grid gap-y-2 sm:items-center sm:gap-x-2 ${GRADE}`}>
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 pr-9 sm:pr-0">
-          <span className="truncate text-[12.5px] font-semibold text-ink">{nome}</span>
-          <span className="font-mono text-[11px] text-t3">{destino.conta}</span>
-          {!destino.ativo ? (
-            <Selo tom="neutro">Desativado</Selo>
-          ) : falta ? (
-            <Selo tom="err" title={falta}>
-              Incompleto
-            </Selo>
-          ) : (
-            <Selo tom="ok">Enviando</Selo>
-          )}
-          {destino.testEventCode && (
-            <Selo
-              tom="warn"
-              title="Os eventos vão para a aba de teste do Events Manager e não contam como conversão."
-            >
-              Modo teste
-            </Selo>
-          )}
-        </div>
-
-        {/* O que saiu por ESTA conta, em 7 dias.
-            Por conta, nao por plataforma: com cinco contas de Google, a mesma venda
-            gera cinco linhas, e somadas dariam "5 compras" para 1 pedido -- a
-            comparacao com pedidos, que e o alarme, nunca mais acusaria falta. */}
-        <div className="grid grid-cols-5 gap-0.5 sm:contents">
-          {EVENTOS.map((ev) => {
-            const n = c.porEvento[ev.chave] ?? 0;
-            const rotulado =
-              destino.plataforma === "meta" || Boolean(destino.labels[ev.chave]);
-            const rotulo = ROTULO_CURTO[ev.chave] ?? ev.nome;
-            return (
-              <div
-                key={ev.chave}
-                className="min-w-0 rounded bg-surface-2 px-0.5 py-1 text-center sm:bg-transparent sm:p-0 sm:text-right"
-                title={
-                  rotulado
-                    ? `enviado ao ${NOME_DA_PLATAFORMA[destino.plataforma]} como ${
-                        destino.plataforma === "meta" ? ev.nomeNoMeta : "conversion"
-                      }`
-                    : "sem rótulo: este evento não é rastreado nesta conta"
-                }
-              >
-                <span
-                  className={cn(
-                    "block truncate text-[10px] tracking-tight sm:hidden",
-                    rotulado ? "text-t3" : "text-[var(--t4)]"
-                  )}
-                >
-                  {rotulo}
-                </span>
-                {rotulado ? (
-                  <span
-                    className={cn(
-                      "font-mono text-[13px] tabular-nums",
-                      n > 0 ? "text-ink" : "text-t3"
-                    )}
-                  >
-                    {n}
-                  </span>
-                ) : (
-                  <span className="font-mono text-[13px] tabular-nums text-[var(--t4)]">
-                    —<span className="sr-only"> (não rastreado)</span>
-                  </span>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="absolute right-2.5 top-2 sm:static sm:flex sm:justify-end">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              disabled={alternando}
-              aria-label={`Ações de ${nome}`}
-              className={cn(
-                "inline-flex h-8 w-8 items-center justify-center rounded-[5px] text-[var(--t4)] hover:bg-hover hover:text-ink disabled:opacity-50 sm:h-7 sm:w-7",
-                FOCO
-              )}
-            >
-              {alternando ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <MoreHorizontal aria-hidden className="h-4 w-4" />
-              )}
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuItem onClick={alternar}>
-                <Power aria-hidden />
-                {destino.ativo ? "Desativar (para de enviar)" : "Ativar"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setEditando(true)}>
-                <Pencil aria-hidden />
-                Editar
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onClick={() => setRemovendo(true)}>
-                <Trash2 aria-hidden />
-                Remover
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+      <div className="flex items-start gap-2.5">
+        <span className="mt-0.5 shrink-0 rounded-sm border border-border-strong px-1.5 text-label font-semibold text-t1">
+          {NOME_CURTO[destino.plataforma]}
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-dense font-semibold text-ink">{nome}</span>
+          <span className="truncate font-mono text-label text-t2">{destino.conta}</span>
+        </span>
+        <StatusBadge {...estado} />
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            disabled={alternando}
+            render={
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                pending={alternando}
+                aria-label={`Ações do destino ${nome}`}
+                className="-my-1"
+              />
+            }
+          >
+            {alternando ? null : <MoreHorizontal aria-hidden />}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuItem onClick={onEditar}>
+              <Pencil aria-hidden />
+              Editar destino
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={alternar}>
+              <Power aria-hidden />
+              {destino.ativo ? "Desativar envio" : "Ativar envio"}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onClick={() => setRemovendo(true)}>
+              <Trash2 aria-hidden />
+              Remover destino…
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
-      {temSubLinha && (
-        <div className="mt-2 flex flex-col gap-0.5 text-[11.5px]">
-          {perdendo && (
-            <p className="flex items-start gap-1.5 text-[var(--err)]">
-              <Ponto tom="err" tamanho={5} className="mt-[5px]" />
-              <span>
-                {faltam === 1
-                  ? "1 pedido sem compra enviada nos últimos 7 dias"
-                  : `${faltam} pedidos sem compra enviada nos últimos 7 dias`}
-              </span>
-            </p>
-          )}
-          {falta && destino.ativo && (
-            <p className="flex items-start gap-1.5 text-[var(--err)]">
-              <Ponto tom="err" tamanho={5} className="mt-[5px]" />
-              <span>{falta}</span>
-            </p>
-          )}
-          {destino.testEventCode && (
-            <p className="flex items-start gap-1.5 text-t3">
-              <Ponto tom="neutro" tamanho={5} className="mt-[5px]" />
-              <span>
-                Os eventos vão para a aba de teste do Events Manager e não contam como
-                conversão.
-              </span>
-            </p>
-          )}
-          {c.pendentes > 0 && (
-            <p className="flex items-start gap-1.5 text-t2">
-              <Ponto tom="warn" tamanho={5} className="mt-[5px]" />
-              <span>
-                {c.pendentes === 1
-                  ? "1 na fila, aguardando reenvio"
-                  : `${c.pendentes} na fila, aguardando reenvio`}
-              </span>
-            </p>
-          )}
-          {c.falharam > 0 && (
-            <p
-              className="flex items-start gap-1.5 text-ink"
-              title={c.ultimoErro ?? undefined}
-            >
-              <Ponto tom="err" tamanho={5} className="mt-[5px]" />
-              <span className="line-clamp-2 min-w-0">
-                {c.falharam} falharam
-                {c.ultimoErro ? ` — ${c.ultimoErro.slice(0, 90)}` : ""}
-              </span>
-            </p>
-          )}
-          {c.semAtribuicao > 0 && (
-            <p className="flex items-start gap-1.5 text-t3">
-              <Ponto tom="neutro" tamanho={5} className="mt-[5px]" />
-              {/* Visita que nao veio de clique em anuncio DESTA plataforma:
-                  organico, direto, ou o anuncio da outra. Normal. O alarme
-                  de verdade -- venda sem clique -- e o aviso de compra. */}
-              <span>
-                {c.semAtribuicao} eventos sem clique de anúncio do{" "}
-                {NOME_DA_PLATAFORMA[destino.plataforma]} — de visita orgânica,
-                direta ou de outro canal
-              </span>
-            </p>
-          )}
-        </div>
-      )}
-
-      {editando && (
-        <FormularioDestino
-          storeId={storeId}
-          plataforma={destino.plataforma}
-          destino={destino}
-          aberto
-          onFechar={() => setEditando(false)}
-        />
-      )}
-      {removendo && (
-        <ConfirmarRemocao
-          destino={destino}
-          aberto
-          onFechar={() => setRemovendo(false)}
-        />
-      )}
-    </div>
-  );
-}
-
-/**
- * Uma plataforma e todas as contas dela.
- *
- * Lista, nao formulario: a loja pode ter cinco contas de Google e dois pixels
- * Meta, e cada uma vive sozinha -- desativar uma nao mexe nas outras.
- */
-export function PainelPlataforma({
-  storeId,
-  plataforma,
-  destinos,
-  faltasPorDestino,
-}: {
-  storeId: string;
-  plataforma: Plataforma;
-  destinos: DestinoNaTela[];
-  /** id do destino -> pedidos sem compra. So vem com a loja ligada. */
-  faltasPorDestino?: Record<string, number>;
-}) {
-  const [adicionando, setAdicionando] = useState(false);
-  const meus = destinos.filter((d) => d.plataforma === plataforma);
-  const enviando = meus.filter((d) => d.ativo && !oQueFalta(d)).length;
-  // So o Google tem evento sem rotulo; a legenda do traco so aparece se houver.
-  const temSemRotulo = meus.some(
-    (d) => d.plataforma === "google" && EVENTOS.some((ev) => !d.labels[ev.chave])
-  );
-
-  return (
-    <div id={`destinos-${plataforma}-${storeId}`} className="scroll-mt-20">
-      <div className="mb-2 flex items-center gap-2.5">
-        <h3 className="shrink-0 whitespace-nowrap text-[12.5px] font-semibold text-ink">
-          {NOME_DA_PLATAFORMA[plataforma]}
-        </h3>
-        {meus.length > 0 && (
-          <Selo tom={enviando > 0 ? "ok" : "warn"}>
-            {enviando} de {meus.length} enviando
-          </Selo>
-        )}
-        <span aria-hidden className="h-px flex-1 bg-border" />
-        <Button
-          size="xs"
-          variant="outline"
-          className="h-8 px-[9px] text-[12px] font-semibold sm:h-[26px]"
-          onClick={() => setAdicionando(true)}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Adicionar {plataforma === "google" ? "conta" : "pixel"}
-        </Button>
-      </div>
-
-      {meus.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-[var(--border-strong)] bg-surface px-4 py-4 text-center text-[12px] text-t2">
-          {plataforma === "google"
-            ? "Nenhuma conta do Google. Cada conta tem o seu ID de conversão e os seus rótulos."
-            : "Nenhum pixel do Meta. Cada pixel precisa do próprio token do CAPI."}
-        </p>
-      ) : (
-        <>
-          <p className="mb-1 text-right text-[10.5px] text-[var(--t4)]">
-            últimos 7 dias{temSemRotulo ? " · — = sem rótulo, não rastreado" : ""}
-          </p>
-          <div className="overflow-hidden rounded-lg border border-border bg-surface">
+      {/* O que saiu por ESTA conta, em 7 dias. Compra comparada com os pedidos. */}
+      <dl
+        aria-label={`Eventos enviados a ${nome} em 7 dias`}
+        className="grid grid-cols-2 gap-2 sm:grid-cols-5"
+      >
+        {EVENTOS.map((ev) => {
+          const n = c.porEvento[ev.chave] ?? 0;
+          const rotulado = destino.plataforma === "meta" || Boolean(destino.labels[ev.chave]);
+          const compra = ev.chave === "purchase";
+          const razao = compra && veredito?.tipo === "razao" && veredito.esperados > 0;
+          const tom =
+            !rotulado ? "warn" : razao && veredito.faltam > 0 ? "err" : null;
+          return (
             <div
-              className={`hidden sm:grid ${GRADE} items-center gap-x-2 border-b border-border bg-surface-2 px-3.5 py-2 text-[11px] font-semibold text-t3`}
+              key={ev.chave}
+              className={clsx(
+                "flex min-w-0 flex-col gap-0.5 rounded-control border p-2",
+                tom === "err"
+                  ? "border-err-border bg-err-bg"
+                  : tom === "warn"
+                    ? "border-warn-border bg-warn-bg"
+                    : "border-border-subtle bg-surface-2"
+              )}
             >
-              <span>Conta</span>
-              {EVENTOS.map((ev) => (
-                <span key={ev.chave} className="truncate text-right">
-                  {ROTULO_CURTO[ev.chave] ?? ev.nome}
-                </span>
-              ))}
-              <span />
+              <dt className="truncate text-label text-t1">{ROTULO_CURTO[ev.chave] ?? ev.nome}</dt>
+              <dd
+                className={clsx(
+                  "num text-dense font-semibold",
+                  tom === "err" ? "text-err" : tom === "warn" ? "text-warn" : "text-ink"
+                )}
+              >
+                {!rotulado
+                  ? "sem rótulo"
+                  : razao
+                    ? `${NUMERO.format(veredito.chegaram)} de ${NUMERO.format(veredito.esperados)}`
+                    : NUMERO.format(n)}
+              </dd>
             </div>
-            <div>
-              {meus.map((d) => (
-                <LinhaDestino
-                  key={d.id}
-                  storeId={storeId}
-                  destino={d}
-                  faltam={faltasPorDestino?.[d.id]}
-                />
-              ))}
-            </div>
-          </div>
-        </>
+          );
+        })}
+      </dl>
+
+      {notas.length > 0 && (
+        <ul className="flex flex-col gap-1">
+          {notas.map((n, i) => (
+            <Nota key={i} tom={n.tom}>
+              {n.texto}
+            </Nota>
+          ))}
+        </ul>
       )}
 
-      {/* Varias contas da mesma plataforma e seguro, e o motivo nao e obvio --
-          sem isto escrito, a pergunta "nao vai contar 5 vezes?" aparece. */}
-      {meus.length > 1 && plataforma === "google" && (
-        <p className="mt-2 text-[11.5px] text-t3">
-          Todas as contas recebem todos os eventos. Não infla nada: conversão cujo
-          gclid não pertence à conta é descartada pelo Google — a conta dona do clique
-          conta, as outras ignoram.
+      {destino.plataforma === "meta" && (
+        <p className="flex flex-wrap items-center gap-1.5 text-label text-t2">
+          Qualidade de correspondência do Meta
+          <span className="rounded-sm border border-border px-1.5">Em breve</span>
         </p>
       )}
 
-      {meus.length > 1 && plataforma === "meta" && (
-        <p className="mt-2 text-[11.5px] text-t3">
-          Todos os pixels recebem todos os eventos, cada um com o seu token.
-        </p>
-      )}
-
-      {adicionando && (
-        <FormularioDestino
-          storeId={storeId}
-          plataforma={plataforma}
-          aberto
-          onFechar={() => setAdicionando(false)}
-        />
-      )}
-    </div>
+      <ConfirmDialog
+        open={removendo}
+        onOpenChange={setRemovendo}
+        titulo={`Remover o destino ${nome}?`}
+        descricao={
+          <>
+            As compras desta loja param de chegar a esse destino agora. O histórico de envios
+            dele é apagado junto e não volta
+            {c.enviados > 0 ? ` (${plural(c.enviados, "envio", "envios")} dos últimos 7 dias)` : ""}.
+            Para só parar de enviar, desative em vez de remover.
+          </>
+        }
+        confirmar="Remover destino"
+        mensagemErro="Não deu para remover agora. Tente de novo."
+        onConfirmar={remover}
+      />
+    </article>
   );
 }

@@ -433,7 +433,9 @@ export interface TextoColuna {
 
 /** A coluna em palavras: "178 de 182", "faltam 4 · 38 sem clique do Google". */
 export function textoDaColuna(c: ColunaPlataforma, p: Plataforma): TextoColuna {
-  const contas = (n: number) => (n > 1 ? [`pior de ${n} contas`] : []);
+  // Com varias contas o numero e o da pior; "pior de" so quando alguma perde.
+  const contas = (n: number, perde = false) =>
+    n > 1 ? [perde ? `pior de ${n} contas` : `${n} contas`] : [];
   switch (c.tipo) {
     case "desligado":
       return { texto: "Desligado", sub: c.motivo, fracao: null, tom: "neutral" };
@@ -461,7 +463,7 @@ export function textoDaColuna(c: ColunaPlataforma, p: Plataforma): TextoColuna {
         c.faltam === 0 ? "todas chegaram" : c.faltam === 1 ? "falta 1" : `faltam ${c.faltam}`,
       ];
       if (c.semClique > 0) partes.push(`${c.semClique} sem clique do ${NOME_CURTO[p]}`);
-      partes.push(...contas(c.contas));
+      partes.push(...contas(c.contas, c.faltam > 0));
       return {
         texto: `${c.chegaram} de ${c.esperados}`,
         sub: partes.join(" · "),
@@ -520,30 +522,11 @@ export function ordenarLinhas(linhas: LinhaLoja[]): LinhaLoja[] {
 // Numeros do topo e o comparativo.
 // ---------------------------------------------------------------------------
 
-/**
- * Pedidos que deveriam ter virado compra, e quantos viraram, numa loja.
- *
- * Por destino, como na regra: vale o destino que mais recebeu. Loja ligada sem
- * nenhum destino recebendo conta os pedidos todos como esperados e nenhum como
- * chegado -- e exatamente o que aconteceu. Null = nao da para comparar (sem
- * lista de pedidos, ou sem contagem da fila).
- */
-export function coberturaDaLoja(
-  loja: LojaTracking,
-  diag: DiagnosticoLoja | null
-): { chegaram: number; esperados: number } | null {
-  if (!loja.ligado || loja.contagemIndisponivel || !diag?.pedidoIds) return null;
-  const recebem = recebemCompra(loja);
-  if (recebem.length === 0) return { chegaram: 0, esperados: diag.pedidoIds.length };
-  let chegaram = 0;
-  let esperados = 0;
-  for (const d of recebem) {
-    const v = vereditoDoDestino(d, loja, diag);
-    if (v.tipo !== "razao") continue;
-    chegaram = Math.max(chegaram, v.chegaram);
-    esperados = Math.max(esperados, v.esperados);
-  }
-  return { chegaram, esperados };
+/** Chegaram de esperados numa plataforma, somando as lojas que comparam. */
+export interface CoberturaPlataforma {
+  chegaram: number;
+  esperados: number;
+  lojas: number;
 }
 
 export interface ResumoTela {
@@ -557,9 +540,18 @@ export interface ResumoTela {
   lojasSemPedidos: number;
   /** Vendas que sairam para pelo menos um destino (o maior por loja, nunca a soma). */
   enviadas: number;
-  /** Pedido a pedido, nas lojas que da para comparar. */
-  cobertura: { chegaram: number; esperados: number; lojas: number } | null;
-  /** Lojas ligadas que comparam e as que ficaram fora da comparacao. */
+  /**
+   * Pedidos das lojas que da para comparar (lista de pedidos e contagem da
+   * fila em maos). null = nenhuma loja compara.
+   */
+  pedidosComparaveis: number | null;
+  /**
+   * Pedido a pedido, por plataforma: a soma das colunas da linha (a pior conta
+   * de cada loja). Separado de proposito -- o Google recebendo tudo nao pode
+   * esconder o Meta sem receber nada.
+   */
+  porPlataforma: Record<Plataforma, CoberturaPlataforma | null>;
+  /** Lojas ligadas que ficaram fora da comparacao. */
   lojasForaDaCobertura: number;
   paradas: number;
   atencao: number;
@@ -573,11 +565,14 @@ export function resumoDaTela(
   let pedidos: number | null = null;
   let lojasSemPedidos = 0;
   let enviadas = 0;
-  let chegaram = 0;
-  let esperados = 0;
-  let lojasCobertas = 0;
+  let pedidosComparaveis: number | null = null;
+  let lojasForaDaCobertura = 0;
+  const porPlataforma: Record<Plataforma, CoberturaPlataforma | null> = {
+    meta: null,
+    google: null,
+  };
 
-  for (const { loja } of ligadas) {
+  for (const { loja, colunas } of ligadas) {
     const diag = diagnostico[loja.storeId] ?? null;
     if (diag?.pedidos7d == null) lojasSemPedidos += 1;
     else pedidos = (pedidos ?? 0) + diag.pedidos7d;
@@ -589,11 +584,22 @@ export function resumoDaTela(
       .filter((d) => !emModoTeste(d))
       .reduce((m, d) => Math.max(m, d.contagem.porEvento.purchase ?? 0), 0);
 
-    const c = coberturaDaLoja(loja, diag);
-    if (c) {
-      chegaram += c.chegaram;
-      esperados += c.esperados;
-      lojasCobertas += 1;
+    // Sem lista de pedidos ou sem contagem da fila nao ha comparacao: somar
+    // como zero acusaria venda perdida que nao se perdeu.
+    if (loja.contagemIndisponivel || !diag?.pedidoIds) {
+      lojasForaDaCobertura += 1;
+      continue;
+    }
+    pedidosComparaveis = (pedidosComparaveis ?? 0) + diag.pedidoIds.length;
+    for (const p of PLATAFORMAS) {
+      const c = colunas[p];
+      if (c.tipo !== "razao") continue;
+      const atual = porPlataforma[p] ?? { chegaram: 0, esperados: 0, lojas: 0 };
+      porPlataforma[p] = {
+        chegaram: atual.chegaram + c.chegaram,
+        esperados: atual.esperados + c.esperados,
+        lojas: atual.lojas + 1,
+      };
     }
   }
 
@@ -604,8 +610,9 @@ export function resumoDaTela(
     pedidos,
     lojasSemPedidos,
     enviadas,
-    cobertura: lojasCobertas > 0 ? { chegaram, esperados, lojas: lojasCobertas } : null,
-    lojasForaDaCobertura: ligadas.length - lojasCobertas,
+    pedidosComparaveis,
+    porPlataforma,
+    lojasForaDaCobertura,
     paradas: ligadas.filter((l) => l.saude === "parado").length,
     atencao: ligadas.filter((l) => l.saude === "atencao").length,
   };
@@ -621,6 +628,17 @@ export function formatarInteiro(n: number): string {
 /** 0,745 -> "74,5%". */
 export function formatarFracao(f: number): string {
   return PORCENTO.format(f);
+}
+
+/** "Meta 65% · Google 100% dos pedidos", ou null sem nada para comparar. */
+export function textoCobertura(
+  porPlataforma: Record<Plataforma, CoberturaPlataforma | null>
+): string | null {
+  const partes = PLATAFORMAS.flatMap((p) => {
+    const c = porPlataforma[p];
+    return c && c.esperados > 0 ? [`${NOME_CURTO[p]} ${formatarFracao(c.chegaram / c.esperados)}`] : [];
+  });
+  return partes.length ? `${partes.join(" · ")} dos pedidos` : null;
 }
 
 /** "1 parada · 1 com atenção", ou "nenhuma loja". */

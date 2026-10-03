@@ -208,15 +208,16 @@ export function tituloDaRota(pathname: string): string {
 // Contexto da barra do topo, por tela.
 //
 // So entra aqui a tela que LE o filtro global. Uma tela com filtro proprio
-// (Saude dos pixels e Vendas, hoje) que ganhasse o seletor faria o lojista
-// achar que trocou de loja e continuar vendo a outra. Quando Saude dos pixels
-// passar a ler a loja da barra: "/tracking": { tipo: "fixo", texto: ... }.
+// (Vendas, hoje) que ganhasse o seletor faria o lojista achar que trocou de
+// loja e continuar vendo a outra. Saude dos pixels le a loja da barra; a
+// janela de 7 dias mora em src/lib/tracking e por isso e fixa.
 // ---------------------------------------------------------------------------
 
 const CONTEXTOS: Record<string, ModoContexto> = {
   "/financeiro": { tipo: "completo" },
   "/financeiro/custos": { tipo: "loja" },
   "/financeiro/anuncios": { tipo: "nenhum" },
+  "/tracking": { tipo: "fixo", texto: "Últimos 7 dias · período fixo desta tela" },
   "/tracking/eventos": { tipo: "loja" },
   "/alertas": { tipo: "loja" },
 };
