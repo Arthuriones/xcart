@@ -15,7 +15,7 @@ import clsx from "clsx";
 // ============================================================================
 
 const CAIXA =
-  "rounded-overlay border border-border bg-surface text-ink shadow-(--shadow) outline-none";
+  "rounded-overlay border border-border bg-surface text-ink shadow-overlay outline-none";
 
 export function Pop({
   gatilho,
@@ -53,7 +53,7 @@ export function Pop({
             aria-label={rotulo}
             className={clsx(
               CAIXA,
-              "max-w-[calc(100vw-16px)] overflow-hidden motion-safe:animate-[xc-in_140ms_ease-out]",
+              "max-w-[calc(100vw-16px)] animate-xc-in overflow-hidden",
               className
             )}
           >
@@ -101,7 +101,7 @@ export function Folha({
         <Dialog.Popup
           className={clsx(
             CAIXA,
-            "fixed inset-x-0 bottom-0 z-50 flex max-h-[88dvh] flex-col rounded-b-none border-x-0 border-b-0 motion-safe:animate-[xc-up_180ms_ease-out]"
+            "fixed inset-x-0 bottom-0 z-50 flex max-h-[88dvh] flex-col rounded-b-none border-x-0 border-b-0 animate-xc-up"
           )}
         >
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border py-2 pl-4 pr-2">
@@ -147,7 +147,7 @@ export function Janela({
           initialFocus={focoInicial}
           className={clsx(
             CAIXA,
-            "fixed left-1/2 top-2 z-50 flex max-h-[calc(100dvh-16px)] w-[calc(100vw-16px)] max-w-160 -translate-x-1/2 flex-col overflow-hidden md:top-22 motion-safe:animate-[xc-in_140ms_ease-out]",
+            "fixed left-1/2 top-2 z-50 flex max-h-[calc(100dvh-16px)] w-[calc(100vw-16px)] max-w-160 -translate-x-1/2 flex-col overflow-hidden md:top-22 animate-xc-in",
             className
           )}
         >

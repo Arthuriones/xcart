@@ -22,7 +22,7 @@ function Barra({ className }: { className: string }) {
   return (
     <span
       className={
-        "block rounded-control bg-linear-to-r from-skeleton via-skeleton-hi to-skeleton bg-size-[200%_100%] motion-safe:animate-[xc-shimmer_1.6s_ease-in-out_infinite] " +
+        "block rounded-control bg-linear-to-r from-skeleton via-skeleton-hi to-skeleton bg-size-[200%_100%] animate-xc-shimmer " +
         className
       }
     />
@@ -38,7 +38,7 @@ export function EsqueletoTela() {
     <div
       aria-busy="true"
       aria-label="Carregando a tela"
-      className="flex flex-col gap-6 motion-safe:animate-[xc-in_140ms_ease-out_300ms_both]"
+      className="flex animate-xc-in flex-col gap-6 [animation-delay:300ms]"
     >
       <div className="hidden flex-col gap-2 md:flex">
         <Barra className="h-5.5 w-40" />

@@ -395,7 +395,7 @@ export function BarraContexto({
         >
           {dados.lojas.length > 6 && (
             <div className="border-b border-border p-2">
-              <label className="flex h-ctl-md items-center gap-2 rounded-control border border-control-border px-2.5">
+              <label className="flex h-ctl-md items-center gap-2 rounded-control border border-control-border px-2.5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus">
                 <Search className="size-4 text-t3" strokeWidth={1.75} aria-hidden />
                 <span className="sr-only">Buscar loja</span>
                 <input
@@ -560,7 +560,7 @@ export function Atualizado({
         className="grid size-ctl-md place-items-center rounded-control border border-border-strong bg-surface text-t1 hover:border-control-border hover:text-ink disabled:cursor-wait"
       >
         <RefreshCw
-          className={clsx("size-4", ctx.pendente && "motion-safe:animate-[xc-spin_900ms_linear_infinite]")}
+          className={clsx("size-4", ctx.pendente && "animate-xc-spin")}
           strokeWidth={1.75}
           aria-hidden
         />
