@@ -1,75 +1,101 @@
-"use client";
-
-import { useState } from "react";
-import { textos } from "@/lib/textos";
-import { AssinarPro } from "@/components/billing/assinar-pro";
-import { APP_HOME } from "@/lib/app-home";
+import Link from "next/link";
 import { LogoXcart } from "@/components/layout/logo";
+import { buttonVariants } from "@/components/ui/button";
+import { Toaster } from "@/components/ui/sonner";
+import { PRO_INCLUDED_CREDITS } from "@/lib/billing/plans";
+import { APP_HOME } from "@/lib/app-home";
+import { lerAssinatura } from "@/lib/leitura/assinatura";
+import { motivoDoBloqueio } from "@/components/billing/regras";
+import { AssinarNoPaywall, BotaoSair } from "./assinar-paywall";
+
+export const dynamic = "force-dynamic";
 
 /**
- * Paywall. O layout do dashboard manda todo mundo sem acesso para ca, entao
- * NAO da para so linkar /billing: a rota esta atras da mesma trava e o usuario
- * voltaria para esta pagina em loop. O formulario de cartao mora aqui mesmo.
+ * Paywall. Fica fora da casca do painel (sem menu): quem chega aqui nao tem
+ * acesso as outras telas. Diz por que chegou (clonagem gratuita usada, Pix de
+ * 30 dias vencido, assinatura encerrada), o que o Pro inclui (a mesma lista
+ * da Assinatura) e deixa assinar ali mesmo, com cartao ou Pix.
  *
- * Antes esta tela chamava /api/billing/checkout, que era o Checkout hospedado
- * do Stripe. A Pagou nao tem equivalente para assinatura, e a rota deixou de
- * existir na migracao — o botao batia em 404 e ninguem conseguia assinar.
+ * Espaco de prova social: so com material real, que ainda nao existe -- por
+ * isso nao ha bloco nenhum (ver pendencias do redesign).
  */
-export default function NoAccessPage() {
-  const t = textos("noAccess");
-  const [mostrarCartao, setMostrarCartao] = useState(false);
 
-  async function logout() {
-    // Rota de API: evita puxar o cliente Supabase para o bundle desta tela.
-    await fetch("/api/auth/logout", { method: "POST" });
-    window.location.href = "/login";
-  }
+// TEXTO PARA O ARTHUR REVISAR: perguntas frequentes escritas a partir do que
+// o codigo faz hoje (cancelamento no fim do periodo, Pix que soma dias,
+// credito por imagem). Nada de teste gratis nem preco inventado.
+const PERGUNTAS: { p: string; r: string }[] = [
+  {
+    p: "Quando o acesso libera?",
+    r: "Na hora em que o cartão é aprovado ou o Pix é confirmado. Você entra no xcart sem precisar fazer login de novo.",
+  },
+  {
+    p: "Posso cancelar quando quiser?",
+    r: "Sim. No cartão, o cancelamento fica em Assinatura e créditos, e o acesso continua até o fim do período já pago. O Pix não renova sozinho, então não há o que cancelar.",
+  },
+  {
+    p: "Como funciona o pagamento por Pix?",
+    r: "Cada Pix libera 30 dias de Pro. Se pagar antes de acabar, os dias novos se somam aos que ainda faltam.",
+  },
+  {
+    p: "O que é um crédito de IA?",
+    r: `Um crédito neutraliza uma imagem com IA. O Pro inclui ${PRO_INCLUDED_CREDITS} por mês, e dá para comprar mais por Pix dentro do app. Neutralizar texto não usa crédito.`,
+  },
+];
+
+export default async function NoAccessPage() {
+  const d = await lerAssinatura({ completo: false });
+  const motivo = motivoDoBloqueio(d.perfil, d.agora);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--bg)] px-6 py-12">
-      <div className="w-full max-w-[380px]">
-        <div className="mb-8 flex items-center gap-2">
-          <LogoXcart altura={22} prioridade />
-        </div>
+    <div className="min-h-dvh bg-bg px-4 py-8 text-ink md:py-14">
+      <Toaster />
+      <main className="mx-auto flex w-full max-w-240 flex-col gap-8">
+        <LogoXcart altura={22} prioridade />
 
-        <div className="rounded-lg border border-border bg-surface p-6">
-          <h1 className="text-[18px] font-semibold tracking-[-0.01em] text-ink">
-            {t("title")}
-          </h1>
-          <p className="mt-1.5 text-[13px] leading-relaxed text-t2">{t("body")}</p>
+        {motivo === null ? (
+          // Tem acesso e chegou aqui pelo endereco: nada a assinar.
+          <section className="flex max-w-120 flex-col gap-3">
+            <h1 className="text-page text-ink">Seu acesso está liberado</h1>
+            <p className="text-body text-t1">Sua conta já pode usar o xcart. Não é preciso assinar de novo.</p>
+            <Link href={APP_HOME} className={buttonVariants({ className: "self-start" })}>
+              Ir para o xcart
+            </Link>
+          </section>
+        ) : (
+          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:items-start lg:gap-x-12">
+            <header className="flex flex-col gap-2">
+              <h1 className="text-page text-ink">Assine o Pro para continuar</h1>
+              <p className="max-w-[60ch] text-body text-t1">{motivo}</p>
+              <p className="max-w-[60ch] text-body text-t1">
+                Suas lojas, custos e configurações continuam salvos: assim que o pagamento for
+                confirmado, tudo volta a abrir.
+              </p>
+            </header>
 
-          {mostrarCartao ? (
-            <div className="mt-5">
-              <AssinarPro
-                onPronto={() =>
-                  // Recarrega para o layout reavaliar o acesso e liberar o app.
-                  setTimeout(() => window.location.replace(APP_HOME), 900)
-                }
-              />
-              <button
-                onClick={() => setMostrarCartao(false)}
-                className="mt-3 w-full text-[12px] text-t3 hover:text-ink"
-              >
-                Voltar
-              </button>
+            <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
+              <AssinarNoPaywall temDocumento={d.perfil ? d.perfil.temDocumento : undefined} />
             </div>
-          ) : (
-            <button
-              onClick={() => setMostrarCartao(true)}
-              className="mt-5 h-9 w-full rounded-md bg-[var(--solid)] text-[13px] font-semibold text-[var(--on-solid)] transition-colors hover:bg-[var(--solid-hover)] active:translate-y-px"
-            >
-              {t("subscribe")}
-            </button>
-          )}
-        </div>
 
-        <button
-          onClick={logout}
-          className="mt-4 w-full text-[12px] text-t3 hover:text-ink"
-        >
-          {t("logout")}
-        </button>
-      </div>
+            <section aria-labelledby="perguntas" className="flex flex-col gap-3">
+              <h2 id="perguntas" className="text-section text-ink">
+                Perguntas frequentes
+              </h2>
+              <dl className="flex flex-col divide-y divide-border-subtle rounded-card border border-border bg-surface">
+                {PERGUNTAS.map((q) => (
+                  <div key={q.p} className="flex flex-col gap-1 px-4 py-3">
+                    <dt className="text-dense font-semibold text-ink">{q.p}</dt>
+                    <dd className="text-dense text-t1">{q.r}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          </div>
+        )}
+
+        <div className="flex justify-center border-t border-border-subtle pt-4 lg:justify-start">
+          <BotaoSair />
+        </div>
+      </main>
     </div>
   );
 }

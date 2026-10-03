@@ -1,11 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import { ArrowLeft, Check, CreditCard, Loader2, QrCode } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { Check, CreditCard, QrCode } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import dynamic from "next/dynamic";
+import { Callout } from "@/components/ui/callout";
 import type { CobrancaPix } from "@/components/billing/pix-dialog";
+import { PRO_PRICE_CENTS } from "@/lib/billing/plans";
+import { cpfValido, digitos } from "@/lib/billing/documento";
+import { BENEFICIOS_PRO } from "@/components/billing/beneficios";
+import { CampoCpf } from "@/components/billing/campo-cpf";
+import { Escolha } from "@/components/billing/escolha";
+import { ERRO_PADRAO, brl, mensagemDeErro, type ErroNaTela } from "@/components/billing/regras";
 
 // So aparecem depois de escolher a forma de pagamento. Somados sao 16 KB que
 // todo mundo baixava para ver o botao de assinar.
@@ -17,42 +24,56 @@ const PixDialog = dynamic(
   () => import("@/components/billing/pix-dialog").then((m) => m.PixDialog),
   { ssr: false }
 );
-import { PRO_INCLUDED_CREDITS, PRO_PRICE_CENTS } from "@/lib/billing/plans";
 
 // ============================================================================
-// Assinar o Pro. Usado na tela de billing e no paywall.
+// Assinar o Pro. Usado na Assinatura e no paywall.
 //
-// Dois caminhos, porque a Pagou nao tem um so que sirva para todo mundo:
+// Dois caminhos, porque o processador nao tem um so que sirva para todo mundo:
 //  - Cartao: assinatura de verdade, renova sozinha.
-//  - Pix: cobranca avulsa que libera 30 dias. Nao renova — a Pagou so faz
-//    recorrencia por cartao (pix_automatic vem UNSUPPORTED nesta conta).
+//  - Pix: cobranca avulsa que libera 30 dias. Nao renova (a recorrencia so
+//    existe no cartao).
+// Os corpos das chamadas sao os de antes: { packId: "pro_month", document? }
+// para o Pix e o token do cartao em /api/billing/subscribe.
 // ============================================================================
 
-const brl = (c: number) =>
-  (c / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+type Via = "cartao" | "pix";
 
-function mascaraDoc(v: string) {
-  const d = v.replace(/\D/g, "").slice(0, 11);
-  return d
-    .replace(/(\d{3})(\d)/, "$1.$2")
-    .replace(/(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
-    .replace(/(\d{3})\.(\d{3})\.(\d{3})(\d)/, "$1.$2.$3-$4");
-}
-
-const INCLUI = [
-  "Clonagem ilimitada de lojas",
-  `${PRO_INCLUDED_CREDITS} créditos de IA por mês`,
-  "Tradução e neutralização automáticas",
-];
-
-export function AssinarPro({ onPronto }: { onPronto: () => void }) {
-  const [via, setVia] = useState<"cartao" | "pix" | null>(null);
+export function AssinarPro({
+  onPronto,
+  somentePix = false,
+  temDocumento,
+  mostrarResumo = true,
+}: {
+  /** Pagamento confirmado (cartao aceito ou Pix pago). */
+  onPronto: () => void;
+  /** So o Pix: renovar quem ja paga por Pix (os dias se somam). */
+  somentePix?: boolean;
+  /** O CPF ja esta salvo? undefined = nao se sabe (pede so se o servidor pedir). */
+  temDocumento?: boolean;
+  /** Resumo com preco e o que inclui. */
+  mostrarResumo?: boolean;
+}) {
+  const [via, setVia] = useState<Via | null>(somentePix ? "pix" : null);
   const [cpf, setCpf] = useState("");
-  const [pedirCpf, setPedirCpf] = useState(false);
+  const [pedirCpf, setPedirCpf] = useState(temDocumento === false);
+  const [erroCpf, setErroCpf] = useState<string | null>(null);
+  const [erro, setErro] = useState<ErroNaTela | null>(null);
   const [busy, setBusy] = useState(false);
   const [pix, setPix] = useState<CobrancaPix | null>(null);
+  const pixPago = useRef(false);
+  // Estavel: o PixDialog reinicia a consulta quando onPago muda.
+  const marcarPago = useCallback(() => {
+    pixPago.current = true;
+  }, []);
 
   async function gerarPix() {
+    setErro(null);
+    // CPF conferido aqui antes de ir ao servidor: o erro aparece no campo.
+    if (pedirCpf && !cpfValido(digitos(cpf))) {
+      setErroCpf(digitos(cpf) ? "CPF inválido. Confira os números." : "Informe o CPF do pagador.");
+      return;
+    }
+    setErroCpf(null);
     setBusy(true);
     try {
       const res = await fetch("/api/billing/credits", {
@@ -63,14 +84,15 @@ export function AssinarPro({ onPronto }: { onPronto: () => void }) {
           ...(cpf.trim() ? { document: cpf } : {}),
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (data.needsDocument) {
           setPedirCpf(true);
-          toast.error(data.error);
+          setErroCpf(pedirCpf ? mensagemDeErro(res.status, data.error, "Confira o CPF.").texto : null);
           return;
         }
-        throw new Error(data.error || "Falha ao gerar cobrança.");
+        setErro(mensagemDeErro(res.status, data.error, ERRO_PADRAO.pix));
+        return;
       }
       setPedirCpf(false);
       setPix({
@@ -80,144 +102,133 @@ export function AssinarPro({ onPronto }: { onPronto: () => void }) {
         kind: "pro_month",
         pix: data.pix,
       });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha ao gerar cobrança.");
+    } catch {
+      setErro({ texto: ERRO_PADRAO.pix, detalhe: null });
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="space-y-5">
-      {/* Resumo do que esta sendo comprado. Fica visivel nos tres estados:
-          quem chega no formulario de cartao nao deve precisar voltar para
-          lembrar do preco. */}
-      <div className="rounded-xl border border-border/60 bg-background/40 p-4">
-        <div className="flex items-baseline justify-between">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Plano Pro
-          </span>
-          <div className="text-right">
-            <span className="text-2xl font-semibold text-foreground">
-              {brl(PRO_PRICE_CENTS)}
+    // @container: os cartoes de forma de pagamento ficam lado a lado so quando
+    // o bloco e largo (Assinatura), e empilhados na coluna estreita do paywall.
+    <div className="@container flex flex-col gap-4">
+      {mostrarResumo ? (
+        <div className="flex flex-col gap-3 rounded-card border border-border bg-surface-2 p-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <span className="text-section text-ink">Plano Pro</span>
+            <span className="flex items-baseline gap-1">
+              <span className="num text-page text-ink">{brl(PRO_PRICE_CENTS)}</span>
+              <span className="text-dense text-t2">por mês</span>
             </span>
-            <span className="text-sm text-muted-foreground">/mês</span>
           </div>
+          <ul aria-label="O que o Pro inclui" className="flex flex-col gap-1.5 border-t border-border-subtle pt-3">
+            {BENEFICIOS_PRO.map((item) => (
+              <li key={item} className="flex items-start gap-2 text-dense text-t1">
+                <Check aria-hidden className="mt-0.5 size-3.5 shrink-0 text-ok" strokeWidth={2} />
+                {item}
+              </li>
+            ))}
+          </ul>
         </div>
-        <ul className="mt-3 space-y-1.5 border-t border-border/50 pt-3">
-          {INCLUI.map((item) => (
-            <li key={item} className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Check className="h-3.5 w-3.5 shrink-0 text-primary" />
-              {item}
-            </li>
-          ))}
-        </ul>
-      </div>
+      ) : null}
 
-      {!via && (
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-foreground">
+      {!somentePix ? (
+        <div className="flex flex-col gap-2">
+          <p id="forma-pagamento" className="text-dense font-medium text-ink">
             Como você prefere pagar?
           </p>
-          <button
-            onClick={() => setVia("cartao")}
-            className="flex w-full items-center gap-3 rounded-xl border border-border/60 bg-background/40 p-4 text-left transition hover:border-primary/60 hover:bg-background/70"
-          >
-            <CreditCard className="h-5 w-5 shrink-0 text-primary" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-foreground">Cartão de crédito</p>
-              <p className="text-xs text-muted-foreground">
-                Renova automaticamente todo mês
-              </p>
-            </div>
-          </button>
-          <button
-            onClick={() => setVia("pix")}
-            className="flex w-full items-center gap-3 rounded-xl border border-border/60 bg-background/40 p-4 text-left transition hover:border-primary/60 hover:bg-background/70"
-          >
-            <QrCode className="h-5 w-5 shrink-0 text-primary" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-foreground">Pix</p>
-              <p className="text-xs text-muted-foreground">
-                Libera 30 dias na hora — sem renovação automática
-              </p>
-            </div>
-          </button>
+          <Escolha<Via>
+            rotulo="Forma de pagamento"
+            valor={via}
+            onValor={(v) => {
+              setVia(v);
+              setErro(null);
+            }}
+            className="@md:grid-cols-2"
+            opcoes={[
+              {
+                valor: "cartao",
+                titulo: "Cartão de crédito",
+                descricao: "Renova sozinho todo mês",
+                icone: <CreditCard />,
+              },
+              {
+                valor: "pix",
+                titulo: "Pix",
+                descricao: "Libera 30 dias na hora, sem renovação automática",
+                icone: <QrCode />,
+              },
+            ]}
+          />
         </div>
-      )}
+      ) : null}
 
-      {via && (
-        <div className="space-y-4">
-          <button
-            onClick={() => setVia(null)}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground transition hover:text-foreground"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Trocar forma de pagamento
-          </button>
-
-          {via === "cartao" ? (
-            <PagouCardForm
-              // O botao diz o que acontece e quanto custa, em vez de um
-              // "Assinar agora" que esconde o valor.
-              labelBotao={`Assinar por ${brl(PRO_PRICE_CENTS)}/mês`}
-              onSuccess={() => {
-                toast.success("Assinatura confirmada!");
-                onPronto();
-              }}
-            />
-          ) : (
-            <div className="space-y-3">
-              {pedirCpf && (
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="cpf-pix"
-                    className="text-xs font-medium text-foreground"
-                  >
-                    CPF do pagador
-                  </label>
-                  <input
-                    id="cpf-pix"
-                    autoFocus
-                    inputMode="numeric"
-                    placeholder="000.000.000-00"
-                    value={mascaraDoc(cpf)}
-                    onChange={(e) => setCpf(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && gerarPix()}
-                    className="w-full rounded-lg border border-border/60 bg-background/40 px-3 py-2.5 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary"
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    Exigido pelo banco emissor da cobrança Pix.
-                  </p>
-                </div>
-              )}
-              <Button size="lg" className="w-full" onClick={gerarPix} disabled={busy}>
-                {busy ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <QrCode className="h-4 w-4" />
-                )}
-                Gerar código Pix de {brl(PRO_PRICE_CENTS)}
-              </Button>
-              <p className="text-center text-[11px] text-muted-foreground">
-                Libera 30 dias de Pro assim que o pagamento cair. Não renova
-                sozinho — quando acabar, é só pagar de novo.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {pix && (
-        <PixDialog
-          cobranca={pix}
-          onPago={onPronto}
-          onFechar={() => {
-            setPix(null);
+      {via === "cartao" ? (
+        <PagouCardForm
+          // O botao diz o que acontece e quanto custa, em vez de um
+          // "Assinar agora" que esconde o valor.
+          labelBotao={`Assinar por ${brl(PRO_PRICE_CENTS)} por mês`}
+          onSuccess={(dados) => {
+            const pendente = (dados as { pending?: boolean } | null)?.pending === true;
+            if (pendente) toast.info("Pagamento em processamento. O Pro libera assim que o banco confirmar.");
+            else toast.success("Assinatura confirmada.");
             onPronto();
           }}
         />
-      )}
+      ) : null}
+
+      {via === "pix" ? (
+        <div className="flex flex-col gap-3">
+          {pedirCpf ? (
+            <CampoCpf
+              valor={cpf}
+              onValor={(v) => {
+                setCpf(v);
+                setErroCpf(null);
+              }}
+              erro={erroCpf}
+              onEnter={gerarPix}
+              autoFocus={temDocumento !== false}
+            />
+          ) : null}
+          {erro ? (
+            <Callout tom="err" titulo={erro.texto} role="alert">
+              {erro.detalhe ? (
+                <details className="text-label text-t2">
+                  <summary className="cursor-pointer">Detalhes para o suporte</summary>
+                  <p className="mt-1 break-words font-mono">{erro.detalhe}</p>
+                </details>
+              ) : null}
+            </Callout>
+          ) : null}
+          <Button size="lg" className="w-full" onClick={gerarPix} pending={busy}>
+            {busy ? null : <QrCode aria-hidden />}
+            Gerar Pix de {brl(PRO_PRICE_CENTS)}
+          </Button>
+          <p className="text-center text-label text-t2">
+            {somentePix
+              ? "Mais 30 dias de Pro, somados aos que ainda faltam. Não renova sozinho."
+              : "Libera 30 dias de Pro assim que o pagamento cair. Não renova sozinho: quando acabar, é só pagar de novo."}
+          </p>
+        </div>
+      ) : null}
+
+      {pix ? (
+        <PixDialog
+          cobranca={pix}
+          onPago={marcarPago}
+          // A tela de tras so muda quando o lojista sai do "Pagamento
+          // confirmado". Fechar sem pagar nao libera nada: so tira o QR.
+          onFechar={() => {
+            setPix(null);
+            if (pixPago.current) {
+              pixPago.current = false;
+              onPronto();
+            }
+          }}
+        />
+      ) : null}
     </div>
   );
 }

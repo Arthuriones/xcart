@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, Loader2, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
+import { Spinner } from "@/components/ui/spinner";
+import { ERRO_PADRAO, mensagemDeErro } from "@/components/billing/regras";
 
 // ============================================================================
 // Payment Element da Pagou.
@@ -10,6 +13,9 @@ import { Button } from "@/components/ui/button";
 // A Pagou nao tem checkout hospedado: o cartao e digitado num iframe servido
 // por js.pagou.ai, que devolve um token pgct_. O numero do cartao nunca passa
 // pelo nosso dominio nem pelo nosso servidor.
+//
+// Redesign: so a APARENCIA mudou (tema e cores do iframe, moldura, estados).
+// Script, chave, submit e a chamada a /api/billing/subscribe sao os de antes.
 // ============================================================================
 
 const SCRIPT = "https://js.pagou.ai/payments/v3.js";
@@ -61,6 +67,48 @@ function carregarScript(): Promise<void> {
   return carregando;
 }
 
+/**
+ * Opcoes visuais do iframe, tiradas dos tokens do tema ATUAL (o iframe aplica
+ * as cores inline, entao vao os valores e nao as variaveis). Antes era sempre
+ * "night" com hex fixo: um formulario escuro dentro do app claro.
+ *
+ * Os temas aceitos sao default, night, flat e soft -- NAO existe "dark":
+ * qualquer valor desconhecido cai em "default", que e claro. As chaves de
+ * style sao as que o elemento le (base/focus/invalid/placeholder/
+ * cellBackground/labelColor/defaultBorder). Le no momento de montar: trocar
+ * o tema com o formulario aberto so vale na proxima vez que ele abrir.
+ */
+function aparenciaDoTema(): {
+  theme: "default" | "night";
+  style: Record<string, string | Record<string, string>>;
+} {
+  const raiz = document.documentElement;
+  const css = getComputedStyle(raiz);
+  const v = (nome: string) => css.getPropertyValue(nome).trim();
+  const so = (obj: Record<string, string>) =>
+    Object.fromEntries(Object.entries(obj).filter(([, valor]) => valor));
+
+  const style: Record<string, string | Record<string, string>> = {
+    base: so({
+      color: v("--ink"),
+      fontFamily: "'Public Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
+      // 16px: abaixo disso o iPhone da zoom ao focar o campo.
+      fontSize: "16px",
+      letterSpacing: "0",
+    }),
+    placeholder: so({ color: v("--t3") }),
+    focus: so({ borderColor: v("--focus") }),
+    invalid: so({ color: v("--err") }),
+  };
+  const extras = so({
+    cellBackground: v("--surface"),
+    focusBackground: v("--surface"),
+    labelColor: v("--t1"),
+    defaultBorder: v("--control-border"),
+  });
+  return { theme: raiz.classList.contains("dark") ? "night" : "default", style: { ...style, ...extras } };
+}
+
 export function PagouCardForm({
   onSuccess,
   labelBotao,
@@ -71,8 +119,9 @@ export function PagouCardForm({
   const [pronto, setPronto] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const publicKey = process.env.NEXT_PUBLIC_PAGOU_PUBLIC_KEY;
-  const erroDeConfig = publicKey ? null : "NEXT_PUBLIC_PAGOU_PUBLIC_KEY não configurada.";
-  const erroVisivel = erro ?? erroDeConfig;
+  // Sem a chave publica o cartao nao funciona nesta instalacao. A tela diz
+  // isso em portugues e oferece o Pix; o nome da configuracao nao aparece.
+  const semChave = !publicKey;
   const [enviando, setEnviando] = useState(false);
   const elementsRef = useRef<PagouElements | null>(null);
   const montado = useRef(false);
@@ -80,7 +129,7 @@ export function PagouCardForm({
   useEffect(() => {
     // A chave publica e constante de build: se falta, falta desde o primeiro
     // render. Setar isso no efeito custava um render so para mostrar um erro
-    // que ja era conhecido -- agora sai de `erroDeConfig`, derivado.
+    // que ja era conhecido -- agora sai de `semChave`, derivado.
     if (!publicKey) return;
     let vivo = true;
 
@@ -97,38 +146,8 @@ export function PagouCardForm({
           locale: "pt",
           origin: window.location.origin,
         });
-        // Os temas aceitos sao default, night, flat e soft — NAO existe
-        // "dark": qualquer valor desconhecido cai em "default", que e claro.
-        // Era por isso que o formulario aparecia branco dentro do app escuro.
-        //
-        // As chaves de style abaixo sao as que o elemento realmente le
-        // (base/focus/invalid/placeholder/cellBackground/labelColor/
-        // defaultBorder). Os valores vem da paleta do app, convertidos de
-        // oklch para hex porque o iframe aplica as cores inline.
-        elements
-          .create("card", {
-            theme: "night",
-            locale: "pt",
-            style: {
-              base: {
-                color: "#eff2f6",
-                fontFamily:
-                  "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
-                fontSize: "15px",
-                letterSpacing: "0",
-              },
-              placeholder: { color: "#8b93a0" },
-              focus: { borderColor: "#566be9" },
-              invalid: { color: "#ea3c3f" },
-              // Campo um tom acima da superficie do cartao: em UI escura e o
-              // que faz o input parecer clicavel.
-              cellBackground: "#1a1e27",
-              focusBackground: "#1a1e27",
-              labelColor: "#8b93a0",
-              defaultBorder: "#282e39",
-            },
-          })
-          .mount("#pagou-card-element");
+        const { theme, style } = aparenciaDoTema();
+        elements.create("card", { theme, locale: "pt", style }).mount("#pagou-card-element");
         elementsRef.current = elements;
         setPronto(true);
       })
@@ -176,41 +195,56 @@ export function PagouCardForm({
     }
   }
 
+  // O texto cru (do SDK ou do processador) pode vir em ingles ou com nome de
+  // fornecedor: a tela mostra a versao em portugues e guarda o cru recolhido.
+  const autenticacao = erro === "O banco pediu autenticação adicional. Tente outro cartão.";
+  const erroNaTela = erro
+    ? autenticacao
+      ? { texto: erro, detalhe: null }
+      : mensagemDeErro(null, erro, ERRO_PADRAO.cartao)
+    : null;
+
+  if (semChave) {
+    return (
+      <Callout tom="warn" titulo="O pagamento com cartão está indisponível agora">
+        Use o Pix, que libera 30 dias na hora, ou fale com o suporte.
+      </Callout>
+    );
+  }
+
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-3">
       {/* O iframe tem 320px fixos e desenha os proprios campos. O respiro
           precisa vir daqui: sem ele o formulario encostava nas bordas. */}
-      <div className="rounded-xl border border-border/60 bg-background/40 px-3 py-1">
-        <div id="pagou-card-element" className="min-h-[320px] w-full" />
+      <div className="rounded-card border border-border bg-surface px-3 py-1">
+        <div id="pagou-card-element" className="min-h-80 w-full" />
       </div>
 
-      {!pronto && !erroVisivel && (
-        <p className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Carregando formulário seguro…
+      {!pronto && !erroNaTela ? (
+        <p role="status" className="flex items-center justify-center gap-2 text-label text-t2">
+          <Spinner size={12} />
+          Carregando o formulário seguro…
         </p>
-      )}
+      ) : null}
 
-      {erroVisivel && (
-        <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-          <p className="text-xs leading-relaxed text-destructive">{erroVisivel}</p>
-        </div>
-      )}
+      {erroNaTela ? (
+        <Callout tom="err" titulo={erroNaTela.texto} role="alert">
+          {erroNaTela.detalhe ? (
+            <details className="text-label text-t2">
+              <summary className="cursor-pointer">Detalhes para o suporte</summary>
+              <p className="mt-1 break-words font-mono">{erroNaTela.detalhe}</p>
+            </details>
+          ) : null}
+        </Callout>
+      ) : null}
 
-      <Button
-        onClick={enviar}
-        disabled={!pronto || enviando}
-        size="lg"
-        className="w-full"
-      >
-        {enviando && <Loader2 className="h-4 w-4 animate-spin" />}
+      <Button onClick={enviar} disabled={!pronto} pending={enviando} size="lg" className="w-full">
         {labelBotao}
       </Button>
 
-      <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground">
-        <ShieldCheck className="h-3.5 w-3.5" />
-        Dados processados pela Pagou — não passam pelos nossos servidores
+      <p className="flex items-center justify-center gap-1.5 text-center text-label text-t2">
+        <ShieldCheck aria-hidden className="size-3.5 shrink-0" strokeWidth={1.75} />
+        O cartão é digitado num ambiente seguro do processador e não passa pelos nossos servidores.
       </p>
     </div>
   );

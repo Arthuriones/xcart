@@ -1,9 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy, Loader2, QrCode, X } from "lucide-react";
+import { CircleCheck, Copy, Check, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { brl, contagem, creditos } from "@/components/billing/regras";
 
 // ============================================================================
 // Cobranca Pix.
@@ -11,7 +21,11 @@ import { Button } from "@/components/ui/button";
 // Pix e assincrono: o usuario paga fora do app e a confirmacao chega depois.
 // Esta tela consulta o backend periodicamente em vez de depender so do webhook,
 // porque o webhook pode atrasar — e quem esta olhando a tela quer feedback.
-// A confirmacao sempre vem da API da Pagou, nunca do cliente.
+// A confirmacao sempre vem da API de cobranca, nunca do cliente.
+//
+// Redesign: Dialog da fundacao (role=dialog, aria-modal, foco preso, Esc), o
+// contador dos 12 minutos, e fechar no meio da espera pergunta antes -- um
+// clique fora nao some mais com o QR.
 // ============================================================================
 
 export interface CobrancaPix {
@@ -37,29 +51,14 @@ export function PixDialog({
 }) {
   const [copiado, setCopiado] = useState(false);
   const [status, setStatus] = useState<"aguardando" | "pago" | "expirado">("aguardando");
-  // Marcado no efeito, nao no argumento do useRef.
-  //
-  // `useRef(Date.now())` avalia Date.now() a CADA render (o ref so guarda o
-  // primeiro valor, mas a chamada acontece sempre). O React Compiler passou a
-  // recusar isso: funcao impura durante o render pode produzir resultado
-  // instavel quando o componente re-renderiza. Aqui o valor certo e "quando o
-  // modal abriu", que e exatamente o que um efeito de montagem da.
-  const inicio = useRef(0);
+  const [confirmarSaida, setConfirmarSaida] = useState(false);
+  // "Quando o modal abriu": inicializador preguicoso roda uma vez so.
+  const [inicio] = useState(() => Date.now());
+  const [agora, setAgora] = useState(inicio);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const ehPro = cobranca.kind === "pro_month";
-
-  // Fecha no Esc e trava o scroll do fundo enquanto o modal esta aberto.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onFechar();
-    document.addEventListener("keydown", onKey);
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = overflow;
-    };
-  }, [onFechar]);
+  const restante = Math.max(0, inicio + LIMITE_MS - agora);
 
   // Renderiza o QR no proprio canvas, sem enviar o payload para fora.
   useEffect(() => {
@@ -72,13 +71,15 @@ export function PixDialog({
       QR.toCanvas(canvas, codigo, {
         width: LADO_QR * 2, // 2x para nao serrilhar em tela retina
         margin: 1,
+        // QR precisa de contraste maximo para o leitor do banco: preto no
+        // branco nos dois temas (a moldura branca vem do box em volta).
         color: { dark: "#000000", light: "#ffffff" },
       })
         .then(() => {
-          // A lib grava width/height inline no canvas; sem isto ele renderiza
-          // no tamanho do bitmap (480px) e estoura a borda do modal.
-          canvas.style.width = `${LADO_QR}px`;
-          canvas.style.height = `${LADO_QR}px`;
+          // A lib grava width/height inline no canvas; tirando, vale o
+          // tamanho da classe (240px) e ele nao estoura o modal.
+          canvas.style.removeProperty("width");
+          canvas.style.removeProperty("height");
         })
         .catch(() => {
           /* se falhar, o copia-e-cola abaixo continua servindo */
@@ -89,9 +90,12 @@ export function PixDialog({
     };
   }, [cobranca.pix.qrCode, status]);
 
+  // Relogio do contador (1 s). O estado so muda no callback do intervalo.
   useEffect(() => {
-    inicio.current = Date.now();
-  }, []);
+    if (status !== "aguardando") return;
+    const t = setInterval(() => setAgora(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [status]);
 
   useEffect(() => {
     if (status !== "aguardando") return;
@@ -99,7 +103,7 @@ export function PixDialog({
 
     const timer = setInterval(async () => {
       if (!vivo) return;
-      if (Date.now() - inicio.current > LIMITE_MS) {
+      if (Date.now() - inicio > LIMITE_MS) {
         setStatus("expirado");
         return;
       }
@@ -113,9 +117,11 @@ export function PixDialog({
         if (!vivo) return;
         if (data.status === "paid") {
           setStatus("pago");
+          setConfirmarSaida(false);
           onPago();
         } else if (["refused", "canceled", "expired"].includes(data.status)) {
           setStatus("expirado");
+          setConfirmarSaida(false);
         }
       } catch {
         /* rede instavel: tenta de novo no proximo ciclo */
@@ -126,7 +132,7 @@ export function PixDialog({
       vivo = false;
       clearInterval(timer);
     };
-  }, [cobranca.transactionId, status, onPago]);
+  }, [cobranca.transactionId, status, onPago, inicio]);
 
   async function copiar() {
     if (!cobranca.pix.qrCode) return;
@@ -136,113 +142,138 @@ export function PixDialog({
       toast.success("Código Pix copiado.");
       setTimeout(() => setCopiado(false), 2500);
     } catch {
-      toast.error("Não foi possível copiar. Selecione o código manualmente.");
+      toast.error("Não deu para copiar. Selecione o código e copie à mão.");
     }
   }
 
-  const reais = (cobranca.amountCents / 100).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
+  // Esc, X ou "Fechar": no meio da espera, pergunta antes; depois, fecha.
+  function pedirFechar() {
+    if (status === "aguardando") setConfirmarSaida(true);
+    else onFechar();
+  }
+
+  const oQue = ehPro ? "Plano Pro por 30 dias" : creditos(cobranca.credits);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm"
-      onClick={(e) => e.target === e.currentTarget && onFechar()}
+    <Dialog
+      open
+      disablePointerDismissal
+      onOpenChange={(aberto) => {
+        if (!aberto) pedirFechar();
+      }}
     >
-      <div className="relative my-auto w-full max-w-sm rounded-2xl border border-border/60 bg-card shadow-2xl">
-        <button
-          onClick={onFechar}
-          aria-label="Fechar"
-          className="absolute right-3 top-3 rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-        >
-          <X className="h-4 w-4" />
-        </button>
-
+      <DialogContent size="sm" className="gap-4">
         {status === "pago" ? (
-          <div className="space-y-3 p-8 text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
-              <Check className="h-7 w-7 text-primary" />
-            </div>
-            <h3 className="text-lg font-semibold">Pagamento confirmado</h3>
-            <p className="text-sm text-muted-foreground">
+          <div role="status" className="flex flex-col items-center gap-3 py-2 text-center">
+            <span
+              aria-hidden
+              className="grid size-11 place-items-center rounded-full border border-ok-border bg-ok-bg text-ok"
+            >
+              <CircleCheck className="size-5" strokeWidth={1.75} />
+            </span>
+            <DialogTitle>Pagamento confirmado</DialogTitle>
+            <DialogDescription>
               {ehPro
-                ? "Seu plano Pro está ativo por 30 dias."
-                : `${cobranca.credits} créditos entraram na sua conta.`}
-            </p>
-            <Button className="w-full" onClick={onFechar}>
+                ? "O Plano Pro está ativo por mais 30 dias."
+                : `${creditos(cobranca.credits)} entraram no seu saldo.`}
+            </DialogDescription>
+            <Button className="mt-1 w-full" onClick={onFechar}>
               Continuar
             </Button>
           </div>
         ) : status === "expirado" ? (
-          <div className="space-y-3 p-8 text-center">
-            <h3 className="text-lg font-semibold">Cobrança expirada</h3>
-            <p className="text-sm text-muted-foreground">
-              O código Pix não foi pago a tempo. Nada foi cobrado — é só gerar
-              outro.
-            </p>
-            <Button className="w-full" variant="outline" onClick={onFechar}>
-              Fechar
-            </Button>
+          <div className="flex flex-col gap-3">
+            <DialogHeader>
+              <DialogTitle>O código Pix expirou</DialogTitle>
+              <DialogDescription>
+                Nada foi cobrado. Gere outro código quando quiser pagar.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="secondary" onClick={onFechar}>
+                Fechar
+              </Button>
+            </DialogFooter>
+          </div>
+        ) : confirmarSaida ? (
+          <div className="flex flex-col gap-3">
+            <DialogHeader>
+              <DialogTitle>Fechar o Pix?</DialogTitle>
+              <DialogDescription>
+                O código deixa de aparecer aqui. Se você já pagou, a compra entra sozinha assim que o
+                banco confirmar. Se ainda não pagou, gere outro código depois.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="secondary" onClick={onFechar}>
+                Fechar o Pix
+              </Button>
+              <Button onClick={() => setConfirmarSaida(false)}>Continuar pagando</Button>
+            </DialogFooter>
           </div>
         ) : (
-          <div className="p-6">
-            <div className="mb-1 flex items-center gap-2">
-              <QrCode className="h-4 w-4 text-primary" />
-              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Pagamento via Pix
-              </span>
-            </div>
-            <h3 className="text-2xl font-semibold text-foreground">{reais}</h3>
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              {ehPro ? "xcart Pro — 30 dias" : `${cobranca.credits} créditos de IA`}
-            </p>
+          <>
+            <DialogHeader>
+              <DialogTitle>Pague com Pix</DialogTitle>
+              <DialogDescription>
+                <span className="num font-semibold text-ink">{brl(cobranca.amountCents)}</span> · {oQue}
+              </DialogDescription>
+            </DialogHeader>
 
             {cobranca.pix.qrCode ? (
               <>
-                <div className="mt-5 flex justify-center">
-                  <div className="rounded-xl bg-white p-3 shadow-sm">
-                    {/* Desenhado localmente: mandar o payload do Pix para um
-                        gerador de terceiro vazaria a cobranca. */}
+                <div className="flex flex-col items-center gap-2">
+                  {/* Box branco nos dois temas: o leitor do banco precisa do
+                      contraste do QR. Desenhado localmente: mandar o payload
+                      para um gerador de terceiro vazaria a cobranca. */}
+                  <div className="rounded-control border border-border bg-white p-3">
                     <canvas
                       ref={canvasRef}
-                      className="block max-w-full rounded"
-                      style={{ width: LADO_QR, height: LADO_QR }}
+                      role="img"
+                      aria-label="QR code do Pix"
+                      className="block size-60 max-w-full"
                     />
                   </div>
+                  <p className="flex items-center gap-1.5 text-label text-t2">
+                    <Clock aria-hidden className="size-3.5" strokeWidth={1.75} />
+                    Expira em <span className="num font-medium text-ink">{contagem(restante)}</span>
+                  </p>
                 </div>
 
-                <p className="mt-4 text-xs font-medium text-foreground">
-                  Ou copie o código:
-                </p>
-                <div className="mt-1.5 flex gap-2">
-                  <code className="min-w-0 flex-1 truncate rounded-lg border border-border/60 bg-background/60 px-3 py-2 font-mono text-[11px] text-muted-foreground">
-                    {cobranca.pix.qrCode}
-                  </code>
-                  <Button
-                    size="sm"
-                    variant={copiado ? "default" : "outline"}
-                    onClick={copiar}
-                    className="shrink-0"
-                    aria-label="Copiar código Pix"
-                  >
-                    {copiado ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                  </Button>
+                <ol className="flex list-decimal flex-col gap-0.5 pl-5 text-dense text-t1">
+                  <li>Abra o app do seu banco e escolha pagar com Pix.</li>
+                  <li>Leia o QR code ou cole o código abaixo.</li>
+                </ol>
+
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-label font-medium text-t1">Pix copia e cola</span>
+                  <div className="flex gap-2">
+                    <code className="min-w-0 flex-1 truncate rounded-control border border-border bg-surface-2 px-3 py-2 font-mono text-label text-t1">
+                      {cobranca.pix.qrCode}
+                    </code>
+                    <Button variant={copiado ? "primary" : "secondary"} onClick={copiar} className="shrink-0">
+                      {copiado ? <Check aria-hidden /> : <Copy aria-hidden />}
+                      {copiado ? "Copiado" : "Copiar"}
+                    </Button>
+                  </div>
                 </div>
               </>
             ) : (
-              <p className="mt-5 text-sm text-destructive">
-                A Pagou não devolveu o código Pix. Feche e tente novamente.
+              <p role="alert" className="text-dense font-medium text-err">
+                O código Pix não veio. Feche e gere outro; nada foi cobrado.
               </p>
             )}
 
-            <div className="mt-5 flex items-center justify-center gap-2 rounded-lg border border-border/50 bg-background/40 py-2.5 text-xs text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Aguardando confirmação — libera sozinho
-            </div>
-          </div>
+            <p
+              role="status"
+              className="flex items-center justify-center gap-2 rounded-control border border-border bg-surface-2 px-3 py-2.5 text-dense text-t1"
+            >
+              <Spinner size={14} />
+              Esperando o pagamento. A confirmação aparece aqui sozinha.
+            </p>
+          </>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
