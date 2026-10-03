@@ -1,216 +1,162 @@
-"use client";
+import { Suspense } from "react";
+import { BarList } from "@/components/ui/bar-list";
+import { EmptyState } from "@/components/ui/empty-state";
+import { KpiCard } from "@/components/ui/kpi-card";
+import { LineChart } from "@/components/ui/line-chart";
+import { Section } from "@/components/ui/section";
+import { STATUS } from "@/components/ui/status-badge";
+import { BotaoAtualizar, ErroAdmin } from "../estados-admin";
+import { diaMes, dolares, hora, inteiro, naMoeda, plural, reais, rotuloAcao, rotuloMes } from "../formato";
+import { lerAnalise } from "../ler-api";
+import type { AnaliseAdmin } from "../tipos";
+import { CabecalhoUso, EsqueletoUso } from "./partes";
 
-import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+export const dynamic = "force-dynamic";
 
-interface Analytics {
-  byAction: { action: string; costUsd: number; count: number; credits: number }[];
-  byDay: { date: string; costUsd: number }[];
-  byMonth: { month: string; revenueBrl: number; newUsers: number }[];
-  revenue: { mrrBrl: number; creditSalesThisMonthBrl: number; revenueThisMonthBrl: number };
-  cost: { thisMonthUsd: number; thisMonthBrl: number };
-  marginBrl: number;
-  usdBrlRate: number;
+/**
+ * /admin/usage: quanto a IA custou (por dia e por tipo de acao, 30 dias), a
+ * receita do mes e a margem. Le GET /api/admin/analytics no servidor. Cada
+ * numero diz a moeda: receita em real, custo de IA em dolar (a moeda em que
+ * e cobrado) com o convertido ao lado.
+ */
+export default function AdminUsoPage() {
+  return (
+    <>
+      <CabecalhoUso />
+      <Suspense fallback={<EsqueletoUso />}>
+        <Conteudo />
+      </Suspense>
+    </>
+  );
 }
 
-const ACTION_LABEL: Record<string, string> = {
-  neutralize_image: "Image neutralization",
-  neutralize_text: "Text neutralization",
-  translate: "Translation",
-  clone: "Cloning",
-  optimize: "Optimization",
-  other: "Other",
-};
+async function Conteudo() {
+  const r = await lerAnalise();
+  if (!r.ok) return <ErroAdmin titulo="Não deu para carregar uso e custos" detalhe={r.detalhe} />;
+  return <Uso a={r.dados} lidoEm={r.lidoEm} />;
+}
 
-const brlU = (v: number) =>
-  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-export default function AdminUsagePage() {
-  const [data, setData] = useState<Analytics | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch("/api/admin/analytics")
-      .then(async (res) => {
-        const body = await res.json();
-        if (!res.ok) throw new Error(body.error || "Falha.");
-        setData(body);
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-      </div>
-    );
-  }
-  if (error) {
-    return (
-      <div className="rounded-lg border border-destructive/30 bg-destructive/8 p-4 text-sm text-destructive">
-        {error}
-      </div>
-    );
-  }
-
-  const maxDay = Math.max(...(data?.byDay.map((d) => d.costUsd) || [0]), 0.0001);
-  const maxAction = Math.max(...(data?.byAction.map((a) => a.costUsd) || [0]), 0.0001);
-  const maxMonthRevenue = Math.max(...(data?.byMonth.map((m) => m.revenueBrl) || [0]), 0.0001);
-  const margin = data?.marginBrl ?? 0;
+function Uso({ a, lidoEm }: { a: AnaliseAdmin; lidoEm: number }) {
+  const imagens = a.byAction.find((x) => x.action === "neutralize_image");
+  const custo30 = a.byDay.reduce((s, d) => s + d.costUsd, 0);
+  const usos30 = a.byAction.reduce((s, x) => s + x.count, 0);
+  const primeiroDia = a.byDay[0]?.date;
+  const ultimoDia = a.byDay.at(-1)?.date;
+  const mesAtual = a.byMonth.at(-1)?.month;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">Usage & Costs</h1>
-        <p className="text-sm text-muted-foreground">
-          AI cost (last 30 days) and monthly revenue.
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <p className="text-label text-t2">
+          Receita e margem: mês de {mesAtual ? rotuloMes(mesAtual, "longo") : "agora"}, até agora · custo por dia: últimos
+          30 dias · câmbio de relatório US$ 1 = {reais(a.usdBrlRate)} · atualizado às {hora(lidoEm)}
         </p>
+        <BotaoAtualizar />
       </div>
 
-      {/* Revenue vs cost */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Receita (mês)</p>
-            <p className="mt-1 text-2xl font-semibold text-foreground">
-              {brlU(data?.revenue.revenueThisMonthBrl ?? 0)}
-            </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              MRR {brlU(data?.revenue.mrrBrl ?? 0)} + créditos{" "}
-              {brlU(data?.revenue.creditSalesThisMonthBrl ?? 0)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Custo de IA (mês)</p>
-            <p className="mt-1 text-2xl font-semibold text-foreground">
-              {brlU(data?.cost.thisMonthBrl ?? 0)}
-            </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              US$ {(data?.cost.thisMonthUsd ?? 0).toFixed(2)} · câmbio{" "}
-              {(data?.usdBrlRate ?? 0).toFixed(2)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Margem (mês)</p>
-            <p className={`mt-1 text-2xl font-semibold ${margin >= 0 ? "text-primary" : "text-destructive"}`}>
-              ${margin.toFixed(2)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Images neutralized</p>
-            <p className="mt-1 text-2xl font-semibold text-foreground">
-              {data?.byAction.find((a) => a.action === "neutralize_image")?.count ?? 0}
-            </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">last 30 days</p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KpiCard
+          rotulo="Receita do mês"
+          valor={reais(a.revenue.revenueThisMonthBrl)}
+          detalhe={`Assinaturas ${reais(a.revenue.mrrBrl, 0)} · créditos ${reais(a.revenue.creditSalesThisMonthBrl, 0)}`}
+          definicao="Assinantes Pro × preço do plano (estimado) mais os pacotes de crédito pagos no mês, em reais."
+        />
+        <KpiCard
+          rotulo="Custo de IA no mês"
+          valor={reais(a.cost.thisMonthBrl)}
+          detalhe={`${naMoeda(a.cost.thisMonthUsd, "USD")} · câmbio ${a.usdBrlRate.toLocaleString("pt-BR")}`}
+          definicao="A IA é cobrada em dólar; o valor em reais usa o câmbio de relatório."
+        />
+        <KpiCard
+          rotulo="Margem do mês"
+          valor={reais(a.marginBrl)}
+          estado={a.marginBrl < 0 ? STATUS.lucro.prejuizo : STATUS.lucro.lucro}
+          detalhe="Receita menos custo de IA, em reais"
+          definicao="Receita do mês menos o custo de IA convertido para real. Não inclui outros custos."
+        />
+        <KpiCard
+          rotulo="Imagens sem marca"
+          valor={inteiro(imagens?.count ?? 0)}
+          detalhe={`Últimos 30 dias · ${dolares(imagens?.costUsd ?? 0)}`}
+          definicao="Fotos de produto refeitas pela IA sem a marca, nos últimos 30 dias, e quanto custaram."
+        />
       </div>
 
-      {/* Monthly revenue + signups (last 6 months) */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Revenue by month (USD)</CardTitle>
-          <CardDescription>Last 6 months — MRR + credit top-ups + new signups</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex h-40 items-end gap-2">
-            {data?.byMonth.map((m) => (
-              <div key={m.month} className="group relative flex flex-1 flex-col items-center gap-1">
-                <div className="w-full flex-1 flex items-end">
-                  <div
-                    className="w-full rounded-t bg-primary/70 transition-colors group-hover:bg-primary"
-                    style={{ height: `${Math.max(4, (m.revenueBrl / maxMonthRevenue) * 130)}px` }}
-                    title={`${m.month}: R$ ${m.revenueBrl}`}
-                  />
-                </div>
-                <span className="text-[10px] text-muted-foreground">{m.month.slice(5)}</span>
-                {m.newUsers > 0 && (
-                  <span className="text-[9px] text-primary font-medium">+{m.newUsers}</span>
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
-            <span>bar height = revenue · green number = new users</span>
-          </div>
-        </CardContent>
-      </Card>
+      <Section
+        titulo="Custo de IA por dia"
+        descricao={
+          primeiroDia && ultimoDia
+            ? `De ${diaMes(primeiroDia)} a ${diaMes(ultimoDia)} · em dólar · total ${dolares(custo30)}`
+            : "Últimos 30 dias · em dólar"
+        }
+      >
+        <LineChart
+          descricao={`Custo de IA por dia, em dólar, nos últimos 30 dias. Total ${dolares(custo30)}.`}
+          rotulos={a.byDay.map((d) => diaMes(d.date))}
+          series={[{ id: "custo", rotulo: "Custo de IA", valores: a.byDay.map((d) => d.costUsd), cor: "chart-3", destaque: true }]}
+          formato={{ style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 3 }}
+          formatoEixo={{ style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 2 }}
+          parcialUltimo
+          altura={220}
+          vazio={
+            <EmptyState
+              variante="tracejado"
+              className="min-h-55"
+              titulo="Nenhum uso de IA em 30 dias"
+              descricao="O gráfico aparece com a primeira ação de IA."
+            />
+          }
+        />
+      </Section>
 
-      {/* AI cost per day */}
-      <Card>
-        <CardHeader>
-          <CardTitle>AI cost per day (USD)</CardTitle>
-          <CardDescription>Last 30 days</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex h-40 items-end gap-1">
-            {data?.byDay.map((d) => (
-              <div
-                key={d.date}
-                className="group relative flex-1"
-                title={`${d.date}: US$ ${d.costUsd.toFixed(3)}`}
-              >
-                <div
-                  className="w-full rounded-t bg-primary/70 transition-colors group-hover:bg-primary"
-                  style={{ height: `${Math.max(2, (d.costUsd / maxDay) * 150)}px` }}
-                />
-              </div>
-            ))}
-          </div>
-          <div className="mt-2 flex justify-between text-[10px] text-muted-foreground">
-            <span>{data?.byDay[0]?.date}</span>
-            <span>{data?.byDay[data.byDay.length - 1]?.date}</span>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Cost by action type */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Cost by action type (USD)</CardTitle>
-          <CardDescription>Last 30 days</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {(data?.byAction.length ?? 0) === 0 ? (
-            <p className="text-sm text-muted-foreground">No usage recorded.</p>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Section
+          titulo="Custo por tipo de ação"
+          descricao={`Últimos 30 dias · em dólar · ${plural(usos30, "uso", "usos")}`}
+        >
+          {a.byAction.length === 0 ? (
+            <EmptyState
+              variante="tracejado"
+              className="min-h-48"
+              titulo="Nenhum uso de IA em 30 dias"
+              descricao="Cada tipo de ação aparece com o primeiro uso."
+            />
           ) : (
-            data?.byAction.map((a) => (
-              <div key={a.action} className="space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="text-foreground">
-                    {ACTION_LABEL[a.action] || a.action}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {a.count}× · ${a.costUsd.toFixed(2)}
-                  </span>
-                </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-primary"
-                    style={{ width: `${(a.costUsd / maxAction) * 100}%` }}
-                  />
-                </div>
-              </div>
-            ))
+            <BarList
+              rotulo="Custo de IA por tipo de ação"
+              itens={a.byAction.map((x) => ({
+                id: x.action,
+                rotulo: rotuloAcao(x.action),
+                valor: x.costUsd,
+                valorTexto: dolares(x.costUsd),
+                detalhe: `· ${plural(x.count, "uso", "usos")}`,
+                cor: "chart-3",
+              }))}
+            />
           )}
-        </CardContent>
-      </Card>
+        </Section>
+
+        <Section titulo="Receita e cadastros por mês" descricao="Últimos 6 meses · em reais">
+          <BarList
+            rotulo="Receita e cadastros por mês"
+            itens={a.byMonth.map((m, i) => {
+              const atual = i === a.byMonth.length - 1;
+              return {
+                id: m.month,
+                rotulo: atual ? `${rotuloMes(m.month)} · até agora` : rotuloMes(m.month),
+                valor: m.revenueBrl,
+                valorTexto: reais(m.revenueBrl, 0),
+                detalhe: `· ${plural(m.newUsers, "cadastro", "cadastros")}`,
+                cor: "chart-2",
+              };
+            })}
+          />
+          <p className="text-label text-t2">
+            Nos meses passados a barra mostra só créditos vendidos: o histórico da assinatura não é guardado. O mês atual
+            soma a assinatura estimada.
+          </p>
+        </Section>
+      </div>
     </div>
   );
 }
