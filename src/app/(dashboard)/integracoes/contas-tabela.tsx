@@ -113,18 +113,27 @@ function idExibido(c: ContaAnuncioResumo): string {
   return c.plataforma === "google" ? formatarCustomerId(c.external_id) : `act_${c.external_id}`;
 }
 
-function CelulaGasto({ g, parcial }: { g: TextoGasto | null; parcial?: string | null }) {
+function CelulaGasto({
+  g,
+  parcial,
+  falhou,
+}: {
+  g: TextoGasto | null;
+  parcial?: string | null;
+  /** A leitura do gasto falhou: "—" e o aviso acima da tabela, nunca zero. */
+  falhou?: boolean;
+}) {
   if (!g) {
     return (
-      <span className="flex flex-col items-end">
+      <span className="flex flex-col items-start sm:items-end">
         <span className="text-t2">—</span>
-        <span className="text-label text-t2">sem dado lido</span>
+        <span className="text-label text-t2">{falhou ? "não lido agora" : "sem dado lido"}</span>
       </span>
     );
   }
   const apoio = [g.detalhe, parcial].filter(Boolean).join(" · ");
   return (
-    <span className="flex flex-col items-end">
+    <span className="flex flex-col items-start sm:items-end">
       <span>{g.texto}</span>
       {apoio ? <span className="text-label text-t2">{apoio}</span> : null}
     </span>
@@ -195,7 +204,7 @@ export function ContasTabela({
   const semLoja = linhasTodas.filter((l) => l.situacao.grupo === "semLoja");
   const fusoDiferente = efetivas.filter((c) => {
     const fusoLoja = c.store_id ? fusosLoja[c.store_id] : undefined;
-    return Boolean(c.fuso && fusoLoja && c.fuso !== fusoLoja);
+    return Boolean(c.ativo && c.fuso && fusoLoja && c.fuso !== fusoLoja);
   });
 
   async function salvar(
@@ -331,26 +340,24 @@ export function ContasTabela({
     {
       chave: "conta",
       titulo: "Conta",
+      className: "pr-2",
       ordenarPor: "nomeOrdem",
-      celula: (l) => (
-        <span className="flex min-w-0 flex-col">
-          <span className="max-w-64 truncate font-medium">{l.nome}</span>
-          <span className="font-mono text-label font-normal text-t2">{idExibido(l.conta)}</span>
-        </span>
-      ),
-    },
-    {
-      chave: "moedaFuso",
-      titulo: "Moeda · fuso",
-      ordenavel: false,
-      celula: (l) => (
-        <span className="text-t1">
-          {[l.conta.moeda, cidadeDoFuso(l.conta.fuso)].filter(Boolean).join(" · ") || "—"}
-        </span>
-      ),
+      celula: (l) => {
+        const moedaFuso = [l.conta.moeda, cidadeDoFuso(l.conta.fuso)].filter(Boolean).join(" · ");
+        return (
+          <span className="flex min-w-0 flex-col">
+            <span className="max-w-44 truncate font-medium">{l.conta.nome || "Conta sem nome"}</span>
+            <span className="text-label font-normal text-t2">
+              <span className="font-mono">{idExibido(l.conta)}</span>
+              {moedaFuso ? ` · ${moedaFuso}` : ""}
+            </span>
+          </span>
+        );
+      },
     },
     {
       chave: "loja",
+      className: "px-2",
       titulo: "Loja ligada",
       ordenarPor: "lojaOrdem",
       celula: (l) => {
@@ -364,7 +371,7 @@ export function ContasTabela({
             <SelectTrigger
               size="sm"
               aria-label={`Loja ligada a ${l.nome}`}
-              className={cn("w-full sm:w-44", !lojaId && "border-warn-border text-warn")}
+              className={cn("w-full sm:w-36", !lojaId && "border-warn-border text-warn")}
             >
               <SelectValue>
                 {() => (lojaId ? (nomeLoja.get(lojaId) ?? "Loja removida") : "Escolher loja")}
@@ -385,31 +392,34 @@ export function ContasTabela({
     },
     {
       chave: "hoje",
+      className: "px-2",
       titulo: "Gasto hoje",
       alinhar: "direita",
       ordenarPor: "hojeValor",
-      celula: (l) => <CelulaGasto g={l.gasto.hoje} />,
+      celula: (l) => <CelulaGasto g={l.gasto.hoje} falhou={Boolean(erroGasto)} />,
     },
     {
       chave: "periodo",
+      className: "px-2",
       titulo: "Gasto no período",
       alinhar: "direita",
       ordenarPor: "periodoValor",
-      celula: (l) => <CelulaGasto g={l.gasto.periodo} parcial={l.gasto.parcial} />,
+      celula: (l) => <CelulaGasto g={l.gasto.periodo} parcial={l.gasto.parcial} falhou={Boolean(erroGasto)} />,
     },
     {
       chave: "situacao",
+      className: "px-2",
       titulo: "Situação",
       ordenarPor: "situacaoOrdem",
       direcaoInicial: "asc",
       celula: (l) => {
         const d = l.situacao.detalhe ?? "";
-        const longo = d.length > 34;
+        const longo = d.length > 22;
         return (
           <span className="flex flex-col items-start gap-0.5">
             <StatusBadge tom={l.situacao.tom}>{l.situacao.texto}</StatusBadge>
             {d ? (
-              <span className="flex max-w-60 items-center gap-0.5 text-label text-t2">
+              <span className="flex max-w-36 items-center gap-0.5 text-label text-t2">
                 <span className="truncate">{d}</span>
                 {longo ? <Dica rotulo={`Ver a situação completa de ${l.nome}`}>{d}</Dica> : null}
               </span>
@@ -420,10 +430,12 @@ export function ContasTabela({
     },
     {
       chave: "ativa",
+      className: "px-2",
       titulo: "Ativa",
       ordenavel: false,
       celula: (l) => (
         <Switch
+          tamanho="lg"
           checked={l.conta.ativo}
           onCheckedChange={(v) => alternar(l.conta, v)}
           disabled={salvando[l.id]}
@@ -433,6 +445,7 @@ export function ContasTabela({
     },
     {
       chave: "acoes",
+      className: "px-2",
       titulo: <span className="sr-only">Ações</span>,
       alinhar: "direita",
       ordenavel: false,
@@ -440,7 +453,7 @@ export function ContasTabela({
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label={`Mais ações para ${l.nome}`}
-            className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+            className={buttonVariants({ variant: "ghost", size: "icon" })}
           >
             <MoreHorizontalIcon aria-hidden />
           </DropdownMenuTrigger>
@@ -499,7 +512,7 @@ export function ContasTabela({
               ) : null
             }
           >
-            Escolha a loja de cada uma na coluna “Loja ligada”.
+            Escolha a loja de cada uma em “Loja ligada”.
           </Callout>
         ) : null}
         {fusoDiferente.length > 0 ? (
@@ -579,7 +592,8 @@ export function ContasTabela({
           {plural(linhas.length, "conta", "contas")} · gasto no período: {periodo}
         </span>
         <span>
-          Gasto em {moeda}, convertido pela cotação de cada dia. “Hoje” é o dia no fuso de cada conta.
+          Gasto em {moeda} pela cotação de cada dia; embaixo, na moeda da conta. “Hoje” é o dia no fuso de
+          cada conta.
         </span>
       </div>
 

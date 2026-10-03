@@ -186,7 +186,7 @@ export function casaBusca(c: Pick<ContaAnuncioResumo, "nome" | "external_id">, b
 export interface TextoGasto {
   /** O numero principal: "R$ 1.234,56" (ou na moeda da conta, sem cotacao). */
   texto: string;
-  /** "US$ 232,10 na conta" / "sem cotação para BRL". */
+  /** O valor na moeda da conta ("US$ 232,10") ou "sem cotação". */
   detalhe: string | null;
   /** Valor cru para ordenar (na moeda do texto). */
   valor: number;
@@ -205,14 +205,14 @@ export function textoDoGasto(v: ValorGasto | null, moedaRelatorio: string): Text
   if (!v.convertido) {
     return {
       texto: dinheiro(v.original, v.moedaOriginal),
-      detalhe: `sem cotação para ${moedaRelatorio}`,
+      detalhe: "sem cotação",
       valor: v.original,
     };
   }
   const mesmaMoeda = v.moedaOriginal === moedaRelatorio.toUpperCase();
   return {
     texto: `${v.aproximado ? "≈ " : ""}${dinheiro(v.valor, moedaRelatorio)}`,
-    detalhe: mesmaMoeda ? null : `${dinheiro(v.original, v.moedaOriginal)} na conta`,
+    detalhe: mesmaMoeda ? null : dinheiro(v.original, v.moedaOriginal),
     valor: v.valor,
   };
 }
@@ -220,7 +220,7 @@ export function textoDoGasto(v: ValorGasto | null, moedaRelatorio: string): Text
 export interface GastoNaTela {
   hoje: TextoGasto | null;
   periodo: TextoGasto | null;
-  /** "dado desde 12/09" quando o periodo nao tem todos os dias. */
+  /** "desde 12/09" quando o periodo nao tem todos os dias com dado. */
   parcial: string | null;
 }
 
@@ -228,7 +228,7 @@ export function gastoNaTela(g: GastoDaConta | undefined, moedaRelatorio: string)
   if (!g) return { hoje: null, periodo: null, parcial: null };
   const parcial =
     g.periodo && g.primeiroDia && g.diasComDado < g.diasNoPeriodo
-      ? `dado desde ${g.primeiroDia.slice(8, 10)}/${g.primeiroDia.slice(5, 7)}`
+      ? `desde ${g.primeiroDia.slice(8, 10)}/${g.primeiroDia.slice(5, 7)}`
       : null;
   return {
     hoje: textoDoGasto(g.hoje, moedaRelatorio),

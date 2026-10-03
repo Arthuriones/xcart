@@ -123,13 +123,13 @@ describe("gasto na tela", () => {
     ).toMatchObject({ detalhe: null, valor: 10 });
   });
 
-  it("moeda diferente mostra o original na conta", () => {
+  it("moeda diferente mostra embaixo o valor na moeda da conta", () => {
     const t = textoDoGasto(
       { valor: 53.2, original: 10, moedaOriginal: "USD", convertido: true, aproximado: false },
       "BRL"
     )!;
     expect(t.texto).toContain("53,20");
-    expect(t.detalhe).toContain("na conta");
+    expect(t.detalhe).toContain("US$");
   });
 
   it("sem cotação fica na moeda da conta e avisa", () => {
@@ -138,7 +138,7 @@ describe("gasto na tela", () => {
       "BRL"
     )!;
     expect(t.texto).toContain("US$");
-    expect(t.detalhe).toBe("sem cotação para BRL");
+    expect(t.detalhe).toBe("sem cotação");
   });
 
   it("câmbio aproximado ganha ≈", () => {
@@ -162,7 +162,7 @@ describe("gasto na tela", () => {
       "BRL"
     );
     expect(g.hoje).toBeNull();
-    expect(g.parcial).toBe("dado desde 30/09");
+    expect(g.parcial).toBe("desde 30/09");
     expect(gastoNaTela(undefined, "BRL")).toEqual({ hoje: null, periodo: null, parcial: null });
   });
 });

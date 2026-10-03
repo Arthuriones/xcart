@@ -1,7 +1,10 @@
+"use client";
+
 // ============================================================================
-// fetch para as APIs que ja existem (src/app/api/ads/*, /api/alertas/canal,
-// /api/mcp-tokens). Nada muda nelas: aqui so se chama e se traduz a falha.
-// Erro de rede ou HTTP vira { ok: false, erro } com texto humano.
+// fetch DO NAVEGADOR para as APIs que ja existem (src/app/api/ads/*,
+// /api/alertas/canal, /api/mcp-tokens). Nada muda nelas: aqui so se chama e
+// se traduz a falha. Erro de rede ou HTTP vira { ok: false, erro } com texto
+// humano. So caminho da propria API: nunca URL vinda de fora.
 // ============================================================================
 
 type Corpo = { ok?: boolean; erro?: string; error?: string } & Record<string, unknown>;
@@ -12,6 +15,7 @@ export async function chamar<T extends object = Record<string, unknown>>(
   url: string,
   init: RequestInit = {}
 ): Promise<Resultado<T>> {
+  if (!url.startsWith("/api/")) throw new Error(`chamar() so aceita a API do app, nao ${url}`);
   try {
     const r = await fetch(url, {
       ...init,

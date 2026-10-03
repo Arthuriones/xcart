@@ -149,7 +149,10 @@ function FormGoogle({ lojas, onCriou }: { lojas: LojaDoSeletor[]; onCriou: (titu
             inputMode="numeric"
             autoComplete="off"
             value={customerId}
-            onChange={(e) => setCustomerId(e.target.value)}
+            onChange={(e) => {
+              setCustomerId(e.target.value);
+              if (erros.id) setErros((x) => ({ ...x, id: undefined }));
+            }}
             placeholder="123-456-7890"
             aria-invalid={erros.id ? true : undefined}
             aria-describedby={erros.id ? `${id}-cid-erro` : undefined}
@@ -163,7 +166,13 @@ function FormGoogle({ lojas, onCriou }: { lojas: LojaDoSeletor[]; onCriou: (titu
         </div>
         <div className="flex min-w-0 flex-col gap-1.5">
           <Label id={`${id}-loja-rotulo`}>Loja</Label>
-          <Select value={lojaId || null} onValueChange={(v) => setLojaId(v ?? "")}>
+          <Select
+            value={lojaId || null}
+            onValueChange={(v) => {
+              setLojaId(v ?? "");
+              setErros((e) => ({ ...e, loja: undefined }));
+            }}
+          >
             <SelectTrigger
               aria-labelledby={`${id}-loja-rotulo`}
               aria-invalid={erros.loja ? true : undefined}

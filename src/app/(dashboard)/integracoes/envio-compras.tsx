@@ -57,7 +57,7 @@ export function EnvioCompras({
                 <span className="min-w-36 flex-1">
                   <span className="text-ink">{nomeLoja.get(d.storeId) ?? "Loja removida"}</span>
                   {d.nome ? <span className="text-t2"> · {d.nome}</span> : null}{" "}
-                  <span className="font-mono text-label text-t2">{idCurto(d.conta)}</span>
+                  <span className="font-mono text-label whitespace-nowrap text-t2">{idCurto(d.conta)}</span>
                 </span>
                 <StatusBadge tom={e.tom}>{e.texto}</StatusBadge>
                 {e.detalhe ? <span className="w-full text-label text-t2">{e.detalhe}</span> : null}
