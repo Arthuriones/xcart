@@ -27,18 +27,6 @@ export function targetState(alvo: StripTarget): TargetState {
   return alvo.enabled && alvo.weight > 0 ? "ok" : "paused";
 }
 
-export const COR_ALVO: Record<TargetState, string> = {
-  ok: "var(--ok)",
-  paused: "var(--t4)",
-  attention: "var(--warn)",
-};
-
-export const TEXTO_ALVO: Record<TargetState, string> = {
-  ok: "Ativa",
-  paused: "Pausada",
-  attention: "Atenção",
-};
-
 // ---------------------------------------------------------------- cobertura
 
 /**
