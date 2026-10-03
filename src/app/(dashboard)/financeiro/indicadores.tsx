@@ -263,7 +263,9 @@ export function Indicadores({
                   Voltar para faturamento, gasto e lucro
                 </Button>
               )}
-              <Segmented rotulo="Agrupar por" valor={gran} onValorChange={setGran} opcoes={opcoesGran} />
+              {pontos.length > 1 && (
+                <Segmented rotulo="Agrupar por" valor={gran} onValorChange={setGran} opcoes={opcoesGran} />
+              )}
             </>
           }
         >

@@ -35,7 +35,7 @@ export function Cascata({ atual, moeda, contexto }: { atual: Totais; moeda: stri
   }
 
   const custos: [string, string, number, ItemBarra["cor"]][] = [
-    ["cmv", "Produtos + frete do fornecedor", atual.cmv, "t4"],
+    ["cmv", "Produtos + frete", atual.cmv, "t4"],
     ["taxas", "Taxas de pagamento", atual.taxas, "t4"],
     ["meta", "Meta Ads", atual.gastoMeta, "chart-3"],
     ["google", "Google Ads", atual.gastoGoogle, "chart-3"],

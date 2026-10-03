@@ -456,7 +456,7 @@ export function DetalharPor({
         l.custo === null ? (
           <StatusBadge tom="warn">Sem custo</StatusBadge>
         ) : (
-          <span className="text-t1">
+          <span className="whitespace-nowrap text-t1">
             {din(l.custo)}
             {l.estimado && <Etiqueta>estimado</Etiqueta>}
           </span>
@@ -748,27 +748,45 @@ export function DetalharPor({
     chave?: string;
     vazio: ReactNode;
   }) {
+    // Sem nenhuma linha nao ha o que buscar nem exportar: so o vazio.
     if (opcoes.todas.length === 0) return opcoes.vazio;
-    if (opcoes.linhas.length === 0) return semLinhaComFiltro;
+    if (opcoes.linhas.length === 0) {
+      return (
+        <>
+          {barra}
+          {semLinhaComFiltro}
+        </>
+      );
+    }
+    // Titulo de numero com mais de uma palavra quebra em duas linhas: a celula
+    // e um valor so (o "R$" vem com espaco inquebravel), e a tabela cabe
+    // inteira em 1280px sem rolar de lado.
+    const colunas = opcoes.colunas.map((c) =>
+      c.alinhar === "direita" && typeof c.titulo === "string" && c.titulo.includes(" ")
+        ? { ...c, className: clsx("whitespace-normal", c.className) }
+        : c
+    );
     return (
-      <div className="border-t border-border">
-        <DataTable
-          key={opcoes.chave}
-          legenda={opcoes.legenda}
-          colunas={opcoes.colunas}
-          linhas={opcoes.linhas}
-          ordenacaoInicial={opcoes.ordem}
-          densidade={densidade}
-          rodape={filtroAtivo ? undefined : opcoes.rodapeTabela}
-        />
-      </div>
+      <>
+        {barra}
+        <div className="border-t border-border">
+          <DataTable
+            key={opcoes.chave}
+            legenda={opcoes.legenda}
+            colunas={colunas}
+            linhas={opcoes.linhas}
+            ordenacaoInicial={opcoes.ordem}
+            densidade={densidade}
+            rodape={filtroAtivo ? undefined : opcoes.rodapeTabela}
+          />
+        </div>
+      </>
     );
   }
 
   const conteudo: Record<Aba, () => ReactNode> = {
     loja: () => (
       <>
-        {barra}
         {tabela({
           legenda: "Lucro por loja no período",
           colunas: colunasLoja,
@@ -824,7 +842,6 @@ export function DetalharPor({
     ),
     dia: () => (
       <>
-        {barra}
         {tabela({
           legenda: "Lucro dia a dia",
           colunas: colunasDia,
@@ -848,7 +865,6 @@ export function DetalharPor({
             </span>
             <span className="text-t1">Nome e foto do produto ainda não aparecem: o pedido guarda só o SKU.</span>
           </Aviso>
-          {barra}
           {tabela({
             legenda: "Lucro antes do anúncio por produto",
             colunas: colunasProduto,
@@ -879,7 +895,6 @@ export function DetalharPor({
               Shopify, para você comparar.
             </span>
           </Aviso>
-          {barra}
           {tabela({
             legenda: "Desempenho por campanha",
             colunas: colunasCampanha,

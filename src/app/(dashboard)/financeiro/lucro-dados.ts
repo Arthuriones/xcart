@@ -568,7 +568,7 @@ export function montarPendencias(d: EntradaPendencias): Pendencia[] {
         d.contas.semLoja === 1
           ? "1 conta de anúncio sem loja ligada"
           : `${d.contas.semLoja} contas de anúncio sem loja ligada`,
-      detalhe: "O gasto delas não entra em nenhuma loja.",
+      detalhe: `O gasto ${d.contas.semLoja === 1 ? "dela" : "delas"} não entra em nenhuma loja.`,
       acao: { rotulo: "Ligar à loja", href: ROTAS.anuncios },
     });
   }
