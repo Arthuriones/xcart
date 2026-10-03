@@ -13,7 +13,7 @@ import type { DestinoDaRota, EventoDaRota, RotaDaLista } from "@/lib/leitura/vis
 /** O console de roteamento: onde se conserta o mapa, a divisao e o script. */
 export const CONSOLE = "/clone/routed-checkout";
 
-/** "1 loja de checkout", "3 lojas de checkout": nunca "loja(s)". */
+/** "1 loja de checkout", "3 lojas de checkout": nunca o plural entre parenteses. */
 export function plural(n: number, um: string, varios: string): string {
   return `${n.toLocaleString("pt-BR")} ${n === 1 ? um : varios}`;
 }
