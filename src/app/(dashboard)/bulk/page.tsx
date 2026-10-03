@@ -1,9 +1,27 @@
-import { getPickerStores } from "@/lib/stores/picker";
-import { BulkScreen } from "./bulk-screen";
+import { Suspense } from "react";
+import { CabecalhoLote } from "./cabecalho";
+import { ConteudoLote, lojaDaUrl } from "./conteudo";
+import { EsqueletoLote } from "./esqueleto";
 
-// Lojas buscadas no servidor: a tela nao precisa autenticar e consultar pelo
-// navegador antes de poder desenhar o seletor.
-export default async function Page() {
-  const stores = await getPickerStores();
-  return <BulkScreen initialStores={stores} />;
+export const dynamic = "force-dynamic";
+
+/**
+ * /bulk: importar por link (AliExpress, lojas Shopify e links soltos), ate 20
+ * por vez, numa fila do servidor. O cabecalho sai na hora; o formulario chega
+ * quando as lojas forem lidas.
+ */
+export default async function BulkPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [chave: string]: string | string[] | undefined }>;
+}) {
+  const sp = await searchParams;
+  return (
+    <>
+      <CabecalhoLote origem="links" />
+      <Suspense fallback={<EsqueletoLote />}>
+        <ConteudoLote origem="links" lojaPedida={lojaDaUrl(sp)} />
+      </Suspense>
+    </>
+  );
 }
