@@ -120,10 +120,10 @@ export function VistaBlocoFaturamento({ g }: { g: FaturamentoAdmin }) {
                     >
                       {u.email}
                     </Link>
-                    <span className="num ml-auto shrink-0 text-label text-t2">
+                    <span className="num ml-auto hidden shrink-0 text-label text-t2 sm:inline">
                       {plural(u.orders, "pedido", "pedidos")}
                     </span>
-                    <span className="num w-28 shrink-0 text-right font-medium text-ink">
+                    <span className="num ml-auto w-24 shrink-0 text-right font-medium text-ink sm:ml-0 sm:w-28">
                       {reais(u.revenueBrlCents / 100, 0)}
                     </span>
                   </li>
