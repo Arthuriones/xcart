@@ -21,16 +21,16 @@ export const dynamic = "force-dynamic";
 const SEM_CACHE = { "Cache-Control": "no-store" };
 
 export async function GET(request: NextRequest) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json(
-      { erro: "Entre na sua conta para ver os eventos." },
-      { status: 401, headers: SEM_CACHE }
-    );
-  }
-
   const params = request.nextUrl.searchParams;
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json(
+        { erro: "Entre na sua conta para ver os eventos." },
+        { status: 401, headers: SEM_CACHE }
+      );
+    }
+
     const minhas = (await listarLojasDoUsuario()).map((l) => l.id.toLowerCase());
     const loja = (params.get("loja") || TODAS).toLowerCase();
     let ids: string[];

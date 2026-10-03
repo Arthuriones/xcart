@@ -71,7 +71,7 @@ function Pedido({ e, ctx }: { e: EventoFeed; ctx: ContextoLista }) {
       aria-label={`Abrir pedido ${nome ? `${nome} ` : ""}no admin da Shopify (abre em nova aba)`}
       className={cn("inline-flex items-center gap-1 rounded-sm text-ink underline-offset-4 hover:underline", FOCO)}
     >
-      {nome ?? "Abrir pedido"}
+      {nome ?? "Abrir"}
       <ExternalLinkIcon aria-hidden className="size-3" strokeWidth={2} />
     </a>
   );
@@ -125,7 +125,7 @@ const Linha = memo(function Linha({
       </td>
       <td className={cn(TD, "num whitespace-nowrap text-right text-t1")}>{formatarLatencia(e)}</td>
       <td className={cn(TD, "whitespace-nowrap text-t1")}>{textoClique(e)}</td>
-      <td className={cn(TD, "min-w-55 py-2 text-t1 [overflow-wrap:anywhere]")}>{textoOrigem(e)}</td>
+      <td className={cn(TD, "min-w-48 py-2 text-t1 [overflow-wrap:anywhere]")}>{textoOrigem(e)}</td>
       <td className={cn(TD, "num whitespace-nowrap text-right")}>
         <Pedido e={e} ctx={ctx} />
       </td>
@@ -168,7 +168,9 @@ const Cartao = memo(function Cartao({
         <span className="text-label text-t1">
           {FONTE_TELA[e.fonte]} · {formatarLatencia(e)} · clique: {textoClique(e)}
         </span>
-        <span className="text-label text-t2 [overflow-wrap:anywhere]">{textoOrigem(e)}</span>
+        {textoOrigem(e) !== "—" && (
+          <span className="text-label text-t2 [overflow-wrap:anywhere]">{textoOrigem(e)}</span>
+        )}
       </button>
     </li>
   );

@@ -163,7 +163,14 @@ function Frescor({ aoVivo, atualizadoEm, fuso }: { aoVivo: boolean; atualizadoEm
     return <span className="text-label text-t2">pausado: a lista não muda até você retomar</span>;
   }
   const s = agora === null ? 0 : Math.max(0, Math.round((agora - atualizadoEm) / 1000));
-  const ha = s < 5 ? "atualizado agora" : s < 120 ? `atualizado há ${s} s` : `atualizado há ${Math.round(s / 60)} min`;
+  const ha =
+    s < 5
+      ? "atualizado agora"
+      : s < 120
+        ? `atualizado há ${s} s`
+        : s < 7200
+          ? `atualizado há ${Math.round(s / 60)} min`
+          : `atualizado há ${Math.round(s / 3600)} h`;
   return (
     <span className="num text-label text-t2">
       {ha} · {horaNoFuso(atualizadoEm, fuso)} ({rotuloFuso(fuso)})

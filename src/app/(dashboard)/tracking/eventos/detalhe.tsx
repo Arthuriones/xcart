@@ -104,19 +104,19 @@ function Conteudo({
           <Callout
             tom={e.status === "falhou" ? "err" : "warn"}
             titulo={e.status === "falhou" ? "O que deu errado" : "Ainda tentando"}
-            acao={
-              e.status === "falhou" ? (
-                <Link href="/tracking" className={buttonVariants({ size: "sm" })}>
-                  Consertar em Saúde dos pixels
-                </Link>
-              ) : undefined
-            }
           >
             <p>{erro.resumo}</p>
             {erro.mensagem && (
               <p className="mt-1 text-label text-t1 [overflow-wrap:anywhere]">
                 Mensagem registrada: {erro.mensagem}
               </p>
+            )}
+            {/* Embaixo do texto, e nao ao lado: no painel de 520 px o botao
+                espremia a explicacao numa coluna estreita. */}
+            {e.status === "falhou" && (
+              <Link href="/tracking" className={buttonVariants({ size: "sm", className: "mt-2.5" })}>
+                Consertar em Saúde dos pixels
+              </Link>
             )}
           </Callout>
         )}
