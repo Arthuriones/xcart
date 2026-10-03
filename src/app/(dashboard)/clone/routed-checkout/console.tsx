@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ChevronLeftIcon } from "lucide-react";
 import { cn } from "@/components/ui/cn";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { getRouteGraph, type RouteGraph } from "@/lib/checkout-routes/graph";
+import { getRouteGraph, type GraphRoute, type RouteGraph } from "@/lib/checkout-routes/graph";
 import { quandoFoi } from "@/lib/leitura/lojas-estado";
 import { conferirLeituraDasRotas, lerUltimoSinalDoScript } from "@/lib/leitura/roteamento";
 import { AbaDiagnostico } from "./aba-diagnostico";
@@ -53,7 +53,51 @@ export async function Console({
   const rota = rotaParam ? grafo.routes.find((r) => r.id === rotaParam) : grafo.routes[0];
   if (!rota) notFound();
 
-  const agora = instante();
+  // O sinal do script so e lido onde aparece (Visao e Instalacao).
+  let sinal = { em: null as string | null, erro: false };
+  if (aba === "visao" || aba === "instalacao") {
+    try {
+      sinal = { em: await lerUltimoSinalDoScript(rota.id), erro: false };
+    } catch (erro) {
+      console.error("[rotas] sinal do script", erro);
+      sinal = { em: null, erro: true };
+    }
+  }
+
+  return (
+    <ConsoleView
+      grafo={grafo}
+      rota={rota}
+      rotaParam={rotaParam}
+      aba={aba}
+      conferir={conferir}
+      origem={origem}
+      sinal={sinal}
+      agora={instante()}
+    />
+  );
+}
+
+/** O desenho do console, so com dados: da para renderizar com qualquer estado. */
+export function ConsoleView({
+  grafo,
+  rota,
+  rotaParam,
+  aba,
+  conferir,
+  origem,
+  sinal,
+  agora,
+}: {
+  grafo: RouteGraph;
+  rota: GraphRoute;
+  rotaParam: string | null;
+  aba: AbaRota;
+  conferir: boolean;
+  origem: string;
+  sinal: { em: string | null; erro: boolean };
+  agora: number;
+}) {
   const lojas = new Map(grafo.stores.map((s) => [s.id, s]));
   const vitrine = lojas.get(rota.sourceStoreId);
 
@@ -67,17 +111,6 @@ export async function Console({
   }));
   const estado = estadoDaRota(rota, agora);
   const recebendo = lojasRecebendo(rota);
-
-  // O sinal do script so e lido onde aparece (Visao e Instalacao).
-  let sinal = { em: null as string | null, erro: false };
-  if (aba === "visao" || aba === "instalacao") {
-    try {
-      sinal = { em: await lerUltimoSinalDoScript(rota.id), erro: false };
-    } catch (erro) {
-      console.error("[rotas] sinal do script", erro);
-      sinal = { em: null, erro: true };
-    }
-  }
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(240px,300px)_minmax(0,1fr)] lg:items-start">

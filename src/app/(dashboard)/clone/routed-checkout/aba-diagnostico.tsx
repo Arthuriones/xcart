@@ -31,9 +31,11 @@ async function testarRota(id: string): Promise<Teste> {
       return {
         ok: false,
         texto:
-          r.status === 404
-            ? "A rota ou uma das lojas não foi encontrada. Confira se as lojas continuam conectadas em Lojas."
-            : "Não deu para testar agora: a Shopify demorou ou recusou. Tente de novo em instantes.",
+          r.status === 401
+            ? "Sua sessão venceu. Entre de novo e teste outra vez."
+            : r.status === 404
+              ? "A rota ou uma das lojas não foi encontrada. Confira se as lojas continuam conectadas em Lojas."
+              : "Não deu para testar agora: a Shopify demorou ou recusou. Tente de novo em instantes.",
       };
     }
     return { ok: true, dado: d };

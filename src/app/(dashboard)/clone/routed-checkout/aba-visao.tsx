@@ -10,8 +10,9 @@ import type { GraphRoute, GraphStore } from "@/lib/checkout-routes/graph";
 import { Instalador } from "./instalar";
 import { ESTRATEGIAS, estadoDaLoja, estadoInstalacao, hrefRota, lojasRecebendo } from "./logica";
 
-const LINK =
-  "rounded-sm text-dense font-medium text-brand underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
+const LINK_BASE =
+  "rounded-sm font-medium text-brand underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
+const LINK = `${LINK_BASE} text-dense`;
 
 function idade(horas: number) {
   const dias = Math.floor(horas / 24);
@@ -144,7 +145,7 @@ export function AbaVisao({
         titulo="Para onde vai o comprador"
         descricao={
           rota.targets.length > 1
-            ? `${estrategia.rotulo}: ${estrategia.dica}`
+            ? `${estrategia.rotulo}. ${estrategia.dica}`
             : "Todo comprador da vitrine vai para esta loja de checkout."
         }
         acoes={
@@ -226,7 +227,7 @@ export function AbaVisao({
       <p className="text-label text-t2 text-pretty">
         Em rota, a compra nasce na loja de checkout e sai sem a origem do anúncio: é proposital, para as
         duas lojas não aparecerem ligadas. As vendas por loja de checkout estão em{" "}
-        <Link href="/sales" className={LINK}>
+        <Link href="/sales" className={LINK_BASE}>
           Vendas por rota
         </Link>
         .
