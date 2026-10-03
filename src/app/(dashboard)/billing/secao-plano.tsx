@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -51,13 +51,14 @@ export function SecaoPlano({
   const [cartaoFinal, setCartaoFinal] = useState<string | null>(null);
   const [renovando, setRenovando] = useState(false);
   const [erroCancelar, setErroCancelar] = useState<string>(ERRO_PADRAO.cancelar);
-  const conferiu = useRef(false);
-
   const atualizar = () => iniciar(() => router.refresh());
 
+  // Dependencias primitivas: depois de um refresh o objeto noBanco e novo,
+  // mas so muda de valor se a conferencia acertou o banco -- ai confere mais
+  // uma vez e para (nao entra em laco de refresh).
+  const { temAssinaturaCartao, status, cancelaNoFim, fimPeriodo } = noBanco;
   useEffect(() => {
-    if (!noBanco.temAssinaturaCartao || conferiu.current) return;
-    conferiu.current = true;
+    if (!temAssinaturaCartao) return;
     let vivo = true;
     fetch("/api/billing/subscription")
       .then((r) => (r.ok ? r.json() : null))
@@ -68,9 +69,9 @@ export function SecaoPlano({
         // "stale" = o processador nao respondeu e a rota devolveu o banco.
         const mudou =
           !d.stale &&
-          (s.status !== noBanco.status ||
-            (s.cancelAtPeriodEnd === true) !== noBanco.cancelaNoFim ||
-            !mesmoInstante(s.currentPeriodEnd, noBanco.fimPeriodo));
+          (s.status !== status ||
+            (s.cancelAtPeriodEnd === true) !== cancelaNoFim ||
+            !mesmoInstante(s.currentPeriodEnd, fimPeriodo));
         if (mudou) iniciar(() => router.refresh());
       })
       .catch(() => {
@@ -79,7 +80,7 @@ export function SecaoPlano({
     return () => {
       vivo = false;
     };
-  }, [noBanco, router]);
+  }, [temAssinaturaCartao, status, cancelaNoFim, fimPeriodo, router]);
 
   async function cancelar() {
     setErroCancelar(ERRO_PADRAO.cancelar);
