@@ -76,8 +76,10 @@ const ICONE_SECUNDARIO: Record<RecursoSecundario["id"], LucideIcon> = {
   roteamento: Route,
 };
 
-const LINK_BOTAO_PRIMARIO = buttonVariants({ variant: "primary", size: "lg" });
-const LINK_BOTAO_SECUNDARIO = buttonVariants({ variant: "secondary", size: "lg" });
+// cn() e obrigatorio: o cva junta "border-transparent" da base com a borda da
+// variante sem resolver o conflito, e o contorno do secundario sumia.
+const LINK_BOTAO_PRIMARIO = cn(buttonVariants({ variant: "primary", size: "lg" }));
+const LINK_BOTAO_SECUNDARIO = cn(buttonVariants({ variant: "secondary", size: "lg" }));
 
 function Secao({
   id,

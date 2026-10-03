@@ -17,7 +17,7 @@ export function RodapeSite({ atual }: { atual?: DocumentoLegal }) {
         </div>
 
         <nav aria-label="Documentos e acesso">
-          <ul className="flex flex-wrap gap-x-1 gap-y-1">
+          <ul className="-mx-2 flex flex-wrap gap-x-1 gap-y-1">
             {DOCUMENTOS_LEGAIS.map((d) => (
               <li key={d.id}>
                 <Link

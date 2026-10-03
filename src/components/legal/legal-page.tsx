@@ -59,7 +59,8 @@ export function LegalPage({ title, description, updatedAt, sections, atual }: Le
               <p id="indice-titulo" className="text-label font-semibold text-t2">
                 Nesta página
               </p>
-              <ol className="mt-2 flex flex-col">
+              {/* -mx-2: o texto alinha com "Nesta página" e o fundo do hover sobra para os lados. */}
+              <ol className="-mx-2 mt-2 flex flex-col">
                 {sections.map((s, i) => (
                   <li key={ids[i]}>
                     <a

@@ -38,21 +38,30 @@ export function MenuCelular({ base = "" }: { base?: string }) {
     setAberto(false);
   }
 
+  function mudar(abrir: boolean) {
+    // O destino vale ate o menu abrir de novo: o painel le o finalFocus
+    // depois do fim da animacao, e limpar antes devolvia o foco ao botao.
+    if (abrir) alvo.current = null;
+    setAberto(abrir);
+  }
+
   function aoTerminar(abrindo: boolean) {
-    if (abrindo || !alvo.current) return;
     const id = alvo.current;
-    alvo.current = null;
-    const secao = document.getElementById(id);
-    if (!secao) return;
-    secao.scrollIntoView({ block: "start" });
-    window.history.replaceState(null, "", `#${id}`);
-    const titulo = secao.querySelector<HTMLElement>("h2") ?? secao;
-    if (!titulo.hasAttribute("tabindex")) titulo.setAttribute("tabindex", "-1");
-    titulo.focus({ preventScroll: true });
+    if (abrindo || !id) return;
+    // Depois do painel soltar a rolagem e o foco.
+    window.setTimeout(() => {
+      const secao = document.getElementById(id);
+      if (!secao) return;
+      secao.scrollIntoView({ block: "start" });
+      window.history.replaceState(null, "", `#${id}`);
+      const titulo = secao.querySelector<HTMLElement>("h2") ?? secao;
+      if (!titulo.hasAttribute("tabindex")) titulo.setAttribute("tabindex", "-1");
+      titulo.focus({ preventScroll: true });
+    }, 0);
   }
 
   return (
-    <Sheet open={aberto} onOpenChange={setAberto} onOpenChangeComplete={aoTerminar}>
+    <Sheet open={aberto} onOpenChange={mudar} onOpenChangeComplete={aoTerminar}>
       <SheetTrigger
         render={<Button variant="ghost" size="icon-lg" className="md:hidden" aria-label="Abrir menu" />}
       >
