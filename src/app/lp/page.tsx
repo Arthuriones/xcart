@@ -1,404 +1,388 @@
 import type { Metadata } from "next";
-import Image from "next/image";
-import Link from "next/link";
-import { PRO_PRICE_BRL, PRO_INCLUDED_CREDITS, CREDIT_PACKS } from "@/lib/billing/plans";
+import type { ReactNode } from "react";
+import {
+  Activity,
+  Bell,
+  Calculator,
+  Check,
+  CircleDollarSign,
+  Download,
+  Info,
+  Plug,
+  Route,
+  Store,
+  type LucideIcon,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/components/ui/cn";
+import { CabecalhoSite } from "@/components/site/cabecalho-site";
+import { RodapeSite } from "@/components/site/rodape-site";
+import { URL_CRIAR_CONTA } from "@/components/site/links";
+import {
+  OUTROS_RECURSOS,
+  PASSOS,
+  PERGUNTAS,
+  PROVAS,
+  RECURSOS_PRINCIPAIS,
+  type RecursoPrincipal,
+  type RecursoSecundario,
+} from "./conteudo";
+import {
+  DiagramaRota,
+  PreviaAlertas,
+  PreviaComposicao,
+  PreviaLucro,
+  PreviaRastreamento,
+} from "./ilustracoes";
+import { BENEFICIOS_PRO, PACOTES, POLITICA_TESTE, PRECO_PRO } from "./plano";
 
 /**
- * A landing comercial.
+ * A landing comercial (raiz do host publico e /lp).
  *
- * Refeita sobre o design system do app -- mesmos tokens, mesma escala, mesma
- * linguagem de cartao e borda. Antes ela vivia no sistema visual anterior
- * (bg-background, primary/, border-border/40) e destoava de tudo o que o
- * visitante encontra depois de entrar.
+ * Vende primeiro o que o lojista abre o app para ver -- lucro por loja,
+ * rastreamento pelo servidor e alertas (decisao 2 do redesign) -- e deixa o
+ * roteamento como um modulo, para quem usa vitrine. A versao anterior vendia
+ * so o checkout roteado.
  *
- * O texto tambem mudou, e essa e a parte que importa mais: a versao antiga
- * vendia "clone qualquer loja para a Shopify em minutos", que e a ferramenta
- * de importacao. O produto hoje e o checkout roteado -- vitrine anuncia, loja
- * de checkout cobra, o xcart casa os SKUs e decide quem cobra cada carrinho.
- * A importacao virou um meio para isso, nao o fim.
+ * Server component inteiro; a unica parte no navegador e o menu do celular
+ * (e a troca de tema no rodape). O texto mora em conteudo.ts e o plano em
+ * plano.ts, ambos esperando a aprovacao do Arthur.
  */
 
-const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://user.xcart.app";
-const loginUrl = `${appUrl}/login`;
-const signupUrl = `${loginUrl}?mode=signup`;
-
 export const metadata: Metadata = {
-  title: "xcart — uma vitrine, várias lojas de checkout",
+  title: "xcart · lucro, rastreamento e alertas para lojas Shopify",
   description:
-    "O xcart leva o carrinho da sua vitrine para a loja que cobra, casando os SKUs. Divida o tráfego entre vários checkouts e continue vendendo quando um cair.",
+    "Veja o lucro estimado de cada loja Shopify, já descontado o anúncio. Envie as compras ao Meta e ao Google pelo servidor e receba alertas quando algo quebra.",
 };
 
-const ETAPAS = [
-  {
-    n: "01",
-    titulo: "Conecte as duas lojas",
-    texto:
-      "A vitrine, que recebe o tráfego do anúncio, e uma ou mais lojas de checkout, onde o pagamento acontece.",
-  },
-  {
-    n: "02",
-    titulo: "Leve o catálogo",
-    texto:
-      "Importe de Shopify, WooCommerce, Shoplazza, AliExpress ou de um site qualquer. O xcart replica na loja de checkout já neutralizado.",
-  },
-  {
-    n: "03",
-    titulo: "Ligue por SKU",
-    texto:
-      "Cada variante ganha par nas duas lojas. É o SKU que sustenta a rota — título e foto podem ser totalmente diferentes.",
-  },
-  {
-    n: "04",
-    titulo: "Divida o tráfego",
-    texto:
-      "Escolha quanto de cada comprador vai para cada checkout. Um processador cai, você move a fatia e continua vendendo.",
-  },
-];
+const ICONE_PRINCIPAL: Record<RecursoPrincipal["id"], LucideIcon> = {
+  lucro: CircleDollarSign,
+  rastreamento: Activity,
+  alertas: Bell,
+};
 
-const RECURSOS = [
-  {
-    titulo: "Rodízio entre checkouts",
-    texto:
-      "Uma vitrine aponta para várias lojas de checkout ao mesmo tempo. O sorteio nunca custa uma linha do carrinho: só entram no rodízio as lojas que cobrem o carrinho inteiro.",
-  },
-  {
-    titulo: "Casamento por SKU",
-    texto:
-      "A ligação entre as lojas é o SKU, não o nome. Isso deixa a loja de checkout mudar título, descrição, tags e foto sem quebrar nada.",
-  },
-  {
-    titulo: "Neutralização com IA",
-    texto:
-      "A loja de checkout recebe o catálogo com o texto reescrito sem marca e as fotos regeradas sem logo. As duas lojas nunca parecem ligadas.",
-  },
-  {
-    titulo: "Importação de qualquer fonte",
-    texto:
-      "Shopify, WooCommerce, Shoplazza, AliExpress e sites genéricos. Traduz para o idioma da loja de destino e publica direto.",
-  },
-  {
-    titulo: "Conserto automático",
-    texto:
-      "De hora em hora o xcart confere a rota: SKU sem par, variante trocada, produto que sumiu. Acha e corrige antes do carrinho falhar.",
-  },
-  {
-    titulo: "Conectado ao Claude",
-    texto:
-      "Um servidor MCP dá ao Claude acesso de leitura e edição às suas lojas. Pergunte, audite e corrija conversando.",
-  },
-];
+const ILUSTRACAO: Record<RecursoPrincipal["id"], () => ReactNode> = {
+  lucro: PreviaComposicao,
+  rastreamento: PreviaRastreamento,
+  alertas: PreviaAlertas,
+};
 
-/** Cartão do diagrama da operação, igual ao do design. */
-function Caixa({
+const ICONE_SECUNDARIO: Record<RecursoSecundario["id"], LucideIcon> = {
+  custos: Calculator,
+  integracoes: Plug,
+  importar: Download,
+  lojas: Store,
+  roteamento: Route,
+};
+
+const LINK_BOTAO_PRIMARIO = buttonVariants({ variant: "primary", size: "lg" });
+const LINK_BOTAO_SECUNDARIO = buttonVariants({ variant: "secondary", size: "lg" });
+
+function Secao({
+  id,
   titulo,
-  texto,
-  destaque,
+  descricao,
+  faixa,
+  children,
 }: {
+  id: string;
   titulo: string;
-  texto: string;
-  destaque?: boolean;
+  descricao?: string;
+  /** Faixa clara de ponta a ponta, para alternar com o fundo da pagina. */
+  faixa?: boolean;
+  children: ReactNode;
 }) {
   return (
-    <div
-      className="rounded-[7px] px-3 py-2.5"
-      style={{
-        border: `1px solid ${destaque ? "var(--solid)" : "var(--border)"}`,
-        background: destaque ? "var(--solid)" : "var(--surface)",
-        color: destaque ? "var(--on-solid)" : "var(--ink)",
-      }}
+    <section
+      id={id}
+      aria-labelledby={`${id}-titulo`}
+      className={cn("scroll-mt-16", faixa && "border-y border-border bg-surface")}
     >
-      <div className="text-[12.5px] font-semibold">{titulo}</div>
-      <div
-        className="text-[11px]"
-        style={{ color: destaque ? "var(--t4)" : "var(--t3)" }}
-      >
-        {texto}
+      <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 md:py-20">
+        <div className="flex max-w-2xl flex-col gap-2">
+          <h2 id={`${id}-titulo`} className="text-kpi text-balance text-ink">
+            {titulo}
+          </h2>
+          {descricao ? <p className="text-body text-pretty text-t2">{descricao}</p> : null}
+        </div>
+        <div className="mt-10">{children}</div>
       </div>
-    </div>
+    </section>
   );
 }
 
-function Fio() {
+function ListaComCheck({ itens }: { itens: readonly string[] }) {
   return (
-    <div className="ml-4 h-4 w-px" style={{ background: "var(--border-strong)" }} aria-hidden />
+    <ul className="flex flex-col gap-2.5">
+      {itens.map((item) => (
+        <li key={item} className="flex gap-2.5 text-body text-pretty text-t1">
+          <Check aria-hidden className="mt-0.5 size-4 shrink-0 text-ok" strokeWidth={2} />
+          {item}
+        </li>
+      ))}
+    </ul>
   );
 }
 
 export default function Landing() {
   return (
-    <div className="min-h-screen bg-[var(--bg)] text-ink">
-      {/* ------------------------------------------------------- topo */}
-      <header className="sticky top-0 z-50 border-b border-border bg-[var(--header-bg)] backdrop-blur">
-        <div className="mx-auto flex max-w-[1080px] items-center gap-6 px-5 py-3">
-          {/* logo-cropped tem o texto escuro, que e o que serve num fundo
-              claro; logo.png e a versao de texto branco, para fundo escuro. */}
-          <Link href="/lp" className="flex items-center">
-            <Image
-              src="/logo-cropped.png"
-              alt="xcart"
-              width={891}
-              height={177}
-              priority
-              className="h-6 w-auto"
-            />
-          </Link>
-          <nav className="ml-4 hidden items-center gap-6 md:flex">
-            {[
-              ["#como-funciona", "Como funciona"],
-              ["#recursos", "Recursos"],
-              ["#precos", "Preços"],
-            ].map(([href, rotulo]) => (
-              <a
-                key={href}
-                href={href}
-                className="text-[12.5px] text-t2 transition-colors hover:text-ink"
-              >
-                {rotulo}
+    <div className="flex min-h-screen flex-col bg-bg text-ink">
+      <a
+        href="#conteudo"
+        className="sr-only z-50 rounded-control bg-surface px-3 py-2 text-dense text-ink focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
+      >
+        Pular para o conteúdo
+      </a>
+      <CabecalhoSite />
+
+      <main id="conteudo" className="flex-1">
+        {/* --------------------------------------------------------- hero */}
+        <section className="mx-auto grid w-full max-w-6xl gap-10 px-4 pt-12 pb-16 sm:px-6 md:pt-20 md:pb-20 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:items-center lg:gap-12">
+          <div className="flex flex-col items-start gap-5">
+            <p className="text-dense font-medium text-t2">Para quem opera lojas Shopify</p>
+            <h1 className="text-4xl leading-tight font-semibold tracking-tight text-balance text-ink lg:text-5xl lg:leading-tight">
+              Quanto cada loja lucrou hoje, já descontado o anúncio
+            </h1>
+            <p className="max-w-[46ch] text-overlay leading-7 font-normal text-pretty text-t1">
+              O xcart junta os pedidos da Shopify com o gasto do Meta e do Google, envia as
+              compras às duas plataformas pelo servidor e avisa quando algo quebra.
+            </p>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+              <a href={URL_CRIAR_CONTA} className={LINK_BOTAO_PRIMARIO}>
+                Criar conta
               </a>
-            ))}
-          </nav>
-          <div className="ml-auto flex items-center gap-3">
-            <a href={loginUrl} className="text-[12.5px] text-t2 hover:text-ink">
-              Entrar
-            </a>
-            <a
-              href={signupUrl}
-              className="inline-flex h-[30px] items-center rounded-md bg-[var(--solid)] px-[13px] text-[12.5px] font-semibold text-[var(--on-solid)] transition-colors hover:bg-[var(--solid-hover)]"
-            >
-              Começar
-            </a>
+              <a href="#preco" className={LINK_BOTAO_SECUNDARIO}>
+                Ver o preço
+              </a>
+            </div>
+            <p className="text-label text-t2">
+              <span className="num">{PRECO_PRO}</span> por mês · {POLITICA_TESTE.curta} ·
+              Cancele quando quiser
+            </p>
           </div>
-        </div>
-      </header>
+          <PreviaLucro />
+        </section>
 
-      {/* ------------------------------------------------------- hero */}
-      <section className="mx-auto grid max-w-[1080px] items-center gap-12 px-5 py-20 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-        <div>
-          <span className="inline-flex items-center gap-2 rounded-md border border-border bg-surface px-2.5 py-1 text-[11.5px] text-t2">
-            <span
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ background: "var(--ok)" }}
-              aria-hidden
-            />
-            Checkout roteado para Shopify
-          </span>
-          <h1 className="mt-4 max-w-[15ch] text-[40px] font-semibold leading-[1.08] tracking-[-0.02em] text-ink">
-            Uma vitrine, várias lojas de checkout
-          </h1>
-          <p className="mt-4 max-w-[46ch] text-pretty text-[14px] leading-relaxed text-t2">
-            A vitrine recebe o tráfego do anúncio. A loja de checkout cobra. O xcart leva
-            o carrinho de uma para a outra casando os SKUs — e divide o tráfego entre
-            quantos checkouts você quiser.
-          </p>
-          <div className="mt-7 flex flex-wrap items-center gap-2.5">
-            <a
-              href={signupUrl}
-              className="inline-flex h-9 items-center rounded-md bg-[var(--solid)] px-4 text-[13px] font-semibold text-[var(--on-solid)] transition-colors hover:bg-[var(--solid-hover)]"
-            >
-              Começar agora
-            </a>
-            <a
-              href="#precos"
-              className="inline-flex h-9 items-center rounded-md border border-[var(--border-strong)] bg-surface px-4 text-[13px] font-semibold !text-ink transition-colors hover:bg-surface-2"
-            >
-              Ver preços
-            </a>
+        {/* ----------------------------------------------------- recursos */}
+        <Secao
+          id="recursos"
+          faixa
+          titulo="Dinheiro e rastreamento no centro"
+          descricao="As três telas que você abre todo dia. O resto do xcart existe para elas ficarem certas."
+        >
+          <div className="flex flex-col gap-16 md:gap-20">
+            {RECURSOS_PRINCIPAIS.map((r, i) => {
+              const Icone = ICONE_PRINCIPAL[r.id];
+              const Ilustracao = ILUSTRACAO[r.id];
+              return (
+                <article
+                  key={r.id}
+                  aria-labelledby={`recurso-${r.id}`}
+                  className="grid items-center gap-8 lg:grid-cols-2 lg:gap-12"
+                >
+                  <div className={cn("flex flex-col gap-4", i % 2 === 1 && "lg:order-2")}>
+                    <span className="inline-flex items-center gap-2 text-dense font-medium text-t2">
+                      <Icone aria-hidden className="size-4" strokeWidth={1.75} />
+                      {r.tela}
+                    </span>
+                    <h3 id={`recurso-${r.id}`} className="text-page text-balance text-ink">
+                      {r.titulo}
+                    </h3>
+                    <p className="text-body leading-6 text-pretty text-t1">{r.resumo}</p>
+                    <ListaComCheck itens={r.pontos} />
+                  </div>
+                  <Ilustracao />
+                </article>
+              );
+            })}
           </div>
-          <p className="mt-4 text-[12px] text-t3">
-            R$ {PRO_PRICE_BRL.toFixed(0).replace(".", ",")}/mês · rotas e produtos
-            ilimitados · {PRO_INCLUDED_CREDITS} imagens neutralizadas inclusas
-          </p>
-        </div>
 
-        {/* O diagrama é o produto. Vem do design, onde ele explica a operação
-            melhor do que qualquer parágrafo. */}
-        <div className="rounded-lg border border-border bg-surface-2 p-7">
-          <div className="font-mono text-[10px] tracking-[0.12em] text-t3">
-            MODELO DA OPERAÇÃO
+          <div className="mt-20 border-t border-border pt-12">
+            <h3 className="text-page text-ink">Também no xcart</h3>
+            <ul className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              {OUTROS_RECURSOS.map((r) => {
+                const Icone = ICONE_SECUNDARIO[r.id];
+                return (
+                  <li
+                    key={r.id}
+                    className="flex flex-col gap-2 rounded-card border border-border bg-surface-2 p-4"
+                  >
+                    <Icone aria-hidden className="size-5 text-t2" strokeWidth={1.75} />
+                    <span className="text-section text-ink">{r.titulo}</span>
+                    <p className="text-dense text-pretty text-t2">{r.texto}</p>
+                    {r.id === "roteamento" ? (
+                      <a href="#roteamento" className="mt-auto pt-1 text-dense font-medium">
+                        Como funciona
+                      </a>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
           </div>
-          <div className="mt-5 flex flex-col gap-2.5">
-            <Caixa titulo="Vitrine" texto="Recebe o tráfego do anúncio" />
-            <Fio />
-            <Caixa titulo="XCART" texto="Mapeia, sincroniza e roteia" destaque />
-            <Fio />
-            <Caixa titulo="Lojas de checkout" texto="Onde o pagamento acontece" />
-          </div>
-          <p className="mt-6 text-pretty text-[12.5px] text-t1">
-            As duas lojas nunca aparecem ligadas. O comprador navega numa e paga na
-            outra, sem perceber a troca.
-          </p>
-        </div>
-      </section>
+        </Secao>
 
-      {/* ----------------------------------------------- como funciona */}
-      <section id="como-funciona" className="border-y border-border bg-surface">
-        <div className="mx-auto max-w-[1080px] px-5 py-16">
-          <h2 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">
-            Como funciona
-          </h2>
-          <p className="mt-1.5 text-[13px] text-t2">Quatro passos até a rota no ar.</p>
-          <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {ETAPAS.map((etapa) => (
-              <div
-                key={etapa.n}
-                className="rounded-lg border border-border bg-surface-2 p-5"
+        {/* ------------------------------------------------- como começar */}
+        <Secao
+          id="como-comecar"
+          titulo="Como começar"
+          descricao="Quatro passos até o primeiro lucro na tela. O app guia cada um."
+        >
+          <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {PASSOS.map((p, i) => (
+              <li
+                key={p.titulo}
+                className="flex flex-col gap-2 rounded-card border border-border bg-surface p-4"
               >
-                <div className="font-mono text-[11px] text-t4">{etapa.n}</div>
-                <div className="mt-2 text-[13.5px] font-semibold text-ink">
-                  {etapa.titulo}
-                </div>
-                <p className="mt-1.5 text-pretty text-[12.5px] leading-relaxed text-t2">
-                  {etapa.texto}
+                <span
+                  aria-hidden="true"
+                  className="num flex size-7 items-center justify-center rounded-full border border-border-strong text-dense font-semibold text-ink"
+                >
+                  {i + 1}
+                </span>
+                <span className="text-section text-ink">{p.titulo}</span>
+                <p className="text-dense text-pretty text-t2">{p.texto}</p>
+              </li>
+            ))}
+          </ol>
+        </Secao>
+
+        {/* --------------------------------------------------- roteamento */}
+        <Secao
+          id="roteamento"
+          faixa
+          titulo="Roteamento, para quem usa vitrine"
+          descricao="Um módulo opcional. Quem anuncia direto na loja que cobra não precisa dele."
+        >
+          <div className="grid items-center gap-8 lg:grid-cols-2 lg:gap-12">
+            <ListaComCheck
+              itens={[
+                "A vitrine recebe o tráfego do anúncio. No checkout, o carrinho vai para a loja que cobra, casado pelo SKU.",
+                "Rodízio entre várias lojas de checkout: se uma conta de pagamento cair, as outras continuam vendendo.",
+                "O sorteio só acontece entre lojas que cobrem o carrinho inteiro. Nenhum item fica para trás.",
+                "A loja de checkout recebe o catálogo com texto e fotos sem marca, refeitos por IA.",
+                "De hora em hora o xcart confere a rota e conserta o SKU que ficou sem par.",
+              ]}
+            />
+            <DiagramaRota />
+          </div>
+        </Secao>
+
+        {/* -------------------------------------------------------- preço */}
+        <Secao
+          id="preco"
+          titulo="Um plano, tudo liberado"
+          descricao="Pague a mais só se precisar de mais fotos refeitas por IA."
+        >
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+            <div className="flex flex-col gap-5 rounded-card border border-border-strong bg-surface p-5 sm:p-6">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-section text-ink">Pro</h3>
+                <Badge variant="neutral">Plano único</Badge>
+              </div>
+              <p className="flex flex-wrap items-baseline gap-x-2">
+                <span className="num text-kpi text-ink">{PRECO_PRO}</span>
+                <span className="text-body text-t2">por mês</span>
+              </p>
+              <ListaComCheck itens={BENEFICIOS_PRO} />
+              <a href={URL_CRIAR_CONTA} className={cn(LINK_BOTAO_PRIMARIO, "w-full")}>
+                Criar conta e assinar
+              </a>
+              <div className="flex flex-col gap-2 border-t border-border-subtle pt-4 text-dense text-t2">
+                <p>Cartão de crédito, que renova todo mês, ou Pix, que libera 30 dias.</p>
+                <p className="flex gap-2 text-t1">
+                  <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-info" strokeWidth={1.75} />
+                  {POLITICA_TESTE.longa}
                 </p>
               </div>
+            </div>
+
+            <div className="flex flex-col gap-4 rounded-card border border-border bg-surface p-5 sm:p-6">
+              <h3 className="text-section text-ink">Créditos extras</h3>
+              <p className="text-dense text-pretty text-t2">
+                Cada crédito refaz com IA a foto de um produto, sem a marca. Compra avulsa por
+                Pix, que não expira.
+              </p>
+              <table className="w-full text-dense">
+                <caption className="sr-only">Pacotes de créditos e preços</caption>
+                <thead>
+                  <tr className="border-b border-border text-label text-t2">
+                    <th scope="col" className="py-2 text-left font-medium">
+                      Pacote
+                    </th>
+                    <th scope="col" className="py-2 text-right font-medium">
+                      Preço
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-subtle">
+                  {PACOTES.map((p) => (
+                    <tr key={p.id}>
+                      <th scope="row" className="py-3 text-left font-normal text-ink">
+                        {p.rotulo}
+                      </th>
+                      <td className="num py-3 text-right text-ink">{p.preco}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-auto text-label text-t2">
+                A compra é feita dentro do app, na tela de assinatura.
+              </p>
+            </div>
+          </div>
+        </Secao>
+
+        {/* ------------------------------------------- prova social (real) */}
+        {PROVAS.length > 0 ? (
+          <Secao id="quem-usa" faixa titulo="Quem usa">
+            <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              {PROVAS.map((p) => (
+                <li key={p.autor} className="rounded-card border border-border bg-surface-2 p-5">
+                  <figure className="flex flex-col gap-3">
+                    <blockquote className="text-body text-pretty text-t1">{p.texto}</blockquote>
+                    <figcaption className="text-dense text-t2">
+                      <span className="font-semibold text-ink">{p.autor}</span>
+                      {p.detalhe ? ` · ${p.detalhe}` : null}
+                    </figcaption>
+                  </figure>
+                </li>
+              ))}
+            </ul>
+          </Secao>
+        ) : null}
+
+        {/* ---------------------------------------------------- perguntas */}
+        <Secao id="perguntas" faixa={PROVAS.length === 0} titulo="Perguntas frequentes">
+          <dl className="grid gap-x-12 gap-y-8 md:grid-cols-2">
+            {PERGUNTAS.map((q) => (
+              <div key={q.pergunta} className="flex flex-col gap-2">
+                <dt className="text-section text-ink">{q.pergunta}</dt>
+                <dd className="text-body leading-6 text-pretty text-t1">{q.resposta}</dd>
+              </div>
             ))}
-          </div>
-        </div>
-      </section>
+          </dl>
+        </Secao>
 
-      {/* --------------------------------------------------- recursos */}
-      <section id="recursos" className="mx-auto max-w-[1080px] px-5 py-16">
-        <h2 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">
-          O que o xcart resolve
-        </h2>
-        <p className="mt-1.5 text-[13px] text-t2">
-          O trabalho que separa duas lojas Shopify de uma operação que cobra.
-        </p>
-        <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {RECURSOS.map((r) => (
-            <div key={r.titulo} className="rounded-lg border border-border bg-surface p-5">
-              <div className="text-[13.5px] font-semibold text-ink">{r.titulo}</div>
-              <p className="mt-1.5 text-pretty text-[12.5px] leading-relaxed text-t2">
-                {r.texto}
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ----------------------------------------------------- preços */}
-      <section id="precos" className="border-y border-border bg-surface">
-        <div className="mx-auto max-w-[1080px] px-5 py-16">
-          <h2 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">
-            Preço simples
-          </h2>
-          <p className="mt-1.5 text-[13px] text-t2">
-            Um plano com tudo liberado. Pague a mais só por imagem neutralizada.
-          </p>
-
-          <div className="mt-8 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <div className="rounded-lg border border-[var(--border-strong)] bg-surface-2 p-6">
-              <div className="flex items-baseline gap-2">
-                <span className="text-[13px] font-semibold text-ink">Pro</span>
-                <span
-                  className="rounded px-[7px] py-0.5 text-[11px] font-medium"
-                  style={{ background: "var(--ok-bg)", color: "var(--ok)" }}
-                >
-                  tudo liberado
-                </span>
-              </div>
-              <div className="mt-3 flex items-baseline gap-1.5">
-                <span className="text-[34px] font-semibold tracking-[-0.02em] tabular-nums text-ink">
-                  R$ {PRO_PRICE_BRL.toFixed(0)}
-                </span>
-                <span className="text-[13px] text-t3">/mês</span>
-              </div>
-              <ul className="mt-5 flex flex-col gap-2">
-                {[
-                  "Vitrines e lojas de checkout ilimitadas",
-                  "Rodízio de tráfego entre checkouts",
-                  "Importação de Shopify, WooCommerce, Shoplazza e AliExpress",
-                  "Neutralização de texto ilimitada",
-                  `${PRO_INCLUDED_CREDITS} imagens neutralizadas por mês`,
-                  "Conserto automático da rota de hora em hora",
-                  "Servidor MCP para usar com o Claude",
-                ].map((item) => (
-                  <li key={item} className="flex gap-2.5 text-[12.5px] text-t1">
-                    <span
-                      className="mt-[7px] h-1 w-1 shrink-0 rounded-full"
-                      style={{ background: "var(--ok)" }}
-                      aria-hidden
-                    />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-              <a
-                href={signupUrl}
-                className="mt-6 inline-flex h-9 w-full items-center justify-center rounded-md bg-[var(--solid)] px-4 text-[13px] font-semibold text-[var(--on-solid)] transition-colors hover:bg-[var(--solid-hover)]"
-              >
-                Assinar Pro
-              </a>
-            </div>
-
-            <div className="rounded-lg border border-border bg-surface p-6">
-              <div className="text-[13px] font-semibold text-ink">Créditos extras</div>
-              <p className="mt-1.5 max-w-[42ch] text-pretty text-[12.5px] leading-relaxed text-t2">
-                1 crédito = 1 imagem neutralizada com IA. Recarregue quando precisar, sem
-                mudar de plano. Texto sem marca não consome crédito.
-              </p>
-              <div className="mt-5 overflow-hidden rounded-lg border border-border">
-                {CREDIT_PACKS.map((pack) => (
-                  <div
-                    key={pack.id}
-                    className="flex items-center justify-between border-b border-[var(--border-subtle)] bg-surface-2 px-4 py-3 last:border-b-0"
-                  >
-                    <span className="text-[12.5px] text-t1">{pack.label}</span>
-                    <span className="font-mono text-[12.5px] font-medium tabular-nums text-ink">
-                      R$ {(pack.amountCents / 100).toFixed(0)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-4 text-[11.5px] text-t3">
-                Compre dentro do app, na aba de assinatura.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* -------------------------------------------------- cta final */}
-      <section className="mx-auto max-w-[1080px] px-5 py-20 text-center">
-        <h2 className="text-[26px] font-semibold tracking-[-0.02em] text-ink">
-          Sua vitrine já tem tráfego. Falta quem cobra.
-        </h2>
-        <p className="mx-auto mt-3 max-w-[52ch] text-pretty text-[13px] text-t2">
-          Conecte as duas lojas, ligue por SKU e coloque a rota no ar. Se um checkout
-          cair, o tráfego vai para o próximo sem você tocar no anúncio.
-        </p>
-        <a
-          href={signupUrl}
-          className="mt-7 inline-flex h-9 items-center rounded-md bg-[var(--solid)] px-5 text-[13px] font-semibold text-[var(--on-solid)] transition-colors hover:bg-[var(--solid-hover)]"
+        {/* ---------------------------------------------------- cta final */}
+        <section
+          aria-labelledby="final-titulo"
+          className="mx-auto flex w-full max-w-6xl flex-col items-center gap-4 px-4 py-16 text-center sm:px-6 md:py-20"
         >
-          Criar conta
-        </a>
-      </section>
+          <h2 id="final-titulo" className="text-kpi text-balance text-ink">
+            Comece pelo lucro de hoje
+          </h2>
+          <p className="max-w-[52ch] text-body text-pretty text-t2">
+            Conecte uma loja Shopify e veja quanto ela lucrou, com o anúncio já descontado.
+          </p>
+          <a href={URL_CRIAR_CONTA} className={cn(LINK_BOTAO_PRIMARIO, "mt-2")}>
+            Criar conta
+          </a>
+        </section>
+      </main>
 
-      {/* ------------------------------------------------------ rodapé */}
-      <footer className="border-t border-border bg-surface">
-        <div className="mx-auto flex max-w-[1080px] flex-col items-center justify-between gap-4 px-5 py-8 text-[12px] text-t3 sm:flex-row">
-          <Image
-            src="/logo-cropped.png"
-            alt="xcart"
-            width={891}
-            height={177}
-            className="h-5 w-auto"
-          />
-          <div className="flex items-center gap-5">
-            <Link href="/privacy" className="text-t3 transition-colors hover:text-ink">
-              Privacidade
-            </Link>
-            <Link href="/terms" className="text-t3 transition-colors hover:text-ink">
-              Termos
-            </Link>
-            <a href={loginUrl} className="text-t3 transition-colors hover:text-ink">
-              Entrar
-            </a>
-          </div>
-          <p>© {new Date().getFullYear()} xcart</p>
-        </div>
-      </footer>
+      <RodapeSite />
     </div>
   );
 }

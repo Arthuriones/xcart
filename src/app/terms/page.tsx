@@ -10,6 +10,7 @@ export const metadata: Metadata = {
 export default function TermsPage() {
   return (
     <LegalPage
+      atual="terms"
       title="Termos de Uso"
       description="Estes termos definem as condições de uso do xcart e de seus recursos de importação, automação, IA, Shopify e checkout roteado."
       updatedAt="8 de maio de 2026"

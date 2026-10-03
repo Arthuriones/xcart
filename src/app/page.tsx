@@ -3,6 +3,11 @@ import { headers } from "next/headers";
 import Landing from "./lp/page";
 import { APP_HOME } from "@/lib/app-home";
 
+// No host publico a raiz E a landing: sem isto ela saia com o titulo generico
+// do layout ("xcart"). No host do app a raiz so redireciona, e o titulo nao
+// chega a aparecer.
+export { metadata } from "./lp/page";
+
 type HomePageProps = {
   searchParams: Promise<{
     [key: string]: string | string[] | undefined;

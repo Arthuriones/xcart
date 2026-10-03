@@ -10,6 +10,7 @@ export const metadata: Metadata = {
 export default function PrivacyPage() {
   return (
     <LegalPage
+      atual="privacy"
       title="Política de Privacidade"
       description="Esta política explica quais dados o xcart coleta, como usa esses dados e quais controles o usuário possui ao conectar lojas Shopify e ferramentas de IA."
       updatedAt="8 de maio de 2026"

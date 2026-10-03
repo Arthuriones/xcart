@@ -10,6 +10,7 @@ export const metadata: Metadata = {
 export default function DataDeletionPage() {
   return (
     <LegalPage
+      atual="data-deletion"
       title="Instruções de Exclusão de Dados"
       description="Esta página explica como solicitar a remoção dos dados associados ao uso do xcart e às integrações conectadas."
       updatedAt="8 de maio de 2026"
