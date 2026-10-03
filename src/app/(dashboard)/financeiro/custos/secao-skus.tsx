@@ -3,7 +3,7 @@
 import { useId, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ExternalLinkIcon, HistoryIcon, SearchIcon } from "lucide-react";
+import { ExternalLinkIcon, HistoryIcon, PackageIcon, SearchIcon } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { cn } from "@/components/ui/cn";
@@ -15,7 +15,9 @@ import { Input } from "@/components/ui/input";
 import { Section } from "@/components/ui/section";
 import { Segmented } from "@/components/ui/segmented";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/status-badge";
+import type { ProdutoDoSku } from "@/lib/leitura/sku-shopify";
 import { ROTAS, somarDias, type CustoItemCorpo, type CustosCorpo } from "@/lib/financeiro/tipos";
 import type { DadosCustos, SkuVendido } from "@/lib/financeiro/custos-queries";
 import { useSincronizarLoja } from "@/app/(dashboard)/stores/usar-sincronizar";
@@ -40,6 +42,7 @@ import {
   type Situacao,
 } from "./apresentar";
 import { HistoricoSku } from "./historico-sku";
+import { useProdutosDaShopify } from "./usar-produtos";
 
 // ============================================================================
 // (2) Custo por produto: os SKUs vendidos em 60 dias, com o custo e o frete
@@ -71,12 +74,15 @@ export function SecaoSkus({
   iniciais,
   alterados,
   situacaoInicial,
+  buscarNomes,
   onEditar,
   onDescartar,
   onSalvo,
 }: {
   dados: DadosCustos;
   loja: { id: string; nome: string; dominio: string };
+  /** Pergunta nome e foto a Shopify. Desligado em loja sem acesso (a resposta seria erro). */
+  buscarNomes: boolean;
   edicoes: Record<string, Edicao>;
   iniciais: ReadonlyMap<string, Edicao>;
   alterados: string[];
@@ -104,6 +110,8 @@ export function SecaoSkus({
     [dados.skus, situacao, busca, alteradosSet, ordem]
   );
   const pag = paginar(filtradas, pagina);
+  const visiveis = useMemo(() => pag.itens.map((s) => s.sku), [pag.itens]);
+  const shopify = useProdutosDaShopify(loja.id, visiveis, buscarNomes);
   const desde = somarDias(dados.hoje, -DIAS_JANELA);
   const versoesAbertas = historico ? (dados.skus.find((s) => s.sku === historico)?.versoes ?? []) : [];
 
@@ -196,12 +204,14 @@ export function SecaoSkus({
       chave: "produto",
       titulo: "Produto",
       ordenavel: false,
-      className: "min-w-44 max-w-72 whitespace-normal",
+      className: "min-w-56 whitespace-normal",
       celula: ({ s }) => (
-        <span className="flex min-w-0 flex-col gap-0.5">
-          <span className="break-all font-mono text-dense text-ink">{s.sku}</span>
-          {s.unidades === 0 ? <span className="text-label text-t2">Sem venda em 60 dias</span> : null}
-        </span>
+        <CelulaProduto
+          sku={s.sku}
+          semVenda={s.unidades === 0}
+          produto={shopify.produtos[s.sku]}
+          carregando={buscarNomes && !shopify.falhou && shopify.produtos[s.sku] === undefined}
+        />
       ),
     },
     {
@@ -523,6 +533,7 @@ export function SecaoSkus({
                   </span>{" "}
                   de {plural(pag.total, "produto", "produtos")}. O xcart converte cada moeda pela cotação do dia do
                   pedido.
+                  {shopify.falhou ? " Os nomes e as fotos não vieram da Shopify agora; a tabela mostra o SKU." : ""}
                 </p>
                 {pag.paginas > 1 ? (
                   <nav aria-label="Páginas da tabela" className="flex items-center gap-2">
@@ -577,6 +588,51 @@ export function SecaoSkus({
         onFechar={() => setHistorico(null)}
       />
     </>
+  );
+}
+
+/**
+ * Foto, nome e variante ao lado do SKU (#34). Enquanto a Shopify responde, um
+ * traco no lugar do nome; SKU que ela nao achou fica so com o codigo.
+ */
+function CelulaProduto({
+  sku,
+  semVenda,
+  produto,
+  carregando,
+}: {
+  sku: string;
+  semVenda: boolean;
+  produto: ProdutoDoSku | null | undefined;
+  carregando: boolean;
+}) {
+  return (
+    <span className="flex min-w-0 items-center gap-2.5">
+      <span
+        aria-hidden
+        className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-control border border-border-subtle bg-surface-2"
+      >
+        {produto?.imagem ? (
+          // Miniatura ja vem pequena do CDN da Shopify (96 px): sem next/image e sem config nova.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={produto.imagem} alt="" width={36} height={36} loading="lazy" decoding="async" className="size-full object-cover" />
+        ) : (
+          <PackageIcon className="size-4 text-t3" strokeWidth={1.75} />
+        )}
+      </span>
+      <span className="flex min-w-0 max-w-72 flex-col gap-0.5">
+        {produto ? (
+          <span className="line-clamp-2 text-dense font-medium text-ink">{produto.nome}</span>
+        ) : carregando ? (
+          <Skeleton className="h-3.5 w-36" />
+        ) : null}
+        <span className={cn("break-all", produto || carregando ? "text-label text-t2" : "text-dense text-ink")}>
+          {produto?.variante ? `${produto.variante} · ` : ""}
+          <span className="font-mono">{sku}</span>
+        </span>
+        {semVenda ? <span className="text-label text-t2">Sem venda em 60 dias</span> : null}
+      </span>
+    </span>
   );
 }
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ProductCostRow } from "../src/lib/financeiro/tipos";
 import type { SkuVendido } from "../src/lib/financeiro/custos-queries";
 import { parseCsvCustos } from "../src/lib/financeiro/csv-custos";
+import { buscaPorSku, produtosDosSkus, skusDoPedido } from "../src/lib/leitura/sku-shopify";
 import {
   destinoInterno,
   edicaoInicial,
@@ -248,6 +249,37 @@ describe("escolher loja", () => {
     expect(r).toEqual({ vendidos: 2, comCusto: 1, taxa: false, sincronizado: true });
     expect(pendenciasDaLoja(r)).toBe(2);
     expect(pendenciasDaLoja(null)).toBe(0);
+  });
+});
+
+describe("nome e foto por SKU (#34)", () => {
+  it("pedido: sem vazio, sem repetido, sem SKU longo, no maximo 25", () => {
+    const muitos = Array.from({ length: 30 }, (_, i) => `S${i}`);
+    expect(skusDoPedido([" A ", "A", "", "x".repeat(121), ...muitos])).toHaveLength(25);
+    expect(skusDoPedido([" A ", "A", "", "B"])).toEqual(["A", "B"]);
+  });
+
+  it("busca exata com aspas escapadas", () => {
+    expect(buscaPorSku(["CIL-001", 'A"B', "C\\D"])).toBe('sku:"CIL-001" OR sku:"A\\"B" OR sku:"C\\\\D"');
+  });
+
+  it("so vale o SKU igual; variante unica nao vira nome de variante", () => {
+    const r = produtosDosSkus(
+      [
+        { sku: "cil-001", title: "Preto", product: { title: "Errado" } }, // caixa diferente: outra chave
+        { sku: "CIL-001 ", title: "Preto / 12 mm", image: { url: "https://cdn.shopify.com/a.jpg" }, product: { title: "Cílios Volume Russo" } },
+        { sku: "CIL-001", title: "Outro", product: { title: "Duplicado" } },
+        { sku: "CIL-002", title: "Default Title", image: null, product: { title: "Cola", featuredImage: { url: "https://cdn.shopify.com/b.jpg" } } },
+        { sku: "CIL-003", title: "X", image: { url: "http://inseguro/c.jpg" }, product: { title: "Sem foto" } },
+        { sku: "NAO-PEDIDO", title: "Y", product: { title: "Z" } },
+      ],
+      ["CIL-001", "CIL-002", "CIL-003", "CIL-404"]
+    );
+    expect(r).toEqual({
+      "CIL-001": { nome: "Cílios Volume Russo", variante: "Preto / 12 mm", imagem: "https://cdn.shopify.com/a.jpg" },
+      "CIL-002": { nome: "Cola", variante: null, imagem: "https://cdn.shopify.com/b.jpg" },
+      "CIL-003": { nome: "Sem foto", variante: "X", imagem: null },
+    });
   });
 });
 

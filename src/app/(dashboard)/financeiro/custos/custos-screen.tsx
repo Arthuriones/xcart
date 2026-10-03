@@ -169,6 +169,7 @@ export function CustosScreen({
         iniciais={iniciais}
         alterados={alterados}
         situacaoInicial={situacaoInicial}
+        buscarNomes={!conexao?.semAcesso}
         onEditar={editar}
         onDescartar={() => setEdicoes({})}
         onSalvo={() => setEdicoes({})}
