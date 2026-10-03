@@ -29,9 +29,9 @@ export function EsqueletoSecao({ altura = "h-64", className }: { altura?: string
   );
 }
 
-export function EsqueletoTabela({ linhas = 6 }: { linhas?: number }) {
+export function EsqueletoTabela({ linhas = 6, rotulo = "Carregando a tabela" }: { linhas?: number; rotulo?: string }) {
   return (
-    <div className="min-w-0 rounded-card border border-border bg-surface">
+    <div aria-busy="true" aria-label={rotulo} className="min-w-0 rounded-card border border-border bg-surface">
       <div className="flex flex-wrap items-center gap-3 border-b border-border-subtle px-4 py-3">
         <Skeleton className="h-8 w-64 max-w-full rounded-control" />
         <Skeleton className="hidden h-8 w-48 rounded-control sm:block" />
