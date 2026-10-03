@@ -1,10 +1,17 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { CircleAlert } from "lucide-react";
-import { filtroResolvido } from "@/lib/filtro-global";
+import { Store } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { filtroResolvido, lerFiltroGlobal } from "@/lib/filtro-global";
 import { carregarCustos } from "@/lib/financeiro/custos-queries";
-import { TODAS } from "@/lib/financeiro/tipos";
-import { CustosScreen, EscolherLoja } from "./custos-screen";
+import { lerConexoes, lerCustosDasLojas } from "@/lib/leitura/custos-lojas";
+import { resumirCustos, type Situacao } from "./apresentar";
+import { CabecalhoCustos } from "./cabecalho";
+import { CustosScreen } from "./custos-screen";
+import { ErroCustos } from "./erro-custos";
+import { EscolherLoja, type LojaParaEscolher } from "./escolher-loja";
+import { EsqueletoCustos } from "./esqueleto";
 
 export const dynamic = "force-dynamic";
 
@@ -12,97 +19,101 @@ export const dynamic = "force-dynamic";
 // Custos e taxas: o que sai de cada venda alem do anuncio.
 //
 // Custo e POR LOJA (o mesmo SKU pode ter fornecedor diferente em cada loja),
-// entao com "todas as lojas" no seletor a tela pede para escolher uma em vez
-// de misturar custos de lojas diferentes numa tabela so.
+// entao com "Todas as lojas" na barra a tela mostra o progresso de cada loja
+// e pede para escolher uma, em vez de misturar custos numa tabela so. Com uma
+// loja so na conta, ela ja vem escolhida.
+//
+// Le so o banco (carregarCustos, sem mudar nada). As rotas que gravam sao as
+// de sempre: POST/DELETE /api/financeiro/custos e POST /api/financeiro/config.
+//
+// ?situacao=semCusto abre a tabela ja filtrada (o link do aviso do Lucro pode
+// usar). O resto do filtro e do cliente.
 // ============================================================================
 
-const VAZIO_CAIXA =
-  "rounded-xl border border-dashed border-[var(--border-strong)] bg-surface px-8 py-11 text-center";
-const VAZIO_CTA =
-  "mt-4 inline-flex h-[30px] items-center rounded-md bg-[var(--solid)] px-[13px] text-[12.5px] font-semibold text-[var(--on-solid)] hover:bg-[var(--solid-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40";
-
-function CaixaErro({ mensagem }: { mensagem: string }) {
-  return (
-    <div
-      role="alert"
-      className="flex items-start gap-3 rounded-xl border px-4 py-3"
-      style={{ borderColor: "var(--err-border)", background: "var(--err-bg)" }}
-    >
-      <CircleAlert aria-hidden className="mt-px h-4 w-4 shrink-0" style={{ color: "var(--err)" }} />
-      <div className="min-w-0">
-        <p className="text-[13px] font-medium text-ink">Não deu para carregar os custos</p>
-        <p className="mt-0.5 break-words text-[12px] text-t2">{mensagem}</p>
-      </div>
-    </div>
-  );
+function mensagem(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
 }
 
-async function Conteudo() {
-  // Erro de banco aparece na tela; nunca vira "nenhuma loja" ou "sem custos".
-  let resolvido: Awaited<ReturnType<typeof filtroResolvido>> | null = null;
-  let erro: string | null = null;
+async function Conteudo({ situacaoInicial }: { situacaoInicial: Situacao }) {
+  let resolvido: Awaited<ReturnType<typeof filtroResolvido>>;
   try {
     resolvido = await filtroResolvido();
   } catch (e) {
-    erro = e instanceof Error ? e.message : String(e);
+    console.error("[custos] lojas", e);
+    // Erro de banco aparece; nunca vira "nenhuma loja" ou "sem custos".
+    return <ErroCustos detalhe={mensagem(e)} />;
   }
-  if (!resolvido) return <CaixaErro mensagem={erro ?? "Erro desconhecido."} />;
   const { filtro, lojas } = resolvido;
+  if (lojas.length === 0) return <SemLojas />;
 
-  if (lojas.length === 0) {
-    return (
-      <div className={VAZIO_CAIXA}>
-        <p className="text-[15px] font-semibold text-ink">Nenhuma loja conectada</p>
-        <p className="mx-auto mt-1.5 max-w-[400px] text-[12.5px] text-t2">
-          Conecte uma loja Shopify para lançar o custo dos produtos e a taxa de pagamento.
-          É com isso que o xcart calcula o lucro de cada venda.
-        </p>
-        <Link href="/stores" className={VAZIO_CTA}>
-          Conectar loja
-        </Link>
-      </div>
-    );
+  const escolhida = lojas.find((l) => l.id === filtro.lojaId) ?? (lojas.length === 1 ? lojas[0] : null);
+
+  if (!escolhida) {
+    const custos = await lerCustosDasLojas(lojas);
+    const paraEscolher: LojaParaEscolher[] = custos.map((c) => ({
+      id: c.loja.id,
+      nome: c.loja.nome,
+      dominio: c.loja.dominio,
+      semAcesso: c.conexao?.semAcesso ?? false,
+      conexao: c.conexao?.detalhe ?? null,
+      resumo: c.dados ? resumirCustos(c.dados) : null,
+    }));
+    return <EscolherLoja lojas={paraEscolher} />;
   }
 
-  const loja = filtro.lojaId === TODAS ? null : lojas.find((l) => l.id === filtro.lojaId) ?? null;
-  if (!loja) return <EscolherLoja lojas={lojas} />;
-
-  let dados: Awaited<ReturnType<typeof carregarCustos>> | null = null;
-  try {
-    dados = await carregarCustos(loja.id);
-  } catch (e) {
-    erro = e instanceof Error ? e.message : String(e);
+  const [dados, conexoes] = await Promise.allSettled([
+    carregarCustos(escolhida.id),
+    lerConexoes([escolhida.id]),
+  ]);
+  if (dados.status === "rejected") {
+    console.error("[custos] loja", dados.reason);
+    return <ErroCustos detalhe={mensagem(dados.reason)} />;
   }
-  if (!dados) return <CaixaErro mensagem={erro ?? "Erro desconhecido."} />;
-  return <CustosScreen key={loja.id} dados={dados} loja={loja} />;
-}
+  const conexao = conexoes.status === "fulfilled" ? (conexoes.value?.get(escolhida.id) ?? null) : null;
 
-function Esqueleto() {
-  // Blocos parados: e leitura de banco, coisa de um segundo.
   return (
-    <div className="flex flex-col gap-[18px]" aria-busy="true">
-      <div aria-hidden className="h-[150px] rounded-xl border border-border bg-surface" />
-      <div aria-hidden className="h-[260px] rounded-xl border border-border bg-surface" />
-      <div aria-hidden className="h-[120px] rounded-xl border border-border bg-surface" />
-    </div>
+    <CustosScreen
+      key={escolhida.id}
+      dados={dados.value}
+      loja={escolhida}
+      conexao={conexao}
+      variasLojas={lojas.length > 1}
+      situacaoInicial={situacaoInicial}
+    />
   );
 }
 
-export default function CustosPage() {
+function SemLojas() {
   return (
-    <div className="flex flex-col gap-[18px]">
-      <div>
-        <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.02em] text-ink">
-          Custos e taxas
-        </h1>
-        <p className="mt-1 max-w-[62ch] text-[13px] leading-relaxed text-t2">
-          O que sai de cada venda além do anúncio: produto, frete do fornecedor e taxa de
-          pagamento. É daqui que sai o lucro.
-        </p>
-      </div>
-      <Suspense fallback={<Esqueleto />}>
-        <Conteudo />
+    <EmptyState
+      icone={<Store />}
+      titulo="Conecte uma loja para lançar custos"
+      descricao="O custo de cada produto e a taxa de pagamento entram no lucro de cada venda."
+      acao={
+        <Link href="/stores" className={buttonVariants({})}>
+          Conectar loja
+        </Link>
+      }
+      className="min-h-80"
+    />
+  );
+}
+
+export default async function CustosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [chave: string]: string | string[] | undefined }>;
+}) {
+  // So cookie (sem banco): serve de key para o Suspense. Trocar de loja na
+  // barra mostra o esqueleto de novo em vez de deixar a tabela velha na tela.
+  const [filtro, sp] = await Promise.all([lerFiltroGlobal(), searchParams]);
+  const situacao: Situacao = sp.situacao === "semCusto" ? "semCusto" : "todos";
+  return (
+    <>
+      <CabecalhoCustos />
+      <Suspense key={filtro.lojaId} fallback={<EsqueletoCustos />}>
+        <Conteudo situacaoInicial={situacao} />
       </Suspense>
-    </div>
+    </>
   );
 }

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { lerNumero, parseCsvCustos, validarCustoItem } from "@/lib/financeiro/csv-custos";
+import {
+  lerNumero,
+  numeroAmbiguo,
+  parseCsvCustos,
+  validarCustoItem,
+  validarValor,
+} from "@/lib/financeiro/csv-custos";
 
 /**
  * O CSV de custos vem de planilha, quase sempre Excel em pt-BR: ";" e decimal
@@ -109,6 +115,66 @@ describe("lerNumero", () => {
     expect(lerNumero("")).toBeNaN();
     expect(lerNumero("1e3")).toBeNaN();
     expect(lerNumero("R$ 5")).toBeNaN();
+  });
+
+  // Achado da revisao: "4.990" virava 4,99 calado. Na planilha brasileira e
+  // 4990; na americana e 4,99. Adivinhar errado erra o custo por mil.
+  it("ponto com tres casas e ambiguo: NaN, nunca 4,99 calado", () => {
+    expect(numeroAmbiguo("4.990")).toBe(true);
+    expect(numeroAmbiguo(" 12.345 ")).toBe(true);
+    expect(lerNumero("4.990")).toBeNaN();
+    expect(lerNumero("-1.500")).toBeNaN();
+  });
+
+  it("o que nao e ambiguo continua passando", () => {
+    expect(numeroAmbiguo("0.125")).toBe(false); // milhar nao comeca com zero
+    expect(lerNumero("0.125")).toBe(0.125);
+    expect(lerNumero("4.99")).toBe(4.99);
+    expect(lerNumero("4.9900")).toBe(4.99);
+    expect(lerNumero("4,990")).toBe(4.99); // virgula e sempre decimal
+    expect(lerNumero("4990")).toBe(4990);
+    expect(lerNumero("1234.567")).toBe(1234.567);
+    expect(numeroAmbiguo(4.99)).toBe(false);
+  });
+
+  it("varios grupos de milhar sem decimal", () => {
+    expect(lerNumero("1.234.567")).toBe(1234567);
+    expect(lerNumero("1,234,567")).toBe(1234567);
+    expect(lerNumero("1 234,50")).toBe(1234.5);
+    expect(lerNumero("1,2,3")).toBeNaN();
+  });
+});
+
+describe("validarValor", () => {
+  it("ambiguo explica as duas leituras", () => {
+    const r = validarValor("4.990", "custo");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.motivo).toMatch(/ambíguo/);
+      expect(r.motivo).toContain("4990");
+      expect(r.motivo).toContain("4,99");
+    }
+  });
+
+  it("number vindo do JSON nao passa pela regra do texto", () => {
+    expect(validarValor(4.99, "custo")).toEqual({ ok: true, valor: 4.99 });
+    expect(validarValor(1.234, "frete")).toEqual({ ok: true, valor: 1.234 });
+  });
+
+  it("vazio, negativo e alto demais", () => {
+    expect(validarValor("", "frete")).toEqual({ ok: false, motivo: "frete vazio" });
+    expect(validarValor("-1", "custo")).toEqual({ ok: false, motivo: "custo negativo" });
+    expect(validarValor("10000000", "custo")).toMatchObject({ ok: false });
+  });
+});
+
+describe("parseCsvCustos com numero ambiguo", () => {
+  it("a linha volta com erro e as outras passam", () => {
+    const r = parseCsvCustos("sku;custo;frete\nA;4.990;0\nB;4990;1.500\nC;4,99;0", "BRL");
+    expect(r.itens.map((i) => [i.sku, i.custo_unitario])).toEqual([["C", 4.99]]);
+    expect(r.erros.map((e) => e.linha)).toEqual([2, 3]);
+    expect(r.erros[0].motivo).toMatch(/custo "4.990" é ambíguo/);
+    expect(r.erros[1].motivo).toMatch(/frete "1.500" é ambíguo/);
   });
 });
 

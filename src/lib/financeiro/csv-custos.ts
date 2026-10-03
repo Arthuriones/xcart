@@ -27,18 +27,40 @@ const ALIASES: Record<"sku" | "custo" | "frete" | "moeda" | "desde", string[]> =
   desde: ["valido_desde", "vale_desde", "data", "desde"],
 };
 
+/** Espaco comum e o inseparavel (U+00A0) que o Excel poe no milhar. */
+function semEspaco(texto: string): string {
+  return texto.replace(/[\s\u00a0]/g, "");
+}
+
+/**
+ * "4.990" sem virgula: um ponto seguido de exatamente tres digitos. Na
+ * planilha brasileira e milhar (4990); na americana, decimal (4,99). Chutar
+ * errado multiplica ou divide o custo por mil sem erro nenhum -- o lucro so
+ * aparece errado. Entao o numero e recusado com a explicacao, e o lojista
+ * escreve "4990" ou "4,99". "0.125" nao e ambiguo: milhar nao comeca com zero.
+ */
+export function numeroAmbiguo(texto: unknown): boolean {
+  if (typeof texto !== "string") return false;
+  return /^-?[1-9]\d{0,2}\.\d{3}$/.test(semEspaco(texto));
+}
+
 /**
  * Texto -> numero, aceitando o formato brasileiro.
  *
  * Com "," e "." no mesmo numero, o ULTIMO e o decimal e o outro e milhar
  * ("1.234,56" e "1,234.56" dao 1234.56). So virgula = decimal ("12,5").
- * Vazio ou lixo = NaN; quem chama decide se vazio vale zero.
+ * Varios grupos de milhar sem decimal ("1.234.567", "1,234,567") sao milhar.
+ * Ambiguo ("4.990", ver numeroAmbiguo), vazio ou lixo = NaN; quem chama
+ * decide se vazio vale zero.
  */
 export function lerNumero(texto: string | number | null | undefined): number {
   if (typeof texto === "number") return texto;
   if (texto === null || texto === undefined) return NaN;
-  let t = String(texto).replace(/[\s ]/g, "");
+  let t = semEspaco(String(texto));
   if (t === "") return NaN;
+  if (numeroAmbiguo(t)) return NaN;
+  if (/^-?\d{1,3}(\.\d{3}){2,}$/.test(t)) return Number(t.replace(/\./g, ""));
+  if (/^-?\d{1,3}(,\d{3}){2,}$/.test(t)) return Number(t.replace(/,/g, ""));
   const virgula = t.lastIndexOf(",");
   const ponto = t.lastIndexOf(".");
   if (virgula >= 0 && ponto >= 0) {
@@ -67,6 +89,39 @@ export interface CustoCru {
   valido_desde?: unknown;
 }
 
+/** O valor cru esta vazio (null, undefined ou so espaco)? */
+function vazio(v: unknown): boolean {
+  return v === null || v === undefined || String(v).trim() === "";
+}
+
+/**
+ * Um valor de dinheiro (custo ou frete) validado, ou o motivo em portugues.
+ * E a mesma regra para o CSV, para o campo da tabela e para a rota: o que a
+ * tela aceita, o servidor aceita. Vazio e recusado; quem aceita vazio (o
+ * frete) confere antes de chamar.
+ */
+export function validarValor(
+  cru: unknown,
+  nome: "custo" | "frete"
+): { ok: true; valor: number } | { ok: false; motivo: string } {
+  if (vazio(cru)) return { ok: false, motivo: `${nome} vazio` };
+  const texto = String(cru).trim();
+  // So texto e ambiguo: o number que a tela manda no JSON ja e o valor (1.234 = 1,234).
+  if (typeof cru === "string" && numeroAmbiguo(texto)) {
+    const decimal = Number(semEspaco(texto)).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+    const milhar = semEspaco(texto).replace(".", "");
+    return {
+      ok: false,
+      motivo: `${nome} "${texto}" é ambíguo: escreva ${milhar} (milhar) ou ${decimal} (decimal)`,
+    };
+  }
+  const valor = lerNumero(typeof cru === "number" ? cru : texto);
+  if (!Number.isFinite(valor)) return { ok: false, motivo: `${nome} "${texto}" não é número` };
+  if (valor < 0) return { ok: false, motivo: `${nome} negativo` };
+  if (valor >= CUSTO_MAXIMO) return { ok: false, motivo: `${nome} alto demais (confira as casas decimais)` };
+  return { ok: true, valor };
+}
+
 /**
  * Um item de custo validado, ou o motivo da recusa (em portugues, para a tela).
  * `moedaPadrao` preenche moeda vazia; null = moeda obrigatoria.
@@ -79,22 +134,14 @@ export function validarCustoItem(
   if (sku.length === 0) return { ok: false, motivo: "SKU vazio" };
   if (sku.length > 255) return { ok: false, motivo: "SKU com mais de 255 caracteres" };
 
-  const textoCusto = cru.custo_unitario;
-  if (textoCusto === null || textoCusto === undefined || String(textoCusto).trim() === "") {
-    return { ok: false, motivo: "custo vazio" };
-  }
-  const custo = lerNumero(textoCusto as string | number);
-  if (!Number.isFinite(custo)) return { ok: false, motivo: `custo "${String(textoCusto)}" não é número` };
-  if (custo < 0) return { ok: false, motivo: "custo negativo" };
-  if (custo >= CUSTO_MAXIMO) return { ok: false, motivo: "custo alto demais (confira as casas decimais)" };
+  const custo = validarValor(cru.custo_unitario, "custo");
+  if (!custo.ok) return custo;
 
-  const textoFrete = cru.frete_unitario;
   let frete = 0;
-  if (textoFrete !== null && textoFrete !== undefined && String(textoFrete).trim() !== "") {
-    frete = lerNumero(textoFrete as string | number);
-    if (!Number.isFinite(frete)) return { ok: false, motivo: `frete "${String(textoFrete)}" não é número` };
-    if (frete < 0) return { ok: false, motivo: "frete negativo" };
-    if (frete >= CUSTO_MAXIMO) return { ok: false, motivo: "frete alto demais (confira as casas decimais)" };
+  if (!vazio(cru.frete_unitario)) {
+    const r = validarValor(cru.frete_unitario, "frete");
+    if (!r.ok) return r;
+    frete = r.valor;
   }
 
   const textoMoeda = typeof cru.moeda === "string" ? cru.moeda.trim().toUpperCase() : "";
@@ -115,7 +162,7 @@ export function validarCustoItem(
 
   return {
     ok: true,
-    item: { sku, custo_unitario: custo, frete_unitario: frete, moeda, valido_desde },
+    item: { sku, custo_unitario: custo.valor, frete_unitario: frete, moeda, valido_desde },
   };
 }
 
