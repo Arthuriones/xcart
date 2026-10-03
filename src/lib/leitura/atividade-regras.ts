@@ -67,7 +67,7 @@ export const TIPOS: readonly OpcaoTipo[] = [
   { id: "importacao", rotulo: "Importação", filtro: "Importações", nenhum: "Nenhuma importação" },
   { id: "alerta", rotulo: "Alerta", filtro: "Alertas", nenhum: "Nenhum alerta" },
   { id: "rastreamento", rotulo: "Rastreamento", filtro: "Rastreamento", nenhum: "Nenhum envio de compras ligado" },
-  { id: "creditos", rotulo: "Créditos", filtro: "Créditos e plano", nenhum: "Nenhuma compra de créditos", daConta: true },
+  { id: "creditos", rotulo: "Créditos e plano", filtro: "Créditos e plano", nenhum: "Nenhuma compra de créditos", daConta: true },
   { id: "rota", rotulo: "Rota", filtro: "Rotas", nenhum: "Nenhuma rota criada", soComRota: true },
   { id: "carrinho", rotulo: "Carrinho", filtro: "Carrinhos", nenhum: "Nenhum carrinho registrado", soComRota: true },
 ];

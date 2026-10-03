@@ -251,7 +251,7 @@ export function LinhaDoTempo({
               value={q}
               onChange={(e) => mudarBusca(e.target.value)}
               aria-label="Buscar na atividade carregada"
-              placeholder="Buscar por loja, produto ou título"
+              placeholder="Buscar por loja ou palavra"
               maxLength={100}
               className="h-ctl-lg pl-8 text-dense sm:h-ctl-md"
             />
