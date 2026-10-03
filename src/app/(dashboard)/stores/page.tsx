@@ -1,39 +1,57 @@
-import { getStoresWithRoles, type StoreRow } from "@/lib/stores/queries";
-import { StoresScreen } from "./stores-screen";
+import { Suspense } from "react";
+import { PageHeader } from "@/components/layout/page-header";
+import { lerResumoLojas, type ResumoLojas } from "@/lib/leitura/resumo-lojas";
+import { AvisoRetorno } from "./aviso-retorno";
+import { BotaoConectar, ConectarLojaProvider } from "./conectar-loja";
+import { ErroLista, EsqueletoLista } from "./estados-lista";
+import { ListaLojas } from "./lista-lojas";
 
-// A pagina roda no servidor: busca as lojas ao lado do banco e entrega o HTML
-// pronto. O que precisa de clique continua no cliente, dentro de StoresScreen.
-export default async function StoresPage() {
-  // Falha de banco NAO pode virar "nenhuma loja conectada". Ja aconteceu: uma
-  // coluna que faltava derrubava a consulta inteira e a tela dizia que a conta
-  // estava vazia para quem tinha nove lojas. O try envolve so a busca -- JSX
-  // dentro de try/catch nao pegaria erro de renderizacao mesmo.
-  let lojas: StoreRow[] = [];
-  let falha: string | null = null;
+export const dynamic = "force-dynamic";
+
+/**
+ * Lojas: todas as lojas Shopify conectadas, a saude de cada conexao e o que
+ * fazer com as que nao se usa mais. O cabecalho e o "Conectar loja" saem na
+ * hora; a lista (faturamento, lucro e rastreamento por loja) chega por Suspense.
+ *
+ * URLs que continuam valendo: ?installed=1 e ?error= (volta do OAuth da
+ * Shopify) e, novo, ?conectar=1&dominio=... (abre o "Conectar loja" ja com o
+ * dominio, para o "Reconectar" de outras telas).
+ */
+export default async function StoresPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [chave: string]: string | string[] | undefined }>;
+}) {
+  const sp = await searchParams;
+  const texto = (v: string | string[] | undefined) => (typeof v === "string" ? v : null);
+  const conectar = texto(sp.conectar) === "1";
+
+  return (
+    <ConectarLojaProvider inicial={conectar ? { dominio: texto(sp.dominio) ?? "", reconectar: Boolean(sp.dominio) } : null}>
+      <PageHeader
+        title="Lojas"
+        description="As lojas Shopify conectadas, a saúde de cada conexão e o que fazer com as que você não usa mais."
+      >
+        <BotaoConectar />
+      </PageHeader>
+      <AvisoRetorno instalado={texto(sp.installed) === "1"} erro={texto(sp.error)} />
+      <Suspense fallback={<EsqueletoLista />}>
+        <Lista />
+      </Suspense>
+    </ConectarLojaProvider>
+  );
+}
+
+async function Lista() {
+  // Falha de banco NAO vira "nenhuma loja conectada": ja aconteceu de uma
+  // coluna faltando derrubar a consulta e a tela dizer que a conta estava
+  // vazia para quem tinha nove lojas.
+  let resumo: ResumoLojas;
   try {
-    lojas = await getStoresWithRoles();
+    resumo = await lerResumoLojas();
   } catch (erro) {
     console.error("[stores] falha ao listar", erro);
-    falha = erro instanceof Error ? erro.message : String(erro);
+    return <ErroLista />;
   }
-
-  if (falha) {
-    return (
-      <div
-        className="rounded-lg border px-6 py-8"
-        style={{ borderColor: "var(--err-border)", background: "var(--err-bg)" }}
-      >
-        <p className="text-[15px] font-semibold text-ink">
-          Não consegui carregar suas lojas
-        </p>
-        <p className="mt-1.5 max-w-[520px] text-[12.5px] text-t2">
-          O banco recusou a consulta. Suas lojas continuam conectadas — é a leitura
-          que falhou. Recarregue a página; se continuar, o detalhe está abaixo.
-        </p>
-        <p className="mt-2 font-mono text-[11px] text-t3">{falha}</p>
-      </div>
-    );
-  }
-
-  return <StoresScreen initialStores={lojas} />;
+  return <ListaLojas resumo={resumo} />;
 }
