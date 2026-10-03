@@ -212,11 +212,19 @@ const DESTINOS: Record<RegraAlerta, Destino> = {
   fila_travada: { href: "/tracking/eventos", tela: "Eventos ao vivo" },
   // Erro de leitura de pedido e quase sempre permissao/token da loja.
   pedidos_sync_erro: { href: "/stores", tela: "Lojas" },
-  ads_sync_atrasado: { href: "/financeiro/anuncios", tela: "Contas de anúncio" },
+  ads_sync_atrasado: { href: "/integracoes/meta", tela: "Integrações · Meta" },
   gastou_sem_vender: { href: "/financeiro", tela: "Lucro" },
 };
 
-export function destinoDoAlerta(regra: RegraAlerta): Destino {
+/**
+ * `titulo` separa Meta de Google no ads_sync_atrasado: o cron grava
+ * "Gasto do Google sem atualizar: ..." (avaliar.ts), e a conta do Google so
+ * aparece em Integracoes -> Google.
+ */
+export function destinoDoAlerta(regra: RegraAlerta, titulo?: string | null): Destino {
+  if (regra === "ads_sync_atrasado" && titulo?.startsWith("Gasto do Google")) {
+    return { href: "/integracoes/google", tela: "Integrações · Google" };
+  }
   return DESTINOS[regra] ?? { href: "/tracking", tela: "Saúde dos pixels" };
 }
 

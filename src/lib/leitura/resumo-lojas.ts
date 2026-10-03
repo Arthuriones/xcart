@@ -623,7 +623,8 @@ export async function lerInventarioLoja(id: string): Promise<InventarioLoja | nu
     produtos,
     materiais,
     rotasComoVitrine,
-    destinosComoCheckout,
+    configsCk,
+    destinosCk,
     destinosRastreamento,
     pedidos,
     custos,
@@ -634,7 +635,11 @@ export async function lerInventarioLoja(id: string): Promise<InventarioLoja | nu
     contar("products", "store_id"),
     contar("store_assets", "store_id"),
     contar("routed_checkout_configs", "source_store_id"),
-    contar("routed_checkout_targets", "target_store_id"),
+    // A loja tambem e checkout pela coluna da propria rota (rota legada, sem
+    // linha em targets, roteia por ela). E NOT NULL com ON DELETE CASCADE: a
+    // rota inteira some com todos os destinos, nao so o desta loja.
+    supabase.from("routed_checkout_configs").select("id, source_store_id").eq("target_store_id", id),
+    supabase.from("routed_checkout_targets").select("route_id").eq("target_store_id", id),
     contar("tracking_destinations", "store_id"),
     contar("fin_orders", "store_id", "store_id"),
     contar("product_costs", "store_id"),
@@ -643,12 +648,24 @@ export async function lerInventarioLoja(id: string): Promise<InventarioLoja | nu
     supabase.from("tracking_configs").select("enabled").eq("store_id", id).maybeSingle(),
   ]);
   if (cfg.error) throw new Error(`Falha ao ler o rastreamento: ${cfg.error.message}`);
+  if (configsCk.error) throw new Error(`Falha ao contar routed_checkout_configs: ${configsCk.error.message}`);
+  if (destinosCk.error) throw new Error(`Falha ao contar routed_checkout_targets: ${destinosCk.error.message}`);
+
+  const rotasCk = (configsCk.data || []) as { id: string; source_store_id: string | null }[];
+  // Rotas que somem inteiras: o destino delas nao conta de novo, e a que tem
+  // esta loja tambem como vitrine ja esta em rotasComoVitrine.
+  const inteiras = new Set(rotasCk.map((r) => String(r.id)));
+  const rotasComoCheckout = rotasCk.filter((r) => r.source_store_id !== id).length;
+  const destinosComoCheckout = ((destinosCk.data || []) as { route_id: string }[]).filter(
+    (t) => !inteiras.has(String(t.route_id))
+  ).length;
 
   return {
     produtos,
     materiais,
     temLogo: Boolean(loja.logo_path),
     rotasComoVitrine,
+    rotasComoCheckout,
     destinosComoCheckout,
     destinosRastreamento,
     rastreamentoLigado: Boolean((cfg.data as { enabled?: boolean } | null)?.enabled),

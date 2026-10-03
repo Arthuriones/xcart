@@ -56,7 +56,7 @@ function Contador({ item, dados }: { item: ItemNav; dados: DadosMenu }) {
     return (
       <span className="num rounded-full bg-err-bg px-1.5 text-label font-medium leading-4.5 text-err">
         {valor}
-        <span className="sr-only"> abertos</span>
+        <span className="sr-only">{valor === 1 ? " aberto" : " abertos"}</span>
       </span>
     );
   }
@@ -141,7 +141,7 @@ export function Sidebar({ dados }: { dados: DadosMenu }) {
                       aberto
                         ? undefined
                         : item.contador === "alertas" && dados.alertas > 0
-                          ? `${item.rotulo}, ${dados.alertas} abertos`
+                          ? `${item.rotulo}, ${dados.alertas} ${dados.alertas === 1 ? "aberto" : "abertos"}`
                           : item.rotulo
                     }
                     className={clsx(
@@ -298,7 +298,7 @@ export function Sidebar({ dados }: { dados: DadosMenu }) {
               {alertas > 0 && (
                 <span className="num absolute left-[calc(50%+6px)] top-2 h-4.5 min-w-4.5 rounded-full bg-err px-1 text-center text-label font-semibold leading-4.5 text-surface">
                   {alertas}
-                  <span className="sr-only"> alertas abertos</span>
+                  <span className="sr-only">{alertas === 1 ? " alerta aberto" : " alertas abertos"}</span>
                 </span>
               )}
             </Link>

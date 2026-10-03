@@ -19,5 +19,9 @@ export default function DashboardError({
     console.error("[painel] erro nao tratado:", error);
   }, [error]);
 
-  return <TelaComErro onTentar={retry} referencia={error.digest} detalhe={error.message} />;
+  // Erro do servidor chega com digest e uma mensagem generica do Next, em
+  // ingles: basta a ref. O texto so ajuda no erro do proprio navegador.
+  return (
+    <TelaComErro onTentar={retry} referencia={error.digest} detalhe={error.digest ? undefined : error.message} />
+  );
 }

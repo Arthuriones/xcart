@@ -182,6 +182,14 @@ describe("Resolver leva a uma tela que existe", () => {
       expect(existsSync(pagina), `${regra} -> ${d.href}`).toBe(true);
     }
   });
+  it("gasto do Google atrasado leva ao Google, onde a conta aparece", () => {
+    expect(destinoDoAlerta("ads_sync_atrasado", "Gasto do Google sem atualizar: Conta X").href).toBe(
+      "/integracoes/google"
+    );
+    expect(destinoDoAlerta("ads_sync_atrasado", "Gasto do Meta sem atualizar: Conta Y").href).toBe(
+      "/integracoes/meta"
+    );
+  });
 });
 
 describe("as regras da tela batem com o cron", () => {

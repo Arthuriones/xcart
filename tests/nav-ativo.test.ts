@@ -50,8 +50,9 @@ describe("hrefAtivo", () => {
 
 /**
  * O menu do redesign (6 grupos) junta telas antigas em itens novos: /bulk e
- * /multi-site acendem Importar, /overview e /sales acendem Rotas, Contas de
- * anuncio e Claude acendem Integracoes. Um item aceso por vez, sempre.
+ * /multi-site acendem Importar, Contas de anuncio e Claude acendem
+ * Integracoes. Visao da rota e Vendas por rota tem item proprio ate virarem
+ * abas do detalhe da rota. Um item aceso por vez, sempre.
  */
 describe("itemAtivo (menu de 6 grupos)", () => {
   it("cada tela do menu acende o proprio item", () => {
@@ -73,8 +74,8 @@ describe("itemAtivo (menu de 6 grupos)", () => {
     expect(itemAtivo("/bulk")).toBe("importar");
     expect(itemAtivo("/multi-site")).toBe("importar");
     expect(itemAtivo("/clone/routed-checkout/map")).toBe("rotas");
-    expect(itemAtivo("/overview")).toBe("rotas");
-    expect(itemAtivo("/sales")).toBe("rotas");
+    expect(itemAtivo("/overview")).toBe("visaoRota");
+    expect(itemAtivo("/sales")).toBe("vendasRota");
     expect(itemAtivo("/financeiro/anuncios")).toBe("integracoes");
     expect(itemAtivo("/claude")).toBe("integracoes");
   });
@@ -99,7 +100,8 @@ describe("itemAtivo (menu de 6 grupos)", () => {
     expect(rotaSem[0].rotulo).toBe("Ativar roteamento");
     expect(rotaSem[0].href).toBe("/clone/routed-checkout");
     const rotaCom = gruposNav(true).find((g) => g.id === "roteamento")!.itens;
-    expect(rotaCom[0].rotulo).toBe("Rotas");
+    expect(rotaCom.map((i) => i.href)).toEqual(["/overview", "/clone/routed-checkout", "/sales"]);
+    expect(rotaCom[1].rotulo).toBe("Rotas");
   });
 
   it("atalhos g + letra sem letra repetida e sem o proprio g", () => {

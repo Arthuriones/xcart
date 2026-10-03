@@ -64,6 +64,14 @@ async function lerPagina(lojaId: string, antes: string | null): Promise<Pagina> 
   return { eventos: corpo.eventos, pedidos: corpo.pedidos ?? {} };
 }
 
+/**
+ * Sem nome de pedido novo, devolve o MESMO objeto: o contexto das linhas fica
+ * estavel e o memo segura as linhas que nao mudaram a cada consulta.
+ */
+function juntarPedidos(atual: Record<string, string>, novos: Record<string, string>): Record<string, string> {
+  return Object.entries(novos).every(([k, v]) => atual[k] === v) ? atual : { ...atual, ...novos };
+}
+
 // Visoes salvas: o localStorage e a fonte. useSyncExternalStore le o texto
 // cru (comparavel por igualdade), e o evento "storage" mantem outras abas em
 // dia. No servidor nao ha visao salva: a lista chega depois de hidratar.
@@ -252,7 +260,7 @@ export function EventosScreen({
       const chegaram = idsNovos(atuais, pagina.eventos);
       setEventos(juntarEventos(atuais, pagina.eventos));
       if (chegaram.length) setNovos(new Set(chegaram));
-      setPedidos((p) => ({ ...p, ...pagina.pedidos }));
+      setPedidos((p) => juntarPedidos(p, pagina.pedidos));
       const agora = Date.now();
       setAtualizadoEm(agora);
       setHoje(diaNoFuso(agora, fuso));
@@ -292,7 +300,7 @@ export function EventosScreen({
       const pagina = await lerPagina(lojaId, ultimo.criado_em);
       if (pagina.eventos.length < PAGINA) setSemMaisAntigos(true);
       setEventos(juntarEventos(eventosRef.current, pagina.eventos));
-      setPedidos((p) => ({ ...p, ...pagina.pedidos }));
+      setPedidos((p) => juntarPedidos(p, pagina.pedidos));
     } catch {
       toast.error("Não foi possível carregar os eventos mais antigos", {
         description: "Tente de novo em instantes.",

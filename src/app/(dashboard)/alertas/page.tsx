@@ -39,7 +39,7 @@ async function Conteudo() {
     confirmado_em: a.confirmado_em,
     silenciado_ate: a.silenciado_ate,
     n_notificacoes: Number(a.n_notificacoes) || 0,
-    destino: destinoDoAlerta(a.regra),
+    destino: destinoDoAlerta(a.regra, a.titulo),
   }));
 
   const travado = !!d.erros.config;

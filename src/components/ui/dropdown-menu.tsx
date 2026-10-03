@@ -6,9 +6,10 @@ import { Menu as MenuPrimitive } from "@base-ui/react/menu"
 import { cn } from "@/components/ui/cn"
 import { ChevronRightIcon, CheckIcon } from "lucide-react"
 
-/* Itens de menu: 32px de altura, 13px, realce em hover; destrutivo em vermelho. */
+/* Itens de menu: 32px de altura, 13px, realce em hover; destrutivo em vermelho.
+   No teclado, o contorno de foco (o fundo do realce sozinho nao tem 3:1). */
 const itemBase =
-  "relative flex min-h-8 cursor-default items-center gap-2 rounded-control px-2 py-1.5 text-dense text-ink outline-hidden select-none data-highlighted:bg-hover focus:bg-hover data-inset:pl-8 data-disabled:pointer-events-none data-disabled:text-t4 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+  "relative flex min-h-8 cursor-default items-center gap-2 rounded-control px-2 py-1.5 text-dense text-ink outline-hidden select-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus data-highlighted:bg-hover focus:bg-hover data-inset:pl-8 data-disabled:pointer-events-none data-disabled:text-t4 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
 
 function DropdownMenu({ ...props }: MenuPrimitive.Root.Props) {
   return <MenuPrimitive.Root data-slot="dropdown-menu" {...props} />

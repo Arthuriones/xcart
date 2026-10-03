@@ -292,7 +292,12 @@ export interface InventarioLoja {
   temLogo: boolean;
   /** Rotas em que a loja e a vitrine: a rota inteira some. */
   rotasComoVitrine: number;
-  /** Destinos de rota em que ela e a loja de checkout. */
+  /**
+   * Rotas cuja coluna de checkout (target_store_id da rota) e ela: a rota
+   * inteira some, com todos os destinos (cascata).
+   */
+  rotasComoCheckout: number;
+  /** Destinos de rota em que ela e a loja de checkout (fora das rotas acima). */
   destinosComoCheckout: number;
   destinosRastreamento: number;
   rastreamentoLigado: boolean;
@@ -321,6 +326,11 @@ export function itensInventario(inv: InventarioLoja): { apaga: string[]; fica: s
   if (inv.rotasComoVitrine > 0) {
     apaga.push(
       `${plural(inv.rotasComoVitrine, "rota", "rotas")} em que ela é a vitrine — o carrinho dela deixa de ser roteado`
+    );
+  }
+  if (inv.rotasComoCheckout > 0) {
+    apaga.push(
+      `${plural(inv.rotasComoCheckout, "rota que manda o carrinho para ela", "rotas que mandam o carrinho para ela")} — a rota inteira é apagada, com todos os destinos, e o carrinho da vitrine deixa de ser roteado`
     );
   }
   if (inv.destinosComoCheckout > 0) {

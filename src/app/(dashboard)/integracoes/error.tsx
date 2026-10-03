@@ -43,7 +43,10 @@ export default function IntegracoesError({
       <details className="mt-2 text-label text-t2">
         <summary className="cursor-pointer">Detalhes para o suporte</summary>
         {error.digest ? <p className="mt-1.5 font-mono">ref. {error.digest}</p> : null}
-        {error.message ? <p className="mt-1 max-w-115 break-words font-mono">{error.message}</p> : null}
+        {/* Com digest, o message e o texto generico do Next (em ingles): so a ref. */}
+        {!error.digest && error.message ? (
+          <p className="mt-1 max-w-115 break-words font-mono">{error.message}</p>
+        ) : null}
       </details>
     </div>
   );

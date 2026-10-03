@@ -136,7 +136,8 @@ export function AvisoConexao({ loja, erro }: { loja: LojaAcoes; erro: string | n
 /**
  * Link para outra tela ja filtrada nesta loja: grava a loja da barra do topo
  * (o mesmo cookie do seletor) antes de navegar. Custos, Lucro e Alertas leem
- * esse cookie no servidor.
+ * esse cookie no servidor. O refresh depois do push acerta a barra do topo
+ * (o layout nao rerenderiza sozinho na navegacao), como o Resolver de Alertas.
  */
 export function LinkComLoja({
   lojaId,
@@ -149,8 +150,24 @@ export function LinkComLoja({
   className?: string;
   children: React.ReactNode;
 }) {
+  const router = useRouter();
+  const [, iniciar] = React.useTransition();
   return (
-    <Link href={href} prefetch={false} className={className} onClick={() => gravarCookie(COOKIE_LOJA, lojaId)}>
+    <Link
+      href={href}
+      prefetch={false}
+      className={className}
+      onClick={(e) => {
+        // Ctrl/Shift/Meta/Alt ou botao que nao e o esquerdo: link normal.
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        e.preventDefault();
+        gravarCookie(COOKIE_LOJA, lojaId);
+        iniciar(() => {
+          router.push(href);
+          router.refresh();
+        });
+      }}
+    >
       {children}
     </Link>
   );

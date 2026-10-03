@@ -55,14 +55,21 @@ const TOM: Record<
 /** Puxa pedidos e gasto do Meta agora, sem esperar o cron (o mesmo das rodadas). */
 async function sincronizar(): Promise<{ falhou: boolean; linhas: string[] }> {
   const chamar = async (url: string): Promise<SyncResposta> => {
-    const res = await fetch(url, { method: "POST" });
+    let res: Response;
+    try {
+      res = await fetch(url, { method: "POST" });
+    } catch {
+      throw new Error("sem conexão com o servidor");
+    }
     let corpo: Partial<SyncResposta> & { erro?: string; error?: string } = {};
     try {
       corpo = await res.json();
     } catch {
       // corpo vazio ou HTML: o status diz o que houve.
     }
-    if (!res.ok) throw new Error(corpo.erro || corpo.error || `erro ${res.status}`);
+    // Pelo status, sem repassar `error` cru ("Unauthorized"): a toast e do lojista.
+    if (res.status === 401) throw new Error("sua sessão expirou; entre de novo");
+    if (!res.ok) throw new Error(corpo.erro || `o servidor respondeu com erro ${res.status}`);
     return {
       ok: Boolean(corpo.ok),
       processadas: Number(corpo.processadas) || 0,

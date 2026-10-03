@@ -57,7 +57,7 @@ export function Contadores({
       aria-label="Contagem nas linhas carregadas"
       className="flex flex-wrap items-center gap-2 text-label text-t2"
     >
-      <span>Nas {total} linhas carregadas:</span>
+      <span>{total === 1 ? "Na 1 linha carregada:" : `Nas ${total} linhas carregadas:`}</span>
       {ORDEM_STATUS.map((s) => {
         const st = STATUS_TELA[s];
         const n = contagem[s];

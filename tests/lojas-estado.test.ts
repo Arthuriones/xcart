@@ -166,6 +166,7 @@ describe("itensInventario", () => {
     materiais: 0,
     temLogo: false,
     rotasComoVitrine: 0,
+    rotasComoCheckout: 0,
     destinosComoCheckout: 0,
     destinosRastreamento: 0,
     rastreamentoLigado: false,
@@ -177,6 +178,13 @@ describe("itensInventario", () => {
 
   it("loja vazia nao inventa item", () => {
     expect(itensInventario(vazio)).toEqual({ apaga: [], fica: [] });
+  });
+
+  it("rota em que ela e o checkout da propria rota nao vira 'so o cadastro'", () => {
+    const { apaga } = itensInventario({ ...vazio, rotasComoCheckout: 1 });
+    expect(apaga).toEqual([
+      "1 rota que manda o carrinho para ela — a rota inteira é apagada, com todos os destinos, e o carrinho da vitrine deixa de ser roteado",
+    ]);
   });
 
   it("so o que existe, com numero real e plural certo", () => {

@@ -6,12 +6,14 @@ import {
   CreditCard,
   Download,
   History,
+  LayoutGrid,
   ListChecks,
   Plug,
   Plus,
   Radio,
   Route,
   Store,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 import { textos } from "@/lib/textos";
@@ -39,6 +41,8 @@ export type IdItem =
   | "importar"
   | "atividade"
   | "rotas"
+  | "visaoRota"
+  | "vendasRota"
   | "integracoes"
   | "assinatura"
   | "guia";
@@ -96,9 +100,11 @@ export const ITENS: Record<IdItem, ItemNav> = {
     rotulo: t("routes"),
     icone: Route,
     atalho: "r",
-    // Visao da rota e Vendas por rota viram abas do detalhe da rota.
-    tambem: ["/overview", "/sales"],
   },
+  // Visao da rota e Vendas por rota ficam no menu ate virarem abas do detalhe
+  // da rota; ai saem daqui.
+  visaoRota: { id: "visaoRota", href: "/overview", rotulo: t("routeOverview"), icone: LayoutGrid },
+  vendasRota: { id: "vendasRota", href: "/sales", rotulo: t("salesByRoute"), icone: TrendingUp },
   integracoes: {
     id: "integracoes",
     href: "/integracoes",
@@ -135,7 +141,11 @@ export function gruposNav(temRota: boolean): GrupoNav[] {
     { id: "rastreamento", rotulo: t("trackingGroup"), itens: [ITENS.saude, ITENS.eventos] },
     { id: "alertas", rotulo: null, itens: [ITENS.alertas] },
     { id: "operacao", rotulo: t("operation"), itens: [ITENS.lojas, ITENS.importar, ITENS.atividade] },
-    { id: "roteamento", rotulo: t("routingGroup"), itens: [rota] },
+    {
+      id: "roteamento",
+      rotulo: t("routingGroup"),
+      itens: temRota ? [ITENS.visaoRota, rota, ITENS.vendasRota] : [rota],
+    },
     {
       id: "configuracoes",
       rotulo: t("settings"),

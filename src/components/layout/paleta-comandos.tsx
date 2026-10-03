@@ -278,7 +278,7 @@ export function PaletaComandos({
   if (!soLojas && !soPedidos) {
     const acoes: Omit<Resultado, "grupo">[] = [
       { chave: "acao-atualizar", rotulo: "Atualizar agora", icone: RefreshCw, acao: () => { setAberta(false); onAtualizar(); } },
-      { chave: "acao-conectar", rotulo: "Conectar loja", icone: Store, acao: () => ir(ITENS.lojas.href) },
+      { chave: "acao-conectar", rotulo: "Conectar loja", icone: Store, acao: () => ir(`${ITENS.lojas.href}?conectar=1`) },
       { chave: "acao-importar", rotulo: "Importar produto", icone: Download, acao: () => ir(ITENS.importar.href) },
       {
         chave: "acao-tema",

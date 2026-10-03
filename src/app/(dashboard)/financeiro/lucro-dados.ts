@@ -508,7 +508,12 @@ export function montarPendencias(d: EntradaPendencias): Pendencia[] {
       tom: "err",
       titulo: `O gasto de ${c.nome} não está sendo lido`,
       detalhe: `O lucro pode estar alto demais. Motivo: ${c.erro}`,
-      acao: { rotulo: "Contas de anúncio", href: ROTAS.anuncios },
+      // O nome vem de nomeConta (queries.ts): "Google ..." ou "Meta ...".
+      // /financeiro/anuncios cai no Meta, onde a conta do Google nao aparece.
+      acao: {
+        rotulo: "Contas de anúncio",
+        href: c.nome.startsWith("Google ") ? "/integracoes/google" : "/integracoes/meta",
+      },
     });
   }
 
@@ -548,7 +553,7 @@ export function montarPendencias(d: EntradaPendencias): Pendencia[] {
       tom: "warn",
       titulo: `O gasto do Google está parado há mais de 3 h`,
       detalhe: `${listar(d.contas.googleSemDado3h)}: confira se o script está colado e agendado de hora em hora. O lucro de hoje pode estar alto demais.`,
-      acao: { rotulo: "Contas de anúncio", href: ROTAS.anuncios },
+      acao: { rotulo: "Contas de anúncio", href: "/integracoes/google" },
     });
   }
 

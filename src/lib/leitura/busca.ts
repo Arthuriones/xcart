@@ -50,9 +50,12 @@ function normalizar(s: string): string {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
-/** O termo vira literal no ILIKE: % _ e \ perdem o poder de curinga. */
+/**
+ * O termo vira literal no ILIKE: % _ e \ perdem o poder de curinga. O * sai
+ * (o PostgREST o troca por %), e nome de pedido nao tem asterisco.
+ */
 function literalIlike(s: string): string {
-  return s.replace(/[\\%_]/g, (c) => `\\${c}`);
+  return s.replace(/\*/g, "").replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
 export function interpretarBusca(bruto: string): {
