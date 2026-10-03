@@ -4,157 +4,275 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ==========================================================================
+   xcart · design system do redesign (Fase 1)
+
+   Fonte dos valores: "design novo/Fase 0/xcart-tokens.css" (aprovado).
+   Duas camadas, como antes:
+   1. a paleta propria (--bg, --surface, --ink, --t1..t4, --ok/--warn/--err/
+      --info/--neutral/--run com fundo e borda, --chart-*), definida em :root
+      (claro) e .dark (escuro);
+   2. os nomes que o app ja usava (shadcn e o design antigo) viram ALIASES que
+      apontam para a paleta. Tela antiga muda de visual sem quebrar.
+
+   Cada cor vira classe do Tailwind com o MESMO nome: bg-surface, text-t2,
+   border-border-subtle, bg-ok-bg, text-err, stroke-chart-2...
+   ========================================================================== */
+
+/* Cores: referencias a variaveis de runtime, por isso "inline". */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
   --font-heading: var(--font-sans);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
+
+  /* superficies */
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-hover: var(--hover);
+  --color-track: var(--track);
+  --color-nav-active: var(--nav-active);
+
+  /* bordas, do mais leve ao contorno de controle (3:1) */
   --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --color-action: var(--action);
-  --color-action-foreground: var(--action-foreground);
-  --color-danger: var(--danger);
-  --color-info: var(--info);
-  --color-warning: var(--warning);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+  --color-control-border: var(--control-border);
+
+  /* texto: ink, t1, t2 e t3 passam 4,5:1; t4 so para icone e desabilitado */
   --color-ink: var(--ink);
   --color-t1: var(--t1);
   --color-t2: var(--t2);
   --color-t3: var(--t3);
+  --color-t4: var(--t4);
+
+  /* acao: primario e preto solido; terracota so em link e foco */
+  --color-solid: var(--solid);
+  --color-solid-hover: var(--solid-hover);
+  --color-on-solid: var(--on-solid);
   --color-brand: var(--brand);
+  --color-focus: var(--focus);
+
+  /* status: seis tons, cada um com cor, fundo e borda */
   --color-ok: var(--ok);
+  --color-ok-bg: var(--ok-bg);
+  --color-ok-border: var(--ok-border);
   --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-warn-border: var(--warn-border);
   --color-err: var(--err);
-  --color-surface: var(--surface);
-  --color-surface-2: var(--surface-2);
-  --color-hover: var(--hover);
+  --color-err-bg: var(--err-bg);
+  --color-err-border: var(--err-border);
+  --color-info: var(--info);
+  --color-info-bg: var(--info-bg);
+  --color-info-border: var(--info-border);
+  --color-neutral: var(--neutral);
+  --color-neutral-bg: var(--neutral-bg);
+  --color-neutral-border: var(--neutral-border);
+  --color-run: var(--run);
+  --color-run-bg: var(--run-bg);
+  --color-run-border: var(--run-border);
+
+  /* graficos: significado fixo (1 lucro, 2 faturamento, 3 gasto, 4 e 5 extras) */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-grid: var(--chart-grid);
+
+  /* carregando e overlay */
+  --color-skeleton: var(--skeleton);
+  --color-skeleton-hi: var(--skeleton-hi);
+  --color-scrim: var(--scrim);
+
+  /* sombra so em overlay (popover, menu, dialog, toast) e painel lateral */
+  --shadow-overlay: var(--shadow);
+  --shadow-sheet: var(--shadow-panel);
+
+  /* --- aliases do shadcn (telas antigas e primitivos de terceiros) --- */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* --- aliases do design antigo (legado: nao use em tela nova) --- */
+  --color-t5: var(--t5);
+  --color-action: var(--action);
+  --color-action-foreground: var(--action-foreground);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
   --color-vitrine: var(--vitrine);
-  --color-vitrine-soft: var(--vitrine-soft);
   --color-checkout: var(--checkout);
-  --color-checkout-soft: var(--checkout-soft);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Escalas fechadas: valores literais. */
+@theme {
+  /* 7 tamanhos de fonte, nenhum abaixo de 12px. Os de titulo ja trazem o
+     peso 600; "font-*" na mesma classe continua vencendo. */
+  --text-kpi: 26px;
+  --text-kpi--line-height: 32px;
+  --text-kpi--letter-spacing: -0.01em;
+  --text-kpi--font-weight: 600;
+  --text-page: 22px;
+  --text-page--line-height: 28px;
+  --text-page--letter-spacing: -0.01em;
+  --text-page--font-weight: 600;
+  --text-overlay: 18px;
+  --text-overlay--line-height: 24px;
+  --text-overlay--font-weight: 600;
+  --text-section: 15px;
+  --text-section--line-height: 20px;
+  --text-section--font-weight: 600;
+  --text-body: 14px;
+  --text-body--line-height: 20px;
+  --text-dense: 13px;
+  --text-dense--line-height: 18px;
+  --text-label: 12px;
+  --text-label--line-height: 16px;
+
+  /* 3 raios. Os nomes do shadcn convergem para eles (sm fica 4px, para
+     marcadores pequenos como o Kbd). */
+  --radius-control: 6px;
+  --radius-card: 8px;
+  --radius-overlay: 12px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 12px;
+  --radius-3xl: 12px;
+  --radius-4xl: 12px;
+
+  /* 3 alturas de controle: h-ctl-sm (tabela), h-ctl-md (padrao),
+     h-ctl-lg (alvo de toque no celular). Tambem servem a size-* e w-*. */
+  --spacing-ctl-sm: 28px;
+  --spacing-ctl-md: 36px;
+  --spacing-ctl-lg: 44px;
+
+  --ease-xc: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Movimento: ate 200ms, so opacidade e posicao. Todos desligam com
+     "reduzir movimento" (regra no fim deste arquivo). */
+  --animate-xc-pulse: xc-pulse 1.4s ease-out infinite;
+  --animate-xc-shimmer: xc-shimmer 1.6s ease-in-out infinite;
+  --animate-xc-flash: xc-flash 2s ease-out 1;
+  --animate-xc-in: xc-in 140ms cubic-bezier(0.2, 0, 0, 1) both;
+  --animate-xc-up: xc-up 180ms cubic-bezier(0.2, 0, 0, 1) both;
+  --animate-xc-left: xc-left 180ms cubic-bezier(0.2, 0, 0, 1) both;
+  --animate-xc-spin: xc-spin 800ms linear infinite;
+  /* legado: telas antigas usam "animate-fade-in" */
+  --animate-fade-in: xc-in 200ms cubic-bezier(0.2, 0, 0, 1) both;
 }
 
 :root {
-  /* ------------------------------------------------------------------
-     Paleta do design novo. Os nomes proprios do design (--bg, --ink, --t1
-     ate --t5, --brand, --ok/--warn/--err) convivem com os nomes que o app
-     ja usava (--background, --foreground, --muted-foreground...), que agora
-     apontam para eles. E por isso que trocar estas linhas repinta o app
-     inteiro sem tocar em componente nenhum.
-     ------------------------------------------------------------------ */
+  color-scheme: light;
 
   /* superficies */
   --bg: #f7f6f5;
   --surface: #ffffff;
   --surface-2: #fbfbfa;
-  --hover: #f4f3f1;
-  --track: #f0efed;
-  --nav-active: #f2f1ef;
+  --hover: #f3f2f0;
+  --track: #ecebe8;
+  --nav-active: #efeeec;
 
-  /* bordas, em tres pesos */
-  --border-subtle: #f0efed;
-  --border-strong: #d6d4d1;
-  --control-border: #b6b3af;
+  /* bordas */
+  --border: #e4e2df;
+  --border-subtle: #efeeec;
+  --border-strong: #cfccc8;
+  --control-border: #8c8a86;
 
-  /* texto, do mais forte ao mais apagado */
+  /* texto */
   --ink: #1a1a1a;
-  --t1: #4d4b49;
-  --t2: #6b6b6b;
-  --t3: #8a8a8a;
-  --t4: #a5a3a0;
-  --t5: #c9c7c4;
+  --t1: #3f3e3c;
+  --t2: #575553;
+  --t3: #6e6c69;
+  --t4: #8c8a86;
 
-  /* acao: o botao primario e preto solido, nao colorido */
+  /* acao */
   --solid: #1a1a1a;
   --solid-hover: #333333;
   --on-solid: #ffffff;
-
-  /* terracota: link, foco e acento. Nunca preenche botao primario. */
   --brand: #b04a2f;
+  --focus: #b04a2f;
 
-  /* estado */
-  --ok: #2f7d4f;
+  /* status */
+  --ok: #276b43;
   --ok-bg: #eaf3ee;
-  --ok-border: #cfe3d7;
-  --warn: #a5741a;
+  --ok-border: #bcd9c7;
+  --warn: #875c12;
   --warn-bg: #fbf3e2;
-  --warn-border: #efe0bf;
+  --warn-border: #e8d3a6;
   --err: #b3261e;
   --err-bg: #fceceb;
-  --err-border: #eccfcd;
+  --err-border: #ecc5c2;
+  --info: #2c5d8f;
+  --info-bg: #ebf1f7;
+  --info-border: #c3d4e6;
+  --neutral: #575553;
+  --neutral-bg: #f1f0ee;
+  --neutral-border: #dcdad6;
+  --run: #2c5d8f;
+  --run-bg: #ebf1f7;
+  --run-border: #c3d4e6;
 
-  --scrim: rgba(26, 26, 26, 0.22);
+  /* graficos */
+  --chart-1: #1a1a1a;
+  --chart-2: #3b6fa8;
+  --chart-3: #c0661f;
+  --chart-4: #24877c;
+  --chart-5: #7c5cad;
+  --chart-grid: #ecebe8;
+
+  /* carregando, overlay, elevacao */
+  --skeleton: #ebe9e6;
+  --skeleton-hi: #f6f5f3;
+  --scrim: rgba(26, 26, 26, 0.32);
+  --shadow: 0 12px 32px rgba(26, 26, 26, 0.14), 0 2px 6px rgba(26, 26, 26, 0.06);
+  --shadow-panel: -12px 0 32px rgba(26, 26, 26, 0.1);
   --header-bg: rgba(255, 255, 255, 0.9);
-  --shadow: 0 12px 40px rgba(0, 0, 0, 0.14);
-  --shadow-panel: -8px 0 28px rgba(0, 0, 0, 0.07);
 
-  /* --- nomes antigos do app, agora apontando para o design --- */
+  --radius: 0.5rem;
+
+  /* --- nomes do shadcn apontando para a paleta --- */
   --background: var(--bg);
   --foreground: var(--ink);
   --card: var(--surface);
   --card-foreground: var(--ink);
   --popover: var(--surface);
   --popover-foreground: var(--ink);
+  --primary: var(--solid);
+  --primary-foreground: var(--on-solid);
   --secondary: var(--surface-2);
   --secondary-foreground: var(--t1);
   --muted: var(--track);
   --muted-foreground: var(--t2);
   --accent: var(--hover);
   --accent-foreground: var(--ink);
-  --border: #e6e5e3;
-  --input: var(--control-border);
-  --ring: var(--brand);
-  --primary: var(--solid);
-  --primary-foreground: var(--on-solid);
-  --primary-cyan: var(--brand);
   --destructive: var(--err);
-  --action: var(--solid);
-  --action-foreground: var(--on-solid);
-  --danger: var(--err);
-  --info: var(--brand);
-  --warning: var(--warn);
-
-  /* papel da loja no mapa de rotas: terracota entra o trafego, verde cobra */
-  --vitrine: var(--brand);
-  --vitrine-soft: #f7ece8;
-  --checkout: var(--ok);
-  --checkout-soft: var(--ok-bg);
-
-  --radius: 0.5rem;
+  --input: var(--control-border);
+  --ring: var(--focus);
 
   --sidebar: var(--surface);
   --sidebar-foreground: var(--t1);
@@ -162,74 +280,161 @@
   --sidebar-primary-foreground: var(--on-solid);
   --sidebar-accent: var(--nav-active);
   --sidebar-accent-foreground: var(--ink);
-  --sidebar-border: #e6e5e3;
-  --sidebar-ring: var(--brand);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--focus);
 
-  --chart-1: #b04a2f;
-  --chart-2: #2f7d4f;
-  --chart-3: #a5741a;
-  --chart-4: #4d4b49;
-  --chart-5: #8a8a8a;
+  /* --- design antigo (legado) apontando para a paleta --- */
+  --t5: var(--t4);
+  --action: var(--solid);
+  --action-foreground: var(--on-solid);
+  --danger: var(--err);
+  --warning: var(--warn);
+  /* papel da loja no mapa de rotas: terracota entra o trafego, verde cobra */
+  --vitrine: var(--brand);
+  --checkout: var(--ok);
 }
 
 .dark {
+  color-scheme: dark;
+
   --bg: #0f0f0f;
   --surface: #171717;
   --surface-2: #1c1c1c;
-  --hover: #242424;
-  --track: #262626;
-  --nav-active: #272727;
+  --hover: #232322;
+  --track: #2a2a29;
+  --nav-active: #262625;
 
-  --border-subtle: #222222;
-  --border-strong: #3a3a3a;
-  --control-border: #6b6b6b;
+  --border: #2c2c2b;
+  --border-subtle: #222221;
+  --border-strong: #3d3d3b;
+  --control-border: #74726e;
 
   --ink: #f1f0ee;
-  --t1: #c9c7c4;
-  --t2: #a5a3a0;
-  --t3: #8a8a8a;
-  --t4: #6f6d6a;
-  --t5: #4d4b49;
+  --t1: #d4d2ce;
+  --t2: #b3b1ad;
+  --t3: #96948f;
+  --t4: #75736f;
 
   --solid: #f1f0ee;
   --solid-hover: #ffffff;
   --on-solid: #141414;
-
   --brand: #d9784f;
+  --focus: #d9784f;
 
   --ok: #5cbf85;
-  --ok-bg: #15301f;
-  --ok-border: #244d33;
-  --warn: #dba646;
-  --warn-bg: #33280f;
-  --warn-border: #4e3c17;
-  --err: #e2705f;
-  --err-bg: #351a17;
+  --ok-bg: #13291b;
+  --ok-border: #24492f;
+  --warn: #e0ad52;
+  --warn-bg: #2e2410;
+  --warn-border: #4d3b17;
+  --err: #e8786a;
+  --err-bg: #331816;
   --err-border: #5a2b25;
+  --info: #7fb0e0;
+  --info-bg: #142233;
+  --info-border: #26405c;
+  --neutral: #b3b1ad;
+  --neutral-bg: #232322;
+  --neutral-border: #3d3d3b;
+  --run: #7fb0e0;
+  --run-bg: #142233;
+  --run-border: #26405c;
 
-  --scrim: rgba(0, 0, 0, 0.6);
+  --chart-1: #f1f0ee;
+  --chart-2: #78a6dc;
+  --chart-3: #e8955a;
+  --chart-4: #5cc0b3;
+  --chart-5: #a98ddb;
+  --chart-grid: #2c2c2b;
+
+  --skeleton: #262625;
+  --skeleton-hi: #303030;
+  --scrim: rgba(0, 0, 0, 0.62);
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px #2c2c2b;
+  --shadow-panel: -12px 0 32px rgba(0, 0, 0, 0.5);
   --header-bg: rgba(23, 23, 23, 0.9);
-  --shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
-  --shadow-panel: -8px 0 28px rgba(0, 0, 0, 0.4);
+}
 
-  --border: #2a2a2a;
-  --sidebar-border: #2a2a2a;
-  --vitrine-soft: #2b1a13;
-  --checkout-soft: var(--ok-bg);
+@keyframes xc-pulse {
+  0% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+  70% { box-shadow: 0 0 0 5px transparent; opacity: 0.85; }
+  100% { box-shadow: 0 0 0 0 transparent; opacity: 1; }
+}
+@keyframes xc-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes xc-flash {
+  0% { background-color: var(--info-bg); }
+  100% { background-color: transparent; }
+}
+@keyframes xc-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes xc-up {
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes xc-left {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes xc-spin {
+  to { transform: rotate(360deg); }
 }
 
 @layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply font-sans;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+    /* 13px e a base densa: interface de trabalho, nao pagina de leitura. */
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-sans), sans-serif;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+
+  /* So vale quando a tela nao escolhe tamanho: um titulo de pagina por tela. */
+  h1 {
+    font-size: var(--text-page);
+    line-height: var(--text-page--line-height);
+    font-weight: 600;
+  }
+
+  h2 {
+    font-size: var(--text-section);
+    line-height: var(--text-section--line-height);
+    font-weight: 600;
+  }
+
   input,
   select,
   textarea {
     background: var(--surface);
-    border-color: var(--border-strong);
+    border-color: var(--control-border);
     color: var(--ink);
   }
 
   input::placeholder,
   textarea::placeholder {
-    color: var(--t4);
+    color: var(--t3);
   }
 
   /* Link e terracota; o preto solido fica reservado para botao primario. */
@@ -243,52 +448,13 @@
   }
 
   ::selection {
-    background: var(--border);
+    background: var(--info-bg);
   }
 
-  *:focus-visible {
-    outline: 2px solid var(--brand);
-    outline-offset: 1px;
-  }
-
-  * {
-    @apply border-border outline-ring/50;
-  }
-
-  body {
-    @apply text-foreground antialiased bg-background;
-    font-family: var(--font-sans), "Helvetica Neue", Helvetica, Arial, sans-serif;
-    /* 13px e a base do design novo: interface densa, nao pagina de leitura. */
-    font-size: 13px;
-    line-height: 1.45;
-    color: var(--ink);
-  }
-
-  html {
-    @apply font-sans scroll-smooth;
-  }
-
-  h1,
-  h2,
-  h3,
-  h4 {
-    font-family: var(--font-sans), sans-serif;
-    letter-spacing: -0.01em;
-    color: var(--foreground);
-  }
-
-  h1 {
-    font-size: clamp(1.9rem, 2.4vw, 2.5rem);
-    line-height: 1.1;
-  }
-
-  h2 {
-    font-size: clamp(1.35rem, 1.8vw, 1.8rem);
-    line-height: 1.18;
-  }
-
-  ::selection {
-    background: oklch(0.72 0.17 260 / 35%);
+  /* Foco: anel terracota de 2px, 3:1 nos dois temas. */
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
   }
 
   code,
@@ -297,87 +463,28 @@
   }
 }
 
-@layer utilities {
-  /* O botao primario do design e preto solido. O gradiente antigo virou
-     apenas o preto de acao, para nao quebrar quem ainda usa a classe. */
-  .bg-brand-gradient {
-    background: var(--solid);
-  }
+/* Algarismo tabular: todo numero de tela. Identificador (SKU, id, dominio)
+   usa font-mono. */
+@utility num {
+  font-variant-numeric: tabular-nums;
 }
 
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-.skeleton {
-  background: linear-gradient(
-    90deg,
-    oklch(1 0 0 / 4%) 25%,
-    oklch(1 0 0 / 8%) 50%,
-    oklch(1 0 0 / 4%) 75%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.8s ease-in-out infinite;
-  border-radius: var(--radius);
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.animate-fade-in {
-  animation: fadeIn 0.3s ease-out forwards;
-}
-
-.stagger-children > * {
-  opacity: 0;
-  animation: fadeIn 0.3s ease-out forwards;
-}
-.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
-.stagger-children > *:nth-child(2) { animation-delay: 60ms; }
-.stagger-children > *:nth-child(3) { animation-delay: 120ms; }
-.stagger-children > *:nth-child(4) { animation-delay: 180ms; }
-.stagger-children > *:nth-child(5) { animation-delay: 240ms; }
-.stagger-children > *:nth-child(6) { animation-delay: 300ms; }
-
-@keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.5); }
-  to { opacity: 1; transform: scale(1); }
-}
-.animate-scale-in {
-  animation: scaleIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-}
-
-@layer utilities {
-  .glass-panel {
-    @apply bg-card/95 border border-border shadow-[0_10px_30px_rgba(15,23,42,0.06)];
-  }
-  
-  .glow-border {
-    position: relative;
-  }
-  
-  .glow-border::before {
-    content: "";
-    position: absolute;
-    inset: -1px;
-    border-radius: inherit;
-    padding: 1px;
-    background: linear-gradient(to bottom right, var(--primary-cyan), var(--primary), transparent);
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    opacity: 0.3;
-    transition: opacity 0.3s ease;
-    pointer-events: none;
-  }
-  
-  .glow-border:hover::before {
-    opacity: 0.8;
+@layer components {
+  /* Visivel nos dois temas (o antigo era branco translucido e sumia no claro).
+     Fica em "components" para que rounded-* e h-* da tela vencam. */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--skeleton) 25%,
+      var(--skeleton-hi) 50%,
+      var(--skeleton) 75%
+    );
+    background-size: 200% 100%;
+    animation: xc-shimmer 1.6s ease-in-out infinite;
+    border-radius: var(--radius-control);
   }
 
-  /* Fundo ambiente era decoracao do tema escuro forcado. O design novo usa
-     superficie chapada. */
+  /* A div ainda existe em app/layout.tsx. Sai quando a casca for refeita. */
   .ambient-bg {
     display: none;
   }
@@ -397,9 +504,21 @@
   animation: route-edge-flow 1.4s linear infinite;
 }
 
-/* Movimento continuo e exatamente o tipo de coisa que incomoda quem pediu
-   menos animacao. Sem ele a aresta continua legivel: vira linha cheia. */
+/* Reduzir movimento: tudo para (o pulso fica parado, o shimmer congela, o
+   spinner vira um anel parado). A aresta do mapa vira linha cheia. */
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
   .route-edge-flow {
     stroke-dasharray: none;
     animation: none;
