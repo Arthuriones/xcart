@@ -46,7 +46,11 @@
   --color-t3: var(--t3);
   --color-t4: var(--t4);
 
-  /* acao: primario e preto solido; terracota so em link e foco */
+  /* acao: primario e preto solido; terracota so em link e foco.
+     ATENCAO: por causa da cor "solid", border-solid / outline-solid /
+     decoration-solid tambem pintam a cor de preto. O estilo solido ja e o
+     padrao: nao escreva essas classes. Para o anel de foco use
+     focus-visible:outline-2 + outline-focus, sem outline-none antes. */
   --color-solid: var(--solid);
   --color-solid-hover: var(--solid-hover);
   --color-on-solid: var(--on-solid);
