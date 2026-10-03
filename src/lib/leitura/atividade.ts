@@ -99,7 +99,7 @@ export async function lerAtividade(pedido: PedidoAtividade): Promise<LeituraAtiv
   const agora = Date.now();
   const { tipo, antes } = pedido;
 
-  let lojasBrutas: { id: string; nome: string }[];
+  let lojasBrutas: { id: string; nome: string; dominio: string }[];
   let lojaId: string;
   if (pedido.lojaId === undefined) {
     const r = await filtroResolvido();
@@ -253,7 +253,7 @@ export async function lerAtividade(pedido: PedidoAtividade): Promise<LeituraAtiv
 
   const { rotas, destinos, daLoja, carrinhos } = rotaria;
   leitura.temRota = rotas.linhas.length > 0;
-  const ctx = montarContexto(lojas, rotas.linhas, destinos.linhas);
+  const ctx = montarContexto(lojasBrutas, rotas.linhas, destinos.linhas);
 
   // Rotas e destinos foram lidos inteiros: o cursor e o filtro de loja valem
   // aqui. Destino da loja: ela entrou no rodizio, ou e a vitrine da rota.

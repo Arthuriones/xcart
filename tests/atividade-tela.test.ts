@@ -170,6 +170,23 @@ describe("linha do banco vira evento", () => {
     expect(lerCarrinhoLevado(null)).toEqual({ itens: null, dominio: null });
   });
 
+  it("aviso antigo sem destino acha a loja pelo dominio", () => {
+    const comDominio = montarContexto(
+      [...LOJAS, { id: "l4", nome: "Checkout Dois", dominio: "Checkout-2.myshopify.com" }],
+      rotas,
+      destinos
+    );
+    const [e] = montarEventos(
+      com({
+        carrinhos: [
+          { id: "c5", route_config_id: "r1", target_id: null, reason: "routed_ok", detail: "2 itens -> checkout-2.myshopify.com", created_at: "2026-10-01T10:00:00Z" },
+        ],
+      }),
+      comDominio
+    );
+    expect(e.descricao).toBe("2 itens da vitrine Vitrine Um foram para Checkout Dois.");
+  });
+
   it("um item no singular", () => {
     const [e] = montarEventos(
       com({

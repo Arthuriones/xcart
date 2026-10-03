@@ -15,7 +15,11 @@ export function ErroAtividade() {
       titulo="Não deu para carregar a atividade"
       descricao="Nada foi perdido: foi a leitura que falhou. Tente de novo em instantes."
       acao={
-        <Button pending={tentando} onClick={() => iniciar(() => router.refresh())}>
+        <Button
+          pending={tentando}
+          onClick={() => iniciar(() => router.refresh())}
+          className="h-ctl-lg sm:h-ctl-md"
+        >
           Tentar de novo
         </Button>
       }

@@ -185,7 +185,10 @@ export function LinhaDoTempo({
         titulo="Nada aconteceu na conta ainda"
         descricao="Lojas, importações, alertas e compras de créditos aparecem aqui."
         acao={
-          <Link href="/stores?conectar=1" className={buttonVariants({ variant: "primary" })}>
+          <Link
+            href="/stores?conectar=1"
+            className={cn(buttonVariants({ variant: "primary" }), "h-ctl-lg sm:h-ctl-md")}
+          >
             Conectar loja
           </Link>
         }
@@ -204,7 +207,13 @@ export function LinhaDoTempo({
           tom="warn"
           titulo={`Parte da atividade não veio: ${lista(falhas)}`}
           acao={
-            <Button size="sm" variant="secondary" pending={pendente} onClick={() => iniciar(() => router.refresh())}>
+            <Button
+              size="sm"
+              variant="secondary"
+              pending={pendente}
+              onClick={() => iniciar(() => router.refresh())}
+              className="h-ctl-lg sm:h-ctl-sm"
+            >
               Tentar de novo
             </Button>
           }
@@ -228,7 +237,7 @@ export function LinhaDoTempo({
             onLimpar={() => mudarTipo(null)}
           />
           {filtrando ? (
-            <Button variant="link" size="sm" onClick={limparFiltros}>
+            <Button variant="link" size="sm" onClick={limparFiltros} className="min-h-11 sm:min-h-0">
               Limpar filtros
             </Button>
           ) : null}
@@ -275,7 +284,7 @@ export function LinhaDoTempo({
               titulo={`Nenhum evento com “${q.trim()}”`}
               descricao="A busca olha só os eventos já carregados."
               acao={
-                <Button variant="secondary" onClick={() => mudarBusca("")}>
+                <Button variant="secondary" onClick={() => mudarBusca("")} className="h-ctl-lg sm:h-ctl-md">
                   Limpar busca
                 </Button>
               }
@@ -404,7 +413,7 @@ function VazioFiltrado({
         titulo="Créditos e plano são da conta, não de uma loja"
         descricao="Com uma loja escolhida, as compras não aparecem."
         acao={
-          <Button variant="secondary" onClick={onTodasLojas}>
+          <Button variant="secondary" onClick={onTodasLojas} className="h-ctl-lg sm:h-ctl-md">
             Ver todas as lojas
           </Button>
         }
@@ -419,7 +428,7 @@ function VazioFiltrado({
       titulo={`${tipo ? opcaoTipo(tipo).nenhum : "Nenhum evento"}${na}`}
       descricao="Tire os filtros para ver a conta inteira."
       acao={
-        <Button variant="secondary" onClick={onLimpar}>
+        <Button variant="secondary" onClick={onLimpar} className="h-ctl-lg sm:h-ctl-md">
           Limpar filtros
         </Button>
       }

@@ -224,10 +224,12 @@ export interface Contexto {
   vitrineDaRota: Map<string, string | null>;
   /** id do destino (routed_checkout_targets) -> loja de checkout. */
   lojaDoDestino: Map<string, string | null>;
+  /** dominio .myshopify.com (minusculo) -> nome da loja. */
+  nomePorDominio: Map<string, string>;
 }
 
 export function montarContexto(
-  lojas: { id: string; nome: string }[],
+  lojas: { id: string; nome: string; dominio?: string }[],
   rotas: LinhaRota[],
   destinos: LinhaDestino[]
 ): Contexto {
@@ -235,6 +237,9 @@ export function montarContexto(
     nomes: new Map(lojas.map((l) => [l.id, l.nome])),
     vitrineDaRota: new Map(rotas.map((r) => [r.id, r.source_store_id])),
     lojaDoDestino: new Map(destinos.map((d) => [d.id, d.target_store_id])),
+    nomePorDominio: new Map(
+      lojas.filter((l) => l.dominio).map((l) => [String(l.dominio).toLowerCase(), l.nome])
+    ),
   };
 }
 
@@ -396,9 +401,12 @@ function eventoCarrinho(c: LinhaCarrinho, ctx: Contexto): EventoAtividade | null
   switch (c.reason) {
     case "routed_ok": {
       const lido = lerCarrinhoLevado(c.detail);
+      // Script antigo nao grava o destino: o dominio do aviso acha a loja.
       const alvo =
         nomeOuNull(ctx, c.target_id ? (ctx.lojaDoDestino.get(c.target_id) ?? null) : null) ??
-        (lido.dominio ? dominioCurto(lido.dominio) : null);
+        (lido.dominio
+          ? (ctx.nomePorDominio.get(lido.dominio.toLowerCase()) ?? dominioCurto(lido.dominio))
+          : null);
       const deOnde = vitrine ? ` da vitrine ${vitrine}` : "";
       const para = alvo ?? "a loja de checkout";
       const n = lido.itens && lido.itens > 0 ? lido.itens : null;
