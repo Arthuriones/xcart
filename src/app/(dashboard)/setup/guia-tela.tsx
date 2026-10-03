@@ -41,6 +41,9 @@ const CAMINHOS = [
   { valor: "vitrine", rotulo: ROTULO_CAMINHO.vitrine },
 ] as const;
 
+/** Botao pequeno no desktop, alvo de toque de 44px no celular. */
+const ALVO = "h-ctl-lg sm:h-ctl-sm";
+
 const EXPLICA_CAMINHO: Record<CaminhoGuia, string> = {
   direto: "O anúncio leva o comprador direto à loja que cobra.",
   vitrine:
@@ -103,7 +106,7 @@ export function GuiaTela({
               : `Não deu para conferir ${guia.naoConferidos} passos`
           }
           acao={
-            <Button variant="secondary" size="sm" pending={atualizando} onClick={() => atualizar(() => router.refresh())}>
+            <Button variant="secondary" size="sm" className={ALVO} pending={atualizando} onClick={() => atualizar(() => router.refresh())}>
               Tentar de novo
             </Button>
           }
@@ -115,7 +118,7 @@ export function GuiaTela({
           tom="ok"
           titulo="Sua operação está no ar"
           acao={
-            <Link href="/financeiro" className={buttonVariants({ variant: "secondary", size: "sm" })}>
+            <Link href="/financeiro" className={cn(buttonVariants({ variant: "secondary", size: "sm" }), ALVO)}>
               Ver o Lucro
             </Link>
           }
@@ -127,7 +130,7 @@ export function GuiaTela({
           tom="info"
           titulo="Você dispensou o guia"
           acao={
-            <Button variant="secondary" size="sm" pending={atualizando} onClick={() => marcarDispensado(false)}>
+            <Button variant="secondary" size="sm" className={ALVO} pending={atualizando} onClick={() => marcarDispensado(false)}>
               Mostrar de novo
             </Button>
           }
@@ -192,9 +195,12 @@ export function GuiaTela({
           {!guia.completo && !dispensado ? (
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border-subtle px-4 py-3">
               <p className="text-label text-t2">
-                {guia.proximo ? `Próximo: ${guia.proximo.titulo.toLowerCase()}.` : "Falta conferir o que ficou de fora."}
+                {guia.proximo
+                  ? // So a primeira letra: "Shopify" e "SKU" continuam como sao.
+                    `Próximo: ${guia.proximo.titulo.charAt(0).toLowerCase()}${guia.proximo.titulo.slice(1)}.`
+                  : "Falta conferir o que ficou de fora."}
               </p>
-              <Button variant="ghost" size="sm" pending={atualizando} onClick={() => marcarDispensado(true)}>
+              <Button variant="ghost" size="sm" className={ALVO} pending={atualizando} onClick={() => marcarDispensado(true)}>
                 Dispensar o guia
               </Button>
             </div>
@@ -262,7 +268,7 @@ function ItemPasso({
           ) : null}
           <Link
             href={passo.href}
-            className={buttonVariants({ variant: proximo ? "primary" : "secondary", size: "sm" })}
+            className={cn(buttonVariants({ variant: proximo ? "primary" : "secondary", size: "sm" }), ALVO)}
           >
             {passo.cta}
           </Link>
