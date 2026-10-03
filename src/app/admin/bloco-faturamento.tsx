@@ -5,6 +5,7 @@ import { Section } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErroAdmin } from "./estados-admin";
 import { hora, inteiro, plural, reais } from "./formato";
+import type { FaturamentoAdmin } from "@/lib/sales/admin-types";
 import { lerFaturamento } from "./ler-api";
 
 const LINK_ACAO =
@@ -59,7 +60,11 @@ export async function BlocoFaturamento() {
     );
   }
 
-  const g = r.dados;
+  return <VistaBlocoFaturamento g={r.dados} />;
+}
+
+/** O bloco pronto, so com dados. */
+export function VistaBlocoFaturamento({ g }: { g: FaturamentoAdmin }) {
   const semResposta = g.deniedCount + g.failedCount;
   const ninguemRespondeu = g.storeCount > 0 && semResposta >= g.storeCount;
   const ranking = g.usuarios.filter((u) => u.lojasComDados > 0).slice(0, 5);
