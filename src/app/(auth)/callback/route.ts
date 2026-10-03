@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { APP_HOME } from "@/lib/app-home";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -13,7 +14,7 @@ export async function GET(request: Request) {
       if (type === "recovery") {
         return NextResponse.redirect(`${origin}/set-password`);
       }
-      return NextResponse.redirect(`${origin}/stores`);
+      return NextResponse.redirect(`${origin}${APP_HOME}`);
     }
     // Link expirado/reutilizado: sinaliza o motivo em vez de devolver um
     // formulario de login em branco, sem explicacao nenhuma.

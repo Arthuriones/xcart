@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { LogoXcart } from "@/components/layout/logo";
+import { APP_HOME } from "@/lib/app-home";
 
 type Mode = "login" | "signup" | "recovery";
 
@@ -24,7 +25,7 @@ function LoginForm() {
   // O middleware e o /api/shopify/auth mandam ?next=... para retomar o fluxo
   // interrompido (ex.: instalacao do app na Shopify com a sessao expirada).
   // Antes esse parametro era ignorado e o usuario perdia o contexto.
-  const redirectTarget = caminhoInternoSeguro(searchParams.get("next")) || "/stores";
+  const redirectTarget = caminhoInternoSeguro(searchParams.get("next")) || APP_HOME;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);

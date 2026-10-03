@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { LogoXcart } from "@/components/layout/logo";
+import { APP_HOME } from "@/lib/app-home";
 
 export default function SetPasswordPage() {
   const [password, setPassword] = useState("");
@@ -44,7 +45,7 @@ export default function SetPasswordPage() {
       return;
     }
 
-    router.push("/stores");
+    router.push(APP_HOME);
   }
 
   return (
