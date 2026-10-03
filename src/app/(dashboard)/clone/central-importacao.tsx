@@ -92,16 +92,16 @@ export function CentralImportacao({ lojas }: { lojas: LojaDestino[] | null }) {
                   href={o.href}
                   className="group flex h-full flex-col gap-3 rounded-card border border-border bg-surface p-4 transition-colors hover:border-border-strong hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                 >
-                  <span className="flex items-center justify-between gap-3">
-                    <span className="grid size-9 place-items-center rounded-control border border-border-subtle bg-surface-2 text-ink">
+                  <span className="flex items-center gap-3">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-control border border-border-subtle bg-surface-2 text-ink">
                       <o.Icone aria-hidden className="size-5" strokeWidth={1.75} />
                     </span>
+                    <h3 className="min-w-0 flex-1 text-section text-ink">{o.titulo}</h3>
                     <ArrowRightIcon
                       aria-hidden
-                      className="size-4 text-t2 transition-transform group-hover:translate-x-0.5 group-hover:text-ink motion-reduce:transition-none"
+                      className="size-4 shrink-0 text-t2 transition-transform group-hover:translate-x-0.5 group-hover:text-ink motion-reduce:transition-none"
                     />
                   </span>
-                  <h3 className="text-section text-ink">{o.titulo}</h3>
                   <p className="text-dense text-t1 text-pretty">{o.descricao}</p>
                   <span className="mt-auto flex flex-wrap gap-1.5 pt-1">
                     {o.pontos.map((p) => (

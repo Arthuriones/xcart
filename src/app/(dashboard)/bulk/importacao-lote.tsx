@@ -291,7 +291,7 @@ export function ImportacaoEmLote({
           <Section titulo="Opções" descricao="Valem para todos os links deste lote.">
             <div className="flex flex-col gap-4">
             <Grupo titulo="Publicação">
-              <Switch
+              <Opcao
                 rotulo="Publicar na loja virtual"
                 descricao="Desligado, o produto é criado mas fica fora da loja até você publicar."
                 checked={o.publicar}
@@ -300,13 +300,13 @@ export function ImportacaoEmLote({
             </Grupo>
 
             <Grupo titulo="Tradução">
-              <Switch
+              <Opcao
                 rotulo="Traduzir título e descrição"
                 descricao="Para o idioma da loja de destino, com IA."
                 checked={o.traduzir}
                 onCheckedChange={(v) => muda("traduzir", v)}
               />
-              <Switch
+              <Opcao
                 rotulo="Traduzir cores e tamanhos"
                 descricao="Os nomes das variações também mudam de idioma."
                 checked={o.traduzirVariacoes}
@@ -315,7 +315,7 @@ export function ImportacaoEmLote({
             </Grupo>
 
             <Grupo titulo="Categoria">
-              <Switch
+              <Opcao
                 rotulo="Preencher a categoria da Shopify"
                 descricao="Usa a lista de categorias da própria Shopify."
                 checked={o.categoria}
@@ -323,7 +323,7 @@ export function ImportacaoEmLote({
               />
               {o.categoria ? (
                 <div className="pl-12.5">
-                  <Switch
+                  <Opcao
                     rotulo="Usar IA quando não achar a categoria"
                     checked={o.categoriaComIa}
                     onCheckedChange={(v) => muda("categoriaComIa", v)}
@@ -334,7 +334,7 @@ export function ImportacaoEmLote({
 
             <Grupo titulo="Marca e fotos">
               {origem === "links" ? (
-                <Switch
+                <Opcao
                   rotulo="Tirar a marca do produto"
                   descricao="Título e descrição genéricos e fotos refeitas com IA, sem logotipo. Desliga a limpeza abaixo."
                   checked={o.tirarMarca}
@@ -343,7 +343,7 @@ export function ImportacaoEmLote({
                   }
                 />
               ) : null}
-              <Switch
+              <Opcao
                 rotulo={texto.limparTitulo}
                 descricao={
                   origem === "links" ? `${texto.limparDescricao} Desliga a opção acima.` : texto.limparDescricao
@@ -353,7 +353,7 @@ export function ImportacaoEmLote({
                   setO((a) => ({ ...a, limparReferencias: v, tirarMarca: v ? false : a.tirarMarca }))
                 }
               />
-              <Switch
+              <Opcao
                 rotulo="Aplicar o logo da loja nas fotos"
                 descricao="Usa o logo cadastrado na loja de destino."
                 checked={o.aplicarLogo}
@@ -504,6 +504,20 @@ export function ImportacaoEmLote({
       />
     </div>
   );
+}
+
+/**
+ * Liga/desliga com rotulo e descricao. O aria-label repete o rotulo: o Switch
+ * da fundacao e um <span role="switch"> dentro de <label>, e o leitor de tela
+ * nao herda o nome do label que o envolve (so elemento nativo herda).
+ */
+function Opcao(props: {
+  rotulo: string;
+  descricao?: string;
+  checked: boolean;
+  onCheckedChange: (v: boolean) => void;
+}) {
+  return <Switch {...props} aria-label={props.rotulo} />;
 }
 
 /** Um grupo de opcoes: fieldset com o nome do grupo, separado por linha fina. */
