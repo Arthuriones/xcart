@@ -121,6 +121,9 @@ export function Assistente({ dados, escopoInicial }: { dados: DadosImportar; esc
   const tituloRef = React.useRef<HTMLHeadingElement>(null);
 
   const destino = lojas.find((l) => l.id === destinoId) ?? null;
+  // Logo so vale se a loja de destino tem uma: trocar de destino depois de
+  // ligar a opcao nao manda pedir logo para loja sem logo.
+  const opcoesEfetivas: Opcoes = { ...opcoes, logo: opcoes.logo && Boolean(destino?.temLogo) };
   // Sem rota, a primeira loja: e o que a tela antiga mandava em sourceStoreId.
   const vitrineId = opcoes.rota ? opcoes.vitrineId : (lojas[0]?.id ?? "");
   const nomeVitrine = lojas.find((l) => l.id === opcoes.vitrineId)?.nome ?? null;
@@ -164,7 +167,7 @@ export function Assistente({ dados, escopoInicial }: { dados: DadosImportar; esc
       destinoId,
       vitrineId,
       limite,
-      opcoes,
+      opcoes: opcoesEfetivas,
       colecaoHandle: colecaoValida?.handle ?? null,
     });
   }
@@ -529,7 +532,8 @@ export function Assistente({ dados, escopoInicial }: { dados: DadosImportar; esc
 
   return (
     <div className="grid gap-4 lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start lg:gap-6">
-      <div className="lg:sticky lg:top-4">
+      {/* Abaixo do topo da casca (h-15, tambem sticky). */}
+      <div className="lg:sticky lg:top-21">
         <Trilha
           passo={passo}
           escopo={escopo}
@@ -608,7 +612,7 @@ export function Assistente({ dados, escopoInicial }: { dados: DadosImportar; esc
               {passo === "revisao" ? (
                 <PassoRevisao
                   linhas={linhasRevisao}
-                  escolhas={resumoOpcoes(opcoes, nomeVitrine)}
+                  escolhas={resumoOpcoes(opcoesEfetivas, nomeVitrine)}
                   estimativa={estimarCreditos(nProdutos, opcoes.marcas)}
                   saldo={saldo}
                   cobrando={cobrando}

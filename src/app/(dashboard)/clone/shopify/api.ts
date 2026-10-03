@@ -1,4 +1,8 @@
+"use client";
+
 // ============================================================================
+// Roda no NAVEGADOR (o fetch vai para a propria API do app).
+//
 // As chamadas do assistente, todas para rotas que JA existem e com os mesmos
 // corpos da tela antiga:
 //   POST /api/shopify/clone            (ler catalogo, previa e importar)
