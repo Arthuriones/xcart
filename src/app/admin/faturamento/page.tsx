@@ -1,303 +1,152 @@
-"use client";
-
-import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import { AlertTriangle, ChevronDown, ChevronRight, Loader2, RefreshCw } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Suspense } from "react";
+import { Callout } from "@/components/ui/callout";
+import { EmptyState } from "@/components/ui/empty-state";
+import { KpiCard } from "@/components/ui/kpi-card";
+import { Section } from "@/components/ui/section";
 import type { FaturamentoAdmin } from "@/lib/sales/admin-types";
+import { BotaoAtualizar, ErroAdmin } from "../estados-admin";
+import { hora, inteiro, periodoDaUrl, plural, reais, type PeriodoFaturamento } from "../formato";
+import { lerFaturamento } from "../ler-api";
+import { CabecalhoFaturamento, EsqueletoFaturamento } from "./partes";
+import { TabelaFaturamento } from "./tabela-faturamento";
 
-const PERIODOS = [
-  { id: "7", label: "7 dias" },
-  { id: "30", label: "30 dias" },
-  { id: "60", label: "60 dias" },
-];
+export const dynamic = "force-dynamic";
+// Pergunta ao vivo a cada loja de checkout: com dezenas de lojas passa facil
+// do teto padrao (o mesmo de /api/admin/revenue).
+export const maxDuration = 120;
 
-const brl = (centavos: number) =>
-  (centavos / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-const nativo = (centavos: number, moeda: string) =>
-  (centavos / 100).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: moeda || "BRL",
-    maximumFractionDigits: 0,
-  });
-
-const num = (n: number) => n.toLocaleString("pt-BR");
-
-function hora(iso: string) {
-  return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+/**
+ * /admin/faturamento: quanto os clientes venderam nas lojas de checkout, por
+ * cliente e por loja. Le GET /api/admin/revenue no servidor; o periodo fica na
+ * URL (?periodo=7|30|60) e cada troca mostra o esqueleto ate as lojas
+ * responderem.
+ */
+export default async function AdminFaturamentoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [chave: string]: string | string[] | undefined }>;
+}) {
+  const periodo = periodoDaUrl((await searchParams).periodo);
+  return (
+    <>
+      <CabecalhoFaturamento periodo={periodo} />
+      <Suspense key={periodo} fallback={<EsqueletoFaturamento />}>
+        <Conteudo periodo={periodo} />
+      </Suspense>
+    </>
+  );
 }
 
-export default function AdminFaturamentoPage() {
-  const [dados, setDados] = useState<FaturamentoAdmin | null>(null);
-  const [periodo, setPeriodo] = useState("30");
-  const [carregando, setCarregando] = useState(true);
-  const [erro, setErro] = useState<string | null>(null);
-  const [aberto, setAberto] = useState<string | null>(null);
+async function Conteudo({ periodo }: { periodo: PeriodoFaturamento }) {
+  const r = await lerFaturamento(periodo);
+  if (!r.ok) {
+    return (
+      <ErroAdmin
+        titulo="Não deu para perguntar às lojas agora"
+        descricao="Nada foi alterado. A Shopify pode estar lenta; tente de novo em instantes."
+        detalhe={r.detalhe}
+      />
+    );
+  }
+  return <Faturamento g={r.dados} periodo={periodo} />;
+}
 
-  const buscar = useCallback(async (p: string) => {
-    setCarregando(true);
-    setErro(null);
-    try {
-      const r = await fetch(`/api/admin/revenue?period=${p}`);
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error || "Falha ao carregar.");
-      setDados(j);
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : "Falha ao carregar.");
-    } finally {
-      setCarregando(false);
-    }
-  }, []);
+function Faturamento({ g, periodo }: { g: FaturamentoAdmin; periodo: PeriodoFaturamento }) {
+  const dias = Math.min(Number(periodo), g.maxDays);
+  const periodoTexto = `últimos ${dias} dias`;
+  const periodoTitulo = `Últimos ${dias} dias`;
+  const semResposta = g.deniedCount + g.failedCount;
+  const responderam = Math.max(0, g.storeCount - semResposta);
+  const ninguem = g.storeCount > 0 && responderam === 0;
+  const incompleto = semResposta > 0 || g.moedasSemTaxa.length > 0;
 
-  useEffect(() => {
-    buscar(periodo);
-  }, [periodo, buscar]);
+  if (g.storeCount === 0) {
+    return (
+      <EmptyState
+        titulo="Nenhuma loja de checkout com rota ligada"
+        descricao="Esta tela só olha lojas que recebem comprador por rota."
+        className="py-12"
+      />
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Faturamento no roteamento</h1>
-          <p className="text-sm text-muted-foreground">
-            Pedidos pagos nas lojas de checkout que recebem comprador por rota.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* O Select entrega `string | null` ao limpar a selecao; manter o
-              periodo atual evita pedir a API com period=null. */}
-          <Select value={periodo} onValueChange={(v) => setPeriodo(v ?? periodo)}>
-            <SelectTrigger className="w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PERIODOS.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => buscar(periodo)}
-            disabled={carregando}
-            aria-label="Atualizar"
-          >
-            <RefreshCw className={carregando ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-          </Button>
-        </div>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <p className="text-label text-t2">
+          {periodoTitulo} · em reais · apurado às {hora(g.computedAt)}
+        </p>
+        <BotaoAtualizar rotulo="Perguntar de novo" />
       </div>
 
-      {erro && (
-        <Card className="border-destructive/40">
-          <CardContent className="py-4 text-sm text-destructive">{erro}</CardContent>
-        </Card>
-      )}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <KpiCard
+          rotulo="Faturamento no período"
+          valor={ninguem ? null : reais(g.totalRevenueBrlCents / 100)}
+          motivoSemDado="Nenhuma loja respondeu"
+          detalhe={incompleto && !ninguem ? "Parcial: falta loja ou moeda" : "Convertido para real"}
+          definicao="Soma dos pedidos pagos nas lojas de checkout com rota ligada, sem teste e sem cancelado. Moeda de fora vira real pela taxa de relatório."
+        />
+        <KpiCard
+          rotulo="Pedidos pagos"
+          valor={ninguem ? null : inteiro(g.totalOrders)}
+          motivoSemDado="Nenhuma loja respondeu"
+          detalhe="Sem teste e sem cancelado"
+        />
+        <KpiCard
+          rotulo="Lojas que responderam"
+          valor={`${inteiro(responderam)} de ${inteiro(g.storeCount)}`}
+          detalhe={semResposta > 0 ? plural(semResposta, "ficou de fora", "ficaram de fora") : "Todas responderam"}
+          className="col-span-2 lg:col-span-1"
+        />
+      </div>
 
-      {carregando && !dados && (
-        <div className="flex items-center gap-2 py-16 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Perguntando a cada loja de checkout na Shopify…
-        </div>
-      )}
+      {incompleto ? (
+        <Callout tom="warn" titulo="O total está incompleto">
+          <ul className="flex list-disc flex-col gap-1 pl-4">
+            {g.deniedCount > 0 ? (
+              <li>
+                {g.deniedCount === 1
+                  ? "1 loja não deu permissão para ler pedidos."
+                  : `${inteiro(g.deniedCount)} lojas não deram permissão para ler pedidos.`}{" "}
+                Foram conectadas antes de o xcart pedir essa permissão e precisam ser reautorizadas pelo dono.
+              </li>
+            ) : null}
+            {g.failedCount > 0 ? (
+              <li>
+                {g.failedCount === 1 ? "1 loja não respondeu" : `${inteiro(g.failedCount)} lojas não responderam`}: app
+                desinstalado, plano vencido ou loja em revisão na Shopify.
+              </li>
+            ) : null}
+            {g.moedasSemTaxa.length > 0 ? (
+              <li>
+                Falta a taxa de conversão de {g.moedasSemTaxa.join(", ")} para real, então esse valor ficou fora do total.
+              </li>
+            ) : null}
+          </ul>
+        </Callout>
+      ) : null}
 
-      {dados && (
-        <>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Faturamento no período</CardDescription>
-                <CardTitle className="text-2xl">{brl(dados.totalRevenueBrlCents)}</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0 text-xs text-muted-foreground">
-                convertido para real, taxa de relatório
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Pedidos pagos</CardDescription>
-                <CardTitle className="text-2xl">{num(dados.totalOrders)}</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0 text-xs text-muted-foreground">
-                sem teste e sem cancelado
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Lojas de checkout</CardDescription>
-                <CardTitle className="text-2xl">{num(dados.storeCount)}</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0 text-xs text-muted-foreground">
-                apurado às {hora(dados.computedAt)}
-              </CardContent>
-            </Card>
-          </div>
-
-          {(dados.deniedCount > 0 || dados.failedCount > 0 || dados.moedasSemTaxa.length > 0) && (
-            <Card className="border-amber-500/40 bg-amber-500/5">
-              <CardContent className="space-y-1 py-4 text-sm">
-                <div className="flex items-center gap-2 font-medium">
-                  <AlertTriangle className="h-4 w-4 text-amber-600" />O total está incompleto
-                </div>
-                {dados.deniedCount > 0 && (
-                  <p className="text-muted-foreground">
-                    {dados.deniedCount} loja(s) sem <code>read_orders</code> — conectadas antes do
-                    app pedir o escopo. Precisam ser reautorizadas pelo dono.
-                  </p>
-                )}
-                {dados.failedCount > 0 && (
-                  <p className="text-muted-foreground">
-                    {dados.failedCount} loja(s) não responderam (app desinstalado, plano vencido ou
-                    loja em revisão).
-                  </p>
-                )}
-                {dados.moedasSemTaxa.length > 0 && (
-                  <p className="text-muted-foreground">
-                    Sem taxa de conversão para {dados.moedasSemTaxa.join(", ")} — esse valor ficou
-                    fora do total. Defina em <code>FX_BRL_RATES</code>.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Quem mais fatura</CardTitle>
-              <CardDescription>
-                Últimos {dados.maxDays >= Number(dados.period) ? dados.period : dados.maxDays} dias.
-                A Shopify só libera 60 dias com <code>read_orders</code>.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="px-0">
-              {dados.usuarios.length === 0 ? (
-                <p className="px-6 py-8 text-sm text-muted-foreground">
-                  Nenhuma rota ligada com loja de checkout respondendo.
-                </p>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead className="border-b text-xs uppercase tracking-wide text-muted-foreground">
-                    <tr>
-                      <th className="px-6 py-2 text-left font-medium">Usuário</th>
-                      <th className="px-3 py-2 text-right font-medium">Pedidos</th>
-                      <th className="px-3 py-2 text-right font-medium">Faturamento</th>
-                      <th className="px-6 py-2 text-right font-medium">Lojas c/ dados</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dados.usuarios.map((u, i) => {
-                      const expandido = aberto === u.userId;
-                      // Nenhuma loja respondeu: nao sabemos o faturamento, e
-                      // mostrar R$ 0,00 aqui seria afirmar que nao vendeu.
-                      const cego = u.lojasComDados === 0;
-                      return (
-                        <>
-                          <tr
-                            key={u.userId}
-                            className="cursor-pointer border-b last:border-0 hover:bg-muted/40"
-                            onClick={() => setAberto(expandido ? null : u.userId)}
-                          >
-                            <td className="px-6 py-3">
-                              <div className="flex items-center gap-2">
-                                {expandido ? (
-                                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-                                ) : (
-                                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                                )}
-                                <span className="w-5 text-xs text-muted-foreground">
-                                  {cego ? "—" : `${i + 1}º`}
-                                </span>
-                                <Link
-                                  href={`/admin/users/${u.userId}`}
-                                  className="truncate hover:underline"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  {u.email}
-                                </Link>
-                                {u.plan === "pro" && (
-                                  <Badge className="rounded-md bg-primary/15 text-primary">
-                                    pro
-                                  </Badge>
-                                )}
-                                {u.semTaxa.length > 0 && (
-                                  <Badge variant="outline" className="rounded-md text-amber-600">
-                                    {u.semTaxa.join(", ")} fora
-                                  </Badge>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-3 py-3 text-right tabular-nums">
-                              {cego ? "—" : num(u.orders)}
-                            </td>
-                            <td className="px-3 py-3 text-right font-medium tabular-nums">
-                              {cego ? (
-                                <span className="text-xs font-normal text-muted-foreground">
-                                  sem dados
-                                </span>
-                              ) : (
-                                brl(u.revenueBrlCents)
-                              )}
-                            </td>
-                            <td className="px-6 py-3 text-right text-muted-foreground">
-                              {u.lojasComDados}/{u.lojas.length}
-                            </td>
-                          </tr>
-
-                          {expandido &&
-                            u.lojas.map((l) => (
-                              <tr key={l.storeId} className="border-b bg-muted/20 last:border-0">
-                                <td className="py-2 pl-16 pr-6">
-                                  <div className="truncate">{l.name}</div>
-                                  <div className="truncate text-xs text-muted-foreground">
-                                    {l.domain}
-                                    {l.vitrines.length > 0 && ` · recebe de ${l.vitrines.join(", ")}`}
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                                  {l.problem ? "—" : num(l.orders)}
-                                </td>
-                                <td className="px-3 py-2 text-right tabular-nums">
-                                  {l.problem === "denied" ? (
-                                    <span className="text-xs text-amber-600">sem read_orders</span>
-                                  ) : l.problem === "failed" ? (
-                                    <span className="text-xs text-muted-foreground">
-                                      não respondeu
-                                    </span>
-                                  ) : (
-                                    <>
-                                      <div>{nativo(l.revenueCents, l.currency)}</div>
-                                      {l.revenueBrlCents !== null && l.currency !== "BRL" && (
-                                        <div className="text-xs text-muted-foreground">
-                                          {brl(l.revenueBrlCents)}
-                                        </div>
-                                      )}
-                                    </>
-                                  )}
-                                </td>
-                                <td className="px-6 py-2" />
-                              </tr>
-                            ))}
-                        </>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </CardContent>
-          </Card>
-        </>
-      )}
+      <Section
+        titulo="Quem mais fatura"
+        descricao={`${periodoTitulo}. Abra um cliente para ver cada loja, na moeda dela e convertida.`}
+        espaco="nenhum"
+      >
+        {g.usuarios.length === 0 ? (
+          <EmptyState
+            variante="simples"
+            className="min-h-45"
+            titulo="Nenhum cliente com loja respondendo"
+            descricao="Os clientes aparecem quando uma loja de checkout responder."
+          />
+        ) : (
+          <TabelaFaturamento usuarios={g.usuarios} periodoTexto={periodoTexto} />
+        )}
+        <p className="border-t border-border-subtle px-4 py-2.5 text-label text-t2">
+          Só entram lojas de checkout com rota ligada: quem anuncia direto na loja, sem vitrine, ainda fica de fora. A
+          Shopify libera no máximo 60 dias de pedidos.
+        </p>
+      </Section>
     </div>
   );
 }
