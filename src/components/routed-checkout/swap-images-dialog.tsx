@@ -1,21 +1,23 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { ImageIcon, Loader2, Sparkles, X } from "lucide-react";
-import { textos } from "@/lib/textos";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { useEffect, useId, useRef, useState } from "react";
+import Link from "next/link";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { CartoesEscolha, Progresso } from "@/components/routed-checkout/cartoes";
 
-interface ImageQueueProgress {
+// ============================================================================
+// Refazer as imagens de uma loja de checkout sem marca, em segundo plano.
+// Mesmas chamadas de sempre (/api/jobs/neutralize-store-images e
+// /api/jobs/neutralize-images); o que mudou foi o desenho, o custo em
+// creditos (o credito e vendido em real, nao em dolar) e o botao que trava
+// quando falta saldo.
+// ============================================================================
+
+interface FilaImagens {
   pending: number;
   processing: number;
   completed: number;
@@ -30,29 +32,41 @@ interface SwapImagesDialogProps {
   storeLabel: string;
 }
 
-export function SwapImagesDialog({
-  open,
-  onOpenChange,
-  storeId,
-  storeLabel,
-}: SwapImagesDialogProps) {
+type Modo = "stock-neutralize" | "external-references";
+
+const MODOS: { valor: Modo; rotulo: string; descricao: string }[] = [
+  {
+    valor: "stock-neutralize",
+    rotulo: "Tirar a marca do produto",
+    descricao: "Remove logos e marcas e recria a foto limpa.",
+  },
+  {
+    valor: "external-references",
+    rotulo: "Só tirar selo e marca d’água",
+    descricao: "Mantém o produto como está e limpa o selo do vendedor.",
+  },
+];
+
+function plural(n: number, um: string, varios: string) {
+  return `${n.toLocaleString("pt-BR")} ${n === 1 ? um : varios}`;
+}
+
+export function SwapImagesDialog({ open, onOpenChange, storeId, storeLabel }: SwapImagesDialogProps) {
   const [starting, setStarting] = useState(false);
   const [started, setStarted] = useState(false);
   const [instructions, setInstructions] = useState("");
-  const [mode, setMode] = useState<"stock-neutralize" | "external-references">(
-    "stock-neutralize"
-  );
-  const [progress, setProgress] = useState<ImageQueueProgress | null>(null);
+  const [mode, setMode] = useState<Modo>("stock-neutralize");
+  const [progress, setProgress] = useState<FilaImagens | null>(null);
   const [canceling, setCanceling] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const t = textos("clone.swapImages");
-  const tCredit = textos("clone.imageNeutralize");
+  const [aviso, setAviso] = useState<{ ok: boolean; texto: string } | null>(null);
   const [estimate, setEstimate] = useState<{
     estimatedCredits: number;
     billingEnforced: boolean;
     creditBalance: number | null;
   } | null>(null);
-  const [estimating, setEstimating] = useState(false);
+  const [estimating, setEstimating] = useState(open);
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const idInstrucoes = useId();
 
   function stopPoll() {
     if (pollRef.current) {
@@ -61,24 +75,19 @@ export function SwapImagesDialog({
     }
   }
 
-  // A limpeza do formulario acontece no RENDER, o efeito fica so com o que e
-  // efeito de verdade (parar o poll, disparar as consultas).
-  //
-  // Antes os quatro setState de reset rodavam sincronos dentro do efeito toda
-  // vez que o dialog fechava: quatro atualizacoes em cascata para chegar a um
-  // estado que o render ja sabia calcular na transicao aberto -> fechado.
+  // A limpeza do formulario acontece no RENDER, na transicao aberto/fechado;
+  // o efeito fica so com o que e efeito de verdade (poll e consultas).
   const [abertoAntes, setAbertoAntes] = useState(open);
   if (open !== abertoAntes) {
     setAbertoAntes(open);
     if (open) {
-      // A estimativa comeca junto com a abertura; ligar a flag aqui evita o
-      // mesmo set sincrono dentro do efeito.
       setEstimating(true);
     } else {
       setStarted(false);
       setStarting(false);
       setProgress(null);
       setEstimate(null);
+      setAviso(null);
     }
   }
 
@@ -87,10 +96,8 @@ export function SwapImagesDialog({
       stopPoll();
       return;
     }
-    // Ao abrir, ja consulta se ha uma fila em andamento para esta loja.
+    // Ao abrir: ha fila em andamento para esta loja? E quanto custa disparar?
     void poll();
-    // ...e quantos creditos esse disparo vai custar, antes do clique.
-    // (a flag `estimating` ja foi ligada na transicao de abertura, acima)
     fetch("/api/jobs/neutralize-store-images", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -115,15 +122,12 @@ export function SwapImagesDialog({
   async function poll() {
     stopPoll();
     try {
-      const res = await fetch(
-        `/api/jobs/neutralize-store-images?storeId=${encodeURIComponent(storeId)}`
-      );
+      const res = await fetch(`/api/jobs/neutralize-store-images?storeId=${encodeURIComponent(storeId)}`);
       const data = await res.json();
       if (res.ok && data.progress) {
-        const p = data.progress as ImageQueueProgress;
+        const p = data.progress as FilaImagens;
         setProgress(p.total > 0 ? p : null);
-        const running = p.pending + p.processing > 0;
-        if (running) {
+        if (p.pending + p.processing > 0) {
           // Garante que o dreno continue mesmo se o servidor tiver parado.
           if (p.pending > 0 && p.processing === 0) {
             fetch("/api/jobs/neutralize-images", {
@@ -136,31 +140,32 @@ export function SwapImagesDialog({
         }
       }
     } catch {
-      // silencioso
+      // acompanhamento: sem ele a fila segue no servidor
     }
   }
 
   async function handleStart() {
     setStarting(true);
+    setAviso(null);
     try {
       const res = await fetch("/api/jobs/neutralize-store-images", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ storeId, mode, customInstructions: instructions }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Falha ao iniciar.");
-      if (data.queued === 0) {
-        toast(data.message || "Nada para trocar.");
-      } else {
-        toast.success(`${data.queued} imagem(ns) na fila. Trocando aos poucos.`);
-      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error("start");
+      setAviso({
+        ok: true,
+        texto:
+          data.queued === 0
+            ? "Nada para trocar: as imagens desta loja já estão na fila ou prontas."
+            : `${plural(data.queued ?? 0, "imagem entrou", "imagens entraram")} na fila. A troca acontece aos poucos.`,
+      });
       setStarted(true);
       void poll();
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Falha ao iniciar a troca."
-      );
+    } catch {
+      setAviso({ ok: false, texto: "Não deu para começar a troca. Nenhuma imagem mudou; tente de novo." });
     } finally {
       setStarting(false);
     }
@@ -170,21 +175,21 @@ export function SwapImagesDialog({
     setCanceling(true);
     stopPoll();
     try {
-      const res = await fetch(
-        `/api/jobs/neutralize-store-images?storeId=${encodeURIComponent(storeId)}`,
-        { method: "DELETE" }
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Falha ao cancelar.");
+      const res = await fetch(`/api/jobs/neutralize-store-images?storeId=${encodeURIComponent(storeId)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error("cancel");
       if (data.progress) {
-        const p = data.progress as ImageQueueProgress;
+        const p = data.progress as FilaImagens;
         setProgress(p.total > 0 ? p : null);
       }
-      toast(
-        `Cancelado. ${data.canceled || 0} imagem(ns) na fila foram paradas. As já trocadas continuam.`
-      );
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Falha ao cancelar.");
+      setAviso({
+        ok: true,
+        texto: `Troca parada: ${plural(data.canceled || 0, "imagem saiu", "imagens saíram")} da fila. As já trocadas continuam.`,
+      });
+    } catch {
+      setAviso({ ok: false, texto: "Não deu para parar a troca. Ela continua; tente de novo." });
       void poll();
     } finally {
       setCanceling(false);
@@ -192,151 +197,96 @@ export function SwapImagesDialog({
   }
 
   const done = progress ? progress.completed + progress.failed : 0;
-  const pct = progress
-    ? Math.round((done / Math.max(progress.total, 1)) * 100)
-    : 0;
+  const pct = progress ? Math.round((done / Math.max(progress.total, 1)) * 100) : 0;
   const running = progress ? progress.pending + progress.processing > 0 : false;
+  const falta =
+    !!estimate &&
+    estimate.billingEnforced &&
+    estimate.creditBalance !== null &&
+    estimate.estimatedCredits > estimate.creditBalance;
+
+  let textoEstimativa: string;
+  if (estimating || !estimate) textoEstimativa = "Calculando quantos créditos a troca usa…";
+  else if (!estimate.billingEnforced)
+    textoEstimativa = "A cobrança de créditos ainda não está ativa: a troca não gasta crédito por enquanto.";
+  else
+    textoEstimativa = `Vai usar cerca de ${plural(estimate.estimatedCredits, "crédito", "créditos")} (1 por imagem)${
+      estimate.creditBalance !== null ? `. Você tem ${estimate.creditBalance.toLocaleString("pt-BR")}.` : "."
+    }`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <ImageIcon className="h-4 w-4 text-primary" />
-            Trocar imagens da loja checkout
-          </DialogTitle>
+          <DialogTitle>Refazer imagens sem marca</DialogTitle>
           <DialogDescription>
-            {t("description", { cost: "0.04" })} (
-            <span className="font-medium text-foreground">{storeLabel}</span>)
+            Recria a imagem de cada produto de <span className="font-medium text-ink">{storeLabel}</span>, em
+            segundo plano. Você pode fechar esta janela.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="space-y-1">
-            <span className="block text-xs font-medium text-foreground">
-              O que fazer com a imagem
-            </span>
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="radio"
-                name="swapMode"
-                checked={mode === "stock-neutralize"}
-                onChange={() => setMode("stock-neutralize")}
-                className="mt-0.5 h-4 w-4 accent-primary"
-              />
-              <span>
-                <span className="block text-foreground">
-                  Neutralizar marca (stock)
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  Remove logos/marcas do produto e recria a foto limpa.
-                </span>
-              </span>
-            </label>
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="radio"
-                name="swapMode"
-                checked={mode === "external-references"}
-                onChange={() => setMode("external-references")}
-                className="mt-0.5 h-4 w-4 accent-primary"
-              />
-              <span>
-                <span className="block text-foreground">
-                  Só tirar marca d&apos;água/selo de vendedor
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  Mantém o produto como está, remove watermark do AliExpress.
-                </span>
-              </span>
-            </label>
-          </div>
+        <div className="flex flex-col gap-4">
+          <CartoesEscolha rotulo="O que fazer com a imagem" colunas={2} valor={mode} onValorChange={setMode} opcoes={MODOS} />
 
-          <div className="space-y-1.5">
-            <Label htmlFor="swap-instructions" className="text-xs">
-              Instruções extras (opcional)
-            </Label>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={idInstrucoes}>Instruções extras (opcional)</Label>
             <Textarea
-              id="swap-instructions"
+              id={idInstrucoes}
               rows={2}
               value={instructions}
               onChange={(event) => setInstructions(event.target.value)}
               placeholder="Ex.: manter o escudo do time, remover só o selo do vendedor."
-              className="bg-background/70 text-xs"
+              className="min-h-16 text-dense"
             />
           </div>
 
-          {!progress?.total && (
-            <p
-              className={`rounded-md border px-2 py-1.5 text-xs ${
-                estimate &&
-                estimate.billingEnforced &&
-                estimate.creditBalance !== null &&
-                estimate.estimatedCredits > estimate.creditBalance
-                  ? "border-destructive/40 bg-destructive/10 text-destructive"
-                  : "border-border/60 bg-muted/40 text-muted-foreground"
-              }`}
-            >
-              {estimating || !estimate
-                ? tCredit("estimateLoading")
-                : !estimate.billingEnforced
-                  ? tCredit("estimateUnlimited")
-                  : estimate.creditBalance !== null &&
-                      estimate.estimatedCredits > estimate.creditBalance
-                    ? tCredit("estimateLowBalance", {
-                        count: estimate.estimatedCredits,
-                        balance: estimate.creditBalance,
-                      })
-                    : tCredit("estimate", {
-                        count: estimate.estimatedCredits,
-                        balance: estimate.creditBalance ?? 0,
-                      })}
-            </p>
-          )}
+          {!progress?.total ? (
+            falta ? (
+              <Callout
+                tom="err"
+                titulo="Faltam créditos"
+                acao={
+                  <Link href="/billing" className={buttonVariants({ variant: "secondary", size: "sm" })}>
+                    Comprar créditos
+                  </Link>
+                }
+              >
+                Precisa de {plural(estimate?.estimatedCredits ?? 0, "crédito", "créditos")} e você tem{" "}
+                {(estimate?.creditBalance ?? 0).toLocaleString("pt-BR")}.
+              </Callout>
+            ) : (
+              <p aria-live="polite" className="text-dense text-t1">
+                {textoEstimativa}
+              </p>
+            )
+          ) : null}
 
-          {progress && progress.total > 0 && (
-            <div className="space-y-1 rounded-lg border border-primary/20 bg-primary/5 p-3">
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>
-                  {progress.completed}/{progress.total} trocadas
-                  {progress.failed > 0 ? ` · ${progress.failed} falharam` : ""}
-                </span>
-                <span>{running ? "processando…" : "concluído"}</span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-primary/15">
-                <div
-                  className="h-full rounded-full bg-primary transition-all"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                Pode fechar — as imagens terminam em background.
+          {progress && progress.total > 0 ? (
+            <div className="flex flex-col gap-2 rounded-card border border-border bg-surface-2 p-3">
+              <Progresso valor={pct} rotulo="Imagens trocadas" />
+              <p aria-live="polite" className="text-dense text-t1">
+                {progress.completed.toLocaleString("pt-BR")} de {progress.total.toLocaleString("pt-BR")} trocadas
+                {progress.failed > 0 ? ` · ${plural(progress.failed, "falhou", "falharam")}` : ""}
+                {running ? " · em andamento" : " · concluído"}
               </p>
             </div>
-          )}
+          ) : null}
+
+          <div aria-live="polite">
+            {aviso ? (
+              <Callout tom={aviso.ok ? "ok" : "err"} titulo={aviso.ok ? "Pronto" : "Não deu certo"}>
+                {aviso.texto}
+              </Callout>
+            ) : null}
+          </div>
 
           {running ? (
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={handleCancel}
-              disabled={canceling}
-            >
-              {canceling ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <X className="h-4 w-4" />
-              )}
-              Cancelar troca de imagens
+            <Button variant="secondary" pending={canceling} onClick={handleCancel}>
+              Parar a troca de imagens
             </Button>
           ) : (
-            <Button className="w-full" onClick={handleStart} disabled={starting}>
-              {starting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="h-4 w-4" />
-              )}
-              {started ? "Trocar de novo" : "Trocar imagens agora"}
+            <Button pending={starting} disabled={falta} onClick={handleStart}>
+              {started ? "Trocar de novo" : "Trocar as imagens agora"}
             </Button>
           )}
         </div>
