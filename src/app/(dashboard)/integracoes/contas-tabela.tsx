@@ -464,7 +464,7 @@ export function ContasTabela({
       titulo="Contas de anúncio"
       nivel={3}
       espaco="nenhum"
-      descricao={`Ligue cada conta a uma loja para o gasto entrar no lucro dela. Horários no ${rotuloFuso(fuso)}.`}
+      descricao={`Ligue cada conta a uma loja para o gasto entrar no lucro dela. Horas no ${rotuloFuso(fuso)}.`}
       acoes={
         meta ? (
           <Button size="sm" variant="secondary" pending={sincronizando} onClick={sincronizar}>
