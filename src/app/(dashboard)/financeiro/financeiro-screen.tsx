@@ -7,14 +7,17 @@ import type { LinhaCampanha } from "@/lib/leitura/por-campanha";
 import { Cascata } from "./cascata";
 import { ComoCalculamos } from "./como-calculamos";
 import { DetalharPor } from "./detalhar-por";
-import { Indicadores } from "./indicadores";
-import { haQuanto, montarDicas, montarPendencias, nomeDaLoja, situacaoDasLojas } from "./lucro-dados";
+import { GraficoFaturamento } from "./grafico-faturamento";
+import { IndicadoresKpi, IndicadoresTopo, LinhaAtualizado, type BaseIndicadores } from "./indicadores";
+import { haQuanto, montarDicas, montarPendencias, nomeDaLoja, situacaoDasLojas, temMovimento } from "./lucro-dados";
 import { Pendencias } from "./pendencias";
+import { PorLoja } from "./por-loja";
 
 // ============================================================================
-// A tela Lucro, montada no servidor: pendencias (o unico bloco de aviso),
-// KPIs + grafico (com a cascata ao lado), "Detalhar por" e "Como calculamos".
-// So as partes que reagem a clique sao client components.
+// A tela Dashboard (mockup "design novo/2.0/Dashboard.dc.html"), montada no
+// servidor: pendencias (o unico bloco de aviso), 5 cartoes de resumo, grafico
+// de faturamento com os custos do periodo ao lado, os KPIs, "Por loja",
+// "Detalhar por" e "Como calculamos". So o grafico e as abas sao client.
 //
 // `dados` vem de getFinanceiro (o calculo de sempre). `extras` sao as leituras
 // novas (serie do periodo anterior, produto, campanha): se falharem, a tela
@@ -89,34 +92,46 @@ export function FinanceiroScreen({
   // porDia vem do mais novo para o mais antigo; o grafico quer o contrario.
   const pontos = [...r.porDia].reverse().map(pontoDeLinha);
   const lucroPorLoja = new Map((extras?.serie.porLoja ?? []).map((l) => [l.storeId, l.lucro]));
+  const mostrarLoja = filtro.lojaId === TODAS && dados.lojaIds.length >= 2;
+
+  const comparando = comparacao === "anterior";
+  const semBase = comparando && !temMovimento(r.anterior);
+  const base: BaseIndicadores = {
+    moeda,
+    atual: r.atual,
+    anterior: r.anterior,
+    compara: comparando && !semBase,
+    dicas: montarDicas(r.avisos, r.atual.coberturaCusto),
+  };
 
   return (
     <div className="flex flex-col gap-6">
       <Pendencias itens={pendencias} />
 
-      <Indicadores
-        moeda={moeda}
-        atual={r.atual}
-        anterior={r.anterior}
-        comparar={comparacao}
-        rotuloAnterior={rotuloIntervalo(r.intervalos.anterior)}
-        pontos={pontos}
-        pontosAnteriores={extras ? extras.serie.anterior : null}
-        contexto={contexto}
-        dicas={montarDicas(r.avisos, r.atual.coberturaCusto)}
-        atualizado={
-          atualizado && conexao.atualizadoEm !== null
-            ? { texto: atualizado, iso: new Date(conexao.atualizadoEm).toISOString() }
-            : null
-        }
-        cascata={<Cascata atual={r.atual} moeda={moeda} />}
-      />
+      <div className="flex flex-col gap-3.5">
+        <LinhaAtualizado
+          atualizado={
+            atualizado && conexao.atualizadoEm !== null
+              ? { texto: atualizado, iso: new Date(conexao.atualizadoEm).toISOString() }
+              : null
+          }
+          semBase={semBase}
+          rotuloAnterior={rotuloIntervalo(r.intervalos.anterior)}
+        />
+        <IndicadoresTopo {...base} />
+        <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <GraficoFaturamento pontos={pontos} moeda={moeda} contexto={contexto} />
+          <Cascata atual={r.atual} moeda={moeda} />
+        </div>
+        <IndicadoresKpi {...base} />
+        {mostrarLoja && <PorLoja lojas={r.porLoja} moeda={moeda} />}
+      </div>
 
       <DetalharPor
         moeda={moeda}
         intervalo={r.intervalos.atual}
         rotuloLoja={rotuloLoja}
-        mostrarLoja={filtro.lojaId === TODAS && dados.lojaIds.length >= 2}
+        mostrarLoja={mostrarLoja}
         lojas={r.porLoja.map((l) => ({
           linha: l,
           semAcesso: semAcesso(l.storeId),

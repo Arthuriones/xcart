@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <title>xcart · Lucro v2</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Public+Sans:wght@400;500;600;700&amp;display=swap">
+  <link rel="stylesheet" href="xcart-tokens.css">
+</helmet>
+<div style="min-height:100vh; background:#e9e8e5; display:flex; flex-direction:column;">
+  <dc-import name="Revisao" tela="Lucro v2" theme="{{ theme }}" width="{{ width }}" cenario="{{ periodo }}" cenarios="{{ periodos }}" anot="{{ false }}" onTheme="{{ setTheme }}" onWidth="{{ setWidth }}" onCenario="{{ setPeriodo }}" hint-size="100%,48px"></dc-import>
+  <div style="flex:1; padding:24px 16px 48px; display:flex; justify-content:center;">
+    <div style="width:{{ wrapW }}; height:{{ wrapH }}; flex:none;">
+      <div data-theme="{{ theme }}" style="position:relative; width:{{ frameW }}; height:{{ frameH }}; transform:scale({{ escala }}); transform-origin:top left; overflow:hidden; border-radius:{{ frameRaio }}; box-shadow:0 0 0 1px rgba(0,0,0,.12), 0 24px 64px rgba(0,0,0,.16); background:var(--bg); display:flex; flex-direction:{{ frameDir }};">
+
+        <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}">
+          <aside aria-label="Menu principal" style="width:232px; flex:none; height:100%; display:flex; flex-direction:column; background:var(--surface-2); border-right:1px solid var(--border);">
+            <div style="height:56px; display:flex; align-items:center; padding:0 16px;"><span style="font-size:16px; font-weight:700; letter-spacing:-0.02em;">xcart</span></div>
+            <nav aria-label="Telas" style="flex:1; padding:4px 8px; display:flex; flex-direction:column;">
+              <sc-for list="{{ menu }}" as="g" hint-placeholder-count="3">
+                <div style="display:flex; flex-direction:column; gap:2px; padding:8px 0; border-bottom:1px solid var(--border-subtle);">
+                  <span style="padding:4px 8px 6px; font-size:var(--fs-label); color:var(--t2);">{{ g.t }}</span>
+                  <sc-for list="{{ g.itens }}" as="m" hint-placeholder-count="3">
+                    <a href="{{ m.href }}" aria-current="{{ m.atual }}" style="display:flex; align-items:center; gap:10px; height:32px; padding:0 8px; border-radius:var(--r-control); text-decoration:none; font-size:var(--fs-dense); background:{{ m.bg }}; color:var(--ink); font-weight:{{ m.fw }};" style-hover="background:var(--hover); color:var(--ink); text-decoration:none;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--t1);"><path d="{{ m.icon }}"></path></svg>{{ m.label }}</a>
+                  </sc-for>
+                </div>
+              </sc-for>
+            </nav>
+          </aside>
+        </sc-if>
+
+        <div style="flex:1; min-width:0; min-height:0; display:flex; flex-direction:column;">
+          <header style="flex:none; min-height:64px; display:flex; align-items:center; gap:10px; padding:{{ topoPad }}; border-bottom:1px solid var(--border); background:var(--surface); flex-wrap:wrap;">
+            <button type="button" style="display:flex; align-items:center; gap:10px; border:0; background:transparent; padding:0; cursor:pointer; text-align:left;">
+              <span aria-hidden="true" style="width:34px; height:34px; border-radius:50%; background:var(--ok); color:var(--surface); display:grid; place-items:center; font-weight:700; font-size:var(--fs-body);">{{ inicial }}</span>
+              <span style="display:flex; flex-direction:column;"><span style="font-size:var(--fs-label); color:var(--t2);">Loja</span><span style="font-size:var(--fs-section); font-weight:600; color:var(--ink); display:flex; align-items:center; gap:4px;">{{ lojaNome }}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color:var(--t2);"><path d="M6 9l6 6 6-6"></path></svg></span></span>
+            </button>
+            <button type="button" onClick="{{ toggleOculto }}" aria-pressed="{{ oculto }}" aria-label="{{ olhoAria }}" style="width:32px; height:32px; display:grid; place-items:center; border:0; background:transparent; color:var(--t1); border-radius:var(--r-control); cursor:pointer;" style-hover="background:var(--hover);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ olhoIcon }}"></path></svg></button>
+            <span style="flex:1;"></span>
+            <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}"><span style="display:flex; align-items:center; gap:6px; font-size:var(--fs-label); color:var(--t2);"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:var(--ok);"></span>Atualizado há 4 min</span></sc-if>
+            <button type="button" onClick="{{ atualizar }}" aria-label="Atualizar agora" style="width:var(--h-md); height:var(--h-md); display:grid; place-items:center; border:1px solid var(--border); background:var(--surface); border-radius:var(--r-card); color:var(--t1); cursor:pointer;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true" style="animation:{{ giro }};"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8 M21 3v5h-5 M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16 M8 16H3v5"></path></svg></button>
+            <div role="radiogroup" aria-label="Período" style="display:flex; padding:3px; gap:2px; border:1px solid var(--border); border-radius:var(--r-card); background:var(--surface);">
+              <sc-for list="{{ perBtns }}" as="p" hint-placeholder-count="3"><button type="button" role="radio" aria-checked="{{ p.on }}" onClick="{{ p.pick }}" style="height:28px; padding:0 10px; border:0; border-radius:var(--r-control); font-size:var(--fs-label); font-weight:{{ p.fw }}; background:{{ p.bg }}; color:{{ p.fg }}; cursor:pointer; white-space:nowrap;">{{ p.l }}</button></sc-for>
+            </div>
+            <button type="button" onClick="{{ toggleTema }}" aria-label="Trocar tema" style="width:var(--h-md); height:var(--h-md); display:grid; place-items:center; border:1px solid var(--border); background:var(--surface); border-radius:var(--r-card); color:var(--t1); cursor:pointer;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ temaIcon }}"></path></svg></button>
+          </header>
+
+          <main style="flex:1; min-height:0; overflow-y:auto;">
+            <div style="padding:{{ pad }}; display:flex; flex-direction:column; gap:14px;">
+
+              <div style="display:grid; grid-template-columns:{{ cols5 }}; gap:14px;">
+                <sc-for list="{{ topo }}" as="k" hint-placeholder-count="5">
+                  <div style="display:flex; align-items:center; gap:12px; padding:16px; min-height:96px; border-radius:var(--r-overlay); background:{{ k.bg }}; border:1px solid {{ k.borda }}; color:{{ k.fg }};">
+                    <span aria-hidden="true" style="width:36px; height:36px; flex:none; border-radius:50%; display:grid; place-items:center; background:{{ k.icBg }}; color:{{ k.icFg }};"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ k.icon }}"></path></svg></span>
+                    <span style="display:flex; flex-direction:column; gap:2px; min-width:0;">
+                      <span style="font-size:var(--fs-dense); opacity:.9;">{{ k.l }}</span>
+                      <span style="font-size:20px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; white-space:nowrap;">{{ k.v }}</span><span style="font-size:var(--fs-label); font-weight:600; color:{{ k.dFg }}; font-variant-numeric:tabular-nums;">{{ k.d }}</span>
+                    </span>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="display:grid; grid-template-columns:{{ colsMeio }}; gap:14px;">
+                <section aria-labelledby="g-t" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-overlay); padding:20px; display:flex; flex-direction:column; gap:14px; min-width:0;">
+                  <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                    <h2 id="g-t" style="font-size:var(--fs-overlay); font-weight:600; flex:1;">Faturamento</h2>
+                    <div role="radiogroup" aria-label="Tipo de gráfico" style="display:flex; gap:4px;">
+                      <sc-for list="{{ tipos }}" as="t" hint-placeholder-count="2"><button type="button" role="radio" aria-checked="{{ t.on }}" aria-label="{{ t.l }}" onClick="{{ t.pick }}" style="width:32px; height:32px; display:grid; place-items:center; border:1px solid var(--border); border-radius:var(--r-control); background:{{ t.bg }}; color:{{ t.fg }}; cursor:pointer;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ t.icon }}"></path></svg></button></sc-for>
+                    </div>
+                  </div>
+                  <div role="group" aria-label="Legenda" style="display:flex; gap:14px; flex-wrap:wrap;">
+                    <sc-for list="{{ legenda }}" as="l" hint-placeholder-count="4"><span style="display:flex; align-items:center; gap:6px; font-size:var(--fs-label); color:var(--t1);"><span aria-hidden="true" style="width:10px; height:10px; border-radius:3px; background:{{ l.cor }};"></span>{{ l.l }}</span></sc-for>
+                  </div>
+                  <div style="position:relative; height:240px; display:grid; grid-template-columns:{{ eixoW }} 1fr; gap:8px;" onMouseLeave="{{ sair }}">
+                    <div aria-hidden="true" style="display:flex; flex-direction:column; justify-content:space-between; padding-bottom:22px;"><sc-for list="{{ ticks }}" as="t" hint-placeholder-count="5"><span style="font-size:var(--fs-label); color:var(--t2); text-align:right; font-variant-numeric:tabular-nums; line-height:1;">{{ t }}</span></sc-for></div>
+                    <div style="position:relative; display:flex; flex-direction:column;">
+                      <div aria-hidden="true" style="position:absolute; inset:0 0 22px 0; display:flex; flex-direction:column; justify-content:space-between;"><sc-for list="{{ ticks }}" as="t" hint-placeholder-count="5"><span style="height:1px; background:var(--chart-grid);"></span></sc-for></div>
+                      <div role="img" aria-label="{{ grafAria }}" style="position:relative; flex:1; display:flex; align-items:flex-end; gap:{{ barGap }};">
+                        <sc-for list="{{ barras }}" as="b" hint-placeholder-count="30">
+                          <div tabindex="0" onMouseEnter="{{ b.enter }}" onFocus="{{ b.enter }}" aria-label="{{ b.aria }}" style="flex:1; height:100%; display:flex; flex-direction:column; justify-content:flex-end; cursor:pointer; outline:none; opacity:{{ b.op }};">
+                            <sc-if value="{{ b.vazio }}" hint-placeholder-val="{{ false }}"><span style="height:2px; background:var(--border-strong); border-radius:1px;"></span></sc-if>
+                            <sc-for list="{{ b.seg }}" as="s" hint-placeholder-count="4"><span style="height:{{ s.h }}; background:{{ s.cor }}; border-radius:{{ s.r }};"></span></sc-for>
+                          </div>
+                        </sc-for>
+                      </div>
+                      <div aria-hidden="true" style="height:22px; display:flex; gap:{{ barGap }}; align-items:flex-end;"><sc-for list="{{ barras }}" as="b" hint-placeholder-count="30"><span style="flex:1; text-align:center; font-size:var(--fs-label); color:var(--t2); white-space:nowrap; overflow:visible;">{{ b.rot }}</span></sc-for></div>
+                      <sc-if value="{{ tipOn }}" hint-placeholder-val="{{ false }}">
+                        <div role="status" style="position:absolute; top:0; left:{{ tipLeft }}; transform:{{ tipTrans }}; z-index:5; min-width:210px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); box-shadow:var(--shadow); padding:10px 12px; display:flex; flex-direction:column; gap:6px; pointer-events:none;">
+                          <strong style="font-size:var(--fs-label);">{{ tipTitulo }}</strong>
+                          <sc-for list="{{ tipLinhas }}" as="t" hint-placeholder-count="5"><span style="display:flex; align-items:center; gap:8px; font-size:var(--fs-label); font-variant-numeric:tabular-nums;"><span aria-hidden="true" style="width:8px; height:8px; border-radius:2px; background:{{ t.cor }};"></span><span style="flex:1; color:var(--t1);">{{ t.l }}</span><strong style="font-weight:600;">{{ t.v }}</strong></span></sc-for>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </div>
+                </section>
+
+                <section aria-labelledby="c-t" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-overlay); padding:20px; display:flex; flex-direction:column; gap:14px;">
+                  <div style="display:flex; align-items:center; gap:12px;">
+                    <span aria-hidden="true" style="width:42px; height:42px; border-radius:50%; display:grid; place-items:center; background:var(--info-bg); color:var(--info);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6h20v12H2Z M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6"></path></svg></span>
+                    <span style="display:flex; flex-direction:column;"><h2 id="c-t" style="font-size:var(--fs-dense); font-weight:500; color:var(--t1);">Custos do período</h2><span style="font-size:22px; font-weight:700; font-variant-numeric:tabular-nums;">{{ custosTotal }}</span></span>
+                  </div>
+                  <ul style="list-style:none; margin:0; padding:12px 0 0; border-top:1px solid var(--border-subtle); display:flex; flex-direction:column; gap:12px;">
+                    <sc-for list="{{ custos }}" as="c" hint-placeholder-count="6">
+                      <li style="display:flex; align-items:center; gap:10px; font-size:var(--fs-dense);">
+                        <sc-if value="{{ c.temLogo }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="width:14px; height:14px; background:url({{ c.logo }}) center/contain no-repeat;"></span></sc-if>
+                        <sc-if value="{{ c.semLogo }}" hint-placeholder-val="{{ true }}"><span aria-hidden="true" style="width:14px; height:14px; border-radius:3px; background:{{ c.cor }};"></span></sc-if>
+                        <span style="flex:1; color:var(--t1);">{{ c.l }}</span>
+                        <sc-if value="{{ c.breve }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--fs-label); color:var(--t2); border:1px solid var(--border); border-radius:4px; padding:0 5px;">Em breve</span></sc-if>
+                        <span style="font-variant-numeric:tabular-nums; font-weight:600; color:{{ c.fg }};">{{ c.v }}</span>
+                      </li>
+                    </sc-for>
+                  </ul>
+                  <a href="#" style="margin-top:auto; font-size:var(--fs-label);">Editar custos e taxas</a>
+                </section>
+              </div>
+
+              <div style="display:grid; grid-template-columns:{{ colsMeio }}; gap:14px;">
+                <div style="display:grid; grid-template-columns:{{ cols4 }}; gap:14px;">
+                  <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="8">
+                    <div style="position:relative; display:flex; align-items:center; gap:12px; padding:16px; min-height:92px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-overlay);">
+                      <span aria-hidden="true" style="width:36px; height:36px; flex:none; border-radius:50%; display:grid; place-items:center; background:var(--info-bg); color:var(--info);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ k.icon }}"></path></svg></span>
+                      <span style="display:flex; flex-direction:column; gap:2px; min-width:0;">
+                        <span style="display:flex; align-items:center; gap:6px; font-size:var(--fs-dense); color:var(--t1);">{{ k.l }}<sc-for list="{{ k.logos }}" as="lg" hint-placeholder-count="0"><span aria-hidden="true" style="width:12px; height:12px; background:url({{ lg.src }}) center/contain no-repeat;"></span></sc-for></span>
+                        <span style="font-size:20px; font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap;">{{ k.v }}</span><span style="font-size:var(--fs-label); font-weight:600; color:{{ k.dFg }}; font-variant-numeric:tabular-nums;">{{ k.d }}</span><sc-if value="{{ k.selo }}" hint-placeholder-val="{{ false }}"><span style="align-self:flex-start; margin-top:4px; font-size:var(--fs-label); font-weight:500; color:{{ k.seloFg }}; border:1px solid {{ k.seloBorda }}; border-radius:var(--r-control); padding:1px 6px; white-space:nowrap;">{{ k.selo }}</span></sc-if>
+                      </span>
+                      
+                    </div>
+                  </sc-for>
+                </div>
+                <section aria-labelledby="meta-t" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-overlay); padding:20px; display:flex; flex-direction:column; align-items:center; gap:10px; text-align:center;">
+                  <div style="align-self:stretch; display:flex; justify-content:space-between; align-items:flex-start;"><span style="display:flex; flex-direction:column; align-items:flex-start; gap:2px;"><h2 id="meta-t" style="font-size:var(--fs-dense); font-weight:600;">Meta de lucro do mês</h2><span style="font-size:var(--fs-label); color:var(--t2);">{{ metaSub }}</span></span><button type="button" onClick="{{ toggleMeta }}" aria-label="Definir meta" style="width:28px; height:28px; display:grid; place-items:center; border:1px solid var(--border); background:var(--surface); border-radius:var(--r-control); color:var(--t1); cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14 M5 12h14"></path></svg></button></div>
+                  <div role="progressbar" aria-label="Meta de lucro do mês" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ metaPct }}" style="position:relative; width:140px; height:76px; overflow:hidden; margin-top:auto;">
+                    <span style="position:absolute; left:0; top:0; width:140px; height:140px; border-radius:50%; background:conic-gradient(from 270deg, var(--ok) 0 {{ metaArco }}, var(--track) {{ metaArco }} 180deg, transparent 180deg);"></span>
+                    <span style="position:absolute; left:14px; top:14px; width:112px; height:112px; border-radius:50%; background:var(--surface);"></span>
+                    <span style="position:absolute; left:0; right:0; bottom:2px; font-size:var(--fs-section); font-weight:700; font-variant-numeric:tabular-nums;">{{ metaTxt }}</span>
+                  </div>
+                  <span style="font-size:var(--fs-label); color:var(--t2);">{{ metaProj }}</span>
+                </section>
+              </div>
+
+              <section aria-labelledby="l-t" style="display:flex; flex-direction:column; gap:10px;">
+                <h2 id="l-t" style="font-size:var(--fs-section); font-weight:600;">Por loja</h2>
+                <div style="display:grid; grid-template-columns:{{ cols4 }}; gap:14px;">
+                  <sc-for list="{{ lojas }}" as="l" hint-placeholder-count="4">
+                    <button type="button" onClick="{{ l.pick }}" style="display:flex; align-items:center; gap:16px; padding:18px; background:var(--surface); border:1px solid {{ l.borda }}; border-radius:var(--r-overlay); cursor:pointer; text-align:left; color:var(--ink);" style-hover="border-color:var(--border-strong);">
+                      <span role="img" aria-label="{{ l.anelAria }}" style="position:relative; width:76px; height:76px; flex:none; border-radius:50%; background:conic-gradient({{ l.cor }} 0 {{ l.arco }}, var(--track) {{ l.arco }} 360deg);"><span style="position:absolute; inset:8px; border-radius:50%; background:var(--surface); display:flex; flex-direction:column; align-items:center; justify-content:center;"><span style="font-size:var(--fs-label); color:var(--t2);">Margem</span><span style="font-size:var(--fs-dense); font-weight:700; font-variant-numeric:tabular-nums;">{{ l.margem }}</span></span></span>
+                      <span style="display:flex; flex-direction:column; gap:4px; min-width:0;">
+                        <span style="font-size:var(--fs-dense); font-weight:600;">{{ l.nome }}</span>
+                        <span style="font-size:var(--fs-section); font-weight:700; font-variant-numeric:tabular-nums; color:{{ l.lucroFg }};">{{ l.lucro }}</span>
+                        <span style="font-size:var(--fs-label); color:var(--t2); font-variant-numeric:tabular-nums;">ROAS {{ l.roas }} · equilíbrio {{ l.eq }}</span>
+                      </span>
+                    </button>
+                  </sc-for>
+                </div>
+              </section>
+              <p style="font-size:var(--fs-label); color:var(--t2);">Lucro estimado, não contábil. Faturamento inclui o frete cobrado; pedidos atualizam a cada 15 minutos. <a href="#">Como calculamos</a></p>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { theme: 'dark', width: 'desktop', vw: 1400, periodo: '30d', tipo: 'barra', hov: null, oculto: false, loja: 'todas', meta: false, giro: false };
+  componentDidMount() {
+    try { const w = localStorage.getItem('xcart-mock-largura'); const s = { vw: window.innerWidth }; if (w) s.width = w; this.setState(s); } catch (e) { this.setState({ vw: window.innerWidth }); }
+    this._rs = () => this.setState({ vw: window.innerWidth }); window.addEventListener('resize', this._rs);
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this._rs); }
+  serie(n, seed, hoje) {
+    let s = seed; const r = () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
+    return Array.from({ length: n }, (_, i) => {
+      let fat = hoje ? (i < 6 ? 200 + r() * 500 : i > 14 ? (i > 15 ? 0 : 2400 * r()) : 900 + r() * 2200) : 6000 + 4000 * Math.sin(i / 3.5) * 0.4 + r() * 4500;
+      if (hoje && i === 9) fat *= 2.1;
+      const prod = fat * (0.33 + r() * 0.06), ads = fat * (0.27 + r() * 0.1), tax = fat * 0.045;
+      return { fat, prod, ads, tax, lucro: fat - prod - ads - tax };
+    });
+  }
+  renderVals() {
+    const st = this.state; const mobile = st.width === 'mobile'; const set = o => this.setState(o);
+    const LOGO = { meta: 'https://cdn.simpleicons.org/meta/0866FF', google: 'https://cdn.simpleicons.org/googleads/4285F4' };
+    const hoje = st.periodo === 'hoje';
+    const n = hoje ? 15 : st.periodo === '7d' ? 7 : 30;
+    const fator = { todas: 1, lumen: 0.48, orla: 0.31, kova: 0.16, alto: 0.05 }[st.loja];
+    const dados = this.serie(n, hoje ? 7 : 13, hoje).map(d => ({ fat: d.fat * fator, prod: d.prod * fator, ads: d.ads * fator, tax: d.tax * fator, lucro: (st.loja === 'alto' ? d.lucro - d.fat * 0.3 : d.lucro) * fator }));
+    const T = dados.reduce((a, d) => ({ fat: a.fat + d.fat, prod: a.prod + d.prod, ads: a.ads + d.ads, tax: a.tax + d.tax, lucro: a.lucro + d.lucro }), { fat: 0, prod: 0, ads: 0, tax: 0, lucro: 0 });
+    const brl = (v, c) => st.oculto ? 'R$ •••••' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: c ? 'compact' : 'standard', maximumFractionDigits: c ? 1 : 2 }).format(v);
+    const pct = v => new Intl.NumberFormat('pt-BR', { style: 'percent', maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(v);
+    const x2 = v => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v) + '×';
+    const up = (v, bom = true) => ({ d: `${v >= 0 ? '↗' : '↘'} ${v >= 0 ? '+' : ''}${Math.round(v)}%`, dFg: (v >= 0) === bom ? 'var(--ok)' : 'var(--err)' });
+    const I = { cifrao: 'M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6', cesta: 'M6 2L3 6v14h18V6l-3-4Z M3 6h18 M16 10a4 4 0 0 1-8 0', cadeado: 'M5 11h14v10H5Z M7 11V7a5 5 0 0 1 10 0v4', pct: 'M19 5L5 19 M6.5 4a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5 M17.5 15a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5', mega: 'M3 11l18-5v12L3 13Z M11.6 16.8a3 3 0 1 1-5.8-1.6', user: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8 M19 8v6 M22 11h-6', trend: 'M22 7l-8.5 8.5-5-5L2 17 M16 7h6v6', alvo: 'M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20 M12 6a6 6 0 1 0 0 12a6 6 0 1 0 0-12 M12 10a2 2 0 1 0 0 4a2 2 0 1 0 0-4', caixa: 'M21 8l-9-5-9 5v8l9 5 9-5Z M3 8l9 5 9-5 M12 13v8', recibo: 'M6 2h12v20l-3-2-3 2-3-2-3 2Z M9 7h6 M9 11h6', ticket: 'M2 9a3 3 0 0 1 0 6v4h20v-4a3 3 0 0 1 0-6V5H2Z M13 5v14', carrinho: 'M9 20a1 1 0 1 0 0 2a1 1 0 1 0 0-2 M20 20a1 1 0 1 0 0 2a1 1 0 1 0 0-2 M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6' };
+    const custosTot = T.prod + T.ads + T.tax;
+    const lucroNeg = T.lucro < 0;
+    const topo = [
+      { l: 'Lucro estimado', v: brl(T.lucro, true), ...up(lucroNeg ? -38 : 18), icon: I.cifrao, bg: lucroNeg ? 'var(--err)' : 'var(--ok)', borda: 'transparent', fg: 'var(--surface)', icBg: 'rgba(255,255,255,.22)', icFg: 'var(--surface)' },
+      { l: 'Faturamento', v: brl(T.fat, true), ...up(12), icon: I.cifrao },
+      { l: 'Custos totais', v: brl(custosTot, true), ...up(9, false), icon: I.cesta },
+      { l: 'Taxas', v: brl(T.tax, true), ...up(12, false), icon: I.cadeado },
+      { l: 'Margem', v: pct(T.lucro / T.fat), ...up(lucroNeg ? -40 : 6), icon: I.pct },
+    ].map((k, i) => i === 0 ? { ...k, dFg: 'var(--surface)' } : { ...k, bg: 'var(--surface)', borda: 'var(--border)', fg: 'var(--ink)', icBg: 'var(--info-bg)', icFg: 'var(--info)' });
+    const COR = { lucro: 'var(--ok)', prod: 'var(--chart-3)', ads: 'var(--chart-5)', tax: 'var(--t4)', fat: 'var(--chart-2)' };
+    const max = Math.max(...dados.map(d => d.fat)) || 1;
+    const passo = [500, 1000, 2500, 5000, 10000, 25000].find(p => p * 4 >= max * 1.05) || 50000;
+    const topoEixo = passo * 4;
+    const ticks = [4, 3, 2, 1, 0].map(i => st.oculto ? '•••' : new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 }).format(i * passo));
+    const hoje0 = new Date(2026, 9, 4);
+    const rot = i => hoje ? `${i}h` : (() => { const d = new Date(hoje0); d.setDate(d.getDate() - (n - 1 - i)); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`; })();
+    const cada = hoje ? 2 : n === 7 ? 1 : 5;
+    const barras = dados.map((d, i) => {
+      const h = v => `${Math.max(0, v) / topoEixo * 100}%`;
+      const seg = st.tipo === 'barra'
+        ? [['lucro', d.lucro], ['ads', d.ads], ['prod', d.prod], ['tax', d.tax]].filter(s => s[1] > 0).map(([k, v], j) => ({ h: h(v), cor: COR[k], r: j === 0 ? '4px 4px 0 0' : '0' }))
+        : [{ h: h(d.fat), cor: COR.fat, r: '4px 4px 0 0' }];
+      return { seg, vazio: d.fat <= 0, rot: i % cada === 0 || i === n - 1 ? rot(i) : '', op: st.hov === null || st.hov === i ? 1 : 0.55, aria: `${rot(i)}: faturamento ${brl(d.fat)}, lucro ${brl(d.lucro)}`, enter: () => set({ hov: i }) };
+    });
+    const hv = st.hov !== null && dados[st.hov] ? dados[st.hov] : null;
+    const tipLinhas = hv ? [['Faturamento', hv.fat, COR.fat], ['Lucro', hv.lucro, COR.lucro], ['Anúncios', hv.ads, COR.ads], ['Produto + frete', hv.prod, COR.prod], ['Taxas', hv.tax, COR.tax]].map(([l, v, cor]) => ({ l, v: brl(v), cor })) : [];
+    const custos = [
+      { l: 'Produto + frete', v: brl(T.prod), cor: COR.prod },
+      { l: 'Meta Ads', v: brl(T.ads * 0.82), logo: LOGO.meta },
+      { l: 'Google Ads', v: brl(T.ads * 0.18), logo: LOGO.google },
+      { l: 'Taxas de pagamento', v: brl(T.tax), cor: COR.tax },
+      { l: 'Reembolsos', v: brl(T.fat * 0.008), cor: 'var(--err)' },
+      { l: 'Custos fixos', v: '—', cor: 'var(--border-strong)', breve: true },
+    ].map(c => ({ ...c, temLogo: !!c.logo, semLogo: !c.logo, fg: c.v === '—' ? 'var(--t2)' : 'var(--ink)' }));
+    const ped = Math.round(T.fat / 158);
+    const kpis = [
+      { l: 'Anúncios', v: brl(T.ads, true), ...up(7, false), icon: I.mega, logos: [{ ok: true, src: LOGO.meta }, { ok: true, src: LOGO.google }] },
+      { l: 'CPA', v: brl(T.ads / ped), ...up(-14, false), icon: I.user },
+      { l: 'ROAS real', v: x2(T.fat / T.ads), ...up(5), icon: I.trend },
+      { l: 'ROAS de equilíbrio', v: x2(T.fat / (T.fat - T.prod - T.tax)), d: '', dFg: 'var(--t2)', icon: I.alvo },
+      { l: 'Produto + frete', v: brl(T.prod, true), ...up(11, false), icon: I.caixa },
+      { l: 'Pedidos', v: new Intl.NumberFormat('pt-BR').format(ped), ...up(9), icon: I.recibo, selo: st.loja === 'alto' || st.loja === 'kova' ? '14 SKUs sem custo' : 'Todos com custo', seloFg: st.loja === 'alto' || st.loja === 'kova' ? 'var(--warn)' : 'var(--ok)', seloBorda: st.loja === 'alto' || st.loja === 'kova' ? 'var(--warn-border)' : 'var(--ok-border)' },
+      { l: 'Ticket médio', v: brl(T.fat / ped), ...up(3), icon: I.ticket },
+      { l: 'Unidades vendidas', v: new Intl.NumberFormat('pt-BR').format(Math.round(ped * 1.4)), ...up(10), icon: I.carrinho },
+    ].map(k => ({ logos: [], selo: null, ...k }));
+    const LJ = [['lumen', 'Lumen Casa', 0.302, 2.84, 1.53], ['orla', 'Orla Wear', 0.221, 2.41, 1.61], ['kova', 'Kova Home', 0.077, 1.92, 1.74], ['alto', 'Alto Fit', -0.027, 1.21, 1.62]];
+    const fatTot = this.serie(n, hoje ? 7 : 13, hoje).reduce((a, d) => a + d.fat, 0);
+    const lojas = LJ.map(([id, nome, mg, roas, eq]) => { const f = { lumen: 0.48, orla: 0.31, kova: 0.16, alto: 0.05 }[id]; const on = st.loja === id; return { nome, margem: pct(mg), lucro: brl(fatTot * f * mg), lucroFg: mg < 0 ? 'var(--err)' : 'var(--ink)', roas: x2(roas), eq: x2(eq), cor: mg < 0 ? 'var(--err)' : mg < 0.1 ? 'var(--warn)' : 'var(--ok)', arco: `${Math.min(1, Math.abs(mg) / 0.4) * 360}deg`, anelAria: `Margem de ${nome}: ${pct(mg)}`, borda: on ? 'var(--ink)' : 'var(--border)', pick: () => set({ loja: on ? 'todas' : id, hov: null }) }; });
+    const metaVal = 60000 * fator;
+    const metaPct = st.meta ? Math.min(100, Math.round(T.lucro / metaVal * 100)) : 0;
+    const MENU = [['Rastreamento', [['Lojas', 'Rastreamento%20v3.dc.html', 'M3 9l1.5-5h15L21 9 M4 9v11h16V9 M3 9h18 M10 20v-5h4v5'], ['Eventos ao vivo', '#', 'M16.2 7.8a6 6 0 0 1 0 8.4 M7.8 16.2a6 6 0 0 1 0-8.4 M12 10a2 2 0 1 0 0 4a2 2 0 1 0 0-4'], ['Alertas', '#', 'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9 M10.3 21a1.94 1.94 0 0 0 3.4 0']]], ['Financeiro', [['Lucro', '#', 'M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20 M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8 M12 18V6', true], ['Custos e taxas', '#', 'M6 2h12v20H6Z M9 6h6 M9 11h.01 M12 11h.01 M15 11h.01']]], ['Configurações', [['Integrações', '#', 'M12 22v-5 M9 8V2 M15 8V2 M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z'], ['Assinatura', '#', 'M2 5h20v14H2Z M2 10h20']]]];
+    const menu = MENU.map(([t, itens]) => ({ t, itens: itens.map(([label, href, icon, on]) => ({ label, href, icon, atual: on ? 'page' : undefined, bg: on ? 'var(--track)' : 'transparent', fw: on ? 500 : 400 })) }));
+    const PER = [['hoje', 'Hoje'], ['7d', '7 dias'], ['30d', '30 dias']];
+    const lojaNome = { todas: 'Todas as lojas', lumen: 'Lumen Casa', orla: 'Orla Wear', kova: 'Kova Home', alto: 'Alto Fit' }[st.loja];
+    const fw = mobile ? 375 : 1440, fh = mobile ? 812 : 980;
+    const escala = mobile ? 1 : Math.min(1, Math.max(0.4, (st.vw - 32) / fw));
+    return {
+      theme: st.theme, width: st.width, periodo: st.periodo, periodos: PER.map(([id, label]) => ({ id, label })),
+      setTheme: v => set({ theme: v }), setWidth: v => { try { localStorage.setItem('xcart-mock-largura', v); } catch (e) {} set({ width: v }); }, setPeriodo: v => set({ periodo: v, hov: null }),
+      desktop: !mobile, frameDir: 'row', frameW: `${fw}px`, frameH: `${fh}px`, escala, wrapW: `${fw * escala}px`, wrapH: `${fh * escala}px`, frameRaio: mobile ? '28px' : '10px',
+      pad: mobile ? '14px 12px 32px' : '20px 24px 40px', topoPad: mobile ? '10px 12px' : '0 24px',
+      cols5: mobile ? '1fr 1fr' : 'repeat(5, minmax(0,1fr))', colsMeio: mobile ? '1fr' : 'minmax(0,1fr) 300px', cols4: mobile ? '1fr' : 'repeat(4, minmax(0,1fr))',
+      menu, inicial: lojaNome[0], lojaNome,
+      oculto: st.oculto, toggleOculto: () => set({ oculto: !st.oculto }), olhoAria: st.oculto ? 'Mostrar valores' : 'Esconder valores',
+      olhoIcon: st.oculto ? 'M9.9 4.2A10.9 10.9 0 0 1 12 4c7 0 10 8 10 8a13.2 13.2 0 0 1-1.7 2.7 M6.6 6.6A13.5 13.5 0 0 0 2 12s3 8 10 8a9.7 9.7 0 0 0 5.4-1.6 M2 2l20 20 M9.9 9.9a3 3 0 0 0 4.2 4.2' : 'M2 12s3-8 10-8 10 8 10 8-3 8-10 8-10-8-10-8Z M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6',
+      giro: st.giro ? 'xc-spin 800ms linear infinite' : 'none', atualizar: () => { set({ giro: true }); setTimeout(() => this.setState({ giro: false }), 900); },
+      perBtns: PER.map(([id, l]) => { const on = id === st.periodo; return { l, on, pick: () => set({ periodo: id, hov: null }), bg: on ? 'var(--solid)' : 'transparent', fg: on ? 'var(--on-solid)' : 'var(--t1)', fw: on ? 600 : 400 }; }),
+      toggleTema: () => set({ theme: st.theme === 'dark' ? 'light' : 'dark' }), temaIcon: st.theme === 'dark' ? 'M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9' : 'M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8 M12 2v2 M12 20v2 M4.9 4.9l1.4 1.4 M17.7 17.7l1.4 1.4 M2 12h2 M20 12h2',
+      topo,
+      tipos: [['barra', 'Barras empilhadas', 'M3 3v18h18 M8 17V9 M13 17V5 M18 17v-6'], ['total', 'Só faturamento', 'M3 3v18h18 M7 14l4-4 4 4 5-6']].map(([id, l, icon]) => { const on = id === st.tipo; return { l, icon, on, pick: () => set({ tipo: id }), bg: on ? 'var(--info)' : 'var(--surface)', fg: on ? 'var(--surface)' : 'var(--t1)' }; }),
+      legenda: st.tipo === 'barra' ? [['Lucro', COR.lucro], ['Anúncios', COR.ads], ['Produto + frete', COR.prod], ['Taxas', COR.tax]].map(([l, cor]) => ({ l, cor })) : [{ l: 'Faturamento', cor: COR.fat }],
+      ticks, barras, barGap: n > 20 ? '4px' : '10px', eixoW: '44px', grafAria: `Faturamento por ${hoje ? 'hora' : 'dia'}, dividido em lucro, anúncios, produto e taxas`, sair: () => set({ hov: null }),
+      tipOn: !!hv, tipTitulo: hv ? `${rot(st.hov)}${hoje && st.hov === n - 1 ? ' · parcial' : ''}` : '', tipLinhas,
+      tipLeft: st.hov !== null ? `${(st.hov + 0.5) / n * 100}%` : '0', tipTrans: st.hov !== null && st.hov > n * 0.6 ? 'translateX(calc(-100% - 10px))' : 'translateX(10px)',
+      custosTotal: brl(custosTot), custos, kpis, lojas,
+      toggleMeta: () => set({ meta: !st.meta }), metaPct, metaArco: `${metaPct * 1.8}deg`, metaTxt: st.meta ? `${metaPct}%` : '—',
+      metaSub: st.meta ? `Meta ${brl(metaVal, true)}` : 'Nenhuma meta definida', metaProj: st.meta ? `No ritmo atual: ${brl(T.lucro / 4 * 30 / 30 * 1.07, true)} até 31/10` : 'Toque em + para definir',
+    };
+  }
+}
+</script>
+</body>
+</html>
