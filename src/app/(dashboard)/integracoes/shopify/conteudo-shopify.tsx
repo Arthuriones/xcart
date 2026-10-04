@@ -63,9 +63,6 @@ export function ConteudoShopify({ lojas, agoraMs }: { lojas: LojaConexao[]; agor
         </div>
         {abrirLojas}
       </div>
-      <p className="max-w-[62ch] text-dense text-t1 text-pretty">
-        Cada loja usa o próprio app da loja. Conectar, reconectar e remover ficam em Lojas.
-      </p>
 
       {lojas.length === 0 ? (
         <EmptyState

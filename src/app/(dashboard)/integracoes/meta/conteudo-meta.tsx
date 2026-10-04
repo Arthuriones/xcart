@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
-import { Callout } from "@/components/ui/callout";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CabecalhoPlataforma } from "../cabecalho-plataforma";
 import { ContasTabela } from "../contas-tabela";
@@ -8,8 +7,6 @@ import type { DadosAnuncios } from "../dados-anuncios";
 import { EnvioCompras } from "../envio-compras";
 import { estadoTokenMeta } from "../regras";
 import { AssistenteMeta, CartaoTokenMeta } from "./token-meta";
-
-const NOTA_LOGIN = "Até lá, o caminho é o modo manual: um token de leitura colado aqui.";
 
 /** O conteudo de Meta com os dados ja lidos (a page le; aqui so desenha). */
 export function ConteudoMeta({ d }: { d: DadosAnuncios }) {
@@ -19,8 +16,11 @@ export function ConteudoMeta({ d }: { d: DadosAnuncios }) {
       <CabecalhoPlataforma
         titulo="Meta Ads"
         estado={ligado ? { tom: "ok", texto: "Conectado · modo manual" } : { tom: "neutral", texto: "Não ligado" }}
-        login="Conectar com Facebook"
-        nota={NOTA_LOGIN}
+        dica={
+          ligado
+            ? "São duas permissões diferentes: a de leitura só vê quanto você gastou; a de conversões só envia as compras ao pixel. Uma não substitui a outra."
+            : undefined
+        }
       />
 
       {d.lojas.length === 0 ? (
@@ -37,10 +37,6 @@ export function ConteudoMeta({ d }: { d: DadosAnuncios }) {
         <AssistenteMeta />
       ) : (
         <>
-          <Callout tom="info" titulo="São duas permissões diferentes.">
-            A de leitura só vê quanto você gastou; a de conversões só envia as compras ao pixel. Uma não
-            substitui a outra.
-          </Callout>
           <div className="grid gap-3 md:grid-cols-2">
             <CartaoTokenMeta estado={estadoTokenMeta(d.daPlataforma)} contas={d.daPlataforma.length} />
             <EnvioCompras plataforma="meta" destinos={d.destinos} lojas={d.lojas} erro={d.erroDestinos} />

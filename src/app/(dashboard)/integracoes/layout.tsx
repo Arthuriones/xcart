@@ -22,10 +22,7 @@ async function NavComEstados() {
 export default function IntegracoesLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      <PageHeader
-        title="Integrações"
-        description="Cada plataforma num lugar só: o que lê quanto você gastou e o que envia as compras."
-      />
+      <PageHeader title="Integrações" />
       <div className="grid min-w-0 gap-6 lg:grid-cols-[200px_minmax(0,1fr)] lg:items-start">
         <Suspense fallback={<NavPlataformas estados={null} />}>
           <NavComEstados />

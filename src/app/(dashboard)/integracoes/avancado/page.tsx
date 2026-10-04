@@ -11,8 +11,7 @@ export default function AvancadoPage() {
       <div className="flex flex-col gap-1">
         <h2 className="text-overlay text-ink">Avançado · Claude</h2>
         <p className="max-w-[62ch] text-dense text-t1 text-pretty">
-          Opere as lojas conversando com o Claude Code ou o Claude Desktop: buscar produtos, reescrever
-          descrição e SEO, conferir se a página subiu certo. Gere um token e copie o comando.
+          Opere as lojas pelo Claude Code ou pelo Claude Desktop. Gere um token e copie o comando.
         </p>
       </div>
       <ClaudeMcp />

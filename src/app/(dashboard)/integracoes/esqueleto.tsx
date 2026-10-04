@@ -7,12 +7,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 function Cabecalho() {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4">
-      <div className="flex flex-col gap-2">
-        <Skeleton className="h-5 w-32" />
-        <Skeleton className="h-5.5 w-40 rounded-full" />
-      </div>
-      <Skeleton className="h-ctl-md w-52 rounded-control" />
+    <div className="flex flex-col gap-2">
+      <Skeleton className="h-5 w-32" />
+      <Skeleton className="h-5.5 w-40 rounded-full" />
     </div>
   );
 }
@@ -32,7 +29,6 @@ export function EsqueletoContas({ rotulo }: { rotulo: string }) {
   return (
     <div aria-busy="true" aria-label={rotulo} className="flex flex-col gap-5">
       <Cabecalho />
-      <Skeleton className="h-12 w-full rounded-card" />
       <div className="grid gap-3 md:grid-cols-2">
         <Cartao />
         <Cartao />

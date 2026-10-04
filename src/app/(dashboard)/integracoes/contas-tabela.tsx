@@ -490,10 +490,7 @@ export function ContasTabela({
     >
       <div className="flex flex-col gap-3 px-4">
         {lojaFiltrada ? (
-          <p className="text-label text-t2">
-            Mostrando as contas de {lojaFiltrada} e as que ainda não têm loja. Troque a loja na barra do
-            topo.
-          </p>
+          <p className="text-label text-t2">Mostrando as contas de {lojaFiltrada} e as sem loja.</p>
         ) : null}
         {erroGasto ? <ErroLeitura tom="warn" titulo="Não deu para ler o gasto agora." detalhe={erroGasto} /> : null}
         {semLoja.length > 0 ? (
@@ -514,17 +511,6 @@ export function ContasTabela({
           >
             Escolha a loja de cada uma em “Loja ligada”.
           </Callout>
-        ) : null}
-        {fusoDiferente.length > 0 ? (
-          <Callout tom="info" titulo="O dia do gasto segue o fuso da conta, não o da loja.">
-            {listarNomes(fusoDiferente.map(nomeDaConta))} usa{fusoDiferente.length === 1 ? "" : "m"} outro
-            fuso. O dia a dia pode desalinhar algumas horas; o total do período não muda.
-          </Callout>
-        ) : null}
-        {erroFuso ? (
-          <p className="text-label text-t2">
-            Não deu para conferir o fuso das lojas agora; o aviso de fuso diferente fica de fora.
-          </p>
         ) : null}
 
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -588,12 +574,23 @@ export function ContasTabela({
       </div>
 
       <div className="flex flex-col gap-1 border-t border-border-subtle px-4 py-2.5 text-label text-t2 sm:flex-row sm:justify-between sm:gap-3">
-        <span>
+        <span className="flex items-center gap-1">
           {plural(linhas.length, "conta", "contas")} · gasto no período: {periodo}
-        </span>
-        <span>
-          Gasto em {moeda} pela cotação de cada dia; embaixo, na moeda da conta. “Hoje” é o dia no fuso de
-          cada conta.
+          <Dica rotulo="Moeda e fuso do gasto" lado="top">
+            <span className="flex flex-col gap-1">
+              <span>
+                Gasto em {moeda} pela cotação de cada dia; embaixo, na moeda da conta. “Hoje” é o dia no fuso de
+                cada conta.
+              </span>
+              {fusoDiferente.length > 0 ? (
+                <span>
+                  {listarNomes(fusoDiferente.map(nomeDaConta))} usa{fusoDiferente.length === 1 ? "" : "m"} outro
+                  fuso que o da loja: o dia a dia pode desalinhar algumas horas; o total do período não muda.
+                </span>
+              ) : null}
+              {erroFuso ? <span>Não deu para conferir o fuso das lojas agora.</span> : null}
+            </span>
+          </Dica>
         </span>
       </div>
 

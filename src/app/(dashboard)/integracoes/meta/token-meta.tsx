@@ -15,9 +15,10 @@ import { plural, type Estado } from "../regras";
 // O token de leitura do Meta (ads_read): o assistente de 4 passos de quem
 // ainda nao ligou, e o cartao "Para ler o gasto" de quem ja ligou.
 //
-// Modo manual de proposito: o login com Facebook (#11) ainda nao existe. O
-// token vai para POST /api/ads/meta/conectar, a API de sempre, que confere no
-// Meta quais contas ele enxerga e guarda o token so no servidor.
+// Modo manual de proposito: o login com Facebook (#11) ainda nao existe, e a
+// tela nao mostra botao desabilitado esperando por ele. O token vai para
+// POST /api/ads/meta/conectar, a API de sempre, que confere no Meta quais
+// contas ele enxerga e guarda o token so no servidor.
 // ============================================================================
 
 const PASSOS: { titulo: string; texto: string }[] = [
@@ -123,11 +124,11 @@ export function AssistenteMeta() {
     >
       <div className="flex flex-col gap-1">
         <h3 id="assistente-meta" className="text-section text-ink">
-          Ligue o Meta em 4 passos (modo manual)
+          Ligue o Meta em 4 passos
         </h3>
         <p className="text-dense text-t1 text-pretty">
-          Até o login com Facebook chegar, o xcart lê o gasto com um token de leitura que você gera no
-          Gerenciador de Negócios. Ele só lê desempenho: não gasta nem edita campanha.
+          O xcart lê o gasto com um token de leitura do Gerenciador de Negócios. Ele só lê desempenho: não gasta
+          nem edita campanha.
         </p>
       </div>
       <ol className="flex flex-col rounded-card border border-border">
