@@ -28,10 +28,7 @@ export default async function StoresPage({
 
   return (
     <ConectarLojaProvider inicial={conectar ? { dominio: texto(sp.dominio) ?? "", reconectar: Boolean(sp.dominio) } : null}>
-      <PageHeader
-        title="Lojas"
-        description="As lojas Shopify conectadas, a saúde de cada conexão e o que fazer com as que você não usa mais."
-      >
+      <PageHeader title="Lojas">
         <BotaoConectar />
       </PageHeader>
       <AvisoRetorno instalado={texto(sp.installed) === "1"} erro={texto(sp.error)} />

@@ -26,10 +26,7 @@ import {
   ORDEM_CONEXAO,
   ROTULO_SUGESTAO,
   SELO_CONEXAO,
-  diaDe,
   filtrarLojas,
-  moedaIdioma,
-  quandoFoi,
   rotuloPapel,
   type GrupoLojas,
 } from "@/lib/leitura/lojas-estado";
@@ -58,11 +55,9 @@ type Linha = {
   loja: ResumoLoja;
   papelTexto: string;
   conexaoOrdem: number;
-  moedaIdioma: string;
   receitaValor: number | null;
   lucroValor: number | null;
   saudeOrdem: number | null;
-  syncValor: number | null;
 };
 
 /** Sem acesso e sem nenhum pedido no periodo: "—" (nao se sabe), nao "R$ 0,00". */
@@ -95,7 +90,6 @@ export function ListaLojas({ resumo }: { resumo: ResumoLojas }) {
   );
   const [busca, setBusca] = React.useState("");
 
-  const agora = React.useMemo(() => new Date(), []);
   const moeda = resumo.moeda;
 
   const linhas: Linha[] = React.useMemo(
@@ -112,11 +106,9 @@ export function ListaLojas({ resumo }: { resumo: ResumoLojas }) {
         loja: l,
         papelTexto: rotuloPapel(l.papel),
         conexaoOrdem: ORDEM_CONEXAO[l.conexao.chave],
-        moedaIdioma: moedaIdioma(l.moeda, l.idioma),
         receitaValor: semNumero(l) ? null : l.financeiro!.receita,
         lucroValor: semNumero(l) ? null : l.financeiro!.lucro,
         saudeOrdem: l.rastreamento ? ORDEM_SAUDE[l.rastreamento.saude] : null,
-        syncValor: l.ultimoSyncOk ? Date.parse(l.ultimoSyncOk) : null,
       })),
     [vivas, grupo, busca]
   );
@@ -187,13 +179,14 @@ export function ListaLojas({ resumo }: { resumo: ResumoLojas }) {
       celula: (l) => (
         <span className="flex flex-col items-start gap-1">
           <StatusBadge {...SELO_CONEXAO[l.loja.conexao.chave]} />
-          <span className="max-w-40 text-label whitespace-normal text-t2">{l.loja.conexao.detalhe}</span>
+          {emCurso === l.id || l.loja.sincronizando ? (
+            <StatusBadge tom="run">Sincronizando</StatusBadge>
+          ) : (
+            <span className="max-w-40 text-label whitespace-normal text-t2">{l.loja.conexao.detalhe}</span>
+          )}
         </span>
       ),
     },
-    // Abaixo de 1536 px a coluna sai (esta tambem no detalhe): com o menu ao
-    // lado, a tabela inteira nao cabe sem rolar de lado.
-    { chave: "moedaIdioma", titulo: "Moeda · idioma", ocultarNoCartao: true, className: "hidden 2xl:table-cell" },
     {
       chave: "faturamento",
       titulo: "Faturamento",
@@ -204,7 +197,7 @@ export function ListaLojas({ resumo }: { resumo: ResumoLojas }) {
     },
     {
       chave: "lucro",
-      titulo: "Lucro estimado",
+      titulo: "Lucro",
       alinhar: "direita",
       ordenarPor: "lucroValor",
       celula: (l) =>
@@ -228,23 +221,6 @@ export function ListaLojas({ resumo }: { resumo: ResumoLojas }) {
             —<span className="sr-only">não deu para ler</span>
           </span>
         ),
-    },
-    {
-      chave: "sync",
-      titulo: "Sincronização",
-      ordenarPor: "syncValor",
-      direcaoInicial: "desc",
-      ocultarNoCartao: true,
-      celula: (l) => {
-        if (emCurso === l.id || l.loja.sincronizando) {
-          return <StatusBadge tom="run">Sincronizando</StatusBadge>;
-        }
-        if (l.semAcesso) {
-          const dia = diaDe(l.loja.conexao.desde ?? l.loja.ultimoSyncOk);
-          return <span className="num text-t1">{dia ? `parou em ${dia}` : "—"}</span>;
-        }
-        return <span className="num text-t1">{quandoFoi(l.loja.ultimoSyncOk, agora) ?? "—"}</span>;
-      },
     },
     {
       chave: "acoes",
@@ -414,14 +390,6 @@ export function ListaLojas({ resumo }: { resumo: ResumoLojas }) {
             )
           }
         />
-
-        <p className="border-t border-border-subtle px-4 py-2.5 text-label text-t2">
-          {grupo === "semAcesso"
-            ? "Lojas sem acesso não recebem pedidos novos. O que já foi sincronizado continua no Lucro."
-            : nSemAcesso > 0 && grupo === "ativas"
-              ? `${nSemAcesso === 1 ? "1 loja sem acesso fica" : `${nSemAcesso} lojas sem acesso ficam`} na aba “Sem acesso”.`
-              : "Clique no título de uma coluna para ordenar."}
-        </p>
       </section>
 
       <RemoverLoja

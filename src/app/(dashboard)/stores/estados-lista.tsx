@@ -20,14 +20,12 @@ export function EsqueletoLista() {
       </div>
       <div className="hidden px-4 py-2 sm:block">
         {[0, 1, 2, 3, 4].map((i) => (
-          <div key={i} className="grid h-14 grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_64px] items-center gap-4">
+          <div key={i} className="grid h-14 grid-cols-[2fr_1fr_1fr_1fr_1fr_64px] items-center gap-4">
             <Skeleton className="h-3 w-3/4" />
             <Skeleton className="h-5 w-22 rounded-full" />
             <Skeleton className="h-3" />
             <Skeleton className="h-3" />
-            <Skeleton className="h-3" />
             <Skeleton className="h-5 w-24 rounded-full" />
-            <Skeleton className="h-3" />
             <Skeleton className="h-6 rounded-control" />
           </div>
         ))}
