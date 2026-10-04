@@ -170,7 +170,8 @@ export const ITENS: Record<IdItem, ItemNav> = {
 export function gruposNav(temRota: boolean): GrupoNav[] {
   const grupos: GrupoNav[] = [
     { id: "lucro", rotulo: null, itens: [ITENS.lucro] },
-    { id: "rastreamento", rotulo: t("trackingGroup"), itens: [ITENS.saude, ITENS.eventos] },
+    // Sem titulo de grupo: o primeiro item ja se chama Rastreamento.
+    { id: "rastreamento", rotulo: null, itens: [ITENS.saude, ITENS.eventos] },
   ];
   if (temRota) {
     grupos.push({

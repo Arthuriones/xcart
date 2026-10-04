@@ -214,7 +214,7 @@ const DESTINOS: Record<RegraAlerta, Destino> = {
   // Reinstalar o app ou desligar o rastreamento da loja.
   app_desinstalado: { href: "/stores", tela: "Lojas" },
   // O token do CAPI se cola no destino Meta do rastreamento.
-  meta_capi_token: { href: "/tracking", tela: "Saúde dos pixels" },
+  meta_capi_token: { href: "/tracking", tela: "Rastreamento" },
   // A compra que falhou aparece com o erro no feed.
   envio_falhando: { href: "/tracking/eventos", tela: "Eventos ao vivo" },
   fila_travada: { href: "/tracking/eventos", tela: "Eventos ao vivo" },
@@ -233,7 +233,7 @@ export function destinoDoAlerta(regra: RegraAlerta, titulo?: string | null): Des
   if (regra === "ads_sync_atrasado" && titulo?.startsWith("Gasto do Google")) {
     return { href: "/integracoes/google", tela: "Integrações · Google" };
   }
-  return DESTINOS[regra] ?? { href: "/tracking", tela: "Saúde dos pixels" };
+  return DESTINOS[regra] ?? { href: "/tracking", tela: "Rastreamento" };
 }
 
 // ---------------------------------------------------------------------------

@@ -12,6 +12,7 @@ import {
   NOME_DA_PLATAFORMA,
   apelido,
   emModoTeste,
+  enviaEvento,
   oQueFalta,
   quando,
   textoProblema,
@@ -36,7 +37,7 @@ function seloDestino(d: DestinoNaTela): { tom: TomStatus; texto: string; ordem: 
 }
 
 function comprasDo(d: DestinoNaTela, loja: LojaTracking, diag: DiagnosticoLoja | null): string {
-  const enviaCompra = d.plataforma === "meta" || Boolean(d.labels.purchase);
+  const enviaCompra = enviaEvento(d, "purchase");
   if (!enviaCompra) return "Não envia compra";
   const v = vereditoDoDestino(d, loja, diag);
   if (v.tipo === "sem-contagem") return "—";
@@ -114,10 +115,10 @@ export function RastreamentoLoja({ r }: { r: RastreamentoDaLoja }) {
     return (
       <EmptyState
         titulo="Rastreamento desligado nesta loja"
-        descricao="Ligue em Saúde dos pixels para mandar as vendas desta loja ao Meta e ao Google pelo servidor."
+        descricao="Ligue em Rastreamento para mandar as vendas desta loja ao Meta e ao Google pelo servidor."
         acao={
           <Link href="/tracking" className={cn(buttonVariants({ variant: "primary" }))}>
-            Abrir Saúde dos pixels
+            Abrir Rastreamento
           </Link>
         }
         className="py-12"
@@ -168,7 +169,7 @@ export function RastreamentoLoja({ r }: { r: RastreamentoDaLoja }) {
         }
         acoes={
           <Link href="/tracking" className={LINK_TRACKING}>
-            Abrir Saúde dos pixels
+            Abrir Rastreamento
           </Link>
         }
       >
@@ -205,7 +206,7 @@ export function RastreamentoLoja({ r }: { r: RastreamentoDaLoja }) {
             <EmptyState
               variante="simples"
               titulo="Nenhum destino cadastrado"
-              descricao="Cadastre um pixel do Meta ou uma conta do Google em Saúde dos pixels."
+              descricao="Cadastre um pixel do Meta ou uma conta do Google em Rastreamento."
             />
           }
         />

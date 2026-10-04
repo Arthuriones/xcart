@@ -90,7 +90,8 @@ grant execute on function public.tracking_evento_teste(text, jsonb) to authentic
 --
 --   n_sem_atribuicao  sem click id (igual a 051, testes inclusive);
 --   n_teste           e teste, com ou sem clique;
---   n_de_anuncio      com click id E sem teste.
+--   n_de_anuncio      com click id, sem teste e que saiu para esta conta
+--                     (ver `saiu` abaixo).
 --
 -- A tela tira o teste do total por padrao e devolve com "Mostrar testes".
 -- Com os testes a vista, "de anuncio" vira n - n_sem_atribuicao.
@@ -143,7 +144,7 @@ as $$
       '{}'::text[]
     ) as order_ids,
     (count(*) filter (where c.teste))::integer as n_teste,
-    (count(*) filter (where c.com_clique and not c.teste))::integer as n_de_anuncio
+    (count(*) filter (where c.com_clique and not c.teste and c.saiu))::integer as n_de_anuncio
   from public.tracking_events e
   cross join lateral (
     select
@@ -161,7 +162,15 @@ as $$
         else
           not coalesce(e.last_error like '%sem atribuicao%', false)
       end as com_clique,
-      public.tracking_evento_teste(e.destination, e.payload) as teste
+      public.tracking_evento_teste(e.destination, e.payload) as teste,
+      -- Saiu e valeu PARA ESTA CONTA. Fica fora do "de anuncio":
+      --   - 'enviado' sem sent_at: fechado sem envio (teste, sem clique);
+      --   - Google pela Data Manager (054) com diagnostico dizendo que o
+      --     clique e de outra conta da loja, ou descartado por consentimento.
+      -- Status 'falhou' ja fica fora pelo agrupamento (vai para as falhas).
+      (e.status <> 'enviado' or e.sent_at is not null)
+        and coalesce(e.response -> 'dm' ->> 'situacao', '')
+              not in ('nao_e_desta_conta', 'sem_consentimento') as saiu
   ) c
   where e.store_id = any (p_store_ids)
     and e.created_at >= p_desde

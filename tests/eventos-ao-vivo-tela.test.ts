@@ -24,6 +24,7 @@ import {
   passa,
   rotuloChip,
   rotuloDia,
+  seloDoStatus,
   temFiltro,
   textoClique,
   textoOrigem,
@@ -326,5 +327,14 @@ describe("teste e clique", () => {
     const f = filtroDaUrl({ clique: ["sim", "talvez"] });
     expect(f.clique).toEqual(["sim"]);
     expect(filtroParaQuery(f)).toBe("clique=sim");
+  });
+});
+
+describe("selo do status", () => {
+  it("enviado sem enviado_em e a fila fechando sem mandar: nem envio, nem falha", () => {
+    expect(seloDoStatus(ev({ id: "1", enviado_em: null }))).toEqual({ tom: "neutral", rotulo: "Não enviado" });
+    expect(seloDoStatus(ev({ id: "2", enviado_em: "2026-10-02T17:32:06.000Z" })).rotulo).toBe("Enviado");
+    expect(seloDoStatus(ev({ id: "3", status: "falhou" })).rotulo).toBe("Falhou");
+    expect(seloDoStatus(ev({ id: "4", status: "pendente" })).rotulo).toBe("Na fila");
   });
 });

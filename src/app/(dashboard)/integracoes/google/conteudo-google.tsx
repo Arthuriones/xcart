@@ -4,22 +4,29 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { CabecalhoPlataforma } from "../cabecalho-plataforma";
 import type { DadosAnuncios } from "../dados-anuncios";
 import { EnvioCompras } from "../envio-compras";
-import { estadoScriptsGoogle, situacaoDaConta } from "../regras";
+import { usaDataManager } from "@/lib/tracking/google-url";
+import { estadoScriptsGoogle, situacaoDaConta, type Estado } from "../regras";
 import { EnvioDataManager, type DadosDataManager } from "./envio-data-manager";
 import { TelaGoogle } from "./tela-google";
 
 /** O conteudo de Google com os dados ja lidos (a page le; aqui so desenha). */
 export function ConteudoGoogle({ d, dm }: { d: DadosAnuncios; dm: DadosDataManager }) {
-  const ligado = d.daPlataforma.length > 0;
   const estadoLeitura = estadoScriptsGoogle(d.daPlataforma.map((c) => situacaoDaConta(c, d.agoraMs, d.fuso)));
+  // O foco desta tela e o envio de conversoes; o gasto pelo script e
+  // secundario ate a API do Google aprovar o app.
+  const apiPronta = dm.temCredencial && dm.destinos.some((x) => x.ativo && usaDataManager(x));
+  const estado: Estado = apiPronta
+    ? { tom: "ok", texto: "Conversões pela API" }
+    : d.destinos.length > 0
+      ? { tom: "warn", texto: "Falta configurar a API" }
+      : { tom: "neutral", texto: "Não ligado" };
 
   return (
     <>
       <CabecalhoPlataforma
         titulo="Google Ads"
-        estado={ligado ? { tom: "ok", texto: "Conectado · modo manual" } : { tom: "neutral", texto: "Não ligado" }}
-        login="Conectar com Google"
-        nota="Quando o Google liberar a API para o xcart, o script vira leitura automática a cada 15 minutos, sem colar nada."
+        estado={estado}
+        dica="As conversões saem pela API do Google, com o ID de cliente (123-456-7890) e o ID de cada ação. O AW- identifica a conta no Rastreamento."
       />
 
       {d.lojas.length === 0 ? (

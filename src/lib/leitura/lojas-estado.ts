@@ -55,7 +55,16 @@ const RE_PAUSADA = /\b402\b|payment required|pausad|frozen|congelad|\b423\b|lock
  * grava em ultimo_erro (getAccessToken) e o 401 cru da Admin API.
  */
 const RE_TOKEN =
-  /invalid_credentials|client id ou client secret|invalid api key|invalid_client|\b401\b|unauthorized|n[aã]o est[aá] instalado|application_cannot_be_found|app_not_installed/i;
+  /invalid_credentials|client id ou client secret|invalid api key|invalid_client|\b401\b|unauthorized/i;
+
+/**
+ * A Shopify diz que o app saiu da loja (shopify/client.ts, APP_NOT_INSTALLED).
+ * Loja antiga pode nao ter a marca do webhook: o erro da busca e que conta.
+ * Uma regra so para Lojas, Lucro e alertas: antes Lojas dizia "Token
+ * invalido" e o Lucro "App desinstalado" para a mesma loja.
+ */
+export const RE_DESINSTALADO =
+  /n[aã]o est[aá] (mais )?instalado|application_cannot_be_found|app_not_installed|not installed/i;
 
 function desdeTexto(iso: string | null, fuso = FUSO_RELATORIO_PADRAO): string | null {
   if (!iso) return null;
@@ -83,6 +92,16 @@ export function estadoConexao(e: EntradaConexao): EstadoConexao {
   const s = e.sync;
   const erro = s?.ultimoErro ?? "";
   const parouEm = s?.ultimoSyncOkEm ?? null;
+
+  if (erro && RE_DESINSTALADO.test(erro)) {
+    return {
+      chave: "appDesinstalado",
+      semAcesso: true,
+      detalhe: desdeTexto(parouEm) ?? "O app saiu da loja",
+      desde: parouEm,
+      sugestao: "remover",
+    };
+  }
 
   if (s?.ultimoErroTipo === "negado") {
     return {

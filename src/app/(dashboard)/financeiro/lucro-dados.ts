@@ -10,7 +10,7 @@ import {
   type FinSyncStateRow,
   type LojaDoSeletor,
 } from "@/lib/financeiro/tipos";
-import { estadoConexao } from "@/lib/leitura/lojas-estado";
+import { RE_DESINSTALADO, estadoConexao } from "@/lib/leitura/lojas-estado";
 // So tipos: o calculo e as leituras nao entram no bundle do navegador.
 import type { Avisos, Semaforo } from "@/lib/financeiro/calculo";
 import type { ResumoContas } from "@/lib/financeiro/queries";
@@ -458,12 +458,6 @@ export interface SituacaoDaLoja {
   /** "desinstalada": quando o webhook marcou (ISO), se marcou. */
   desde?: string | null;
 }
-
-/**
- * A Shopify diz que o app saiu da loja (shopify/client.ts, APP_NOT_INSTALLED).
- * Loja antiga pode nao ter a marca do webhook: o erro da busca e que conta.
- */
-const RE_DESINSTALADO = /n[aã]o est[aá] (mais )?instalado|application_cannot_be_found|app_not_installed|not installed/i;
 
 const MOTIVO_SEM_ACESSO = {
   semPermissao: "Falta a permissão de pedidos.",

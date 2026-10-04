@@ -36,14 +36,19 @@ export function emModoTeste(d: DestinoNaTela): boolean {
   return d.plataforma === "meta" && Boolean(d.testEventCode);
 }
 
+/**
+ * O destino manda este evento? No Meta o pixel cobre todos; no Google vale o
+ * ID da acao quando ele vai pela Data Manager, e o rotulo no caminho antigo
+ * (a mesma regra de `destinoAceita`).
+ */
+export function enviaEvento(d: DestinoNaTela, chave: ChaveEvento): boolean {
+  if (d.plataforma === "meta") return true;
+  return d.acoes ? Boolean(d.acoes[chave]) : Boolean(d.labels[chave]);
+}
+
 /** Os destinos para onde a compra SAI -- inclusive o Meta em modo teste. */
 export function aceitamCompra(loja: LojaTracking): DestinoNaTela[] {
-  return loja.destinos.filter(
-    (d) =>
-      d.ativo &&
-      d.completo &&
-      (d.plataforma === "meta" || Boolean(d.labels.purchase))
-  );
+  return loja.destinos.filter((d) => d.ativo && d.completo && enviaEvento(d, "purchase"));
 }
 
 /** Os destinos que deveriam estar recebendo a compra COMO CONVERSAO. */
@@ -56,7 +61,7 @@ export function oQueFalta(d: DestinoNaTela): string | null {
   if (d.plataforma === "meta") {
     return d.temToken ? null : "falta o token do CAPI — sem ele nenhum evento sai";
   }
-  return Object.keys(d.labels).length > 0
+  return d.acoes || Object.keys(d.labels).length > 0
     ? null
     : "falta o rótulo de ao menos um evento — sem rótulo não há o que enviar";
 }
@@ -163,7 +168,7 @@ export function numerosDoEvento(
   if (comTestes) deAnuncio = Math.max(0, enviados - (c.semAtribPorEvento[chave] ?? 0));
   else deAnuncio = c.deAnuncioPorEvento ? (c.deAnuncioPorEvento[chave] ?? 0) : null;
   return {
-    envia: d.plataforma === "meta" || Boolean(d.labels[chave]),
+    envia: enviaEvento(d, chave),
     deAnuncio,
     total: comTestes ? enviados : Math.max(0, enviados - (c.testesPorEvento[chave] ?? 0)),
     falhas: c.falhasPorEvento[chave] ?? 0,

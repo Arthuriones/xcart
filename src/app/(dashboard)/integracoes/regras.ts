@@ -288,7 +288,7 @@ export function estadoDoDestino(d: DestinoParaEstado): Estado {
     return { tom: "err", texto: "Sem token", detalhe: "sem o token de conversões nenhuma compra sai" };
   }
   if (d.plataforma === "google" && d.rotulos === 0) {
-    return { tom: "err", texto: "Incompleto", detalhe: "falta o rótulo de ao menos um evento" };
+    return { tom: "err", texto: "Incompleto", detalhe: "falta configurar ao menos um evento" };
   }
   if (d.alertas.includes("meta_capi_token")) {
     return { tom: "err", texto: "Token recusado", detalhe: "o Meta recusou o token na última hora" };

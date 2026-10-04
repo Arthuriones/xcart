@@ -251,7 +251,7 @@ export function EnvioDataManager({ dados, lojas }: { dados: DadosDataManager; lo
             href="/tracking"
             className="rounded-sm font-medium text-brand underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
           >
-            Cadastrar em Saúde dos pixels
+            Cadastrar em Rastreamento
           </Link>
         </p>
       ) : (

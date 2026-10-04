@@ -8,6 +8,7 @@ import {
   type ChaveEvento,
   type MapaDeRotulos,
 } from "@/lib/tracking/eventos";
+import { usaDataManager } from "@/lib/tracking/google-url";
 
 // ============================================================================
 // Dados da tela de rastreamento.
@@ -101,6 +102,11 @@ export interface DestinoNaTela {
   conta: string;
   /** So Google: um rotulo por evento. Evento fora do mapa = o lojista nao quis. */
   labels: MapaDeRotulos;
+  /**
+   * So Google pela Data Manager (054): o ID da acao de cada evento. Presente,
+   * vale no lugar dos `labels` -- e o que a fila usa (`destinoAceita`).
+   */
+  acoes?: Partial<Record<string, string>>;
   /** So Meta. */
   testEventCode: string | null;
   /** Formato do id de produto. null = {variant_id}. */
@@ -539,17 +545,19 @@ export async function getPainelTracking(): Promise<PainelTracking> {
           nome: d.nome,
           conta: d.conta,
           labels: d.labels,
+          ...(usaDataManager(d) ? { acoes: d.acoes } : {}),
           testEventCode: d.testEventCode,
           idTemplate: d.idTemplate,
           ativo: d.ativo,
           temToken: d.temToken,
           // Mesma regra de `destinoAceita`, sem o evento: no Meta o pixel cobre
           // tudo e o que falta e o token; no Google cada evento e uma action
-          // propria, e sem nenhum rotulo nao ha o que enviar.
+          // propria, e sem rotulo nem acao da Data Manager nao ha o que enviar.
           completo:
             d.plataforma === "meta"
               ? Boolean(d.conta && d.temToken)
-              : Boolean(d.conta) && Object.keys(d.labels).length > 0,
+              : Boolean(d.conta) &&
+                (usaDataManager(d) || Object.keys(d.labels).length > 0),
           criadoEm: criadoEm.get(d.id) ?? null,
           contagem: contagens.get(d.id) ?? contagemVazia(),
         })),

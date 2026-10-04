@@ -5,7 +5,9 @@ import type { EventoFeed } from "@/lib/financeiro/tipos";
 // ============================================================================
 // Feed de eventos ao vivo: as ultimas linhas da fila de rastreamento.
 //
-// Le pela RPC tracking_feed (052), que e SECURITY INVOKER: a RLS de
+// Le pela RPC tracking_feed_v2 (055), que traz a marca de teste; a
+// tracking_feed (052) e o fallback enquanto a 055 nao estiver aplicada. As
+// duas sao SECURITY INVOKER: a RLS de
 // tracking_events vale la dentro, entao mesmo um storeId alheio que escapasse
 // da conferencia da rota voltaria vazio. Ela devolve so colunas tratadas --
 // sem payload, IP ou user agent, que a tela nao precisa e nao deve carregar.
@@ -33,6 +35,8 @@ interface LinhaRpc {
   utm_source: string | null;
   utm_campaign: string | null;
   pedido: string | null;
+  /** So na tracking_feed_v2 (055). Ausente = nao sabemos, nunca "nao e". */
+  teste?: boolean | null;
 }
 
 const FONTES = new Set<EventoFeed["fonte"]>(["tema", "pixel", "webhook"]);
@@ -73,6 +77,7 @@ export function normalizarLinhaFeed(l: LinhaRpc): EventoFeed {
     utm_source: l.utm_source ?? null,
     utm_campaign: l.utm_campaign ?? null,
     pedido: l.pedido ?? null,
+    teste: l.teste === true,
   };
 }
 
@@ -88,11 +93,14 @@ export async function lerFeed(
 ): Promise<EventoFeed[]> {
   if (!storeIds.length) return [];
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("tracking_feed", {
-    p_store_ids: storeIds,
-    p_antes: antes,
-    p_limite: limite,
-  });
+  const args = { p_store_ids: storeIds, p_antes: antes, p_limite: limite };
+  let { data, error } = await supabase.rpc("tracking_feed_v2", args);
+  // PGRST202: a funcao nao existe. Entre o deploy e a migration 055 a lista
+  // continua de pe pela 052, so sem o selo "teste".
+  if (error?.code === "PGRST202") {
+    console.error("[tracking/feed] tracking_feed_v2 ausente: aplique a migration 055");
+    ({ data, error } = await supabase.rpc("tracking_feed", args));
+  }
   if (error) throw new Error(`Falha ao ler os eventos: ${error.message}`);
   return ((data || []) as LinhaRpc[]).map(normalizarLinhaFeed);
 }

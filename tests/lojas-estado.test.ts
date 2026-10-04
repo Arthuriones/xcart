@@ -89,6 +89,22 @@ describe("estadoConexao: ativas e sem acesso", () => {
     expect(e.detalhe).toBe("desde 12/09");
   });
 
+  it("app que nao esta instalado e desinstalado, como no Lucro -- nao token invalido", () => {
+    const e = estadoConexao({
+      desinstaladaEm: null,
+      sync: {
+        ...OK,
+        ultimoSyncOkEm: "2026-09-12T12:00:00Z",
+        ultimoErroTipo: "falhou",
+        ultimoErro: "App nao esta instalado nessa loja. Instale o app primeiro: no dev.shopify.com, va em seu App > Distribution.",
+      },
+    });
+    expect(e.chave).toBe("appDesinstalado");
+    expect(e.semAcesso).toBe(true);
+    expect(e.sugestao).toBe("remover");
+    expect(e.detalhe).toBe("desde 12/09");
+  });
+
   it("outra falha continua ativa, com a sugestao de tentar de novo", () => {
     const e = estadoConexao({
       desinstaladaEm: null,

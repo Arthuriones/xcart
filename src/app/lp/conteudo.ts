@@ -36,13 +36,13 @@ export const RECURSOS_PRINCIPAIS: RecursoPrincipal[] = [
   },
   {
     id: "rastreamento",
-    tela: "Saúde dos pixels",
+    tela: "Rastreamento",
     titulo: "Compras que chegam ao Meta e ao Google",
     resumo:
       "A compra sai do nosso servidor assim que a Shopify cria o pedido, sem depender do navegador do comprador.",
     pontos: [
       "Ver produto, carrinho e checkout também vão para as duas plataformas.",
-      "A Saúde dos pixels mostra, loja por loja, o que está chegando e o que consertar.",
+      "O Rastreamento mostra, loja por loja, o que está chegando e o que consertar.",
       "Os Eventos ao vivo listam cada envio, com o motivo quando algo falha.",
     ],
   },

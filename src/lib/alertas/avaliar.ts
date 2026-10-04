@@ -15,6 +15,7 @@ import {
   type CondicaoAlerta,
 } from "@/lib/alertas/regras";
 import { enviarTelegram, tokenDoBot } from "@/lib/alertas/telegram";
+import { RE_DESINSTALADO } from "@/lib/leitura/lojas-estado";
 
 // ============================================================================
 // O cron de alertas: le o banco, decide e manda UMA mensagem por usuario.
@@ -188,24 +189,48 @@ export async function coletarCondicoesDetalhado(
   });
 
   // ---- R3: compra que falhou no envio -------------------------------------
+  // Duas leituras. Meta e Google antigo falham perto da criacao da linha
+  // (envio na hora). O Google pela Data Manager so sai 6 h depois do evento,
+  // e o diagnostico que diz "nao contou" chega horas depois disso: pela
+  // created_at da ultima hora esta regra nunca o veria. Para ele vale quando
+  // o Google respondeu (response.dm.conferidoEm, gravado por fila.ts).
   await rodar("envio_falhando", async () => {
-    const { data, error } = await admin
-      .from("tracking_events")
-      .select("store_id, destination, destination_id, last_error, created_at")
-      .eq("event_name", "Purchase")
-      .eq("status", "falhou")
-      .gte("created_at", desdeUmaHora)
-      .order("created_at", { ascending: false })
-      .limit(500);
-    if (error) throw new Error(error.message);
+    const colunas = "id, store_id, destination, destination_id, last_error, created_at";
+    const [recentes, doGoogle] = await Promise.all([
+      admin
+        .from("tracking_events")
+        .select(colunas)
+        .eq("event_name", "Purchase")
+        .eq("status", "falhou")
+        .gte("created_at", desdeUmaHora)
+        .order("created_at", { ascending: false })
+        .limit(500),
+      admin
+        .from("tracking_events")
+        .select(colunas)
+        .eq("event_name", "Purchase")
+        .eq("status", "falhou")
+        .eq("destination", "google")
+        .gte("response->dm->>conferidoEm", desdeUmaHora)
+        .order("created_at", { ascending: false })
+        .limit(500),
+    ]);
+    if (recentes.error) throw new Error(recentes.error.message);
+    if (doGoogle.error) throw new Error(doGoogle.error.message);
     type Linha = {
+      id: string;
       store_id: string;
       destination: string;
       destination_id: string | null;
       last_error: string | null;
+      created_at: string | null;
     };
+    const vistas = new Set<string>();
+    const linhas = ([...(recentes.data || []), ...(doGoogle.data || [])] as Linha[])
+      .filter((l) => !vistas.has(String(l.id)) && Boolean(vistas.add(String(l.id))))
+      .sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
     const grupos = new Map<string, { linha: Linha; n: number }>();
-    for (const l of (data || []) as Linha[]) {
+    for (const l of linhas) {
       const k = `${l.store_id}|${l.destination_id ?? l.destination}`;
       const g = grupos.get(k);
       // Ordenado do mais novo: o primeiro de cada grupo traz o ultimo erro.
@@ -280,6 +305,23 @@ export async function coletarCondicoesDetalhado(
     for (const s of syncs) {
       const loja = lojas.get(String(s.store_id));
       if (!loja || loja.uninstalled_at) continue;
+      // "App nao esta instalado": a loja tirou o app sem o webhook marcar.
+      // Nao e sync atrasado que se resolve sozinho, e o erro cru da Shopify
+      // nao diz o que fazer. Continua UM aviso (aviso nao renotifica; o
+      // aberto so troca de texto), dizendo o que a tela Lojas e o Lucro dizem.
+      if (RE_DESINSTALADO.test(s.ultimo_erro ?? "")) {
+        condicoes.push({
+          user_id: loja.user_id,
+          store_id: loja.id,
+          regra: "pedidos_sync_erro",
+          chave: "",
+          severidade: "aviso",
+          titulo: "App desinstalado",
+          detalhe:
+            "A Shopify diz que o app não está instalado nesta loja: pedidos e compras param de chegar. Reinstale o app ou remova a loja em Lojas.",
+        });
+        continue;
+      }
       const okEm = s.ultimo_sync_ok_em ? Date.parse(s.ultimo_sync_ok_em) : null;
       const atualizado = s.updated_at ? Date.parse(s.updated_at) : 0;
       const atrasado = okEm !== null ? okEm < limite : atualizado < limite;

@@ -261,9 +261,9 @@ async function tratarPedidoCriado(
   // Uma linha de fila por DESTINO ativo que aceita a compra.
   //
   // Destino e linha, nao coluna, desde a 043: a loja pode ter cinco contas de
-  // Google e dois pixels Meta. Todas recebem -- conversao cujo gclid nao
-  // pertence a conta e DESCARTADA pelo Google, entao a conta dona do clique
-  // conta e as outras ignoram, e nao ha roteamento a adivinhar.
+  // Google e dois pixels Meta. Todas recebem -- so a conta dona do clique
+  // conta. Pela Data Manager as outras respondem CLICK_NOT_FOUND no
+  // diagnostico e a linha vira "nao e desta conta" (fila.ts), nao erro.
   //
   // As linhas ficam separadas de proposito: cada API tem o seu formato, e uma
   // falhar nao pode impedir as outras de sair.

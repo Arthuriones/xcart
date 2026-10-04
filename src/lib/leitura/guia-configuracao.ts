@@ -18,6 +18,7 @@ import {
   type LojaGuia,
   type RotaGuia,
 } from "@/lib/leitura/guia-passos";
+import { limparAcoes, usaDataManager } from "@/lib/tracking/google-url";
 
 // ============================================================================
 // Leitura nova do Guia de configuracao. So SELECT, nada de API externa, e
@@ -73,7 +74,9 @@ export const lerFotoGuia = cache(async (): Promise<FotoGuia> => {
     supabase.from("tracking_configs").select("store_id").eq("user_id", user.id).eq("enabled", true),
     supabase
       .from("tracking_destinations")
-      .select("id, store_id, plataforma, labels, test_event_code, ativo")
+      // `*`: customer_id e acoes so existem depois da migration 054, e a lista
+      // explicita faria esta leitura inteira falhar antes dela.
+      .select("*")
       .eq("user_id", user.id),
     supabase.from("ad_accounts").select("plataforma, store_id, ativo, ultimo_erro").eq("user_id", user.id),
     supabase.from("fin_store_settings").select("store_id, custo_padrao_pct").eq("user_id", user.id),
@@ -150,6 +153,9 @@ export const lerFotoGuia = cache(async (): Promise<FotoGuia> => {
           .in("store_id", idsLojas)
           .eq("event_name", "Purchase")
           .eq("status", "enviado")
+          // 'enviado' sem sent_at fechou sem sair (teste, sem clique no
+          // Google): nao e venda que chegou na plataforma.
+          .not("sent_at", "is", null)
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle()
@@ -170,7 +176,9 @@ export const lerFotoGuia = cache(async (): Promise<FotoGuia> => {
             recebeCompra:
               plataforma === "meta"
                 ? segredos.has(String(d.id))
-                : typeof labels.purchase === "string" && labels.purchase.trim() !== "",
+                : usaDataManager({ customerId: d.customer_id, acoes: limparAcoes(d.acoes) })
+                  ? Boolean(limparAcoes(d.acoes).purchase)
+                  : typeof labels.purchase === "string" && labels.purchase.trim() !== "",
             modoTeste: plataforma === "meta" && Boolean(String(d.test_event_code ?? "").trim()),
           };
         })

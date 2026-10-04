@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { listarLojasDoUsuario } from "@/lib/filtro-global";
 import { destinosParaTela } from "@/lib/tracking/destinos";
+import { usaDataManager } from "@/lib/tracking/google-url";
 import type { Plataforma, RegraAlerta } from "@/lib/financeiro/tipos";
 
 // ============================================================================
@@ -195,7 +196,10 @@ export interface DestinoDeCompra {
   ativo: boolean;
   /** So Meta: o token do CAPI esta gravado. */
   temToken: boolean;
-  /** So Google: quantos eventos tem rotulo, e se a compra tem. */
+  /**
+   * So Google: quantos eventos tem rotulo (ou ID de acao, pela Data Manager),
+   * e se a compra tem.
+   */
   rotulos: number;
   rotuloCompra: boolean;
   /** So Meta: codigo de teste ligado (o evento nao conta como conversao). */
@@ -247,8 +251,17 @@ export async function lerDestinosDeCompra(plataforma: Plataforma): Promise<Desti
         conta: d.conta,
         ativo: d.ativo,
         temToken: d.temToken,
-        rotulos: Object.values(d.labels ?? {}).filter(Boolean).length,
-        rotuloCompra: Boolean(d.labels?.purchase),
+        // Pela Data Manager vale o ID da acao de cada evento, nao o rotulo:
+        // o destino ja configurado nela nao e "Incompleto" por nao ter rotulo.
+        ...(usaDataManager(d)
+          ? {
+              rotulos: Object.keys(d.acoes ?? {}).length,
+              rotuloCompra: Boolean(d.acoes?.purchase),
+            }
+          : {
+              rotulos: Object.values(d.labels ?? {}).filter(Boolean).length,
+              rotuloCompra: Boolean(d.labels?.purchase),
+            }),
         modoTeste: Boolean(d.testEventCode),
         alertas: alertasPorDestino.get(d.id) ?? [],
       });

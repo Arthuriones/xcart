@@ -409,8 +409,10 @@ async function entregarNaDataManager(
   );
 
   if (!r.ok) {
+    // conferidoEm: quando o Google respondeu. A linha nasceu 6 h antes, e e
+    // por aqui que o alerta de compra que nao chegou (R3) a enxerga.
     return gravarFalha(r.erro ?? "falha desconhecida", r.podeTentarDeNovo, {
-      dm: { status: r.status, erro: r.corpo ?? null },
+      dm: { status: r.status, erro: r.corpo ?? null, conferidoEm: new Date().toISOString() },
     });
   }
 

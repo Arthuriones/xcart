@@ -7,7 +7,7 @@ import { cn } from "@/components/ui/cn";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   FONTE_TELA,
-  STATUS_TELA,
+  seloDoStatus,
   ehCompra,
   ehTeste,
   formatarLatencia,
@@ -44,7 +44,7 @@ const FOCO = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visib
 
 function rotuloAbrir(e: EventoFeed, hora: string): string {
   const teste = ehTeste(e) ? " (teste)" : "";
-  return `${nomeDoEvento(e.evento)}${teste} para ${nomePlataforma(e.plataforma)}, ${STATUS_TELA[e.status].rotulo}, ${hora}: abrir detalhe`;
+  return `${nomeDoEvento(e.evento)}${teste} para ${nomePlataforma(e.plataforma)}, ${seloDoStatus(e).rotulo}, ${hora}: abrir detalhe`;
 }
 
 /** O selo do evento de teste: fica fora das contagens, nao desta lista. */
@@ -57,7 +57,7 @@ export function SeloTeste() {
 }
 
 function Status({ e }: { e: EventoFeed }) {
-  const s = STATUS_TELA[e.status];
+  const s = seloDoStatus(e);
   return <StatusBadge tom={s.tom}>{s.rotulo}</StatusBadge>;
 }
 

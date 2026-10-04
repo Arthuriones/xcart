@@ -17,13 +17,6 @@ export function CabecalhoPlataforma({
   estado: Estado;
   /** Explicacao curta que antes era um aviso fixo na tela. */
   dica?: ReactNode;
-  /**
-   * @deprecated O botao "Conectar com..." desabilitado saiu. Ignorado;
-   * so continua no tipo ate google/conteudo-google.tsx parar de passar.
-   */
-  login?: string;
-  /** @deprecated Ia embaixo do botao de login, que saiu. Ignorado. */
-  nota?: ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-1.5">

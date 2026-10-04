@@ -403,9 +403,9 @@ export async function POST(request: NextRequest) {
   // Os destinos sao LINHAS: a loja pode ter cinco contas Google e dois pixels
   // Meta. Todo destino ativo que aceita este evento recebe uma copia.
   //
-  // Mandar para todas as contas Google e seguro: conversao cujo gclid nao
-  // pertence a conta e DESCARTADA pelo Google, nao contada sem atribuicao --
-  // a conta dona do clique conta e as outras ignoram.
+  // Mandar para todas as contas Google e seguro: so a conta dona do clique
+  // conta. Pela Data Manager as outras respondem CLICK_NOT_FOUND no
+  // diagnostico, e a linha vira "nao e desta conta" (fila.ts), nao erro.
   const { destinosDaLoja, destinoAceita } = await import("@/lib/tracking/destinos");
   const todos = await destinosDaLoja(admin, registro.id, { comToken: true });
   const querem = todos.filter((d) => destinoAceita(d, evento));

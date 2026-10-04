@@ -262,7 +262,9 @@ export function TelaGoogle({
   const [script, setScript] = useState<{ titulo: string; texto: string } | null>(null);
   const [adicionando, setAdicionando] = useState(false);
   const semConta = todas === 0;
-  const mostrarForm = semConta || adicionando;
+  // O formulario so abre a pedido: o gasto do Google entra de verdade quando
+  // a API aprovar o app, e o foco desta tela e o envio de conversoes.
+  const mostrarForm = adicionando;
 
   function mostrarScript(titulo: string, texto: string) {
     setScript({ titulo, texto });
@@ -272,32 +274,32 @@ export function TelaGoogle({
 
   return (
     <>
+      {dataManager}
+
       <div className="grid gap-3 md:grid-cols-2">
+        {envio}
         <section
           aria-labelledby="ler-google"
           className="flex min-w-0 flex-col gap-2.5 rounded-card border border-border bg-surface p-4"
         >
-          <span className="text-label font-semibold text-t2">Para ler o gasto</span>
+          <span className="text-label font-semibold text-t2">Para ler o gasto (opcional)</span>
           <h3 id="ler-google" className="text-section text-ink">
             {semConta ? "Script por conta" : `Script em ${plural(todas, "conta", "contas")}`}
           </h3>
-          <StatusBadge tom={estadoLeitura.tom}>{estadoLeitura.texto}</StatusBadge>
+          {!semConta ? <StatusBadge tom={estadoLeitura.tom}>{estadoLeitura.texto}</StatusBadge> : null}
           <p className="text-dense text-t1 text-pretty">
-            Cada conta envia o gasto de hora em hora por um script colado no Google Ads.
-            {estadoLeitura.detalhe ? ` ${estadoLeitura.detalhe}` : ""}
+            {semConta
+              ? "Até o login com Google chegar, o gasto entra no lucro por um script colado em cada conta."
+              : "Cada conta envia o gasto de hora em hora por um script colado no Google Ads."}
+            {!semConta && estadoLeitura.detalhe ? ` ${estadoLeitura.detalhe}` : ""}
           </p>
-          {!semConta ? (
-            <div className="mt-auto">
-              <Button size="sm" variant="secondary" onClick={() => setAdicionando((v) => !v)} aria-expanded={adicionando}>
-                {adicionando ? "Cancelar" : "Adicionar conta"}
-              </Button>
-            </div>
-          ) : null}
+          <div className="mt-auto">
+            <Button size="sm" variant="secondary" onClick={() => setAdicionando((v) => !v)} aria-expanded={adicionando}>
+              {adicionando ? "Cancelar" : "Adicionar conta"}
+            </Button>
+          </div>
         </section>
-        {envio}
       </div>
-
-      {dataManager}
 
       {mostrarForm ? (
         <section
@@ -306,7 +308,7 @@ export function TelaGoogle({
         >
           <div className="flex flex-col gap-1">
             <h3 id="cadastro-google" className="text-section text-ink">
-              {semConta ? "Ligue o Google em 4 passos (modo manual)" : "Adicionar conta do Google Ads"}
+              {semConta ? "Ler o gasto em 4 passos (modo manual)" : "Adicionar conta do Google Ads"}
             </h3>
             <p className="text-dense text-t1 text-pretty">
               Até o login com Google chegar, cada conta lê o gasto por um script. Ele só lê desempenho: não

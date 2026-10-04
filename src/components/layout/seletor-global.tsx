@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Calendar, Check, ChevronDown, Lock, RefreshCw, Search, SlidersHorizontal, Store, X } from "lucide-react";
+import { Tooltip } from "@base-ui/react/tooltip";
+import { Calendar, Check, ChevronDown, RefreshCw, Search, SlidersHorizontal, Store, X } from "lucide-react";
 import clsx from "clsx";
 import {
   COOKIE_LOJA,
@@ -428,9 +429,6 @@ export function BarraContexto({
               }}
             />
           </div>
-          <p className="border-t border-border bg-surface-2 px-3 py-2 text-label text-t2">
-            Vale para todas as telas e fica salvo neste navegador.
-          </p>
         </Pop>
         {filtrada && (
           <button
@@ -475,9 +473,6 @@ export function BarraContexto({
                 />
               ))}
             </div>
-            <p className="mt-1 border-t border-border px-2 pb-1 pt-2 text-label text-t2">
-              Vale para todas as telas com número.
-            </p>
           </Pop>
 
           <Pop
@@ -511,24 +506,13 @@ export function BarraContexto({
         </>
       )}
 
-      {modo.tipo === "fixo" && (
-        <span className="flex h-ctl-md items-center gap-2 whitespace-nowrap rounded-control border border-dashed border-border-strong px-3 text-dense text-t1">
-          <Lock className="size-3.5 text-t3" strokeWidth={1.75} aria-hidden />
-          {modo.texto}
-        </span>
-      )}
-
-      {modo.tipo === "loja" && (
-        <span className="whitespace-nowrap text-label text-t2">Esta tela usa só a loja.</span>
-      )}
-
       {completo && <Moedas valor={v.moeda} onEscolher={(m) => ctx.gravar({ moeda: m })} />}
     </div>
   );
 }
 
 /**
- * "Atualizado as HH:MM", no fuso do relatorio, e o botao de atualizar.
+ * O botao de atualizar e "Atualizado as HH:MM", no fuso do relatorio.
  *
  * A hora e de quando esta tela leu os dados: muda ao trocar de tela (a chave
  * inclui o caminho) e ao atualizar. Nao e hora de sincronizacao com a Shopify
@@ -547,15 +531,25 @@ export function Atualizado({
 }) {
   const chave = `${chaveTela}|${ctx.rodada}`;
   if (compacto) {
-    return <Hora key={chave} fuso={fuso} pendente={ctx.pendente} curto />;
+    return <Hora key={chave} fuso={fuso} pendente={ctx.pendente} />;
   }
+  return <AtualizarComDica key={chave} ctx={ctx} fuso={fuso} />;
+}
+
+/**
+ * Desktop: so o icone. "Atualizado as HH:MM" fica na dica, que o mouse e o
+ * teclado abrem, e o leitor de tela ouve a mesma frase pela regiao viva.
+ * Chaveado pelo pai: le o instante uma vez por tela e por rodada.
+ */
+function AtualizarComDica({ ctx, fuso }: { ctx: Contexto; fuso: string }) {
+  const [instante] = useState(() => Date.now());
+  const frase = ctx.pendente
+    ? "Atualizando…"
+    : `Atualizado às ${horaNoFuso(instante, fuso)} · ${rotuloFuso(fuso)}`;
   return (
-    <div className="flex items-center gap-2.5 whitespace-nowrap text-label text-t2">
-      <span className="flex flex-col items-end leading-4">
-        <Hora key={chave} fuso={fuso} pendente={ctx.pendente} />
-        <span>{rotuloFuso(fuso)}</span>
-      </span>
-      <button
+    <Tooltip.Root>
+      <Tooltip.Trigger
+        delay={150}
         type="button"
         onClick={ctx.atualizar}
         disabled={ctx.pendente}
@@ -568,27 +562,31 @@ export function Atualizado({
           strokeWidth={1.75}
           aria-hidden
         />
-      </button>
-    </div>
+      </Tooltip.Trigger>
+      {/* O servidor e o navegador podem divergir no minuto da hidratacao. */}
+      <span aria-live="polite" suppressHydrationWarning className="sr-only">
+        {frase}
+      </span>
+      <Tooltip.Portal>
+        <Tooltip.Positioner side="bottom" align="end" sideOffset={6} className="z-50">
+          <Tooltip.Popup className="whitespace-nowrap rounded-control bg-solid px-2.5 py-2 text-label text-on-solid shadow-overlay outline-none">
+            {frase}
+          </Tooltip.Popup>
+        </Tooltip.Positioner>
+      </Tooltip.Portal>
+    </Tooltip.Root>
   );
 }
 
-function Hora({ fuso, pendente, curto }: { fuso: string; pendente: boolean; curto?: boolean }) {
+/** Celular: so a hora, no botao do resumo. */
+function Hora({ fuso, pendente }: { fuso: string; pendente: boolean }) {
   // Lido uma vez por montagem: a chave do pai troca a cada tela e a cada
   // "Atualizar agora". O servidor e o navegador podem divergir no minuto da
   // hidratacao, dai o suppressHydrationWarning.
   const [instante] = useState(() => Date.now());
-  const hora = horaNoFuso(instante, fuso);
-  if (curto) {
-    return (
-      <span suppressHydrationWarning className="num whitespace-nowrap text-label text-t3">
-        {pendente ? "…" : hora}
-      </span>
-    );
-  }
   return (
-    <span aria-live="polite" suppressHydrationWarning className="text-t1">
-      {pendente ? "Atualizando…" : `Atualizado às ${hora}`}
+    <span suppressHydrationWarning className="num whitespace-nowrap text-label text-t3">
+      {pendente ? "…" : horaNoFuso(instante, fuso)}
     </span>
   );
 }
@@ -618,7 +616,6 @@ export function ContextoCelular({
   const nomeLoja = nomeDaLoja(dados.lojas, v.lojaId);
   const resumo = [nomeLoja ?? "Todas as lojas"];
   if (completo) resumo.push(ROTULO_PERIODO[v.periodo], v.moeda);
-  if (modo.tipo === "fixo") resumo.push("período fixo");
   if (modo.tipo === "loja") resumo.push("só a loja");
 
   function abrir(a: boolean) {

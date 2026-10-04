@@ -36,6 +36,18 @@ export const STATUS_TELA: Record<
 };
 export const ORDEM_STATUS: EventoFeed["status"][] = ["enviado", "pendente", "falhou"];
 
+/**
+ * O selo de uma linha. 'enviado' sem enviado_em e a fila fechando a linha sem
+ * mandar (teste pulado, Google sem clique): "Não enviado", em cinza -- nem
+ * envio, nem falha. As contagens continuam por `status`.
+ */
+export function seloDoStatus(
+  e: Pick<EventoFeed, "status" | "enviado_em">
+): { tom: TomEvento | "neutral"; rotulo: string } {
+  if (e.status === "enviado" && !e.enviado_em) return { tom: "neutral", rotulo: "Não enviado" };
+  return STATUS_TELA[e.status];
+}
+
 export const FONTE_TELA: Record<EventoFeed["fonte"], string> = {
   tema: "Tema",
   pixel: "Pixel do checkout",

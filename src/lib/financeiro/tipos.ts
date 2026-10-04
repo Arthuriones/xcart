@@ -531,6 +531,8 @@ export interface EventoFeed {
   utm_source: string | null;
   utm_campaign: string | null;
   pedido: string | null;
+  /** Teste do dono (tracking_feed_v2, 055). Sem a 055, sempre false. */
+  teste?: boolean;
 }
 
 /** POST ROTAS.apiAlertasCanal (com ?testar=1 manda mensagem de teste). */

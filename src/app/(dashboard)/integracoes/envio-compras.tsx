@@ -36,11 +36,11 @@ export function EnvioCompras({
     >
       <span className="text-label font-semibold text-t2">Para enviar as compras</span>
       <h3 id={id} className="text-section text-ink">
-        {meta ? "Token de conversões, por pixel" : "AW- e um rótulo por evento"}
+        {meta ? "Token de conversões, por pixel" : "Conversões por conta (AW-)"}
       </h3>
       {erro ? (
         <p role="alert" className="text-dense text-err">
-          Não deu para ler os destinos agora. Eles continuam enviando; confira em Saúde dos pixels.
+          Não deu para ler os destinos agora. Eles continuam enviando; confira em Rastreamento.
         </p>
       ) : destinos.length === 0 ? (
         <p className="text-dense text-t1 text-pretty">
@@ -70,7 +70,7 @@ export function EnvioCompras({
         href="/tracking"
         className="mt-auto self-start rounded-sm text-dense font-medium text-brand underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
       >
-        {destinos.length > 0 ? "Gerenciar em Saúde dos pixels" : "Cadastrar em Saúde dos pixels"}
+        {destinos.length > 0 ? "Gerenciar em Rastreamento" : "Cadastrar em Rastreamento"}
       </Link>
     </section>
   );

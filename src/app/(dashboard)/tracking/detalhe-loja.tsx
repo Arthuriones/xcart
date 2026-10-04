@@ -601,7 +601,7 @@ export function DetalheLoja({
                   ? "Ligado: cada pedido novo vira compra nos destinos desta loja."
                   : podeLigar
                     ? "Desligado. Os destinos estão prontos para receber."
-                    : "Para ligar, um destino precisa receber a compra: no Google o rótulo da compra, no Meta o token de conversões."
+                    : "Para ligar, um destino precisa receber a compra: no Google o rótulo ou a ação da compra, no Meta o token de conversões."
               }
               checked={ligadoNaTela}
               disabled={envio !== null || (!loja.ligado && !podeLigar)}

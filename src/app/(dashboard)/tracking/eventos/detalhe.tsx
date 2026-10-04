@@ -18,7 +18,7 @@ import {
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   FONTE_TELA,
-  STATUS_TELA,
+  seloDoStatus,
   dataHoraCompleta,
   decodificarUtm,
   detalheClique,
@@ -85,7 +85,7 @@ function Conteudo({
   nomePedido: (e: EventoFeed) => string | null;
   urlPedido: (e: EventoFeed) => string | null;
 }) {
-  const s = STATUS_TELA[e.status];
+  const s = seloDoStatus(e);
   const plataforma = nomePlataforma(e.plataforma);
   const erro = explicarErro(e);
   const nome = nomePedido(e);
