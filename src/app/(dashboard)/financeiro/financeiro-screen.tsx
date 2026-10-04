@@ -8,14 +8,13 @@ import { Cascata } from "./cascata";
 import { ComoCalculamos } from "./como-calculamos";
 import { DetalharPor } from "./detalhar-por";
 import { GraficoFaturamento } from "./grafico-faturamento";
-import { IndicadoresKpi, IndicadoresTopo, LinhaAtualizado, type BaseIndicadores } from "./indicadores";
-import { haQuanto, montarDicas, montarPendencias, nomeDaLoja, situacaoDasLojas, temMovimento } from "./lucro-dados";
-import { Pendencias } from "./pendencias";
+import { IndicadoresKpi, IndicadoresTopo, type BaseIndicadores } from "./indicadores";
+import { montarDicas, nomeDaLoja, situacaoDasLojas, temMovimento } from "./lucro-dados";
 import { PorLoja } from "./por-loja";
 
 // ============================================================================
 // A tela Dashboard (mockup "design novo/2.0/Dashboard.dc.html"), montada no
-// servidor: pendencias (o unico bloco de aviso), 5 cartoes de resumo, grafico
+// servidor, sem faixa de aviso (fica na tela Alertas): 5 cartoes de resumo, grafico
 // de faturamento com os custos do periodo ao lado, os KPIs, "Por loja",
 // "Detalhar por" e "Como calculamos". So o grafico e as abas sao client.
 //
@@ -43,11 +42,6 @@ export interface ConexaoLucro {
   atualizadoEm: number | null;
 }
 
-/** O relogio do servidor, lido fora do corpo do componente. */
-function instante(): number {
-  return Date.now();
-}
-
 export function FinanceiroScreen({
   dados,
   comparacao,
@@ -73,22 +67,6 @@ export function FinanceiroScreen({
     const s = situacoes.get(id)?.situacao;
     return s === "desinstalada" || s === "sem-acesso";
   };
-  const pendencias = montarPendencias({
-    lojas: dados.lojas,
-    lojaIds: dados.lojaIds,
-    estados: dados.estados,
-    contas: dados.contas,
-    avisos: r.avisos,
-    coberturaCusto: r.atual.coberturaCusto,
-    porLoja: r.porLoja.map((l) => ({ storeId: l.storeId, receita: l.receita, pedidos: l.pedidos })),
-    desinstaladas: conexao.desinstaladas,
-    lojasComConta: conexao.lojasComConta,
-  });
-
-  // Relativo ao momento em que a pagina foi montada (force-dynamic): cada
-  // visita ou troca de filtro calcula de novo.
-  const atualizado = conexao.atualizadoEm === null ? null : haQuanto(conexao.atualizadoEm, instante());
-
   // porDia vem do mais novo para o mais antigo; o grafico quer o contrario.
   const pontos = [...r.porDia].reverse().map(pontoDeLinha);
   const lucroPorLoja = new Map((extras?.serie.porLoja ?? []).map((l) => [l.storeId, l.lucro]));
@@ -105,19 +83,8 @@ export function FinanceiroScreen({
   };
 
   return (
-    <div className="flex flex-col gap-6">
-      <Pendencias itens={pendencias} />
-
+    <div data-largura="total" className="flex flex-col gap-6">
       <div className="flex flex-col gap-3.5">
-        <LinhaAtualizado
-          atualizado={
-            atualizado && conexao.atualizadoEm !== null
-              ? { texto: atualizado, iso: new Date(conexao.atualizadoEm).toISOString() }
-              : null
-          }
-          semBase={semBase}
-          rotuloAnterior={rotuloIntervalo(r.intervalos.anterior)}
-        />
         <IndicadoresTopo {...base} />
         <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1fr)_300px]">
           <GraficoFaturamento pontos={pontos} moeda={moeda} contexto={contexto} />

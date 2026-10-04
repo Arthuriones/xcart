@@ -20,9 +20,8 @@ function Cartao({ className = "" }: { className?: string }) {
 
 export function EsqueletoLucro() {
   return (
-    <div aria-busy="true" className="flex flex-col gap-3.5">
+    <div aria-busy="true" data-largura="total" className="flex flex-col gap-3.5">
       <span className="sr-only">Carregando o dashboard</span>
-      <Skeleton className="h-3 w-40" />
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-5">
         {Array.from({ length: 5 }, (_, i) => (
           <Cartao key={i} className={i === 0 ? "col-span-2 lg:col-span-1" : ""} />
