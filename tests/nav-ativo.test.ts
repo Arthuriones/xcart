@@ -98,15 +98,13 @@ describe("itemAtivo (todas as telas)", () => {
 describe("gruposNav (menu focado)", () => {
   const ids = (temRota: boolean) => gruposNav(temRota).flatMap((g) => g.itens.map((i) => i.id));
 
-  it("Lucro, Rastreamento e Configuracoes; Roteamento so para quem tem rota", () => {
-    expect(gruposNav(false).map((g) => g.id)).toEqual(["lucro", "rastreamento", "configuracoes"]);
-    expect(ids(false)).toEqual(["lucro", "saude", "eventos", "configuracoes", "assinatura"]);
-    expect(gruposNav(true).map((g) => g.id)).toEqual([
-      "lucro",
-      "rastreamento",
-      "roteamento",
-      "configuracoes",
+  it("menu completo: Financeiro, Rastreamento, Operacoes e Sistema; Roteamento so para quem tem rota", () => {
+    expect(gruposNav(false).map((g) => g.id)).toEqual(["lucro", "rastreamento", "operacao", "configuracoes"]);
+    expect(ids(false)).toEqual([
+      "lucro", "custos", "saude", "eventos", "alertas",
+      "lojas", "importar", "atividade", "integracoes", "configuracoes", "assinatura",
     ]);
+    expect(gruposNav(true).map((g) => g.id)).toEqual(["lucro", "rastreamento", "operacao", "roteamento", "configuracoes"]);
     const rota = gruposNav(true).find((g) => g.id === "roteamento")!;
     expect(rota.rotulo).toBe("Roteamento");
     expect(rota.itens.map((i) => i.href)).toEqual(["/overview", "/clone/routed-checkout", "/sales"]);
@@ -127,18 +125,12 @@ describe("gruposNav (menu focado)", () => {
     }
   });
 
-  it("sem Alertas (mora no sino) e sem Campanhas (a tela ainda nao existe)", () => {
+  it("sem Campanhas (a tela ainda nao existe) e roteamento so com rota", () => {
     for (const temRota of [false, true]) {
-      expect(ids(temRota)).not.toContain("alertas");
       const rotulos = gruposNav(temRota).flatMap((g) => g.itens.map((i) => i.rotulo));
       expect(rotulos).not.toContain("Campanhas");
     }
-  });
-
-  it("os modulos saem do menu para quem nao tem rota", () => {
-    for (const fora of ["custos", "lojas", "integracoes", "importar", "atividade", "rotas", "claude", "guia"]) {
-      expect(ids(false)).not.toContain(fora);
-    }
+    expect(ids(false)).not.toContain("rotas");
   });
 });
 
@@ -154,25 +146,9 @@ describe("itemAcesoNoMenu (nenhum item acende errado)", () => {
 
   it("tela fora do menu acende Configuracoes, onde ela mora", () => {
     const grupos = gruposNav(false);
-    for (const caminho of [
-      "/financeiro/custos",
-      "/stores",
-      "/stores/abc",
-      "/integracoes/meta",
-      "/integracoes/notificacoes",
-      "/integracoes/avancado",
-      "/claude",
-      "/financeiro/anuncios",
-      "/clone",
-      "/clone/shopify/bulk",
-      "/bulk",
-      "/activity",
-      "/setup",
-      "/clone/routed-checkout",
-      "/overview",
-      "/sales",
-    ]) {
-      expect(itemAcesoNoMenu(caminho, grupos), caminho).toBe("configuracoes");
+    for (const caminho of ["/integracoes/notificacoes", "/claude", "/setup", "/clone/routed-checkout", "/overview", "/sales"]) {
+      const aceso = itemAcesoNoMenu(caminho, grupos);
+      expect(["configuracoes", "integracoes"], caminho).toContain(aceso);
     }
   });
 
@@ -188,13 +164,12 @@ describe("itemAcesoNoMenu (nenhum item acende errado)", () => {
     expect(itemAcesoNoMenu("/clone/routed-checkout/map", grupos)).toBe("rotas");
     expect(itemAcesoNoMenu("/overview", grupos)).toBe("visaoRota");
     expect(itemAcesoNoMenu("/sales", grupos)).toBe("vendasRota");
-    // Importar continua fora do menu, mesmo com rota.
-    expect(itemAcesoNoMenu("/clone", grupos)).toBe("configuracoes");
+    expect(itemAcesoNoMenu("/clone", grupos)).toBe("importar");
   });
 
-  it("Alertas e rota fora do app nao acendem nada no menu", () => {
+  it("Alertas acende Alertas; rota fora do app nao acende nada", () => {
     const grupos = gruposNav(false);
-    expect(itemAcesoNoMenu("/alertas", grupos)).toBeNull();
+    expect(itemAcesoNoMenu("/alertas", grupos)).toBe("alertas");
     expect(itemAcesoNoMenu("/qualquer-coisa", grupos)).toBeNull();
   });
 });

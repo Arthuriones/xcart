@@ -168,10 +168,20 @@ export const ITENS: Record<IdItem, ItemNav> = {
  * abrir uma tela "em breve".
  */
 export function gruposNav(temRota: boolean): GrupoNav[] {
+  // Menu completo de novo: o de 3 itens escondia Lojas, Custos, Alertas e
+  // Integracoes atras de Configuracoes, e o dono nao achava as telas.
   const grupos: GrupoNav[] = [
-    { id: "lucro", rotulo: null, itens: [ITENS.lucro] },
-    // Sem titulo de grupo: o primeiro item ja se chama Rastreamento.
-    { id: "rastreamento", rotulo: null, itens: [ITENS.saude, ITENS.eventos] },
+    { id: "lucro", rotulo: t("finance"), itens: [ITENS.lucro, ITENS.custos] },
+    {
+      id: "rastreamento",
+      rotulo: t("trackingGroup"),
+      itens: [ITENS.saude, ITENS.eventos, ITENS.alertas],
+    },
+    {
+      id: "operacao",
+      rotulo: t("operations"),
+      itens: [ITENS.lojas, ITENS.importar, ITENS.atividade],
+    },
   ];
   if (temRota) {
     grupos.push({
@@ -182,8 +192,8 @@ export function gruposNav(temRota: boolean): GrupoNav[] {
   }
   grupos.push({
     id: "configuracoes",
-    rotulo: null,
-    itens: [ITENS.configuracoes, ITENS.assinatura],
+    rotulo: t("system"),
+    itens: [ITENS.integracoes, ITENS.configuracoes, ITENS.assinatura],
     fim: true,
   });
   return grupos;
