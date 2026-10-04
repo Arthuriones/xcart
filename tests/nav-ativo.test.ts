@@ -176,7 +176,7 @@ describe("itemAcesoNoMenu (nenhum item acende errado)", () => {
 
 describe("barra do celular e atalhos", () => {
   it("Lucro, Rastreamento e Alertas (o Mais abre o resto)", () => {
-    expect(BARRA_CELULAR.map((b) => b.rotulo)).toEqual(["Lucro", "Rastreamento", "Alertas"]);
+    expect(BARRA_CELULAR.map((b) => b.rotulo)).toEqual(["Dashboard", "Rastreamento", "Alertas"]);
     expect(BARRA_CELULAR[1].acende).toEqual(["saude", "eventos"]);
   });
 

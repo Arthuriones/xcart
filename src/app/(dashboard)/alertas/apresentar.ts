@@ -221,7 +221,7 @@ const DESTINOS: Record<RegraAlerta, Destino> = {
   // Erro de leitura de pedido e quase sempre permissao/token da loja.
   pedidos_sync_erro: { href: "/stores", tela: "Lojas" },
   ads_sync_atrasado: { href: "/integracoes/meta", tela: "Integrações · Meta" },
-  gastou_sem_vender: { href: "/financeiro", tela: "Lucro" },
+  gastou_sem_vender: { href: "/financeiro", tela: "Dashboard" },
 };
 
 /**

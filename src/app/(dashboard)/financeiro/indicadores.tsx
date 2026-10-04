@@ -34,8 +34,8 @@ import {
 // ============================================================================
 // Os KPIs e o grafico. Ficam juntos porque clicar num KPI leva a metrica para
 // o grafico (atual x periodo anterior). O Lucro abre em destaque; Faturamento,
-// Gasto e ROAS ficam ao lado e os outros 4 atras de "+4 métricas" (no celular,
-// o ROAS tambem).
+// Custo de produto, Gasto e ROAS ficam ao lado e os outros 4 atras de
+// "+4 métricas".
 //
 // A cascata chega pronta do servidor (`cascata`) e fica ao lado do grafico.
 // ============================================================================
@@ -46,6 +46,8 @@ function valorDe(t: Totais, id: IdMetrica): number | null {
       return t.receita;
     case "gasto":
       return t.gasto;
+    case "custo":
+      return t.cmv;
     case "lucro":
       return t.lucro;
     case "roas":
@@ -75,11 +77,11 @@ function detalheDe(t: Totais, id: IdMetrica, moeda: string): ReactNode {
   }
 }
 
-/** Celular: Lucro, Faturamento e Gasto. Do sm para cima, o ROAS tambem. */
+/** Celular: Lucro na linha toda e os outros 4 em pares. No lg, 5 por linha. */
 const CLASSE_KPI: Partial<Record<IdMetrica, string>> = {
-  lucro: "col-span-2 sm:col-span-3 lg:col-span-1",
-  // Ultimo dos 7 menores: fecha a linha em vez de deixar um buraco.
-  margem: "col-span-2 sm:col-span-3 lg:col-span-1",
+  lucro: "col-span-2 lg:col-span-1",
+  // Ultimo dos 4 extras: no lg fecha a linha de 5 em vez de deixar um buraco.
+  margem: "lg:col-span-2",
 };
 
 export function Indicadores({
@@ -267,19 +269,12 @@ export function Indicadores({
             aria-controls="kpis-lucro"
             onClick={() => setTodas((t) => !t)}
           >
-            {todas ? (
-              "Menos métricas"
-            ) : (
-              <>
-                <span className="sm:hidden">+{KPIS_MAIS.length + 1} métricas</span>
-                <span className="hidden sm:inline">+{KPIS_MAIS.length} métricas</span>
-              </>
-            )}
+            {todas ? "Menos métricas" : `+${KPIS_MAIS.length} métricas`}
             <ChevronDown aria-hidden className={clsx("transition-transform", todas && "rotate-180")} />
           </Button>
         </div>
-        <div id="kpis-lucro" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {KPIS_PRINCIPAIS.map((id) => cartao(id, id === "roas" && !todas ? "hidden sm:flex" : undefined))}
+        <div id="kpis-lucro" className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          {KPIS_PRINCIPAIS.map((id) => cartao(id))}
           {todas && KPIS_MAIS.map((id) => cartao(id))}
         </div>
       </section>

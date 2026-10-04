@@ -56,7 +56,7 @@ describe("formatacao", () => {
 describe("derivar", () => {
   it("usa as formulas do calculo e nao inventa sem base", () => {
     const d = derivar({ pedidos: 4, receita: 1000, cmv: 300, taxas: 50, gastoMeta: 200, gastoGoogle: 50 });
-    expect(d).toEqual({ receita: 1000, gasto: 250, lucro: 400, roas: 4, pedidos: 4, ticket: 250, cpa: 62.5, margem: 0.4 });
+    expect(d).toEqual({ receita: 1000, gasto: 250, custo: 300, lucro: 400, roas: 4, pedidos: 4, ticket: 250, cpa: 62.5, margem: 0.4 });
     const vazio = derivar({ pedidos: 0, receita: 0, cmv: 0, taxas: 0, gastoMeta: 0, gastoGoogle: 0 });
     expect(vazio).toMatchObject({ roas: null, ticket: null, cpa: null, margem: null, lucro: 0 });
   });

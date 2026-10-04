@@ -82,10 +82,10 @@ export function nomeDaLoja(l: Pick<LojaDoSeletor, "nome" | "dominio">): string {
 // Metricas (os 8 KPIs)
 // ---------------------------------------------------------------------------
 
-export type IdMetrica = "receita" | "gasto" | "lucro" | "roas" | "pedidos" | "ticket" | "cpa" | "margem";
+export type IdMetrica = "receita" | "gasto" | "custo" | "lucro" | "roas" | "pedidos" | "ticket" | "cpa" | "margem";
 
 /** Sempre a vista: o Lucro em destaque e o que forma ele. */
-export const KPIS_PRINCIPAIS: IdMetrica[] = ["lucro", "receita", "gasto", "roas"];
+export const KPIS_PRINCIPAIS: IdMetrica[] = ["lucro", "receita", "custo", "gasto", "roas"];
 /** Atras do "+4 métricas". */
 export const KPIS_MAIS: IdMetrica[] = ["pedidos", "ticket", "cpa", "margem"];
 
@@ -121,6 +121,16 @@ export const METRICAS: Record<IdMetrica, DefinicaoMetrica> = {
     definicao:
       "Gasto do Meta e do Google nas contas ligadas a cada loja, convertido pela cotação do dia.",
     semDado: "Sem gasto no período",
+  },
+  custo: {
+    rotulo: "Custo de produto",
+    bom: "neutro",
+    formatoVariacao: "pct",
+    tipo: "dinheiro",
+    compacto: true,
+    definicao:
+      "Produto mais frete do fornecedor dos pedidos do período, pelo custo cadastrado em Custos.",
+    semDado: "Sem pedidos no período",
   },
   lucro: {
     rotulo: "Lucro estimado",
@@ -212,6 +222,7 @@ export function derivar(s: Soma): Record<IdMetrica, number | null> {
   return {
     receita: s.receita,
     gasto,
+    custo: s.cmv,
     lucro,
     roas: gasto > 0 ? s.receita / gasto : null,
     pedidos: s.pedidos,

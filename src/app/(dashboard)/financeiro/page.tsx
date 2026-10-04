@@ -150,7 +150,7 @@ export default async function FinanceiroPage() {
       {/* Sem descricao, no celular o cabecalho fica vazio (o titulo ja esta no
           topo da casca): escondido, nao deixa um vao antes das pendencias. */}
       <div className="hidden md:block">
-        <PageHeader title="Lucro" />
+        <PageHeader title="Dashboard" />
       </div>
       <Suspense key={JSON.stringify({ filtro, comparacao })} fallback={<EsqueletoLucro />}>
         <Conteudo />
