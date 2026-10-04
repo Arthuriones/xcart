@@ -414,10 +414,13 @@ export function SecaoSkus({
                 </StatusBadge>
               )
             ) : null}
-            <Button variant="secondary" size="sm" className="h-ctl-lg sm:h-ctl-sm" onClick={onImportarCsv}>
-              <Upload aria-hidden />
-              Importar CSV
-            </Button>
+            {/* Tabela vazia de loja ja lida: o botao e o do proprio estado vazio. */}
+            {dados.skus.length > 0 || !dados.sincronizado ? (
+              <Button variant="secondary" size="sm" className="h-ctl-lg sm:h-ctl-sm" onClick={onImportarCsv}>
+                <Upload aria-hidden />
+                Importar CSV
+              </Button>
+            ) : null}
           </>
         }
       >
