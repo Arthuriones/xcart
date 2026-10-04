@@ -9,6 +9,7 @@ import {
   emModoTeste,
   faltasDaLoja,
   melhorDa,
+  numerosDoEvento,
   oQueFalta,
   plural,
   recebemCompra,
@@ -287,10 +288,12 @@ export function problemasDaLoja(
     });
   }
   for (const p of ["google", "meta"] as const) {
-    const m = melhorDa(recebem, p);
-    if (!m) continue;
-    const { enviadas, deAnuncio } = comprasSemTeste(m);
-    if (enviadas > 0 && deAnuncio === 0) {
+    const contas = recebem.filter((d) => d.plataforma === p).map(comprasSemTeste);
+    if (contas.length === 0) continue;
+    // NENHUMA conta creditou, nao a "melhor": com 2 contas Google, a que nao e
+    // dona do clique fica com deAnuncio 0 (055: 'nao_e_desta_conta').
+    const enviadas = Math.max(...contas.map((c) => c.enviadas));
+    if (enviadas > 0 && contas.every((c) => c.deAnuncio === 0)) {
       warn.push({
         tom: "warn",
         texto: `Nenhuma venda foi ligada a um anúncio do ${NOME_CURTO[p]}.`,
@@ -583,12 +586,14 @@ export function resumoDaTela(
 
     // MAX entre os destinos, nao soma: a mesma venda rende uma linha para cada
     // conta configurada. Meta em modo teste fica fora -- vai para a aba de
-    // teste, nao para a campanha. Sem a contagem, o total inteiro e "—".
+    // teste, nao para a campanha. Compra de teste do dono tambem (a regra "sem
+    // testes" do resto da tela): sem codigo de teste ela nem sai. Sem a
+    // contagem, o total inteiro e "—".
     if (loja.contagemIndisponivel) enviadas = null;
     else if (enviadas !== null) {
       enviadas += loja.destinos
         .filter((d) => !emModoTeste(d))
-        .reduce((m, d) => Math.max(m, d.contagem.porEvento.purchase ?? 0), 0);
+        .reduce((m, d) => Math.max(m, numerosDoEvento(d, "purchase", false).total), 0);
     }
 
     // Sem lista de pedidos ou sem contagem da fila nao ha comparacao: somar

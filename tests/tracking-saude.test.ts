@@ -368,4 +368,26 @@ describe("venda sem clique de anuncio ignora o teste", () => {
       "Nenhuma venda creditada a anúncio no Google"
     );
   });
+
+  it("duas contas Google: a que nao e dona do clique nao dispara o alarme", () => {
+    // A conta A (primeira) fica com deAnuncio 0 ('nao_e_desta_conta'); a B
+    // creditou. Empate em compras: antes ficava com a primeira e acusava.
+    const l = loja({
+      destinos: [
+        destino({
+          id: "gA",
+          conta: "AW-1",
+          contagem: { porEvento: { purchase: 1 }, deAnuncioPorEvento: { purchase: 0 } } as never,
+        }),
+        destino({
+          id: "gB",
+          conta: "AW-2",
+          contagem: { porEvento: { purchase: 1 }, deAnuncioPorEvento: { purchase: 1 } } as never,
+        }),
+      ],
+    });
+    expect(saudeDaLoja(l, true, diag(), true).motivos.map((m) => m.texto)).not.toContain(
+      "Nenhuma venda creditada a anúncio no Google"
+    );
+  });
 });

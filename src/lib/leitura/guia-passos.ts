@@ -269,7 +269,7 @@ function passoRastreamento(foto: FotoGuia, b: Base, caminho: CaminhoGuia): Passo
       ...passo,
       estado: "feito",
       detalhe: `Ligado em ${listarNomes(lojas.map(b.nomeDe))}: ${plataformas(prontos.map((d) => d.plataforma))}.`,
-      cta: "Ver saúde dos pixels",
+      cta: "Ver rastreamento",
     };
   }
 

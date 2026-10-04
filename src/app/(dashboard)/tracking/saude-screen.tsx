@@ -542,7 +542,12 @@ function Comparativo({ resumo }: { resumo: ReturnType<typeof resumoDaTela> }) {
               const c = resumo.porPlataforma[p];
               return {
                 id: p,
-                rotulo: `Enviadas ao ${NOME_CURTO[p]} pelo xcart`,
+                // Google: compra sem clique (e teste) fecha sem sair -- conta
+                // como coberta, mas nao foi "enviada".
+                rotulo:
+                  p === "google"
+                    ? "Registradas para o Google pelo xcart"
+                    : `Enviadas ao ${NOME_CURTO[p]} pelo xcart`,
                 valor: c ? c.chegaram : null,
                 valorTexto: c ? formatarInteiro(c.chegaram) : undefined,
                 detalhe: c

@@ -449,6 +449,7 @@ describe("Data Manager: leitura do diagnostico", () => {
 
   it("clique recente volta para a fila, nao e falha", () => {
     expect(lerDiagnostico(com("FAILED", "PROCESSING_ERROR_REASON_TOO_RECENT_CLICK")).tipo).toBe("reenviar");
+    expect(lerDiagnostico(com("FAILED", "PROCESSING_ERROR_REASON_INTERNAL_ERROR")).tipo).toBe("reenviar");
   });
 
   it("clique de outra conta e transactionId repetido nao sao erro", () => {
@@ -479,6 +480,10 @@ describe("Data Manager: leitura do diagnostico", () => {
 
   it("varias contas: so e erro quando nenhuma irma aceitou", () => {
     expect(decidirCliqueDeOutraConta([{ status: "enviado", situacao: "ok" }], false)).toBe("nao_e_desta_conta");
+    // Irma no ping antigo (enviado, sem diagnostico): pode ser a dona do clique.
+    expect(decidirCliqueDeOutraConta([{ status: "enviado", situacao: null }], false)).toBe("nao_e_desta_conta");
+    // Ping que errou continua sem salvar esta conta.
+    expect(decidirCliqueDeOutraConta([{ status: "falhou", situacao: null }], false)).toBe("falhou");
     expect(decidirCliqueDeOutraConta([{ status: "enviado", situacao: "processando" }], false)).toBe("esperar");
     expect(decidirCliqueDeOutraConta([{ status: "pendente", situacao: null }], false)).toBe("esperar");
     // A irma que tambem nao achou nao e "esperando": as duas nao travam.
@@ -745,6 +750,19 @@ describe("Data Manager: credencial e aceite do destino", () => {
     expect(cred?.chave.startsWith("-----BEGIN PRIVATE KEY-----\n")).toBe(true);
     process.env.GOOGLE_DM_SA_KEY = "lixo";
     expect(credencialDoGoogle()).toBeNull();
+  });
+
+  it("so quem esta em GOOGLE_DM_DONOS configura a service account", async () => {
+    const { podeUsarDataManager } = await import("../src/lib/tracking/google-dm");
+    const antes = process.env.GOOGLE_DM_DONOS;
+    delete process.env.GOOGLE_DM_DONOS;
+    expect(podeUsarDataManager("u-1")).toBe(false);
+    process.env.GOOGLE_DM_DONOS = " u-1 , u-2,";
+    expect(podeUsarDataManager("u-2")).toBe(true);
+    expect(podeUsarDataManager("u-3")).toBe(false);
+    expect(podeUsarDataManager(null)).toBe(false);
+    if (antes === undefined) delete process.env.GOOGLE_DM_DONOS;
+    else process.env.GOOGLE_DM_DONOS = antes;
   });
 });
 

@@ -282,7 +282,7 @@ export function TelaGoogle({
           aria-labelledby="ler-google"
           className="flex min-w-0 flex-col gap-2.5 rounded-card border border-border bg-surface p-4"
         >
-          <span className="text-label font-semibold text-t2">Para ler o gasto (opcional)</span>
+          <span className="text-label font-semibold text-t2">Para ler o gasto</span>
           <h3 id="ler-google" className="text-section text-ink">
             {semConta ? "Script por conta" : `Script em ${plural(todas, "conta", "contas")}`}
           </h3>

@@ -44,6 +44,8 @@ export interface DestinoDataManager {
 export interface DadosDataManager {
   destinos: DestinoDataManager[];
   temCredencial: boolean;
+  /** O usuario esta em GOOGLE_DM_DONOS. Sem isso a secao nao aparece. */
+  liberado: boolean;
   erro: string | null;
 }
 

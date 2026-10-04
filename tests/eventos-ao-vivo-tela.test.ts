@@ -269,6 +269,7 @@ describe("CSV", () => {
           evento: "Purchase",
           fonte: "webhook",
           latencia_s: 1.26,
+          enviado_em: "2026-10-02T17:32:06.000Z",
           com_clique: true,
           origem_host: "google.com",
           utm_campaign: "=cmd",
@@ -294,6 +295,15 @@ describe("CSV", () => {
       nomePedido: () => "",
     });
     expect(csv.trim().split("\r\n")[1].split(";")[9]).toBe("Sim");
+  });
+
+  it("linha fechada sem envio sai como Não enviado, igual ao selo", () => {
+    const csv = montarCsv([ev({ id: "1", enviado_em: null })], {
+      fuso: SP,
+      nomeLoja: () => "Lumen",
+      nomePedido: () => "",
+    });
+    expect(csv.trim().split("\r\n")[1].split(";")[6]).toBe("Não enviado");
   });
 });
 

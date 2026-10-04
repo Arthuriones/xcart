@@ -340,13 +340,15 @@ export function saudeDaLoja(
     if (n > 0) warn.push(`${apelido(d)}: ${n === 1 ? "1 envio falhou" : `${n} envios falharam`}`);
   }
   for (const p of ["google", "meta"] as const) {
-    const m = melhorDa(recebem, p);
-    if (!m) continue;
+    const contas = recebem.filter((d) => d.plataforma === p).map(comprasSemTeste);
+    if (contas.length === 0) continue;
     // O mesmo teste do "todas" da Atribuicao: so acusa quando NENHUMA venda
     // foi creditada. Parte sem click id e trafego organico, normal. Teste do
     // dono fica fora: uma compra com gclid TESTE nao pode calar o alarme.
-    const { enviadas, deAnuncio } = comprasSemTeste(m);
-    if (enviadas > 0 && deAnuncio === 0) {
+    // Com 2 contas Google, a que nao e dona do clique fica com deAnuncio 0
+    // (055: 'nao_e_desta_conta'); por isso NENHUMA conta, e nao a "melhor".
+    const enviadas = Math.max(...contas.map((c) => c.enviadas));
+    if (enviadas > 0 && contas.every((c) => c.deAnuncio === 0)) {
       warn.push(
         `Nenhuma venda creditada a anúncio no ${p === "google" ? "Google" : "Meta"}`
       );

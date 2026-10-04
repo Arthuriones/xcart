@@ -150,7 +150,7 @@ export function Indicadores({
       const { texto, negativo } = valorComSinal(formatarMetrica(id, v, moeda, true), v);
       valor =
         destaque || negativo ? (
-          <span className={clsx(destaque && "text-kpi sm:text-[2rem] sm:leading-10", negativo && "text-err")}>
+          <span className={clsx(destaque && "text-kpi", negativo && "text-err")}>
             {texto}
           </span>
         ) : (
@@ -253,7 +253,8 @@ export function Indicadores({
           <p className="min-w-0 flex-1 text-label text-t2">
             {atualizado && (
               <span>
-                Atualizado <time dateTime={atualizado.iso}>{atualizado.texto}</time>
+                {/* Nao "Atualizado": o topo ja usa a palavra para a hora da leitura. */}
+                Último dado recebido <time dateTime={atualizado.iso}>{atualizado.texto}</time>
               </span>
             )}
             {atualizado && semBase && " · "}

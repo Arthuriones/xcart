@@ -307,7 +307,9 @@ describe("montarPendencias", () => {
       titulo: "Os pedidos de Lumen não atualizaram na última rodada",
       acao: { rotulo: "Tentar agora", sincronizar: true },
     });
-    expect(p[0].detalhe).toBeUndefined();
+    // Sem o erro cru, mas com o caminho ate ele.
+    expect(p[0].detalhe).not.toContain("ECONNRESET");
+    expect(p[0].detalhe).toContain("Lojas");
   });
 
   it("conta de anuncio com erro: sem o motivo cru, com o caminho certo", () => {

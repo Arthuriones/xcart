@@ -424,6 +424,11 @@ export function lerDiagnostico(resposta: unknown): Desfecho {
   if (motivos.includes("TOO_RECENT_CLICK")) {
     return { tipo: "reenviar", motivo: "clique recente demais: reenvio em 6 h" };
   }
+  // Falha do lado do Google: nao entrou, entao reenviar (mesmo transactionId,
+  // limitado por MAX_TENTATIVAS) nao duplica.
+  if (motivos.includes("INTERNAL_ERROR")) {
+    return { tipo: "reenviar", motivo: "erro interno do Google: reenvio em 6 h" };
+  }
   if (motivos.every((m) => SEM_CONSENTIMENTO.has(m))) {
     return { tipo: "sem_consentimento", motivo: "sem consentimento do visitante: o Google descartou" };
   }
@@ -442,12 +447,19 @@ export function lerDiagnostico(resposta: unknown): Desfecho {
  * sem diagnostico = esperar; passado o prazo, decide com o que tem. Irma que
  * tambem nao achou NAO conta como "esperando" -- senao as duas esperariam uma
  * pela outra para sempre.
+ *
+ * Irma 'enviado' sem situacao e a conta que ficou no ping antigo (a Data
+ * Manager sempre grava response.dm.situacao). O ping nao diz de quem e o
+ * clique, entao conta como possivel dona: nao e esta conta que tem o que
+ * consertar.
  */
 export function decidirCliqueDeOutraConta(
   irmas: { status: string; situacao: string | null }[],
   prazoEsgotado: boolean
 ): "nao_e_desta_conta" | "esperar" | "falhou" {
-  if (irmas.some((i) => i.situacao === "ok")) return "nao_e_desta_conta";
+  if (irmas.some((i) => i.situacao === "ok" || (i.status === "enviado" && i.situacao === null))) {
+    return "nao_e_desta_conta";
+  }
   if (
     !prazoEsgotado &&
     irmas.some((i) => i.status === "pendente" || i.situacao === "processando")

@@ -5,6 +5,7 @@ import { apenasNumeroDaConversao } from "@/lib/tracking/normalizar";
 import { chaveDoEvento, limparMapaDeRotulos } from "@/lib/tracking/eventos";
 import { TEMPLATE_PADRAO, validarTemplate } from "@/lib/tracking/id-produto";
 import { validarEscritaNoPixel } from "@/lib/tracking/meta-capi";
+import { podeUsarDataManager } from "@/lib/tracking/google-dm";
 import {
   usaDataManager,
   validarConfigDataManager,
@@ -381,6 +382,24 @@ function colunasDataManager(
   };
 }
 
+/**
+ * A service account e uma so, do dono do xcart. Gravar customer_id/MCC sem esta
+ * trava deixaria qualquer lojista mandar conversao para a conta de outro (o
+ * customer id e o id da acao nao sao segredo). Limpar continua livre: e assim
+ * que se volta ao caminho antigo.
+ */
+function recusaDataManager(
+  corpo: CorpoDestino,
+  dm: ConfigDataManager | null,
+  userId: string
+): NextResponse | null {
+  if (!mexeNaDataManager(corpo) || !dm?.customerId || podeUsarDataManager(userId)) return null;
+  return NextResponse.json(
+    { error: "Envio pela API do Google não liberado para esta conta." },
+    { status: 403 }
+  );
+}
+
 /** Mensagem legivel para o unique (store_id, plataforma, conta). */
 function erroDeBanco(mensagem: string): NextResponse {
   if (mensagem.includes("tracking_destinations_loja_conta_key")) {
@@ -429,6 +448,8 @@ export async function POST(request: NextRequest) {
 
   const v = validar(corpo.plataforma, corpo, { exigirToken: true });
   if ("erro" in v) return NextResponse.json({ error: v.erro }, { status: 400 });
+  const semPermissao = recusaDataManager(corpo, v.dm, loja.user_id);
+  if (semPermissao) return semPermissao;
 
   // Antes do insert: token recusado nao cria destino nenhum.
   if (corpo.plataforma === "meta" && v.token) {
@@ -557,6 +578,8 @@ export async function PATCH(request: NextRequest) {
     { exigirToken: true, jaTemToken: Boolean(segredo?.access_token) }
   );
   if ("erro" in v) return NextResponse.json({ error: v.erro }, { status: 400 });
+  const semPermissao = recusaDataManager(corpo, v.dm, user.id);
+  if (semPermissao) return semPermissao;
 
   // Antes de qualquer escrita: token recusado nao muda nada, nem o resto do
   // formulario -- senao o lojista veria "erro" e acharia que nada foi salvo.

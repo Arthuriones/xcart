@@ -22,7 +22,7 @@ export function DicaEventos() {
   return (
     <Dica rotulo="Por que um evento pode não aparecer aqui" lado="top">
       Só entram eventos aceitos por algum destino: o Meta aceita todos; o Google, só os que têm
-      rótulo.
+      rótulo ou, pela API do Google, ID de ação (compra, carrinho e checkout).
     </Dica>
   );
 }

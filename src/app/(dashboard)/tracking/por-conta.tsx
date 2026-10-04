@@ -7,7 +7,9 @@ import { Dica } from "@/components/ui/dica";
 import { Section } from "@/components/ui/section";
 import { STATUS, StatusBadge } from "@/components/ui/status-badge";
 import { Switch } from "@/components/ui/switch";
-import type { LojaTracking } from "@/lib/tracking/queries";
+import type { DestinoNaTela, LojaTracking } from "@/lib/tracking/queries";
+import type { ChaveEvento } from "@/lib/tracking/eventos";
+import { EVENTOS_DATA_MANAGER } from "@/lib/tracking/google-url";
 import {
   EVENTOS_DA_GRADE,
   NOME_CURTO,
@@ -36,6 +38,22 @@ function curto(texto: string, max = 220): string {
 }
 
 /**
+ * Por que o destino nao manda este evento, para a caixa da grade. Pela Data
+ * Manager so compra, carrinho e checkout tem acao: os outros "nao se aplicam"
+ * -- nao ha o que configurar, entao `resolve` e false e a caixa nao fica
+ * amarela.
+ */
+export function semEnvioDoEvento(
+  d: Pick<DestinoNaTela, "acoes">,
+  chave: ChaveEvento
+): { texto: string; resolve: boolean } {
+  if (!d.acoes) return { texto: "sem rótulo", resolve: true };
+  return (EVENTOS_DATA_MANAGER as readonly string[]).includes(chave)
+    ? { texto: "sem ação", resolve: true }
+    : { texto: "não se aplica", resolve: false };
+}
+
+/**
  * Os numeros de um evento: de anuncio em destaque, total em cinza, falha em
  * vermelho. Leitura que falhou e "—", nunca zero.
  */
@@ -44,8 +62,11 @@ export function ValorDoEvento({
   semContagem,
   grande = false,
   extra,
+  semEnvio = "sem rótulo",
 }: {
   n: NumerosEvento;
+  /** O texto quando o destino nao manda o evento. Ver `semEnvioDoEvento`. */
+  semEnvio?: string;
   /** A contagem da fila falhou nesta carga. */
   semContagem: boolean;
   grande?: boolean;
@@ -56,7 +77,7 @@ export function ValorDoEvento({
   // Neutro: no Google, deixar um evento sem rotulo pode ser escolha. O cartao
   // do destino pinta a caixa de amarelo quando isso e o que falta.
   if (!n.envia) {
-    return <span className="text-dense text-t2">sem rótulo</span>;
+    return <span className="text-dense text-t2">{semEnvio}</span>;
   }
   if (semContagem) {
     return (
@@ -72,7 +93,7 @@ export function ValorDoEvento({
         {n.deAnuncio === null ? "—" : formatarInteiro(n.deAnuncio)}
         <span className="sr-only"> de anúncio</span>
       </span>
-      <span className="num text-label text-t2">de {formatarInteiro(n.total)} enviados</span>
+      <span className="num text-label text-t2">de {formatarInteiro(n.total)} registrados</span>
       {n.falhas > 0 && (
         <span className="num text-label font-semibold text-err">
           {n.falhas === 1 ? "1 falhou" : `${formatarInteiro(n.falhas)} falharam`}
@@ -119,6 +140,7 @@ function LinhaDaConta({
           <ValorDoEvento
             n={numerosDoEvento(destino, chave, mostrarTestes)}
             semContagem={loja.contagemIndisponivel}
+            semEnvio={semEnvioDoEvento(destino, chave).texto}
             grande
             extra={
               chave === "purchase" && metaDiz !== null ? (

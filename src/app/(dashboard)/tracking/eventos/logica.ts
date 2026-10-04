@@ -653,7 +653,8 @@ export function montarCsv(
         FONTE_TELA[e.fonte],
         nomePlataforma(e.plataforma),
         e.destino_nome ?? "",
-        STATUS_TELA[e.status].rotulo,
+        // O mesmo selo da tabela: 'enviado' sem envio sai "Não enviado".
+        seloDoStatus(e).rotulo,
         latencia,
         textoClique(e) === "—" ? "" : textoClique(e),
         ehTeste(e) ? "Sim" : "",

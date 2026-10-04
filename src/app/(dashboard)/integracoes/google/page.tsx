@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { configDataManagerDe } from "@/lib/tracking/destinos";
-import { temCredencialDoGoogle } from "@/lib/tracking/google-dm";
+import { podeUsarDataManager, temCredencialDoGoogle } from "@/lib/tracking/google-dm";
 import { CabecalhoPlataforma } from "../cabecalho-plataforma";
 import { carregarAnuncios, type DadosAnuncios } from "../dados-anuncios";
 import { ErroLeitura } from "../erro-leitura";
@@ -21,8 +22,15 @@ export const dynamic = "force-dynamic";
  * de `d.destinos`, ja filtrados pelas lojas do usuario.
  */
 async function lerDataManager(d: DadosAnuncios): Promise<DadosDataManager> {
-  const temCredencial = temCredencialDoGoogle();
-  if (d.erroDestinos) return { destinos: [], temCredencial, erro: d.erroDestinos };
+  // A service account e do dono do xcart (GOOGLE_DM_DONOS). Para os outros
+  // lojistas a secao nem aparece: os passos da Vercel nao valem para eles.
+  const {
+    data: { user },
+  } = await (await createClient()).auth.getUser();
+  const liberado = podeUsarDataManager(user?.id);
+  const temCredencial = temCredencialDoGoogle() && liberado;
+  if (!liberado) return { destinos: [], temCredencial, liberado, erro: null };
+  if (d.erroDestinos) return { destinos: [], temCredencial, liberado, erro: d.erroDestinos };
   try {
     const config = await configDataManagerDe(
       createAdminClient(),
@@ -36,6 +44,7 @@ async function lerDataManager(d: DadosAnuncios): Promise<DadosDataManager> {
     }
     return {
       temCredencial,
+      liberado,
       erro: null,
       destinos: d.destinos.map((x) => {
         const c = config.get(x.id);
@@ -54,7 +63,7 @@ async function lerDataManager(d: DadosAnuncios): Promise<DadosDataManager> {
       }),
     };
   } catch (e) {
-    return { destinos: [], temCredencial, erro: e instanceof Error ? e.message : String(e) };
+    return { destinos: [], temCredencial, liberado, erro: e instanceof Error ? e.message : String(e) };
   }
 }
 

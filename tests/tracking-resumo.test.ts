@@ -172,6 +172,24 @@ const casos: Record<string, { loja: LojaTracking; diag: DiagnosticoLoja | null; 
     }),
     diag: diag(),
   },
+  // Duas contas Google empatadas em compras: a primeira nao e dona do clique
+  // ('nao_e_desta_conta', deAnuncio 0), a segunda creditou. Sem alarme.
+  duasContasGoogle: {
+    loja: loja({
+      destinos: [
+        destino({
+          id: "gA",
+          contagem: { porEvento: { purchase: 1 }, deAnuncioPorEvento: { purchase: 0 } } as never,
+        }),
+        destino({
+          id: "gB",
+          conta: "AW-2",
+          contagem: { porEvento: { purchase: 1 }, deAnuncioPorEvento: { purchase: 1 } } as never,
+        }),
+      ],
+    }),
+    diag: diag(),
+  },
   shopifyNaoRespondeu: {
     loja: loja(),
     diag: diag({ pedidos7d: null, pedidoIds: null, pedidoCriadoEm: null, problema: "failed" }),
@@ -215,6 +233,11 @@ describe("problemasDaLoja espelha a regra de saude", () => {
     expect(
       problemasDaLoja(casos.conferenciaFalhou.loja, null, true).at(-1)?.acao?.tipo
     ).toBe("rechecar");
+  });
+
+  it("duas contas Google: alguma creditou, nada de 'nenhuma venda ligada'", () => {
+    const p = problemasDaLoja(casos.duasContasGoogle.loja, casos.duasContasGoogle.diag, true);
+    expect(p.map((x) => x.texto).join(" ")).not.toContain("Nenhuma venda foi ligada");
   });
 
   it("o limite de eventos nao tem botao: nao ha o que o lojista faca", () => {

@@ -173,10 +173,22 @@ export async function entregar(
 ): Promise<{ ok: boolean; motivo?: string; agendado?: boolean }> {
   const tentativas = linha.attempts + 1;
 
-  const desistir = async (motivo: string) => {
+  /**
+   * `dm`: linha da Data Manager, que desiste 6 h depois de nascer. O R3
+   * (alertas/avaliar.ts) le a compra do Google que falhou pelo
+   * response.dm.conferidoEm, nao pela created_at -- sem isto ela nao alertaria.
+   */
+  const desistir = async (motivo: string, dm = false) => {
     await admin
       .from("tracking_events")
-      .update({ status: "falhou", attempts: tentativas, last_error: motivo })
+      .update({
+        status: "falhou",
+        attempts: tentativas,
+        last_error: motivo,
+        ...(dm
+          ? { response: { dm: { situacao: "falhou", motivo, conferidoEm: new Date().toISOString() } } }
+          : {}),
+      })
       .eq("id", linha.id);
     return { ok: false, motivo };
   };
@@ -202,7 +214,12 @@ export async function entregar(
   }
 
   if (!destinoAceita(destino, linha.event_name)) {
-    return desistir(porQueRecusa(destino, linha.event_name) || "destino nao aceita");
+    // So o destino ativo: desativar e escolha do lojista, nao falha a alertar.
+    // Ativo e recusando pela Data Manager = credencial ou acao que sumiu.
+    return desistir(
+      porQueRecusa(destino, linha.event_name) || "destino nao aceita",
+      destino.ativo && usaDataManager(destino)
+    );
   }
 
   const gravarSucesso = async (

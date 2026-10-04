@@ -630,7 +630,11 @@ export function montarPendencias(d: EntradaPendencias): Pendencia[] {
         falharam.length === 1
           ? `Os pedidos de ${nome(falharam[0])} não atualizaram na última rodada`
           : `Os pedidos de ${falharam.length} lojas não atualizaram na última rodada`,
-      detalhe: falharam.length > 1 ? `${listar(falharam.map(nome))}.` : undefined,
+      // O motivo nao cabe aqui; o caminho ate ele, sim (AvisoConexao da loja).
+      detalhe:
+        falharam.length > 1
+          ? `${listar(falharam.map(nome))}. Se repetir, o motivo aparece em Lojas.`
+          : "Se repetir, o motivo aparece na página da loja, em Lojas.",
       acao: { rotulo: "Tentar agora", sincronizar: true },
     });
   }

@@ -56,8 +56,8 @@
     return m ? decodeURIComponent(m[1]) : null;
   }
 
-  function gravarCookie(nome, valor) {
-    var validade = new Date(Date.now() + DIAS * 864e5).toUTCString();
+  function gravarCookie(nome, valor, dias) {
+    var validade = new Date(Date.now() + (dias || DIAS) * 864e5).toUTCString();
     // Sem `domain`: fica first-party no host da loja, que e o que sobrevive
     // ao ITP. SameSite=Lax deixa o cookie ir na navegacao que vem do anuncio.
     document.cookie =
@@ -255,11 +255,13 @@
   // ---- 1d. teste do dono e consentimento ---------------------------------
   //
   // ?xcart_teste=1 marca ESTE navegador como teste (?xcart_teste=0 desmarca).
+  // Vale 1 dia, nao 90: o link nao tem segredo, e um link vazado nao pode
+  // calar por meses as compras reais de quem o abriu.
   // O evento continua indo ao coletor -- e la que o dono confere o teste --,
   // mas marcado: o servidor nao manda ao Google, e ao Meta so com codigo de
   // teste. Vai tambem ao carrinho, para o checkout e a compra saberem.
   var pedidoTeste = daUrl("xcart_teste");
-  if (pedidoTeste === "1") gravarCookie(PREFIXO + "teste", "1");
+  if (pedidoTeste === "1") gravarCookie(PREFIXO + "teste", "1", 1);
   else if (pedidoTeste === "0") apagarCookie(PREFIXO + "teste");
   var TESTE =
     pedidoTeste === "1" || (pedidoTeste !== "0" && lerCookie(PREFIXO + "teste") === "1");

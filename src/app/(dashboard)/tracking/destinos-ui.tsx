@@ -42,7 +42,7 @@ import {
   type VereditoDestino,
 } from "./saude";
 import { NOME_CURTO } from "./resumo";
-import { ValorDoEvento } from "./por-conta";
+import { ValorDoEvento, semEnvioDoEvento } from "./por-conta";
 import { respostaJson } from "./resposta";
 
 // ============================================================================
@@ -596,7 +596,14 @@ export function CartaoDestino({
       >
         {EVENTOS.map((ev) => {
           const n = numerosDoEvento(destino, ev.chave, mostrarTestes);
-          const tom = !n.envia ? "warn" : ev.chave === "purchase" && faltam > 0 ? "err" : null;
+          const sem = semEnvioDoEvento(destino, ev.chave);
+          const tom = !n.envia
+            ? sem.resolve
+              ? "warn"
+              : null
+            : ev.chave === "purchase" && faltam > 0
+              ? "err"
+              : null;
           return (
             <div
               key={ev.chave}
@@ -611,7 +618,7 @@ export function CartaoDestino({
             >
               <dt className="truncate text-label text-t1">{ROTULO_EVENTO[ev.chave]}</dt>
               <dd className="flex min-w-0 flex-col gap-0.5">
-                <ValorDoEvento n={n} semContagem={semContagem} />
+                <ValorDoEvento n={n} semContagem={semContagem} semEnvio={sem.texto} />
               </dd>
             </div>
           );

@@ -23,6 +23,12 @@ import { safeFetch } from "@/lib/net/safe-url";
 // Sem as duas, o destino configurado fica "falta configurar" e nao recebe
 // evento nenhum (destinos.ts). Nao ha erro de envio a mostrar.
 //
+//   GOOGLE_DM_DONOS      uuids (virgula) dos usuarios que podem usar a service
+//                        account. Ela e UMA so, do Arthur: sem esta lista,
+//                        qualquer lojista apontaria customer_id/MCC para uma
+//                        conta onde a service account tem acesso e mandaria
+//                        conversao para la.
+//
 // O token de acesso (1 h) fica em memoria da instancia: o JWT e assinado com
 // node:crypto, sem biblioteca do Google.
 // ============================================================================
@@ -66,6 +72,16 @@ export function credencialDoGoogle(): Credencial | null {
 
 export function temCredencialDoGoogle(): boolean {
   return credencialDoGoogle() !== null;
+}
+
+/** O usuario pode configurar envio pela service account? Ver GOOGLE_DM_DONOS. */
+export function podeUsarDataManager(userId: string | null | undefined): boolean {
+  if (!userId) return false;
+  return (process.env.GOOGLE_DM_DONOS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .includes(userId);
 }
 
 function base64url(texto: string): string {
@@ -125,7 +141,9 @@ async function tokenDeAcesso(): Promise<ResultadoToken> {
       return {
         ok: false,
         erro: `Google recusou a service account: ${json.error_description || json.error || `HTTP ${resposta.status}`}`,
-        podeTentarDeNovo: resposta.status >= 500 || resposta.status === 429,
+        // Credencial recusada se conserta na Vercel; ate MAX_TENTATIVAS a
+        // compra espera em vez de virar 'falhou' para sempre.
+        podeTentarDeNovo: true,
       };
     }
     const validade = Math.min(Number(json.expires_in) || 3600, 3600);
@@ -196,8 +214,15 @@ async function chamar(
       ok: false,
       status: resposta.status,
       erro: mensagemDeErro(json, resposta.status),
-      // 400 (campo errado) e 403 (sem acesso a conta) nao melhoram sozinhos.
-      podeTentarDeNovo: resposta.status >= 500 || resposta.status === 429 || resposta.status === 401,
+      // 400 (campo errado) nao melhora sozinho. 403 (sem acesso a conta) e o
+      // lojista adicionando a service account: as 8 tentativas (~8 h) dao
+      // tempo de consertar sem perder a compra, e o mesmo transactionId nao
+      // duplica (DUPLICATE_TRANSACTION_ID vira ok).
+      podeTentarDeNovo:
+        resposta.status >= 500 ||
+        resposta.status === 429 ||
+        resposta.status === 401 ||
+        resposta.status === 403,
       corpo: json,
     };
   } catch (e) {
