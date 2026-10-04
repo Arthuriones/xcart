@@ -20,19 +20,23 @@
  *     uma vez e nunca mais. A versao anterior disto era gerada por loja e
  *     exigia recolar a cada mudanca de logica.
  *
- * O QUE ELE NAO FAZ
+ * META: PELO SERVIDOR
  *
- * Nao fala com o Meta nem com o Google. Avisa o coletor do xcart, e quem envia
- * e o servidor -- igual ao snippet do tema. O checkout e so o lugar de onde
- * estes eventos podem ser observados.
+ * Para o Meta ele nao fala com ninguem de fora: avisa o coletor do xcart, e
+ * quem envia e o servidor (CAPI) -- igual ao snippet do tema. A compra do Meta
+ * vem do webhook `orders/create`, nunca daqui: `checkout_completed` NAO vai
+ * para o coletor.
  *
- * A COMPRA NAO SAI DAQUI
+ * GOOGLE: PELA TAG DO GOOGLE, AQUI MESMO
  *
- * `checkout_completed` existe e seria tentador. Mas a compra vem do webhook
- * `orders/create`, que e servidor-a-servidor e nao depende de o navegador
- * continuar vivo na pagina de obrigado. Pelos dois caminhos, o primeiro a
- * chegar venceria o indice unico da fila -- e o que chega primeiro e o mais
- * fragil.
+ * O Google Ads sai do navegador, com a tag do Google (gtag.js), como o
+ * WeTracked faz. As contas e os rotulos vem de /api/tracking/google-config:
+ *   - checkout_started   -> begin_checkout, transaction_id begin_checkout_ck_<token>
+ *   - checkout_completed -> user_data (conversoes otimizadas) + purchase,
+ *                           transaction_id = id do pedido, valor e moeda
+ * Uma conversao por conta (send_to AW-x/rotulo), para todas as contas da loja.
+ * O consentimento vem da Customer Privacy API: concedido -> granted, negado ->
+ * denied, sem leitura -> nada e forcado. Evento de teste nao dispara a tag.
  * =========================================================================== */
 (function () {
   "use strict";
@@ -91,6 +95,229 @@
   function consentimento() {
     if (!privacidade || typeof privacidade.marketingAllowed !== "boolean") return null;
     return privacidade.marketingAllowed ? "concedido" : "negado";
+  }
+
+  // =========================================================================
+  // GOOGLE ADS PELA TAG DO GOOGLE (gtag.js)
+  // =========================================================================
+
+  /** null = ainda buscando; [] = loja sem Google (ou falhou: nao tenta de novo). */
+  var contasGoogle = null;
+  var esperandoGoogle = [];
+
+  function gtag() {
+    self.dataLayer = self.dataLayer || [];
+    self.dataLayer.push(arguments);
+  }
+
+  /** O estado de consentimento no formato do Google, ou null sem leitura. */
+  function consentimentoGoogle() {
+    var c = consentimento();
+    if (!c) return null;
+    var v = c === "concedido" ? "granted" : "denied";
+    return { ad_storage: v, ad_user_data: v, ad_personalization: v };
+  }
+
+  function aplicarConsentimento() {
+    var estado = consentimentoGoogle();
+    // Sem leitura nao forca nada: nem granted (o WeTracked forca), nem denied.
+    if (estado) gtag("consent", "update", estado);
+  }
+
+  function ligarGoogle(lista) {
+    var contas = [];
+    for (var i = 0; i < (lista || []).length; i++) {
+      var c = lista[i];
+      // Mesmo filtro do servidor: o valor vai para a URL do gtag e para send_to.
+      if (c && /^AW-\d+$/.test(c.conta || "")) {
+        contas.push({ conta: c.conta, labels: c.labels || {} });
+      }
+    }
+    contasGoogle = contas;
+    if (contas.length) {
+      // UM gtag.js para todas as contas: a biblioteca atende varias pelo dataLayer.
+      var s = document.createElement("script");
+      s.async = true;
+      s.src = "https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(contas[0].conta);
+      document.head.appendChild(s);
+      gtag("js", new Date());
+      aplicarConsentimento();
+      for (var j = 0; j < contas.length; j++) {
+        gtag("config", contas[j].conta, { allow_enhanced_conversions: true });
+      }
+    }
+    var fila = esperandoGoogle;
+    esperandoGoogle = [];
+    for (var k = 0; k < fila.length; k++) fila[k]();
+  }
+
+  /** Roda `fn` quando a configuracao chegar (ou ja). */
+  function comGoogle(fn) {
+    if (contasGoogle === null) esperandoGoogle.push(fn);
+    else fn();
+  }
+
+  if (STORE_ID) {
+    try {
+      fetch(
+        SRC.origin +
+          "/api/tracking/google-config?store=" +
+          encodeURIComponent(STORE_ID) +
+          "&shop=" +
+          encodeURIComponent(LOJA),
+        { credentials: "omit" }
+      )
+        .then(function (r) {
+          return r.ok ? r.json() : [];
+        })
+        .then(ligarGoogle, function () {
+          ligarGoogle([]);
+        });
+    } catch (e) {
+      ligarGoogle([]);
+    }
+  } else {
+    // Trecho antigo, sem o id da loja: a configuracao exige id E dominio.
+    contasGoogle = [];
+  }
+
+  /** Uma conversao por conta que tem rotulo para o evento. */
+  function converter(evento, params) {
+    comGoogle(function () {
+      if (!contasGoogle.length) return;
+      aplicarConsentimento();
+      for (var i = 0; i < contasGoogle.length; i++) {
+        var rotulo = contasGoogle[i].labels[evento];
+        if (!rotulo) continue;
+        var p = { send_to: contasGoogle[i].conta + "/" + rotulo };
+        for (var k in params) {
+          if (Object.prototype.hasOwnProperty.call(params, k) && params[k] !== undefined) {
+            p[k] = params[k];
+          }
+        }
+        gtag("event", evento, p);
+      }
+    });
+  }
+
+  /** DDI por pais, so os do dia a dia: telefone sem "+" de outro pais fica de fora. */
+  var DDI = {
+    BR: "55", US: "1", CA: "1", PT: "351", GB: "44", IE: "353", AU: "61", NZ: "64",
+    MX: "52", AR: "54", CL: "56", CO: "57", PE: "51", UY: "598", PY: "595",
+    ES: "34", FR: "33", DE: "49", IT: "39", NL: "31", BE: "32", CH: "41", AT: "43",
+    JP: "81", ZA: "27",
+  };
+
+  /**
+   * Telefone em E.164 (+5511999998888), ou null quando nao da para ter certeza.
+   * O Google so casa o formato exato; um numero errado e pior que nenhum.
+   */
+  function telefoneE164(bruto, pais) {
+    var t = String(bruto || "").trim();
+    if (!t) return null;
+    var digitos = t.replace(/\D/g, "");
+    if (t.charAt(0) === "+") {
+      return digitos.length >= 8 && digitos.length <= 15 ? "+" + digitos : null;
+    }
+    if (digitos.indexOf("00") === 0) {
+      digitos = digitos.slice(2);
+      return digitos.length >= 8 && digitos.length <= 15 ? "+" + digitos : null;
+    }
+    var ddi = DDI[String(pais || "").toUpperCase()];
+    if (!ddi) return null;
+    // O 0 de discagem nacional (0xx no Brasil, 07... no Reino Unido) sai.
+    var nacional = digitos.replace(/^0+/, "");
+    // Ja veio com o DDI, sem o "+" (5511999998888).
+    if (nacional.indexOf(ddi) === 0 && nacional.length >= ddi.length + 10) {
+      return nacional.length <= 15 ? "+" + nacional : null;
+    }
+    var total = ddi + nacional;
+    return nacional.length >= 6 && total.length <= 15 ? "+" + total : null;
+  }
+
+  /** Endereco no formato do user_data do Google. Campo vazio nao entra. */
+  function enderecoGoogle(e) {
+    if (!e) return null;
+    var saida = {};
+    var campos = [
+      ["first_name", e.firstName],
+      ["last_name", e.lastName],
+      ["street", e.address1],
+      ["city", e.city],
+      ["region", e.provinceCode || e.province],
+      ["postal_code", e.zip],
+      ["country", e.countryCode || e.country],
+    ];
+    var algum = false;
+    for (var i = 0; i < campos.length; i++) {
+      if (campos[i][1]) {
+        saida[campos[i][0]] = String(campos[i][1]);
+        algum = true;
+      }
+    }
+    return algum ? saida : null;
+  }
+
+  /** Dados do comprador para as conversoes otimizadas. A tag faz o hash. */
+  function dadosDoComprador(checkout) {
+    var endereco = checkout.billingAddress || checkout.shippingAddress || null;
+    var u = {};
+    var algum = false;
+    if (checkout.email) {
+      u.email = String(checkout.email).trim();
+      algum = true;
+    }
+    var fone = telefoneE164(
+      checkout.phone || (endereco && endereco.phone) || null,
+      endereco && (endereco.countryCode || endereco.country)
+    );
+    if (fone) {
+      u.phone_number = fone;
+      algum = true;
+    }
+    var end = enderecoGoogle(endereco);
+    if (end) {
+      u.address = end;
+      algum = true;
+    }
+    return algum ? u : null;
+  }
+
+  /** "gid://shopify/Order/123" -> "123"; o resto como veio. */
+  function idDoPedido(checkout) {
+    var o = checkout && checkout.order;
+    var id = o && o.id ? String(o.id) : "";
+    var m = /\/(\d+)$/.exec(id);
+    return m ? m[1] : id || null;
+  }
+
+  function googleNoCheckout(nome, event) {
+    var checkout = (event && event.data && event.data.checkout) || {};
+    // O dono testando (?xcart_teste=1): nada sai para o Google.
+    if (deTeste(checkout)) return;
+    if (nome === "begin_checkout") {
+      if (!checkout.token) return;
+      // O mesmo id do coletor: um begin_checkout POR CHECKOUT, e o Google
+      // descarta o repetido pelo transaction_id.
+      converter("begin_checkout", { transaction_id: "begin_checkout_ck_" + checkout.token });
+      return;
+    }
+    if (nome === "purchase") {
+      var pedido = idDoPedido(checkout);
+      if (!pedido) return;
+      var total = checkout.totalPrice || {};
+      var valor = Number(total.amount);
+      var dados = dadosDoComprador(checkout);
+      comGoogle(function () {
+        // Antes da conversao: e o que liga as conversoes otimizadas.
+        if (contasGoogle.length && dados) gtag("set", "user_data", dados);
+      });
+      converter("purchase", {
+        transaction_id: pedido,
+        value: isFinite(valor) ? valor : 0,
+        currency: total.currencyCode || checkout.currencyCode || undefined,
+      });
+    }
   }
 
   /**
@@ -186,7 +413,24 @@
     (function (par) {
       ctx.analytics.subscribe(par[0], function (event) {
         enviar(par[1], event);
+        if (par[1] === "begin_checkout") {
+          try {
+            googleNoCheckout("begin_checkout", event);
+          } catch (e) {
+            // Erro na tag nao pode derrubar o checkout nem o evento do Meta.
+          }
+        }
       });
     })(EVENTOS[i]);
   }
+
+  // A compra do GOOGLE sai daqui, pela tag. A do Meta continua vindo do webhook
+  // orders/create: este evento NAO vai para o coletor.
+  ctx.analytics.subscribe("checkout_completed", function (event) {
+    try {
+      googleNoCheckout("purchase", event);
+    } catch (e) {
+      // Erro na tag nao pode derrubar a pagina de obrigado.
+    }
+  });
 })();

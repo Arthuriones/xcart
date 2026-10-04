@@ -11,7 +11,7 @@ const ITENS: { titulo: string; texto: string; soComRota?: boolean }[] = [
   {
     titulo: "Como a compra chega ao Meta e ao Google",
     texto:
-      "Quando a Shopify avisa um pedido novo, o xcart envia a compra direto do servidor para cada destino ligado. Ver produto e carrinho vêm do script no tema da loja; checkout e pagamento, do pixel do checkout.",
+      "Meta: quando a Shopify avisa um pedido novo, o xcart envia a compra direto do servidor; ver produto e carrinho vêm do script no tema da loja, checkout e pagamento do pixel do checkout. Google: a tag do Google dispara no navegador do comprador — ver produto e carrinho no tema, checkout e compra no pixel do checkout.",
   },
   {
     titulo: "O que é o identificador de clique (gclid e fbc)",
@@ -26,12 +26,12 @@ const ITENS: { titulo: string; texto: string; soComRota?: boolean }[] = [
   {
     titulo: "O que é o rótulo de conversão do Google",
     texto:
-      "No Google Ads, cada evento (compra, checkout…) é uma ação de conversão com rótulo próprio. O AW- é da conta; o rótulo muda por evento. Evento sem rótulo não é enviado.",
+      "No Google Ads, cada evento (compra, checkout…) é uma ação de conversão com rótulo próprio. O AW- é da conta; o rótulo muda por evento. Evento sem rótulo a tag não dispara.",
   },
   {
     titulo: "“Enviada” não é “contada”",
     texto:
-      "Enviada quer dizer que a plataforma aceitou o envio, não que contou a conversão. A confirmação fica no Google Ads e no Gerenciador de Eventos do Meta. Se entrarem pedidos e as compras pararem de sair, o aviso aparece aqui.",
+      "Enviada quer dizer que o Meta aceitou o envio, não que contou a conversão; a confirmação fica no Gerenciador de Eventos. O Google, que vai pela tag no navegador, só é contado no próprio Google Ads. Se entrarem pedidos e as compras pararem de sair para o Meta, o aviso aparece aqui.",
   },
   {
     soComRota: true,

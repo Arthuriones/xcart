@@ -62,11 +62,16 @@ export async function POST(request: NextRequest) {
   // recebe" se um destino for removido depois -- ligado sem destino nao envia
   // nada, e isso precisa ser visivel em vez de silencioso.
   if (ligar) {
-    const { destinosDaLoja, destinoAceita } = await import("@/lib/tracking/destinos");
+    const { destinosDaLoja, destinoAceita, tagDoGoogleDispara } = await import(
+      "@/lib/tracking/destinos"
+    );
     const destinos = await destinosDaLoja(admin, loja.id, { comToken: true });
     // `purchase` e o evento que decide: e a venda. Destino que nao cobre a
-    // compra pode existir, mas nao serve de motivo para ligar a loja.
-    const algumEnvia = destinos.some((d) => destinoAceita(d, "purchase"));
+    // compra pode existir, mas nao serve de motivo para ligar a loja. O Meta
+    // pela fila do servidor; o Google pela tag do navegador.
+    const algumEnvia = destinos.some(
+      (d) => destinoAceita(d) || tagDoGoogleDispara(d, "purchase")
+    );
     if (!algumEnvia) {
       return NextResponse.json(
         {

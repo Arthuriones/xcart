@@ -14,10 +14,11 @@ export const runtime = "nodejs";
 //
 // A Shopify nao tem webhook para essas tres acoes -- carrinho e checkout
 // acontecem no navegador. Entao o snippet do tema avisa aqui, e daqui o NOSSO
-// servidor fala com o Google. O ping de conversao continua saindo do servidor:
-// o que o navegador faz e avisar que a acao aconteceu, nao falar com o Google.
-// Isso importa porque o bloqueador de anuncio derruba a requisicao para
-// googleadservices.com, e nao a requisicao para ca.
+// servidor fala com o Meta (CAPI).
+//
+// O GOOGLE NAO PASSA POR AQUI. O Google Ads sai do navegador, pela tag do
+// Google (gtag.js) que o proprio snippet e o Web Pixel carregam -- ver
+// /api/tracking/google-config. Este coletor nao enfileira nada para o Google.
 //
 // ------------------------- ESTE ENDPOINT E PUBLICO -------------------------
 //
@@ -42,8 +43,8 @@ export const runtime = "nodejs";
 /**
  * LINHAS de fila por visitante por dia -- nao acoes.
  *
- * Uma acao rende uma linha por destino configurado, entao numa loja com Google e
- * Meta juntos sao duas. Um visitante de verdade faz algo como 10 produtos + 3
+ * Uma acao rende uma linha por destino configurado, entao numa loja com dois
+ * pixels Meta sao duas. Um visitante de verdade faz algo como 10 produtos + 3
  * carrinhos + 1 checkout = 14 acoes = 28 linhas, e o teto nao pode encostar
  * nisso. Contar linha em vez de acao e escolha de custo: distinct por event_id
  * seria outra consulta a cada evento.
@@ -107,7 +108,7 @@ export async function POST(request: NextRequest) {
     gclid?: string | null;
     gbraid?: string | null;
     wbraid?: string | null;
-    /** Do cookie `_gcl_au`, escrito pela tag do Google. Ver google-ads.ts. */
+    /** Do cookie `_gcl_au`, escrito pela tag do Google. So vai para a identidade. */
     auid?: string | null;
     fbp?: string | null;
     fbc?: string | null;
@@ -400,15 +401,12 @@ export async function POST(request: NextRequest) {
     return ok({ ignorado: "checkout coberto pelo Web Pixel" });
   }
 
-  // Os destinos sao LINHAS: a loja pode ter cinco contas Google e dois pixels
-  // Meta. Todo destino ativo que aceita este evento recebe uma copia.
-  //
-  // Mandar para todas as contas Google e seguro: so a conta dona do clique
-  // conta. Pela Data Manager as outras respondem CLICK_NOT_FOUND no
-  // diagnostico, e a linha vira "nao e desta conta" (fila.ts), nao erro.
+  // Os destinos sao LINHAS: a loja pode ter dois pixels Meta. Todo destino
+  // ativo que aceita este evento recebe uma copia. So o Meta: o Google vai pelo
+  // navegador, e `destinoAceita` recusa destino Google.
   const { destinosDaLoja, destinoAceita } = await import("@/lib/tracking/destinos");
   const todos = await destinosDaLoja(admin, registro.id, { comToken: true });
-  const querem = todos.filter((d) => destinoAceita(d, evento));
+  const querem = todos.filter((d) => d.plataforma === "meta" && destinoAceita(d));
 
   // Nenhum destino quer este evento. Silencio, nao erro: o snippet dispara
   // todos os que sabe e e aqui que se decide o que interessa.
@@ -515,30 +513,12 @@ export async function POST(request: NextRequest) {
   const { enfileirar, entregar } = await import("@/lib/tracking/fila");
 
   const destinos: {
-    destination: "google" | "meta";
+    destination: "meta";
     destinationId: string;
     payload: unknown;
     /** Ja carregado aqui: evita `entregar` reler destino, token e config. */
     destino: (typeof querem)[number];
   }[] = [];
-
-  const paraGoogle = querem.filter((d) => d.plataforma === "google");
-  for (const d of paraGoogle) {
-    destinos.push({
-      destination: "google",
-      destinationId: d.id,
-      destino: d,
-      payload: {
-        ...clique,
-        pageUrl: (corpo.pageUrl || "").trim().slice(0, 500) || null,
-        // `oid` = o proprio event_id. Mesma conversion action com o mesmo oid, o
-        // Google descarta -- e a segunda trava contra a mesma acao contar duas
-        // vezes, junto com o indice unico da fila.
-        orderId: eventId,
-        // Sem value/currency de proposito. Ver o cabecalho.
-      },
-    });
-  }
 
   if (temMeta) {
     // O Meta pontua pela quantidade de sinais que conferem, e num evento de
@@ -690,15 +670,13 @@ export async function POST(request: NextRequest) {
     //
     // Cada destino e uma chamada de rede para outra empresa, e elas nao
     // dependem umas das outras: linhas de fila distintas, contas distintas.
-    // Em serie, cinco contas do Google -- o caso real do Arthur -- somavam
-    // cinco idas e voltas antes de a funcao responder.
     //
     // Uma falhar continua nao impedindo as outras: cada `entregar` trata o
     // proprio erro e grava o desfecho na linha dela.
     await Promise.all(
       destinos.map(async (alvo) => {
-        // Chave por DESTINO em todos os desfechos: com duas contas Google uma
-        // chave "google" sozinha faria a segunda sobrescrever a primeira.
+        // Chave por DESTINO em todos os desfechos: com dois pixels Meta uma
+        // chave "meta" sozinha faria o segundo sobrescrever o primeiro.
         const chave = `${alvo.destination}:${alvo.destinationId.slice(0, 8)}`;
 
         // Evento de teste fica na fila para o dono conferir, mas so sai para o

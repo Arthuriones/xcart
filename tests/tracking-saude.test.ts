@@ -17,17 +17,19 @@ import {
 // travar e que "chegaram" e o alarme usam a mesma regra, e que falha de LEITURA
 // nunca vira loja "Parado".
 
+// O destino padrao e Meta: so ele passa pela fila do servidor e tem contagem.
+// O Google vai pela tag do navegador (ver "Google pela tag" abaixo).
 function destino(p: Partial<DestinoNaTela> = {}): DestinoNaTela {
   return {
-    id: "g1",
-    plataforma: "google",
+    id: "m1",
+    plataforma: "meta",
     nome: "Principal",
-    conta: "AW-1",
-    labels: { purchase: "abc" },
+    conta: "123",
+    labels: {},
     testEventCode: null,
     idTemplate: null,
     ativo: true,
-    temToken: false,
+    temToken: true,
     completo: true,
     criadoEm: "2026-09-01T00:00:00Z",
     ...p,
@@ -187,7 +189,7 @@ describe("saude da loja", () => {
     expect(s.faltas).toHaveLength(1);
     expect(s.motivos[0]).toEqual({
       tom: "err",
-      texto: '1 pedido sem compra enviada em Google "Principal"',
+      texto: '1 pedido sem compra enviada em Meta "Principal"',
     });
   });
 
@@ -320,10 +322,16 @@ describe("numeros de um evento: de anuncio x total", () => {
     expect(numerosDoEvento(antigo, "purchase", true).deAnuncio).toBe(3);
   });
 
-  it("Google sem rotulo no evento nao envia", () => {
-    const g = destino({ labels: { purchase: "abc" } });
-    expect(numerosDoEvento(g, "add_to_cart", false).envia).toBe(false);
-    expect(numerosDoEvento(g, "purchase", false).envia).toBe(true);
+  it("Google vai pela tag: o servidor nao conta nenhum evento dele", () => {
+    const g = destino({ plataforma: "google", conta: "AW-1", labels: { purchase: "abc" } });
+    expect(numerosDoEvento(g, "add_to_cart", false)).toEqual({
+      envia: false,
+      deAnuncio: null,
+      total: 0,
+      falhas: 0,
+    });
+    // Com rotulo tambem: quem conta e o Google Ads, nao a fila.
+    expect(numerosDoEvento(g, "purchase", false).envia).toBe(false);
   });
 });
 
@@ -346,7 +354,7 @@ describe("venda sem clique de anuncio ignora o teste", () => {
     expect(comprasSemTeste(l.destinos[0])).toEqual({ enviadas: 2, deAnuncio: 0 });
     expect(saudeDaLoja(l, true, diag(), true).motivos).toContainEqual({
       tom: "warn",
-      texto: "Nenhuma venda creditada a anúncio no Google",
+      texto: "Nenhuma venda creditada a anúncio no Meta",
     });
   });
 
@@ -365,29 +373,83 @@ describe("venda sem clique de anuncio ignora o teste", () => {
     });
     expect(comprasSemTeste(l.destinos[0])).toEqual({ enviadas: 0, deAnuncio: 0 });
     expect(saudeDaLoja(l, true, diag(), true).motivos.map((m) => m.texto)).not.toContain(
-      "Nenhuma venda creditada a anúncio no Google"
+      "Nenhuma venda creditada a anúncio no Meta"
     );
   });
 
-  it("duas contas Google: a que nao e dona do clique nao dispara o alarme", () => {
+  it("dois pixels: um creditou, o alarme nao dispara", () => {
     // A conta A (primeira) fica com deAnuncio 0 ('nao_e_desta_conta'); a B
     // creditou. Empate em compras: antes ficava com a primeira e acusava.
     const l = loja({
       destinos: [
         destino({
-          id: "gA",
-          conta: "AW-1",
+          id: "mA",
+          conta: "111",
           contagem: { porEvento: { purchase: 1 }, deAnuncioPorEvento: { purchase: 0 } } as never,
         }),
         destino({
-          id: "gB",
-          conta: "AW-2",
+          id: "mB",
+          conta: "222",
           contagem: { porEvento: { purchase: 1 }, deAnuncioPorEvento: { purchase: 1 } } as never,
         }),
       ],
     });
     expect(saudeDaLoja(l, true, diag(), true).motivos.map((m) => m.texto)).not.toContain(
-      "Nenhuma venda creditada a anúncio no Google"
+      "Nenhuma venda creditada a anúncio no Meta"
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// O Google sai do navegador, pela tag do Google: nao passa pela fila e nao tem
+// pedido para comparar. A loja so com Google (com rotulo de compra) esta
+// recebendo a compra; falha antiga de linha 'google' na fila nao e alarme.
+// ---------------------------------------------------------------------------
+describe("Google pela tag", () => {
+  const google = (p: Partial<DestinoNaTela> = {}) =>
+    destino({
+      id: "g1",
+      plataforma: "google",
+      conta: "AW-1",
+      labels: { purchase: "abc" },
+      temToken: false,
+      ...p,
+      contagem: {
+        porEvento: {},
+        pedidosComCompra: [],
+        falharam: 4,
+        ultimoErro: "o Google vai pelo navegador (tag do Google), não pelo servidor",
+        ...p.contagem,
+      } as never,
+    });
+
+  it("so Google com rotulo de compra: tudo certo, sem pedido faltando", () => {
+    const s = saudeDaLoja(loja({ destinos: [google()] }), true, diag(), true);
+    expect(s.saude).toBe("ok");
+    expect(s.faltas).toEqual([]);
+    expect(s.motivos).toEqual([]);
+  });
+
+  it("Google sem rotulo de compra e sem Meta: nenhum destino recebe a compra", () => {
+    const s = saudeDaLoja(
+      loja({ destinos: [google({ labels: { add_to_cart: "x" } })] }),
+      true,
+      diag(),
+      true
+    );
+    expect(s.saude).toBe("parado");
+    expect(s.motivos[0].texto).toBe("Nenhum destino está recebendo a compra");
+  });
+
+  it("Meta em teste com Google pela tag: nao e 'so em modo teste'", () => {
+    const s = saudeDaLoja(
+      loja({ destinos: [destino({ testEventCode: "TEST1" }), google()] }),
+      true,
+      diag(),
+      true
+    );
+    expect(s.motivos.map((m) => m.texto)).not.toContain(
+      "Só em modo teste — compras ainda não contam como conversão"
     );
   });
 });

@@ -10,7 +10,7 @@ export function CabecalhoEventos({ children }: { children?: ReactNode }) {
   return (
     <PageHeader
       title="Eventos ao vivo"
-      description="Cada evento enviado ao Meta e ao Google, quase em tempo real."
+      description="Cada evento enviado ao Meta, quase em tempo real. O Google vai pela tag no navegador e é contado no Google Ads."
     >
       {children}
     </PageHeader>
@@ -21,8 +21,8 @@ export function CabecalhoEventos({ children }: { children?: ReactNode }) {
 export function DicaEventos() {
   return (
     <Dica rotulo="Por que um evento pode não aparecer aqui" lado="top">
-      Só entram eventos aceitos por algum destino: o Meta aceita todos; o Google, só os que têm
-      rótulo ou, pela API do Google, ID de ação (compra, carrinho e checkout).
+      Só entram eventos que o servidor envia ao Meta. O Google não aparece aqui: a tag do Google
+      dispara no navegador do comprador, e a conversão é contada no Google Ads.
     </Dica>
   );
 }

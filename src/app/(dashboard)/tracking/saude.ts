@@ -37,18 +37,36 @@ export function emModoTeste(d: DestinoNaTela): boolean {
 }
 
 /**
- * O destino manda este evento? No Meta o pixel cobre todos; no Google vale o
- * ID da acao quando ele vai pela Data Manager, e o rotulo no caminho antigo
- * (a mesma regra de `destinoAceita`).
+ * O Google sai do NAVEGADOR, pela tag do Google (gtag.js), e nao passa pela
+ * fila do servidor: nao ha envio para contar nem pedido para comparar. A tela
+ * mostra a configuracao e "tag ativa"; quem conta e o Google Ads.
+ */
+export function pelaTag(d: Pick<DestinoNaTela, "plataforma">): boolean {
+  return d.plataforma === "google";
+}
+
+/**
+ * O destino manda este evento? No Meta o pixel cobre todos; no Google a tag so
+ * dispara o evento que tem rotulo.
  */
 export function enviaEvento(d: DestinoNaTela, chave: ChaveEvento): boolean {
   if (d.plataforma === "meta") return true;
-  return d.acoes ? Boolean(d.acoes[chave]) : Boolean(d.labels[chave]);
+  return Boolean(d.labels[chave]);
 }
 
-/** Os destinos para onde a compra SAI -- inclusive o Meta em modo teste. */
+/**
+ * Os destinos para onde a compra SAI PELO SERVIDOR -- inclusive o Meta em
+ * modo teste. O Google fica fora: vai pela tag (ver `tagComCompra`).
+ */
 export function aceitamCompra(loja: LojaTracking): DestinoNaTela[] {
-  return loja.destinos.filter((d) => d.ativo && d.completo && enviaEvento(d, "purchase"));
+  return loja.destinos.filter(
+    (d) => d.ativo && d.completo && !pelaTag(d) && enviaEvento(d, "purchase")
+  );
+}
+
+/** Contas Google ativas com rotulo de compra: a tag dispara a compra. */
+export function tagComCompra(loja: LojaTracking): DestinoNaTela[] {
+  return loja.destinos.filter((d) => d.ativo && pelaTag(d) && enviaEvento(d, "purchase"));
 }
 
 /** Os destinos que deveriam estar recebendo a compra COMO CONVERSAO. */
@@ -61,7 +79,7 @@ export function oQueFalta(d: DestinoNaTela): string | null {
   if (d.plataforma === "meta") {
     return d.temToken ? null : "falta o token do CAPI — sem ele nenhum evento sai";
   }
-  return d.acoes || Object.keys(d.labels).length > 0
+  return Object.keys(d.labels).length > 0
     ? null
     : "falta o rótulo de ao menos um evento — sem rótulo não há o que enviar";
 }
@@ -140,7 +158,10 @@ export const ROTULO_EVENTO: Record<ChaveEvento, string> = {
 
 /** O que a tela mostra de UM evento de UM destino (uma conta). */
 export interface NumerosEvento {
-  /** No Google, evento sem rotulo nao e enviado: nao ha numero a mostrar. */
+  /**
+   * O servidor envia e conta este evento? No Meta, sim. No Google, nunca: la
+   * a tag do navegador dispara, e quem conta e o Google Ads.
+   */
   envia: boolean;
   /**
    * Com clique de anuncio -- e sem teste, salvo `comTestes`. E o que se
@@ -162,6 +183,7 @@ export function numerosDoEvento(
   chave: ChaveEvento,
   comTestes: boolean
 ): NumerosEvento {
+  if (pelaTag(d)) return { envia: false, deAnuncio: null, total: 0, falhas: 0 };
   const c = d.contagem;
   const enviados = c.porEvento[chave] ?? 0;
   let deAnuncio: number | null;
@@ -306,11 +328,12 @@ export function saudeDaLoja(
 
   const aceitam = aceitamCompra(loja);
   const recebem = recebemCompra(loja);
+  const pelaTagCompra = tagComCompra(loja);
   const faltas = faltasDaLoja(loja, diag);
 
   const err: string[] = [];
   if (loja.desinstalada) err.push("App desinstalado — nada está sendo enviado");
-  if (recebem.length === 0 && aceitam.length === 0) {
+  if (recebem.length === 0 && aceitam.length === 0 && pelaTagCompra.length === 0) {
     err.push("Nenhum destino está recebendo a compra");
   }
   for (const { d, faltam } of faltas) {
@@ -323,7 +346,7 @@ export function saudeDaLoja(
   const warn: string[] = [];
   if (loja.tetoAtingidoRecente) warn.push("Bateu no teto de eventos — números incompletos");
   if (loja.contagemIndisponivel) warn.push("Não deu para contar os envios agora");
-  if (aceitam.length > 0 && recebem.length === 0) {
+  if (aceitam.length > 0 && recebem.length === 0 && pelaTagCompra.length === 0) {
     warn.push("Só em modo teste — compras ainda não contam como conversão");
   } else {
     for (const d of aceitam.filter(emModoTeste)) warn.push(`${apelido(d)} em modo teste`);
@@ -335,23 +358,22 @@ export function saudeDaLoja(
   for (const d of loja.destinos) {
     if (d.ativo && oQueFalta(d) !== null) warn.push(`${apelido(d)} incompleto`);
   }
+  // Linha 'google' antiga que a fila fechou ao parar de enviar o Google pelo
+  // servidor nao e falha de agora: a tag nao passa pela fila.
   for (const d of loja.destinos) {
-    const n = d.contagem.falharam;
+    const n = pelaTag(d) ? 0 : d.contagem.falharam;
     if (n > 0) warn.push(`${apelido(d)}: ${n === 1 ? "1 envio falhou" : `${n} envios falharam`}`);
   }
-  for (const p of ["google", "meta"] as const) {
-    const contas = recebem.filter((d) => d.plataforma === p).map(comprasSemTeste);
-    if (contas.length === 0) continue;
+  {
+    // So o Meta: o Google pela tag nao tem contagem no servidor.
+    const contas = recebem.filter((d) => d.plataforma === "meta").map(comprasSemTeste);
     // O mesmo teste do "todas" da Atribuicao: so acusa quando NENHUMA venda
     // foi creditada. Parte sem click id e trafego organico, normal. Teste do
-    // dono fica fora: uma compra com gclid TESTE nao pode calar o alarme.
-    // Com 2 contas Google, a que nao e dona do clique fica com deAnuncio 0
-    // (055: 'nao_e_desta_conta'); por isso NENHUMA conta, e nao a "melhor".
-    const enviadas = Math.max(...contas.map((c) => c.enviadas));
+    // dono fica fora: uma compra com fbc TESTE nao pode calar o alarme. Com 2
+    // pixels, NENHUMA conta, e nao a "melhor".
+    const enviadas = contas.length ? Math.max(...contas.map((c) => c.enviadas)) : 0;
     if (enviadas > 0 && contas.every((c) => c.deAnuncio === 0)) {
-      warn.push(
-        `Nenhuma venda creditada a anúncio no ${p === "google" ? "Google" : "Meta"}`
-      );
+      warn.push("Nenhuma venda creditada a anúncio no Meta");
     }
   }
   if (temDiag && (diag === null || diag.pedidos7d === null)) {

@@ -11,9 +11,11 @@ import {
   melhorDa,
   numerosDoEvento,
   oQueFalta,
+  pelaTag,
   plural,
   recebemCompra,
   saudeDaLoja,
+  tagComCompra,
   textoProblema,
   vereditoDoDestino,
   type Plataforma,
@@ -26,7 +28,7 @@ import {
 // A REGRA continua em saude.ts e nao muda aqui. Este arquivo so traduz o
 // resultado dela para a tela nova:
 //   - UM problema por loja (o mais grave), com UM botao;
-//   - as duas colunas da linha (Meta e Google: chegaram de esperados);
+//   - as duas colunas da linha (Meta: chegaram de esperados; Google: a tag);
 //   - os numeros do topo e o comparativo pedidos x compras enviadas.
 //
 // `problemasDaLoja` espelha `saudeDaLoja` item a item, na mesma ordem: o teste
@@ -117,6 +119,7 @@ export function problemasDaLoja(
 
   const aceitam = aceitamCompra(loja);
   const recebem = recebemCompra(loja);
+  const pelaTagCompra = tagComCompra(loja);
   const faltas = faltasDaLoja(loja, diag);
   const semAviso = diag?.temWebhook === false;
 
@@ -129,7 +132,7 @@ export function problemasDaLoja(
       acao: { tipo: "abrir-lojas", rotulo: "Abrir Lojas" },
     });
   }
-  if (recebem.length === 0 && aceitam.length === 0) {
+  if (recebem.length === 0 && aceitam.length === 0 && pelaTagCompra.length === 0) {
     if (loja.destinos.length === 0) {
       err.push({
         tom: "err",
@@ -218,7 +221,7 @@ export function problemasDaLoja(
       acao: { tipo: "recarregar", rotulo: "Tentar de novo" },
     });
   }
-  if (aceitam.length > 0 && recebem.length === 0) {
+  if (aceitam.length > 0 && recebem.length === 0 && pelaTagCompra.length === 0) {
     warn.push({
       tom: "warn",
       texto: "Só em modo teste: as compras vão para a aba de teste do Meta e não contam como conversão.",
@@ -276,7 +279,8 @@ export function problemasDaLoja(
     });
   }
   for (const d of loja.destinos) {
-    const n = d.contagem.falharam;
+    // O Google pela tag nao passa pela fila: falha antiga dele nao e de agora.
+    const n = pelaTag(d) ? 0 : d.contagem.falharam;
     if (n <= 0) continue;
     warn.push({
       tom: "warn",
@@ -287,17 +291,16 @@ export function problemasDaLoja(
       acao: { tipo: "editar-destino", rotulo: "Corrigir destino", destinoId: d.id },
     });
   }
-  for (const p of ["google", "meta"] as const) {
-    const contas = recebem.filter((d) => d.plataforma === p).map(comprasSemTeste);
-    if (contas.length === 0) continue;
-    // NENHUMA conta creditou, nao a "melhor": com 2 contas Google, a que nao e
-    // dona do clique fica com deAnuncio 0 (055: 'nao_e_desta_conta').
-    const enviadas = Math.max(...contas.map((c) => c.enviadas));
+  {
+    // So o Meta: o Google pela tag nao tem contagem no servidor. NENHUMA conta
+    // creditou, nao a "melhor".
+    const contas = recebem.filter((d) => d.plataforma === "meta").map(comprasSemTeste);
+    const enviadas = contas.length ? Math.max(...contas.map((c) => c.enviadas)) : 0;
     if (enviadas > 0 && contas.every((c) => c.deAnuncio === 0)) {
       warn.push({
         tom: "warn",
-        texto: `Nenhuma venda foi ligada a um anúncio do ${NOME_CURTO[p]}.`,
-        detalhe: `${plural(enviadas, "compra chegou", "compras chegaram")} sem o identificador de clique (${p === "google" ? "gclid" : "fbc"}). Ou o tráfego não veio de anúncio, ou o clique se perdeu no caminho até a loja.`,
+        texto: "Nenhuma venda foi ligada a um anúncio do Meta.",
+        detalhe: `${plural(enviadas, "compra chegou", "compras chegaram")} sem o identificador de clique (fbc). Ou o tráfego não veio de anúncio, ou o clique se perdeu no caminho até a loja.`,
         acao: { tipo: "eventos", rotulo: "Ver eventos" },
       });
     }
@@ -326,7 +329,7 @@ export function proximoPassoDesligada(loja: LojaTracking): Problema {
       acao: { tipo: "adicionar-destino", rotulo: "Ligar rastreamento" },
     };
   }
-  if (aceitamCompra(loja).length > 0) {
+  if (aceitamCompra(loja).length > 0 || tagComCompra(loja).length > 0) {
     return {
       tom: "neutral",
       texto: "Pronto para ligar: falta só ligar o envio das compras.",
@@ -353,6 +356,8 @@ export function proximoPassoDesligada(loja: LojaTracking): Problema {
 export type ColunaPlataforma =
   | { tipo: "desligado"; motivo: string }
   | { tipo: "nao-recebe"; motivo: string }
+  /** Google: a tag do navegador dispara a compra; o servidor nao conta. */
+  | { tipo: "tag"; contas: number }
   | { tipo: "sem-contagem"; contas: number }
   | { tipo: "sem-pedidos"; compras: number; semClique: number; contas: number }
   | {
@@ -391,16 +396,18 @@ export function colunaDaPlataforma(
       motivo: daPlataforma.length > 0 ? "destino desativado" : "sem destino nesta loja",
     };
   }
+  if (p === "google") {
+    const comCompra = tagComCompra(loja).length;
+    return comCompra > 0
+      ? { tipo: "tag", contas: comCompra }
+      : { tipo: "nao-recebe", motivo: "falta o rótulo da compra" };
+  }
   const recebem = recebemCompra(loja).filter((d) => d.plataforma === p);
   if (recebem.length === 0) {
     const emTeste = aceitamCompra(loja).some((d) => d.plataforma === p && emModoTeste(d));
     return {
       tipo: "nao-recebe",
-      motivo: emTeste
-        ? "em modo teste"
-        : p === "google"
-          ? "falta o rótulo da compra"
-          : "falta o token de conversões",
+      motivo: emTeste ? "em modo teste" : "falta o token de conversões",
     };
   }
   if (loja.contagemIndisponivel) return { tipo: "sem-contagem", contas: recebem.length };
@@ -445,6 +452,13 @@ export function textoDaColuna(c: ColunaPlataforma, p: Plataforma): TextoColuna {
       return { texto: "Desligado", sub: c.motivo, fracao: null, tom: "neutral" };
     case "nao-recebe":
       return { texto: "Não recebe a compra", sub: c.motivo, fracao: null, tom: "warn" };
+    case "tag":
+      return {
+        texto: "Tag ativa",
+        sub: ["no navegador, contada no Google Ads", ...contas(c.contas)].join(" · "),
+        fracao: null,
+        tom: "ok",
+      };
     case "sem-contagem":
       return { texto: "—", sub: "sem contagem agora", fracao: null, tom: "neutral" };
     case "sem-pedidos":
@@ -592,7 +606,7 @@ export function resumoDaTela(
     if (loja.contagemIndisponivel) enviadas = null;
     else if (enviadas !== null) {
       enviadas += loja.destinos
-        .filter((d) => !emModoTeste(d))
+        .filter((d) => !emModoTeste(d) && !pelaTag(d))
         .reduce((m, d) => Math.max(m, numerosDoEvento(d, "purchase", false).total), 0);
     }
 
@@ -663,7 +677,7 @@ export function contasDaTela(lojas: LojaTracking[]): LinhaConta[] {
 export function testesNaTela(contas: LinhaConta[]): number {
   let n = 0;
   for (const { loja, destino } of contas) {
-    if (loja.contagemIndisponivel) continue;
+    if (loja.contagemIndisponivel || pelaTag(destino)) continue;
     for (const v of Object.values(destino.contagem.testesPorEvento)) n += v ?? 0;
   }
   return n;

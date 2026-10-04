@@ -1,14 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rotuloDoEvento, type MapaDeRotulos } from "@/lib/tracking/eventos";
-import {
-  acaoDoEvento,
-  idDeCliente,
-  limparAcoes,
-  usaDataManager,
-  type AcoesDataManager,
-} from "@/lib/tracking/google-url";
-import { temCredencialDoGoogle } from "@/lib/tracking/google-dm";
+import { contasGoogleParaNavegador, type ContaGoogleNoNavegador } from "@/lib/tracking/google-tag";
 
 // ============================================================================
 // Os destinos de conversao de uma loja.
@@ -22,6 +15,10 @@ import { temCredencialDoGoogle } from "@/lib/tracking/google-dm";
 // Sem ele, dois pixels Meta na mesma loja colidiriam em
 // (store_id, 'meta', event_id) e o segundo sumiria como "duplicado" -- em
 // silencio, que e o pior jeito de falhar.
+//
+// O destino GOOGLE (conta AW- e um rotulo por evento) continua aqui como
+// configuracao, mas nao e destino de FILA: quem envia e a tag do Google no
+// navegador, que le esta configuracao por /api/tracking/google-config.
 // ============================================================================
 
 export interface Destino {
@@ -43,14 +40,6 @@ export interface Destino {
    */
   idTemplate: string | null;
   ativo: boolean;
-  /**
-   * So Google, pela Data Manager API (migration 054). Com `customerId` e ao
-   * menos uma acao, o destino sai por la; sem, continua no ping antigo pelos
-   * `labels`. Opcionais para nao obrigar quem monta Destino a mao.
-   */
-  customerId?: string | null;
-  loginCustomerId?: string | null;
-  acoes?: AcoesDataManager;
   /** So no Meta, e so quando o chamador pediu. Nunca sai para o cliente. */
   token?: string | null;
 }
@@ -58,10 +47,9 @@ export interface Destino {
 type Admin = ReturnType<typeof createAdminClient>;
 
 /**
- * As colunas da linha. `*` e nao a lista: com a lista, um deploy que chegue
- * antes da migration 054 faria TODA leitura de destino falhar -- e o coletor e
- * o webhook param o Meta junto. Com `*`, antes da 054 as colunas novas so vem
- * ausentes e o Google segue no caminho antigo.
+ * As colunas da linha. `*` e nao a lista: coluna nova que chegue por migration
+ * antes ou depois do deploy nao derruba a leitura -- e o coletor e o webhook
+ * param o Meta junto quando ela falha.
  */
 const COLUNAS = "*";
 
@@ -77,9 +65,6 @@ function destinoDaLinha(d: Record<string, unknown>): Destino {
     testEventCode: (d.test_event_code as string | null) ?? null,
     idTemplate: (d.id_template as string | null) ?? null,
     ativo: Boolean(d.ativo),
-    customerId: idDeCliente(d.customer_id),
-    loginCustomerId: idDeCliente(d.login_customer_id),
-    acoes: limparAcoes(d.acoes),
   };
 }
 
@@ -175,32 +160,22 @@ export async function destinosParaTela(
 }
 
 /**
- * A configuracao da Data Manager dos destinos pedidos, para a tela de
- * Integracoes -> Google. Os ids ja vem filtrados pelas lojas do usuario.
+ * As contas Google ATIVAS da loja, com os rotulos, para a tag do Google no
+ * navegador (/api/tracking/google-config).
  *
- * Erro de banco LANCA: devolver vazio mostraria o formulario em branco, e
- * salvar em branco apagaria a configuracao gravada.
+ * Erro de banco LANCA: a rota responde sem cache, e o navegador tenta de novo
+ * na proxima pagina em vez de guardar "loja sem Google".
  */
-export async function configDataManagerDe(
-  admin: Admin,
-  ids: string[]
-): Promise<Map<string, { customerId: string | null; loginCustomerId: string | null; acoes: AcoesDataManager }>> {
-  const mapa = new Map<
-    string,
-    { customerId: string | null; loginCustomerId: string | null; acoes: AcoesDataManager }
-  >();
-  if (ids.length === 0) return mapa;
-  const { data, error } = await admin.from("tracking_destinations").select(COLUNAS).in("id", ids);
-  if (error) throw new Error(`falha ao ler a configuração do Google: ${error.message}`);
-  for (const linha of data || []) {
-    const d = destinoDaLinha(linha);
-    mapa.set(d.id, {
-      customerId: d.customerId ?? null,
-      loginCustomerId: d.loginCustomerId ?? null,
-      acoes: d.acoes ?? {},
-    });
-  }
-  return mapa;
+export async function googleDaLoja(admin: Admin, storeId: string): Promise<ContaGoogleNoNavegador[]> {
+  const { data, error } = await admin
+    .from("tracking_destinations")
+    .select("conta, labels, ativo")
+    .eq("store_id", storeId)
+    .eq("plataforma", "google")
+    .eq("ativo", true)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`falha ao ler as contas Google da loja: ${error.message}`);
+  return contasGoogleParaNavegador(data || []);
 }
 
 /**
@@ -262,37 +237,35 @@ export async function destinoPorId(
 }
 
 /**
- * Este destino quer este evento?
+ * Este destino quer este evento NA FILA DO SERVIDOR?
  *
- * No Google cada evento e uma conversion action propria. Pela Data Manager, o
- * evento sem ID de acao e o lojista dizendo que nao quer aquele evento -- e sem
- * a credencial da service account no servidor nada sai, entao nada entra na
- * fila (a tela mostra "falta configurar"). No caminho antigo vale o rotulo. No
- * Meta um pixel cobre todos, entao basta estar configurado.
+ * So o Meta: um pixel cobre todos os eventos, entao basta estar configurado.
+ * O Google nunca -- vai pelo navegador (tag do Google), fora da fila.
  */
-export function destinoAceita(destino: Destino, nomeDoEvento: string): boolean {
+export function destinoAceita(destino: Destino): boolean {
   if (!destino.ativo) return false;
-  if (destino.plataforma === "meta") return Boolean(destino.conta && destino.token);
-  if (usaDataManager(destino)) {
-    return acaoDoEvento(destino.acoes, nomeDoEvento) !== null && temCredencialDoGoogle();
-  }
-  return Boolean(destino.conta) && rotuloDoEvento(destino.labels, nomeDoEvento) !== null;
+  if (destino.plataforma !== "meta") return false;
+  return Boolean(destino.conta && destino.token);
+}
+
+/**
+ * A tag do Google, no navegador, dispara este evento para este destino? Conta
+ * ativa com rotulo para o evento. Serve para decidir se a loja pode ser ligada
+ * so com Google -- `destinoAceita` e da fila, e la o Google nunca entra.
+ */
+export function tagDoGoogleDispara(destino: Destino, nomeDoEvento: string): boolean {
+  return (
+    destino.ativo &&
+    destino.plataforma === "google" &&
+    Boolean(destino.conta) &&
+    rotuloDoEvento(destino.labels, nomeDoEvento) !== null
+  );
 }
 
 /** Para a mensagem de erro da fila dizer o que falta, e nao so "sem config". */
-export function porQueRecusa(destino: Destino, nomeDoEvento: string): string {
+export function porQueRecusa(destino: Destino): string {
   if (!destino.ativo) return "destino desativado";
+  if (destino.plataforma !== "meta") return "o Google vai pelo navegador (tag do Google), não pelo servidor";
   if (!destino.conta) return "destino sem conta configurada";
-  if (destino.plataforma === "meta") {
-    return destino.token ? "" : "destino do Meta sem token do CAPI";
-  }
-  if (usaDataManager(destino)) {
-    if (acaoDoEvento(destino.acoes, nomeDoEvento) === null) {
-      return `sem ID de ação para o evento "${nomeDoEvento}"`;
-    }
-    return temCredencialDoGoogle() ? "" : "falta a credencial do Google (service account) no servidor";
-  }
-  return rotuloDoEvento(destino.labels, nomeDoEvento) !== null
-    ? ""
-    : `sem rotulo configurado para o evento "${nomeDoEvento}"`;
+  return destino.token ? "" : "destino do Meta sem token do CAPI";
 }

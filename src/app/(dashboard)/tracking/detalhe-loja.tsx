@@ -42,6 +42,7 @@ import {
   aceitamCompra,
   quando,
   recebemCompra,
+  tagComCompra,
   textoProblema,
   vereditoDoDestino,
   type Plataforma,
@@ -355,7 +356,7 @@ export function DetalheLoja({
   const variasContas = (["google", "meta"] as const).some(
     (p) => loja.destinos.filter((d) => d.plataforma === p).length > 1
   );
-  const podeLigar = aceitamCompra(loja).length > 0;
+  const podeLigar = aceitamCompra(loja).length > 0 || tagComCompra(loja).length > 0;
   const recebem = new Set(recebemCompra(loja).map((d) => d.id));
   // Sem o app, ou com o envio desligado, a Shopify nao foi consultada.
   const alcancavel = loja.ligado && !loja.desinstalada;
@@ -601,7 +602,7 @@ export function DetalheLoja({
                   ? "Ligado: cada pedido novo vira compra nos destinos desta loja."
                   : podeLigar
                     ? "Desligado. Os destinos estão prontos para receber."
-                    : "Para ligar, um destino precisa receber a compra: no Google o rótulo ou a ação da compra, no Meta o token de conversões."
+                    : "Para ligar, um destino precisa receber a compra: no Google o rótulo da compra, no Meta o token de conversões."
               }
               checked={ligadoNaTela}
               disabled={envio !== null || (!loja.ligado && !podeLigar)}

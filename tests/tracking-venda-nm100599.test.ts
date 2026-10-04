@@ -10,7 +10,6 @@ import {
 } from "../src/lib/tracking/normalizar";
 import {
   cliquesDaLanding,
-  montarConversaoGoogle,
   montarPurchase,
   type PedidoShopify,
 } from "../src/lib/tracking/purchase";
@@ -67,21 +66,6 @@ describe("fbclid da URL de chegada perto do corte de 255", () => {
   it("sem cart attribute nem identidade, a compra reconstroi o fbc pela landing", () => {
     const fbc = montarPurchase(PEDIDO).evento.user_data.fbc;
     expect(fbc).toBe(`fb.1.${Date.parse("2026-10-01T10:53:47Z")}.${FBCLID}`);
-  });
-});
-
-describe("Google: a compra sai no dominio publico", () => {
-  it("usa a origem da order_status_url, como o Meta", () => {
-    const c = montarConversaoGoogle(PEDIDO, { dominioLoja: "qkgknv-w3.myshopify.com" });
-    expect(c.pageUrl).toBe(`https://lashbestie.shop${LANDING}`);
-  });
-
-  it("sem order_status_url, cai no dominio cadastrado", () => {
-    const c = montarConversaoGoogle(
-      { ...PEDIDO, order_status_url: null },
-      { dominioLoja: "qkgknv-w3.myshopify.com" }
-    );
-    expect(c.pageUrl).toBe(`https://qkgknv-w3.myshopify.com${LANDING}`);
   });
 });
 

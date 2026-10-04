@@ -189,34 +189,20 @@ export async function coletarCondicoesDetalhado(
   });
 
   // ---- R3: compra que falhou no envio -------------------------------------
-  // Duas leituras. Meta e Google antigo falham perto da criacao da linha
-  // (envio na hora). O Google pela Data Manager so sai 6 h depois do evento,
-  // e o diagnostico que diz "nao contou" chega horas depois disso: pela
-  // created_at da ultima hora esta regra nunca o veria. Para ele vale quando
-  // o Google respondeu (response.dm.conferidoEm, gravado por fila.ts).
+  // So o Meta: o Google sai do navegador (tag do Google), fora da fila, e
+  // linha 'google' antiga que a fila fecha como 'falhou' nao e compra perdida.
   await rodar("envio_falhando", async () => {
     const colunas = "id, store_id, destination, destination_id, last_error, created_at";
-    const [recentes, doGoogle] = await Promise.all([
-      admin
-        .from("tracking_events")
-        .select(colunas)
-        .eq("event_name", "Purchase")
-        .eq("status", "falhou")
-        .gte("created_at", desdeUmaHora)
-        .order("created_at", { ascending: false })
-        .limit(500),
-      admin
-        .from("tracking_events")
-        .select(colunas)
-        .eq("event_name", "Purchase")
-        .eq("status", "falhou")
-        .eq("destination", "google")
-        .gte("response->dm->>conferidoEm", desdeUmaHora)
-        .order("created_at", { ascending: false })
-        .limit(500),
-    ]);
+    const recentes = await admin
+      .from("tracking_events")
+      .select(colunas)
+      .eq("event_name", "Purchase")
+      .eq("destination", "meta")
+      .eq("status", "falhou")
+      .gte("created_at", desdeUmaHora)
+      .order("created_at", { ascending: false })
+      .limit(500);
     if (recentes.error) throw new Error(recentes.error.message);
-    if (doGoogle.error) throw new Error(doGoogle.error.message);
     type Linha = {
       id: string;
       store_id: string;
@@ -225,10 +211,7 @@ export async function coletarCondicoesDetalhado(
       last_error: string | null;
       created_at: string | null;
     };
-    const vistas = new Set<string>();
-    const linhas = ([...(recentes.data || []), ...(doGoogle.data || [])] as Linha[])
-      .filter((l) => !vistas.has(String(l.id)) && Boolean(vistas.add(String(l.id))))
-      .sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
+    const linhas = (recentes.data || []) as Linha[];
     const grupos = new Map<string, { linha: Linha; n: number }>();
     for (const l of linhas) {
       const k = `${l.store_id}|${l.destination_id ?? l.destination}`;

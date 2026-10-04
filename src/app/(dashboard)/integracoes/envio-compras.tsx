@@ -36,7 +36,7 @@ export function EnvioCompras({
     >
       <span className="text-label font-semibold text-t2">Para enviar as compras</span>
       <h3 id={id} className="text-section text-ink">
-        {meta ? "Token de conversões, por pixel" : "Conversões por conta (AW-)"}
+        {meta ? "Token de conversões, por pixel" : "Tag do Google no navegador (AW-)"}
       </h3>
       {erro ? (
         <p role="alert" className="text-dense text-err">

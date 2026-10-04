@@ -522,7 +522,7 @@ function Comparativo({ resumo }: { resumo: ReturnType<typeof resumoDaTela> }) {
     <Section
       titulo="Pedidos e compras enviadas"
       descricao={
-        "Lojas rastreando, pedido a pedido · últimos 7 dias" +
+        "Lojas rastreando, pedido a pedido · últimos 7 dias · o Google vai pela tag no navegador e é contado no Google Ads" +
         (fora > 0 ? ` · ${fora === 1 ? "1 loja sem conferência ficou" : `${fora} lojas sem conferência ficaram`} de fora` : "")
       }
     >
@@ -538,16 +538,13 @@ function Comparativo({ resumo }: { resumo: ReturnType<typeof resumoDaTela> }) {
               valorTexto: formatarInteiro(pedidos),
               cor: "chart-1",
             },
-            ...PLATAFORMAS.map((p) => {
+            // So o Meta: o Google vai pela tag no navegador, sem contagem no
+            // servidor -- quem conta e o Google Ads.
+            ...(["meta"] as const).map((p) => {
               const c = resumo.porPlataforma[p];
               return {
                 id: p,
-                // Google: compra sem clique (e teste) fecha sem sair -- conta
-                // como coberta, mas nao foi "enviada".
-                rotulo:
-                  p === "google"
-                    ? "Registradas para o Google pelo xcart"
-                    : `Enviadas ao ${NOME_CURTO[p]} pelo xcart`,
+                rotulo: `Enviadas ao ${NOME_CURTO[p]} pelo xcart`,
                 valor: c ? c.chegaram : null,
                 valorTexto: c ? formatarInteiro(c.chegaram) : undefined,
                 detalhe: c
@@ -555,7 +552,7 @@ function Comparativo({ resumo }: { resumo: ReturnType<typeof resumoDaTela> }) {
                     ? `de ${formatarInteiro(c.esperados)} · ${formatarFracao(c.chegaram / c.esperados)}`
                     : "nenhum pedido esperado"
                   : "nenhum destino recebendo",
-                cor: p === "meta" ? ("chart-2" as const) : ("chart-3" as const),
+                cor: "chart-2" as const,
               };
             }),
           ]}

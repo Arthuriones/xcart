@@ -24,17 +24,19 @@ import { respostaJson } from "../src/app/(dashboard)/tracking/resposta";
 // motivo vira um problema, na mesma ordem e com o mesmo tom, e a loja vermelha
 // nunca aparece com "Nada a fazer agora".
 
+// O destino padrao e Meta: so ele passa pela fila do servidor e tem contagem.
+// O Google vai pela tag do navegador (`google()`, e "Google pela tag" abaixo).
 function destino(p: Partial<DestinoNaTela> = {}): DestinoNaTela {
   return {
-    id: "g1",
-    plataforma: "google",
+    id: "d1",
+    plataforma: "meta",
     nome: "Principal",
-    conta: "AW-1",
-    labels: { purchase: "abc" },
+    conta: "999",
+    labels: {},
     testEventCode: null,
     idTemplate: null,
     ativo: true,
-    temToken: false,
+    temToken: true,
     completo: true,
     criadoEm: "2026-09-01T00:00:00Z",
     ...p,
@@ -59,6 +61,17 @@ function destino(p: Partial<DestinoNaTela> = {}): DestinoNaTela {
 
 function meta(p: Partial<DestinoNaTela> = {}): DestinoNaTela {
   return destino({ id: "m1", plataforma: "meta", conta: "123", labels: {}, temToken: true, ...p });
+}
+
+function google(p: Partial<DestinoNaTela> = {}): DestinoNaTela {
+  return destino({
+    id: "g1",
+    plataforma: "google",
+    conta: "AW-1",
+    labels: { purchase: "abc" },
+    temToken: false,
+    ...p,
+  });
 }
 
 function loja(p: Partial<LojaTracking> = {}): LojaTracking {
@@ -265,21 +278,25 @@ describe("loja desligada", () => {
     );
     expect(
       proximoPassoDesligada(
-        loja({ ligado: false, destinos: [destino({ labels: { add_to_cart: "x" } })] })
+        loja({ ligado: false, destinos: [google({ labels: { add_to_cart: "x" } })] })
       ).acao
     ).toMatchObject({ tipo: "editar-destino", destinoId: "g1" });
+    // So Google com rotulo de compra ja pode ligar: a tag dispara a compra.
+    expect(proximoPassoDesligada(loja({ ligado: false, destinos: [google()] })).acao?.tipo).toBe(
+      "ligar"
+    );
   });
 
   it("as colunas dizem desligado, sem barra", () => {
-    const c = colunaDaPlataforma(loja({ ligado: false }), null, "google");
+    const c = colunaDaPlataforma(loja({ ligado: false }), null, "meta");
     expect(c).toEqual({ tipo: "desligado", motivo: "envio desligado nesta loja" });
-    expect(textoDaColuna(c, "google").fracao).toBeNull();
+    expect(textoDaColuna(c, "meta").fracao).toBeNull();
   });
 });
 
 describe("colunas Meta e Google", () => {
   it("sem destino da plataforma", () => {
-    expect(colunaDaPlataforma(loja(), diag(), "meta")).toEqual({
+    expect(colunaDaPlataforma(loja(), diag(), "google")).toEqual({
       tipo: "desligado",
       motivo: "sem destino nesta loja",
     });
@@ -292,9 +309,9 @@ describe("colunas Meta e Google", () => {
         destino({ id: "b", contagem: { pedidosComCompra: ["1"] } as never }),
       ],
     });
-    const c = colunaDaPlataforma(l, diag(), "google");
+    const c = colunaDaPlataforma(l, diag(), "meta");
     expect(c).toMatchObject({ tipo: "razao", chegaram: 1, esperados: 3, faltam: 2, contas: 2 });
-    expect(textoDaColuna(c, "google")).toEqual({
+    expect(textoDaColuna(c, "meta")).toEqual({
       texto: "1 de 3",
       sub: "faltam 2 · pior de 2 contas",
       fracao: 1 / 3,
@@ -303,8 +320,8 @@ describe("colunas Meta e Google", () => {
   });
 
   it("compra sem clique aparece na sub-linha", () => {
-    const c = colunaDaPlataforma(casos.semClique.loja, casos.semClique.diag, "google");
-    expect(textoDaColuna(c, "google").sub).toBe("todas chegaram · 3 sem clique do Google");
+    const c = colunaDaPlataforma(casos.semClique.loja, casos.semClique.diag, "meta");
+    expect(textoDaColuna(c, "meta").sub).toBe("todas chegaram · 3 sem clique do Meta");
   });
 
   it("modo teste e destino sem rotulo da compra nao recebem", () => {
@@ -313,15 +330,15 @@ describe("colunas Meta e Google", () => {
       motivo: "em modo teste",
     });
     expect(
-      colunaDaPlataforma(loja({ destinos: [destino({ labels: { add_to_cart: "x" } })] }), diag(), "google")
+      colunaDaPlataforma(loja({ destinos: [google({ labels: { add_to_cart: "x" } })] }), diag(), "google")
     ).toEqual({ tipo: "nao-recebe", motivo: "falta o rótulo da compra" });
   });
 
   it("falha de leitura nunca vira zero", () => {
-    const c = colunaDaPlataforma(casos.contagemIndisponivel.loja, diag(), "google");
-    expect(textoDaColuna(c, "google")).toMatchObject({ texto: "—", fracao: null });
-    const s = colunaDaPlataforma(loja(), null, "google");
-    expect(textoDaColuna(s, "google")).toMatchObject({
+    const c = colunaDaPlataforma(casos.contagemIndisponivel.loja, diag(), "meta");
+    expect(textoDaColuna(c, "meta")).toMatchObject({ texto: "—", fracao: null });
+    const s = colunaDaPlataforma(loja(), null, "meta");
+    expect(textoDaColuna(s, "meta")).toMatchObject({
       texto: "3 compras enviadas",
       sub: "pedidos não conferidos",
     });
@@ -363,25 +380,25 @@ describe("ordem e numeros do topo", () => {
       paradas: 1,
       atencao: 1,
       pedidosComparaveis: 9,
-      porPlataforma: { google: { chegaram: 7, esperados: 9, lojas: 3 }, meta: null },
+      porPlataforma: { meta: { chegaram: 7, esperados: 9, lojas: 3 }, google: null },
       lojasForaDaCobertura: 0,
     });
     expect(textoPrecisam(r)).toBe("1 parada · 1 com atenção");
-    expect(textoCobertura(r.porPlataforma)).toBe("Google 77,8% dos pedidos");
+    expect(textoCobertura(r.porPlataforma)).toBe("Meta 77,8% dos pedidos");
   });
 
-  it("uma plataforma recebendo tudo nao esconde a outra sem receber nada", () => {
+  it("o Google pela tag nao entra na cobertura nem esconde o Meta sem receber", () => {
     const l = linhaDaLoja(
       loja({
-        destinos: [destino(), meta({ contagem: { pedidosComCompra: [] } as never })],
+        destinos: [google(), meta({ contagem: { pedidosComCompra: [] } as never })],
       }),
       diag(),
       true
     );
     const r = resumoDaTela([l], { s1: diag() });
     expect(r.porPlataforma.meta).toEqual({ chegaram: 0, esperados: 3, lojas: 1 });
-    expect(r.porPlataforma.google).toEqual({ chegaram: 3, esperados: 3, lojas: 1 });
-    expect(textoCobertura(r.porPlataforma)).toBe("Meta 0% · Google 100% dos pedidos");
+    expect(r.porPlataforma.google).toBeNull();
+    expect(textoCobertura(r.porPlataforma)).toBe("Meta 0% dos pedidos");
   });
 
   it("vendas enviadas usam o maior destino, nao a soma", () => {
@@ -419,7 +436,7 @@ describe("ordem e numeros do topo", () => {
 
   it("varias contas sem perda nao falam em pior", () => {
     const l = loja({ destinos: [destino({ id: "a" }), destino({ id: "b" })] });
-    expect(textoDaColuna(colunaDaPlataforma(l, diag(), "google"), "google").sub).toBe(
+    expect(textoDaColuna(colunaDaPlataforma(l, diag(), "meta"), "meta").sub).toBe(
       "todas chegaram · 2 contas"
     );
   });
@@ -476,7 +493,7 @@ describe("por conta", () => {
   });
 
   it("o que o Meta diz so aparece com um pixel na loja e dado do Meta", () => {
-    const umPixel = loja({ comprasContadasPeloMeta: 4, destinos: [meta(), destino()] });
+    const umPixel = loja({ comprasContadasPeloMeta: 4, destinos: [meta(), google()] });
     const [m, g] = contasDaTela([umPixel]);
     expect(comprasQueOMetaDiz(m)).toBe(4);
     expect(comprasQueOMetaDiz(g)).toBeNull();
@@ -489,5 +506,51 @@ describe("por conta", () => {
 
     const semDado = loja({ destinos: [meta()] });
     expect(comprasQueOMetaDiz(contasDaTela([semDado])[0])).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// O Google sai do navegador, pela tag do Google: a coluna dele mostra a tag,
+// nunca "x de y" do servidor, e linha 'google' antiga na fila nao vira falha.
+// ---------------------------------------------------------------------------
+describe("Google pela tag", () => {
+  it("a coluna diz tag ativa, sem barra e sem contagem", () => {
+    const l = loja({ destinos: [google(), google({ id: "g2", conta: "AW-2" })] });
+    const c = colunaDaPlataforma(l, diag(), "google");
+    expect(c).toEqual({ tipo: "tag", contas: 2 });
+    expect(textoDaColuna(c, "google")).toEqual({
+      texto: "Tag ativa",
+      sub: "no navegador, contada no Google Ads · 2 contas",
+      fracao: null,
+      tom: "ok",
+    });
+  });
+
+  it("so Google: nada a fazer, e as compras enviadas nao contam o Google", () => {
+    const l = linhaDaLoja(
+      loja({
+        destinos: [
+          google({
+            contagem: {
+              porEvento: { purchase: 9 },
+              falharam: 3,
+              ultimoErro: "o Google vai pelo navegador (tag do Google), não pelo servidor",
+            } as never,
+          }),
+        ],
+      }),
+      diag(),
+      true
+    );
+    expect(l.saude).toBe("ok");
+    expect(l.problemas).toEqual([]);
+    expect(resumoDaTela([l], { s1: diag() }).enviadas).toBe(0);
+  });
+
+  it("testes do Google antigo nao entram no 'Mostrar testes'", () => {
+    const l = loja({
+      destinos: [google({ contagem: { testesPorEvento: { add_to_cart: 5 } } as never })],
+    });
+    expect(testesNaTela(contasDaTela([l]))).toBe(0);
   });
 });

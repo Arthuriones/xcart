@@ -14,6 +14,7 @@ import {
   emModoTeste,
   enviaEvento,
   oQueFalta,
+  pelaTag,
   quando,
   textoProblema,
   vereditoDoDestino,
@@ -31,6 +32,7 @@ const SELO_SAUDE: Record<Saude, { tom: TomStatus; texto: string }> = {
 function seloDestino(d: DestinoNaTela): { tom: TomStatus; texto: string; ordem: number } {
   if (!d.ativo) return { ...STATUS.destino.desativado, ordem: 4 };
   if (oQueFalta(d) !== null) return { ...STATUS.destino.incompleto, ordem: 1 };
+  if (pelaTag(d)) return { ...STATUS.destino.tagAtiva, ordem: 3 };
   if (d.contagem.falharam > 0 && d.contagem.enviados === 0) return { ...STATUS.destino.erro, ordem: 0 };
   if (emModoTeste(d)) return { ...STATUS.destino.modoTeste, ordem: 2 };
   return { ...STATUS.destino.enviando, ordem: 3 };
@@ -39,6 +41,8 @@ function seloDestino(d: DestinoNaTela): { tom: TomStatus; texto: string; ordem: 
 function comprasDo(d: DestinoNaTela, loja: LojaTracking, diag: DiagnosticoLoja | null): string {
   const enviaCompra = enviaEvento(d, "purchase");
   if (!enviaCompra) return "Não envia compra";
+  // O Google vai pela tag no navegador: quem conta e o Google Ads.
+  if (pelaTag(d)) return "Pela tag do Google";
   const v = vereditoDoDestino(d, loja, diag);
   if (v.tipo === "sem-contagem") return "—";
   if (v.tipo === "sem-pedidos") return plural(v.compras, "compra enviada", "compras enviadas");
@@ -115,7 +119,7 @@ export function RastreamentoLoja({ r }: { r: RastreamentoDaLoja }) {
     return (
       <EmptyState
         titulo="Rastreamento desligado nesta loja"
-        descricao="Ligue em Rastreamento para mandar as vendas desta loja ao Meta e ao Google pelo servidor."
+        descricao="Ligue em Rastreamento para mandar as vendas desta loja ao Meta (pelo servidor) e ao Google (pela tag no navegador)."
         acao={
           <Link href="/tracking" className={cn(buttonVariants({ variant: "primary" }))}>
             Abrir Rastreamento
@@ -141,10 +145,10 @@ export function RastreamentoLoja({ r }: { r: RastreamentoDaLoja }) {
       estado: <StatusBadge tom={selo.tom} texto={selo.texto} />,
       estadoOrdem: selo.ordem,
       compras: comprasDo(d, loja, diag),
-      enviados: d.contagem.enviados.toLocaleString("pt-BR"),
-      enviadosValor: d.contagem.enviados,
+      enviados: pelaTag(d) ? "—" : d.contagem.enviados.toLocaleString("pt-BR"),
+      enviadosValor: pelaTag(d) ? 0 : d.contagem.enviados,
       falhas:
-        d.contagem.falharam > 0 ? (
+        d.contagem.falharam > 0 && !pelaTag(d) ? (
           <span className="flex flex-col items-end gap-0.5 whitespace-normal">
             <span className="font-semibold text-err">{d.contagem.falharam.toLocaleString("pt-BR")}</span>
             {d.contagem.ultimoErro ? (
@@ -154,7 +158,7 @@ export function RastreamentoLoja({ r }: { r: RastreamentoDaLoja }) {
         ) : (
           "0"
         ),
-      falhasValor: d.contagem.falharam,
+      falhasValor: pelaTag(d) ? 0 : d.contagem.falharam,
     };
   });
 

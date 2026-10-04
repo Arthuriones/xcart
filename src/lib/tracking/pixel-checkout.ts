@@ -16,9 +16,10 @@
 //
 // O QUE ELE E, E O QUE ELE NAO E
 //
-// Ele NAO manda nada para o Meta nem para o Google. Ele avisa o NOSSO coletor,
-// e o nosso servidor e que envia -- igual ao snippet do tema. O pixel e o
-// sensor; o emissor continua sendo o servidor.
+// Para o Meta ele NAO manda nada direto: avisa o NOSSO coletor, e o nosso
+// servidor e que envia -- igual ao snippet do tema. Para o Google ele carrega a
+// tag do Google (gtag.js) e dispara begin_checkout e purchase no navegador,
+// com as contas de /api/tracking/google-config.
 //
 // LIMITE QUE DECIDE O DESENHO
 //
@@ -31,13 +32,12 @@
 // sinais que os nossos eventos de funil nunca tiveram. Isso foi verificado no
 // codigo de implementacoes publicas de Web Pixel, nao suposto.
 //
-// A COMPRA NAO SAI DAQUI
+// A COMPRA DO META NAO SAI DAQUI
 //
-// `checkout_completed` existe e seria tentador. Mas a compra ja vem do webhook
-// `orders/create`, que e servidor-a-servidor: nao depende de o navegador do
-// comprador continuar vivo na pagina de obrigado. Mandar pelos dois caminhos
-// faria o primeiro a chegar vencer o indice unico da fila -- e o que chegaria
-// primeiro seria justamente o mais fragil.
+// A compra do Meta vem do webhook `orders/create`, que e servidor-a-servidor:
+// nao depende de o navegador do comprador continuar vivo na pagina de
+// obrigado. `checkout_completed` so dispara a compra do GOOGLE, pela tag --
+// nunca vai para o coletor.
 // ============================================================================
 
 export interface DadosDoPixel {

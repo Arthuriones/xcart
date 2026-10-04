@@ -258,28 +258,21 @@ async function tratarPedidoCriado(
     dominioLoja: loja.shop_domain,
   });
 
-  // Uma linha de fila por DESTINO ativo que aceita a compra.
+  // Uma linha de fila por DESTINO Meta ativo que aceita a compra.
   //
-  // Destino e linha, nao coluna, desde a 043: a loja pode ter cinco contas de
-  // Google e dois pixels Meta. Todas recebem -- so a conta dona do clique
-  // conta. Pela Data Manager as outras respondem CLICK_NOT_FOUND no
-  // diagnostico e a linha vira "nao e desta conta" (fila.ts), nao erro.
+  // Destino e linha, nao coluna, desde a 043: a loja pode ter dois pixels
+  // Meta, e uma linha falhar nao pode impedir a outra de sair.
   //
-  // As linhas ficam separadas de proposito: cada API tem o seu formato, e uma
-  // falhar nao pode impedir as outras de sair.
+  // O GOOGLE NAO SAI DAQUI: a compra do Google e disparada pelo Web Pixel do
+  // checkout (checkout_completed), pela tag do Google no navegador.
   const { destinosDaLoja, destinoAceita } = await import("@/lib/tracking/destinos");
   const querem = (await destinosDaLoja(admin, loja.id, { comToken: true })).filter(
-    (d) => destinoAceita(d, evento.event_name)
+    (d) => d.plataforma === "meta" && destinoAceita(d)
   );
 
   if (querem.length === 0) {
     return ok({ ignorado: "nenhum destino configurado", topic: "orders/create" });
   }
-
-  const { montarConversaoGoogle } = await import("@/lib/tracking/purchase");
-  const conversaoGoogle = querem.some((d) => d.plataforma === "google")
-    ? montarConversaoGoogle(pedido, { identidade, dominioLoja: loja.shop_domain })
-    : null;
 
   // Compra de teste que o filtro do pedido nao pega: o dono pagando de verdade
   // depois do ?xcart_teste=1 (atributo _xc_teste), ou com um gclid TESTE_*.
@@ -294,22 +287,19 @@ async function tratarPedidoCriado(
 
   const destinos = querem.map((d) => {
     const envia = enviaAoDestino(d, marcas.teste);
-    const base =
-      d.plataforma === "google"
-        ? conversaoGoogle!
-        : // O id de produto e do DESTINO: dois pixels Meta na mesma loja podem
-          // apontar para catalogos montados de formas diferentes. Sem template
-          // configurado reusa o evento ja montado -- e o caso comum, e remontar
-          // so repetiria os hashes do user_data.
-          d.idTemplate
-          ? montarPurchase(pedido, {
-              identidade,
-              dominioLoja: loja.shop_domain,
-              idTemplate: d.idTemplate,
-            }).evento
-          : evento;
+    // O id de produto e do DESTINO: dois pixels Meta na mesma loja podem
+    // apontar para catalogos montados de formas diferentes. Sem template
+    // configurado reusa o evento ja montado -- e o caso comum, e remontar so
+    // repetiria os hashes do user_data.
+    const base = d.idTemplate
+      ? montarPurchase(pedido, {
+          identidade,
+          dominioLoja: loja.shop_domain,
+          idTemplate: d.idTemplate,
+        }).evento
+      : evento;
     return {
-      destination: d.plataforma,
+      destination: "meta" as const,
       destinationId: d.id,
       destino: d,
       envia,
@@ -323,17 +313,17 @@ async function tratarPedidoCriado(
     // EM PARALELO, nao em fila.
     //
     // Cada destino e uma chamada de rede para outra empresa, e elas nao
-    // dependem umas das outras: linhas de fila distintas, contas distintas.
-    // Em serie, cinco contas do Google somavam cinco idas e voltas antes de o
-    // webhook responder -- e a Shopify tem limite de tempo para a resposta.
+    // dependem umas das outras: linhas de fila distintas, contas distintas. Em
+    // serie, somariam idas e voltas antes de o webhook responder -- e a
+    // Shopify tem limite de tempo para a resposta.
     //
     // Uma falhar continua nao impedindo as outras: cada `entregar` trata o
     // proprio erro e grava o desfecho na linha dela.
     await Promise.all(
       destinos.map(async (alvo) => {
-        // A chave do mapa carrega o id do destino: com duas contas do Google,
-        // uma chave "google" sozinha faria a segunda sobrescrever a primeira e
-        // o log mentiria sobre o que saiu.
+        // A chave do mapa carrega o id do destino: com dois pixels Meta, uma
+        // chave "meta" sozinha faria o segundo sobrescrever o primeiro e o log
+        // mentiria sobre o que saiu.
         const chave = `${alvo.destination}:${alvo.destinationId.slice(0, 8)}`;
 
         if (!alvo.envia) {
@@ -376,8 +366,6 @@ async function tratarPedidoCriado(
             store_id: loja.id,
             destination: alvo.destination,
             destination_id: alvo.destinationId,
-            // "Purchase" do Meta; o catalogo normaliza a caixa para achar o
-            // rotulo da conversion action de compra no Google.
             event_name: evento.event_name,
             payload: alvo.payload,
             attempts: 0,

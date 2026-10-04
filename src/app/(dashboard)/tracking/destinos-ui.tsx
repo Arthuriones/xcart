@@ -37,6 +37,7 @@ import {
   ROTULO_EVENTO,
   numerosDoEvento,
   oQueFalta,
+  pelaTag,
   plural,
   type Plataforma,
   type VereditoDestino,
@@ -263,9 +264,9 @@ export function FormularioDestino({
               <p className="flex items-start gap-1.5 text-label text-t2">
                 <CircleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" />
                 <span>
-                  Estes rótulos são de <strong className="font-medium text-ink">conversão</strong>,
-                  não de remarketing. O público de remarketing o Google só monta com a tag no
-                  navegador: é a linha “Remarketing do Google” no detalhe da loja.
+                  Estes rótulos são de <strong className="font-medium text-ink">conversão</strong>:
+                  a tag do Google, no navegador do comprador, dispara cada evento que tem rótulo.
+                  O público de remarketing é a linha “Remarketing do Google” no detalhe da loja.
                 </span>
               </p>
             </fieldset>
@@ -402,6 +403,7 @@ export function FormularioDestino({
 function estadoDoDestino(d: DestinoNaTela, faltam: number) {
   if (!d.ativo) return STATUS.destino.desativado;
   if (oQueFalta(d) !== null) return STATUS.destino.incompleto;
+  if (pelaTag(d)) return STATUS.destino.tagAtiva;
   if (d.testEventCode) return STATUS.destino.modoTeste;
   if (faltam > 0) return STATUS.destino.erro;
   return STATUS.destino.enviando;
@@ -508,6 +510,13 @@ export function CartaoDestino({
           : "Falta o rótulo de pelo menos um evento: sem rótulo não há o que enviar.",
     });
   }
+  if (pelaTag(destino) && destino.ativo && !falta) {
+    notas.push({
+      tom: "info",
+      texto:
+        "Vai pela tag do Google, no navegador do comprador: as conversões são contadas no Google Ads, não aqui.",
+    });
+  }
   if (destino.testEventCode) {
     notas.push({
       tom: "info",
@@ -515,7 +524,8 @@ export function CartaoDestino({
         "Em modo teste: os eventos vão para a aba de teste do Gerenciador de Eventos e não contam como conversão.",
     });
   }
-  if (c.falharam > 0) {
+  // O Google pela tag nao passa pela fila: falha ou fila dele e resto de antes.
+  if (c.falharam > 0 && !pelaTag(destino)) {
     notas.push({
       tom: "err",
       texto: (
@@ -526,7 +536,7 @@ export function CartaoDestino({
       ),
     });
   }
-  if (c.pendentes > 0) {
+  if (c.pendentes > 0 && !pelaTag(destino)) {
     notas.push({
       tom: "neutral",
       texto:

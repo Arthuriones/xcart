@@ -27,10 +27,11 @@ import { ContasTabela } from "../contas-tabela";
 import { formatarCustomerId, plural, type Estado, type GastoNaTela } from "../regras";
 
 // ============================================================================
-// Integracoes -> Google. O gasto chega EMPURRADO por um script colado em cada
-// conta (a API do Google ainda pede o nivel Explorer); as conversoes saem pela
-// Data Manager API (envio-data-manager.tsx), por destino. Cadastro e script
-// novo usam as APIs de sempre (/api/ads/google/contas e .../segredo).
+// Integracoes -> Google. As conversoes saem do navegador, pela tag do Google
+// (o AW- e os rotulos ficam no Rastreamento). O gasto, OPCIONAL, chega
+// EMPURRADO por um script colado em cada conta (a API do Google ainda pede o
+// nivel Explorer). Cadastro e script novo usam as APIs de sempre
+// (/api/ads/google/contas e .../segredo).
 //
 // O script traz o segredo da conta e aparece UMA vez, na resposta do cadastro.
 // A tela avisa isso ANTES de gerar, e o texto copiado e o que a API devolveu,
@@ -233,7 +234,6 @@ export function TelaGoogle({
   lojas,
   estadoLeitura,
   envio,
-  dataManager,
   tabela,
 }: {
   contas: ContaAnuncioResumo[];
@@ -243,8 +243,6 @@ export function TelaGoogle({
   estadoLeitura: Estado;
   /** O cartao "Para enviar as compras" (server component). */
   envio: ReactNode;
-  /** "Conversões pela API do Google": ID do cliente e acoes por destino. */
-  dataManager?: ReactNode;
   tabela: {
     gastos: Record<string, GastoNaTela>;
     erroGasto: string | null;
@@ -274,15 +272,13 @@ export function TelaGoogle({
 
   return (
     <>
-      {dataManager}
-
       <div className="grid gap-3 md:grid-cols-2">
         {envio}
         <section
           aria-labelledby="ler-google"
           className="flex min-w-0 flex-col gap-2.5 rounded-card border border-border bg-surface p-4"
         >
-          <span className="text-label font-semibold text-t2">Para ler o gasto</span>
+          <span className="text-label font-semibold text-t2">Para ler o gasto (opcional)</span>
           <h3 id="ler-google" className="text-section text-ink">
             {semConta ? "Script por conta" : `Script em ${plural(todas, "conta", "contas")}`}
           </h3>

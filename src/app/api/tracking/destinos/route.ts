@@ -5,12 +5,6 @@ import { apenasNumeroDaConversao } from "@/lib/tracking/normalizar";
 import { chaveDoEvento, limparMapaDeRotulos } from "@/lib/tracking/eventos";
 import { TEMPLATE_PADRAO, validarTemplate } from "@/lib/tracking/id-produto";
 import { validarEscritaNoPixel } from "@/lib/tracking/meta-capi";
-import { podeUsarDataManager } from "@/lib/tracking/google-dm";
-import {
-  usaDataManager,
-  validarConfigDataManager,
-  type ConfigDataManager,
-} from "@/lib/tracking/google-url";
 
 export const runtime = "nodejs";
 
@@ -23,18 +17,17 @@ export const runtime = "nodejs";
 // diferentes do mesmo catalogo. Antes da 043 isto era UMA coluna por
 // plataforma, e a segunda conta nao tinha onde morar.
 //
-// Mandar todo evento para TODAS as contas e correto, nao desperdicio: so a conta
-// dona do clique aceita. Pela Data Manager as outras respondem "clique nao
-// encontrado" no diagnostico, e a fila marca "nao e desta conta" quando uma
-// irma aceitou -- nao e erro. Adivinhar a dona antes custaria a conversao
-// quando adivinhasse errado.
+// Mandar todo evento para TODAS as contas e correto, nao desperdicio: conversao
+// cujo gclid nao pertence a conta e DESCARTADA pelo Google -- a conta dona do
+// clique conta, as outras ignoram. Entao nao existe roteamento a fazer por
+// produto, e tentar adivinhar qual conta e a dona custaria a conversao quando
+// adivinhasse errado.
 //
-// O GOOGLE TEM DOIS CAMINHOS, POR DESTINO
+// O GOOGLE E CONFIGURACAO, NAO FILA
 //
-// Com `customerId` + `acoes` (ID da acao "Importar de cliques" por evento), o
-// destino sai pela Data Manager API. Sem, continua no ping antigo pelos
-// `labels`. Os dois convivem: o destino com rotulos e sem ID de cliente segue
-// como sempre, e mandar os tres campos vazios volta um destino para o antigo.
+// A conta AW- e os rotulos por evento sao lidos pela tag do Google no
+// navegador (/api/tracking/google-config); nada sai do servidor para o Google.
+// Aqui so se grava e valida.
 //
 // TUDO PASSA PELO SERVICE ROLE
 //
@@ -62,12 +55,6 @@ interface CorpoDestino {
   conta?: string | null;
   /** So Google: {"purchase":"AbC...","add_to_cart":"XyZ..."}. */
   labels?: Record<string, string> | null;
-  /** So Google, Data Manager: ID do cliente (123-456-7890). Ausente = nao mexer. */
-  customerId?: string | null;
-  /** So Google, Data Manager: a MCC, quando a service account entrou por ela. */
-  loginCustomerId?: string | null;
-  /** So Google, Data Manager: {"purchase":"123","add_to_cart":"456"}. */
-  acoes?: Record<string, string> | null;
   testEventCode?: string | null;
   /**
    * Formato do id de produto: {variant_id}, {product_id}, {sku}.
@@ -289,8 +276,6 @@ function validar(
       testEventCode: string | null;
       idTemplate: string | null;
       token: string | null;
-      /** So Google. Tudo nulo/vazio = caminho antigo. */
-      dm: ConfigDataManager | null;
     } {
   const token = (corpo.accessToken || "").trim() || null;
 
@@ -312,25 +297,20 @@ function validar(
       return { erro: "ID de conversão inválido. Esperado algo como AW-123456789." };
     }
 
-    // Meio preenchido e recusado: conta sem acao ficaria "configurada" na tela
-    // sem mandar nada.
-    const dm = validarConfigDataManager(corpo);
-    if ("erro" in dm) return { erro: dm.erro };
-
     // Descarta evento desconhecido e rotulo vazio: o mapa nunca chega ao banco
     // como {"purchase": ""}.
     const labels = limparMapaDeRotulos(corpo.labels);
-    if (Object.keys(labels).length === 0 && !usaDataManager(dm)) {
+    if (Object.keys(labels).length === 0) {
       return {
         erro:
-          "Preencha o ID do cliente e as ações de importação de cliques (ou o rótulo de " +
-          "ao menos um evento) — no Google cada evento é uma ação de conversão própria.",
+          "Preencha o rótulo de ao menos um evento — no Google cada evento é uma " +
+          "ação de conversão própria, e sem rótulo não há o que enviar.",
       };
     }
 
     // Guardado como AW-<digitos>: o lojista cola o que o painel mostra, com
     // espaco ou sem prefixo, e a URL do endpoint recusa qualquer outra forma.
-    return { conta: `AW-${numero}`, labels, testEventCode: null, idTemplate, token: null, dm };
+    return { conta: `AW-${numero}`, labels, testEventCode: null, idTemplate, token: null };
   }
 
   // So digitos: o Events Manager as vezes mostra o id com espaco, e o Meta
@@ -352,52 +332,7 @@ function validar(
     testEventCode: (corpo.testEventCode || "").trim() || null,
     idTemplate,
     token,
-    dm: null,
   };
-}
-
-/** O corpo trouxe algum campo da Data Manager? Ausente = nao mexer no gravado. */
-function mexeNaDataManager(corpo: CorpoDestino): boolean {
-  return (
-    corpo.customerId !== undefined ||
-    corpo.loginCustomerId !== undefined ||
-    corpo.acoes !== undefined
-  );
-}
-
-/**
- * As colunas da 054, so quando o corpo mexeu nelas. Escrever sempre faria toda
- * edicao (inclusive de token do Meta) falhar se o deploy chegasse antes da
- * migration.
- */
-function colunasDataManager(
-  corpo: CorpoDestino,
-  dm: ConfigDataManager | null
-): Record<string, unknown> {
-  if (!dm || !mexeNaDataManager(corpo)) return {};
-  return {
-    customer_id: dm.customerId,
-    login_customer_id: dm.loginCustomerId,
-    acoes: dm.acoes,
-  };
-}
-
-/**
- * A service account e uma so, do dono do xcart. Gravar customer_id/MCC sem esta
- * trava deixaria qualquer lojista mandar conversao para a conta de outro (o
- * customer id e o id da acao nao sao segredo). Limpar continua livre: e assim
- * que se volta ao caminho antigo.
- */
-function recusaDataManager(
-  corpo: CorpoDestino,
-  dm: ConfigDataManager | null,
-  userId: string
-): NextResponse | null {
-  if (!mexeNaDataManager(corpo) || !dm?.customerId || podeUsarDataManager(userId)) return null;
-  return NextResponse.json(
-    { error: "Envio pela API do Google não liberado para esta conta." },
-    { status: 403 }
-  );
 }
 
 /** Mensagem legivel para o unique (store_id, plataforma, conta). */
@@ -448,8 +383,6 @@ export async function POST(request: NextRequest) {
 
   const v = validar(corpo.plataforma, corpo, { exigirToken: true });
   if ("erro" in v) return NextResponse.json({ error: v.erro }, { status: 400 });
-  const semPermissao = recusaDataManager(corpo, v.dm, loja.user_id);
-  if (semPermissao) return semPermissao;
 
   // Antes do insert: token recusado nao cria destino nenhum.
   if (corpo.plataforma === "meta" && v.token) {
@@ -469,7 +402,6 @@ export async function POST(request: NextRequest) {
       test_event_code: v.testEventCode,
       id_template: v.idTemplate,
       ativo: corpo.ativo ?? true,
-      ...colunasDataManager(corpo, v.dm),
     })
     .select("id")
     .single();
@@ -515,11 +447,11 @@ export async function PATCH(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const admin = createAdminClient();
-  // `*`: antes da migration 054 as colunas da Data Manager nao existem, e a
-  // lista explicita faria toda edicao virar "Destino nao encontrado".
   const { data: atual } = await admin
     .from("tracking_destinations")
-    .select("*")
+    .select(
+      "id, store_id, user_id, plataforma, conta, labels, test_event_code, id_template, ativo"
+    )
     .eq("id", corpo.id)
     .maybeSingle();
 
@@ -543,7 +475,6 @@ export async function PATCH(request: NextRequest) {
     corpo.conta === undefined &&
     corpo.labels === undefined &&
     corpo.nome === undefined &&
-    !mexeNaDataManager(corpo) &&
     !(corpo.accessToken || "").trim();
 
   if (soMudarAtivo) {
@@ -569,17 +500,10 @@ export async function PATCH(request: NextRequest) {
       labels: corpo.labels ?? (atual.labels as Record<string, string> | null),
       testEventCode: corpo.testEventCode ?? atual.test_event_code,
       idTemplate: corpo.idTemplate ?? atual.id_template,
-      // Ausente = o gravado; null/"" = apagar (volta ao caminho antigo).
-      customerId: corpo.customerId !== undefined ? corpo.customerId : atual.customer_id,
-      loginCustomerId:
-        corpo.loginCustomerId !== undefined ? corpo.loginCustomerId : atual.login_customer_id,
-      acoes: corpo.acoes !== undefined ? corpo.acoes : atual.acoes,
     },
     { exigirToken: true, jaTemToken: Boolean(segredo?.access_token) }
   );
   if ("erro" in v) return NextResponse.json({ error: v.erro }, { status: 400 });
-  const semPermissao = recusaDataManager(corpo, v.dm, user.id);
-  if (semPermissao) return semPermissao;
 
   // Antes de qualquer escrita: token recusado nao muda nada, nem o resto do
   // formulario -- senao o lojista veria "erro" e acharia que nada foi salvo.
@@ -596,7 +520,6 @@ export async function PATCH(request: NextRequest) {
     id_template: v.idTemplate,
     ativo: corpo.ativo ?? atual.ativo,
     updated_at: new Date().toISOString(),
-    ...colunasDataManager(corpo, v.dm),
   };
   // Campo ausente nao vira null: PATCH sem `nome` nao e "apague o nome".
   if (corpo.nome !== undefined) mudancas.nome = (corpo.nome || "").trim() || null;

@@ -51,6 +51,8 @@ export const STATUS = {
   },
   destino: {
     enviando: { tom: "ok", texto: "Enviando" },
+    /** Google: sai do navegador pela tag do Google, sem contagem no servidor. */
+    tagAtiva: { tom: "ok", texto: "Tag ativa" },
     incompleto: { tom: "warn", texto: "Incompleto" },
     desativado: { tom: "neutral", texto: "Desativado" },
     modoTeste: { tom: "info", texto: "Modo teste" },

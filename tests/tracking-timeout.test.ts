@@ -33,11 +33,6 @@ describe("toda saida de rastreamento tem teto de espera", () => {
     expect(Number(m![1])).toBeLessThanOrEqual(10000);
   });
 
-  it("o Google passa timeoutMs na conversao", () => {
-    const fonte = lerFonte("src", "lib", "tracking", "google-ads.ts");
-    expect(fonte).toMatch(/timeoutMs: \d+,/);
-  });
-
   it("safeFetch aceita o teto sem impor um padrao", () => {
     // Sem padrao de proposito: o mesmo safeFetch importa catalogo por proxy,
     // que legitimamente demora. Um padrao global quebraria a importacao.
@@ -55,8 +50,8 @@ describe("toda saida de rastreamento tem teto de espera", () => {
     // funcao com catch proprio -- a que confere credencial -- e ela nao vai
     // para fila nenhuma, entao nao tem (nem precisa de) `podeTentarDeNovo`.
     const entregadores: [string, string][] = [
+      // O Google saiu do servidor: vai pela tag do navegador (google-tag.ts).
       ["meta-capi.ts", "export async function enviarParaMeta"],
-      ["google-ads.ts", "export async function enviarParaGoogleAds"],
     ];
 
     for (const [arquivo, assinatura] of entregadores) {

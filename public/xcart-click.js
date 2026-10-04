@@ -19,9 +19,12 @@
  *
  * A Shopify nao tem webhook para essas tres acoes -- elas acontecem no
  * navegador. Entao aqui a gente AVISA o coletor do xcart, e e o servidor do
- * xcart que fala com o Google. O ping de conversao nunca sai do navegador: o
- * bloqueador de anuncio derruba a requisicao para googleadservices.com, e nao a
- * requisicao para ca.
+ * xcart que fala com o Meta (CAPI).
+ *
+ * O GOOGLE ADS SAI DAQUI MESMO, pela tag do Google (gtag.js): ver produto e
+ * adicionar ao carrinho viram conversao com send_to AW-x/rotulo, para cada
+ * conta de /api/tracking/google-config. O begin_checkout do Google so sai do
+ * tema quando o Web Pixel NAO esta cobrindo o checkout (ver 5).
  *
  * Nenhum valor monetario e enviado daqui. O coletor tambem ignora se vier --
  * valor vindo do navegador e numero que qualquer um pode inflar na conta de
@@ -258,8 +261,8 @@
   // Vale 1 dia, nao 90: o link nao tem segredo, e um link vazado nao pode
   // calar por meses as compras reais de quem o abriu.
   // O evento continua indo ao coletor -- e la que o dono confere o teste --,
-  // mas marcado: o servidor nao manda ao Google, e ao Meta so com codigo de
-  // teste. Vai tambem ao carrinho, para o checkout e a compra saberem.
+  // mas marcado: ao Meta so vai com codigo de teste, e a tag do Google nem
+  // dispara. Vai tambem ao carrinho, para o checkout e a compra saberem.
   var pedidoTeste = daUrl("xcart_teste");
   if (pedidoTeste === "1") gravarCookie(PREFIXO + "teste", "1", 1);
   else if (pedidoTeste === "0") apagarCookie(PREFIXO + "teste");
@@ -804,19 +807,22 @@
     var produto = COM_PRODUTO[evento] ? produtoAtual() : null;
     var pagina = location.href.slice(0, 500);
     quandoPronto(function () {
-      entregar(corpoDoEvento(evento, instante, produto, pagina));
+      // Instante no id: protege contra reenvio da MESMA acao (o nosso retry, o
+      // tema disparando duas vezes), sem impedir a acao repetida de verdade --
+      // adicionar dois produtos ao carrinho sao dois eventos. O mesmo id vira
+      // o transaction_id da conversao no Google.
+      var id = evento + "_" + vid + "_" + instante;
+      entregar(corpoDoEvento(evento, id, produto, pagina));
+      converterNoGoogle(evento, id);
     });
   }
 
-  function corpoDoEvento(evento, instante, produto, pagina) {
+  function corpoDoEvento(evento, id, produto, pagina) {
     return JSON.stringify({
       shop: LOJA,
       storeId: STORE_ID,
       evento: evento,
-      // Instante no id: protege contra reenvio da MESMA acao (o nosso retry, o
-      // tema disparando duas vezes), sem impedir a acao repetida de verdade --
-      // adicionar dois produtos ao carrinho sao dois eventos.
-      eventId: evento + "_" + vid + "_" + instante,
+      eventId: id,
       visitorId: vid,
       gclid: achados.gclid || null,
       gbraid: achados.gbraid || null,
@@ -1086,19 +1092,44 @@
   // Isto NAO da para fazer do servidor, e e o motivo de existir aqui.
   //
   // Quem monta o publico de remarketing e o Google, a partir de um cookie que
-  // ele so consegue gravar quando o NAVEGADOR fala com ele diretamente. O nosso
-  // ping de conversao sai do servidor com um gclid -- nao ha navegador nenhum
-  // do outro lado para entrar em lista. Conversao server-side e remarketing sao
-  // coisas diferentes, e uma nao substitui a outra.
+  // ele so consegue gravar quando o NAVEGADOR fala com ele diretamente.
   //
-  // O QUE NAO PODE ACONTECER AQUI: disparar conversao.
-  //
-  // `gtag('config', 'AW-x')` sozinho manda um hit de remarketing e nada mais.
-  // Conversao so sai com `gtag('event','conversion',{send_to:'AW-x/rotulo'})`.
-  // Se alguem acrescentar isso, a venda passa a contar duas vezes -- uma pelo
-  // navegador e outra pelo nosso servidor -- e o Google nao deduplica, porque os
-  // dois caminhos nao compartilham identificador de transacao.
+  // Aqui so o hit de remarketing (page_view com send_to = a conta, sem
+  // rotulo): nao e conversao. As conversoes ficam na secao 5, com rotulo e
+  // transaction_id -- e o servidor nao manda mais nada ao Google, entao nao ha
+  // segundo caminho para contar em dobro.
   // =========================================================================
+
+  /** A fila da tag do Google. A mesma do tema, se ele ja tiver uma. */
+  function gtag() {
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push(arguments);
+  }
+
+  var gtagCarregado = false;
+  /** Contas que ja receberam `config`, para nao configurar duas vezes. */
+  var configuradas = {};
+
+  /**
+   * Carrega o gtag.js UMA vez. Se o tema ja carrega (app do Google, tag
+   * colada), reaproveita: a biblioteca atende qualquer conta pelo dataLayer.
+   */
+  function carregarGtag(conta) {
+    if (gtagCarregado) return;
+    gtagCarregado = true;
+    var jaTem = false;
+    try {
+      jaTem = !!document.querySelector('script[src*="googletagmanager.com/gtag/js"]');
+    } catch (e) {
+      jaTem = false;
+    }
+    if (jaTem) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(conta);
+    document.head.appendChild(s);
+    gtag("js", new Date());
+  }
   var REMARKETING = (tag && tag.getAttribute("data-xcart-remarketing")) || null;
 
   function tipoDaPagina() {
@@ -1223,27 +1254,17 @@
     var contas = contasDeRemarketing();
     if (contas.length === 0) return;
 
-    window.dataLayer = window.dataLayer || [];
-    function gtag() {
-      window.dataLayer.push(arguments);
-    }
-
     // UM carregamento de gtag.js, nao um por conta: o arquivo e o mesmo e a
     // biblioteca atende varias contas pelo dataLayer. Carregar de novo so
     // duplicaria o download.
-    var s = document.createElement("script");
-    s.async = true;
-    s.src =
-      "https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(contas[0]);
-    document.head.appendChild(s);
-
-    gtag("js", new Date());
+    carregarGtag(contas[0]);
 
     var pagina = tipoDaPagina();
     var prod = dadosDoProduto();
 
     for (var i = 0; i < contas.length; i++) {
       gtag("config", contas[i]);
+      configuradas[contas[i]] = true;
 
       var params = { send_to: contas[i], ecomm_pagetype: pagina };
       if (prod && prod.id) {
@@ -1262,6 +1283,117 @@
     document.addEventListener("DOMContentLoaded", ligarRemarketing);
   } else {
     ligarRemarketing();
+  }
+
+  // =========================================================================
+  // 5. CONVERSOES DO GOOGLE ADS, PELA TAG DO GOOGLE
+  //
+  // O Google sai do navegador, nao do servidor. As contas e os rotulos vem de
+  // /api/tracking/google-config (id da loja E dominio, como o coletor). Cada
+  // conta com rotulo para o evento recebe a conversao, com send_to
+  // AW-x/rotulo e transaction_id = o id do evento (o mesmo do coletor).
+  //
+  // - view_item e add_to_cart: daqui.
+  // - begin_checkout: daqui SO quando o Web Pixel nao cobre o checkout (header
+  //   x-xcart-pixel-checkout: 0). Cobrindo, sai do pixel: o clique no botao e
+  //   o checkout_started descrevem a mesma acao com ids diferentes, e o Google
+  //   contaria duas.
+  // - purchase: nunca daqui. Sai do pixel, na pagina de obrigado.
+  // - teste (?xcart_teste=1): nada sai para o Google.
+  // =========================================================================
+
+  /** null = ainda buscando; [] = loja sem Google (ou a busca falhou). */
+  var contasGoogle = null;
+  var esperandoGoogle = [];
+  var pixelCobreCheckout = true;
+
+  /** O consentimento no formato do Google; sem leitura, nada e forcado. */
+  function aplicarConsentimentoGoogle() {
+    var c = consentimento();
+    if (!c) return;
+    var v = c === "concedido" ? "granted" : "denied";
+    gtag("consent", "update", { ad_storage: v, ad_user_data: v, ad_personalization: v });
+  }
+
+  function receberContasGoogle(lista) {
+    var contas = [];
+    for (var i = 0; i < (lista || []).length; i++) {
+      var c = lista[i];
+      if (c && /^AW-\d+$/.test(c.conta || "")) contas.push({ conta: c.conta, labels: c.labels || {} });
+    }
+    contasGoogle = contas;
+    if (contas.length) {
+      carregarGtag(contas[0].conta);
+      aplicarConsentimentoGoogle();
+      for (var j = 0; j < contas.length; j++) {
+        if (configuradas[contas[j].conta]) continue;
+        configuradas[contas[j].conta] = true;
+        // Sem page_view: o hit de remarketing e da secao 4, e so para as
+        // contas que o lojista ligou la.
+        gtag("config", contas[j].conta, { send_page_view: false });
+      }
+    }
+    var fila = esperandoGoogle;
+    esperandoGoogle = [];
+    for (var k = 0; k < fila.length; k++) {
+      try {
+        fila[k]();
+      } catch (e) {
+        /* uma conversao com problema nao segura as outras */
+      }
+    }
+  }
+
+  function ligarGoogle() {
+    if (!origem || !LOJA || !STORE_ID) {
+      contasGoogle = [];
+      return;
+    }
+    try {
+      fetch(
+        origem +
+          "/api/tracking/google-config?store=" +
+          encodeURIComponent(STORE_ID) +
+          "&shop=" +
+          encodeURIComponent(LOJA),
+        { credentials: "omit", mode: "cors" }
+      )
+        .then(function (r) {
+          if (!r || !r.ok) return [];
+          try {
+            pixelCobreCheckout = r.headers.get("x-xcart-pixel-checkout") !== "0";
+          } catch (e) {
+            pixelCobreCheckout = true;
+          }
+          return r.json();
+        })
+        .then(receberContasGoogle, function () {
+          receberContasGoogle([]);
+        });
+    } catch (e) {
+      receberContasGoogle([]);
+    }
+  }
+
+  /** Dispara a conversao do evento em cada conta que tem rotulo para ele. */
+  function converterNoGoogle(evento, id) {
+    if (TESTE) return;
+    if (evento !== "view_item" && evento !== "add_to_cart" && evento !== "begin_checkout") return;
+    var disparar = function () {
+      if (!contasGoogle || !contasGoogle.length) return;
+      if (evento === "begin_checkout" && pixelCobreCheckout) return;
+      aplicarConsentimentoGoogle();
+      for (var i = 0; i < contasGoogle.length; i++) {
+        var rotulo = contasGoogle[i].labels[evento];
+        if (!rotulo) continue;
+        gtag("event", evento, {
+          send_to: contasGoogle[i].conta + "/" + rotulo,
+          transaction_id: id,
+        });
+      }
+    };
+    if (contasGoogle === null) esperandoGoogle.push(disparar);
+    else disparar();
   }
 
   // AGORA, sincronamente, nao no DOMContentLoaded.
@@ -1294,6 +1426,7 @@
   }
 
   if (COLETOR && LOJA) {
+    ligarGoogle();
     observarCheckout();
     esperarClienteDaShopify();
 

@@ -5,9 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import {
-  cliqueDoGoogle,
   cliquesDaLanding,
-  montarConversaoGoogle,
   montarPurchase,
   type PedidoShopify,
 } from "../src/lib/tracking/purchase";
@@ -66,37 +64,7 @@ describe("cliquesDaLanding", () => {
   });
 });
 
-describe("cliqueDoGoogle", () => {
-  it("usa a primeira fonte que tem clique, sem misturar fontes", () => {
-    // gclid do carrinho com gbraid da identidade seria um clique que nunca
-    // aconteceu.
-    const r = cliqueDoGoogle({ gclid: "DO_CARRINHO" }, { gbraid: "DA_IDENTIDADE" });
-    expect(r).toEqual({ gclid: "DO_CARRINHO", gbraid: null, wbraid: null });
-  });
-
-  it("pula fonte vazia", () => {
-    const r = cliqueDoGoogle({ gclid: null }, null, { wbraid: "W" });
-    expect(r.wbraid).toBe("W");
-  });
-});
-
 describe("compra sem cart attribute", () => {
-  it("Google recupera o gbraid de iPhone pela identidade", () => {
-    // gbraid/wbraid faltavam no fallback, e clique de iOS so traz esses.
-    const conv = montarConversaoGoogle(pedidoSemCarrinho(), {
-      identidade: { gbraid: "GB_IOS", auid: "111.222" },
-    });
-    expect(conv.gbraid).toBe("GB_IOS");
-    expect(conv.auid).toBe("111.222");
-  });
-
-  it("Google cai para a URL de chegada quando nao ha identidade", () => {
-    const conv = montarConversaoGoogle(
-      pedidoSemCarrinho({ landing_site: "/products/x?gclid=DA_LANDING" })
-    );
-    expect(conv.gclid).toBe("DA_LANDING");
-  });
-
   it("Meta reconstroi o fbc a partir do fbclid da URL de chegada", () => {
     const { evento } = montarPurchase(
       pedidoSemCarrinho({ landing_site: "/products/x?fbclid=FBX" })

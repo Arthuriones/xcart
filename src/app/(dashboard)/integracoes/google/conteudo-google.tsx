@@ -4,37 +4,23 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { CabecalhoPlataforma } from "../cabecalho-plataforma";
 import type { DadosAnuncios } from "../dados-anuncios";
 import { EnvioCompras } from "../envio-compras";
-import { usaDataManager } from "@/lib/tracking/google-url";
 import { estadoScriptsGoogle, situacaoDaConta, type Estado } from "../regras";
-import { EnvioDataManager, type DadosDataManager } from "./envio-data-manager";
 import { TelaGoogle } from "./tela-google";
 
 /** O conteudo de Google com os dados ja lidos (a page le; aqui so desenha). */
-export function ConteudoGoogle({ d, dm }: { d: DadosAnuncios; dm: DadosDataManager }) {
+export function ConteudoGoogle({ d }: { d: DadosAnuncios }) {
   const estadoLeitura = estadoScriptsGoogle(d.daPlataforma.map((c) => situacaoDaConta(c, d.agoraMs, d.fuso)));
-  // O foco desta tela e o envio de conversoes; o gasto pelo script e
-  // secundario ate a API do Google aprovar o app.
-  const apiPronta = dm.temCredencial && dm.destinos.some((x) => x.ativo && usaDataManager(x));
-  // Sem a API liberada (GOOGLE_DM_DONOS), o AW- e o caminho: nao ha o que
-  // configurar, entao nao ha aviso.
-  const estado: Estado = apiPronta
-    ? { tom: "ok", texto: "Conversões pela API" }
-    : d.destinos.length === 0
-      ? { tom: "neutral", texto: "Não ligado" }
-      : dm.liberado
-        ? { tom: "warn", texto: "Falta configurar a API" }
-        : { tom: "ok", texto: "Conversões por conta (AW-)" };
+  // As conversoes saem do navegador, pela tag do Google: basta um AW- ativo.
+  const estado: Estado = d.destinos.some((x) => x.ativo)
+    ? { tom: "ok", texto: "Tag do Google ativa" }
+    : { tom: "neutral", texto: "Não ligado" };
 
   return (
     <>
       <CabecalhoPlataforma
         titulo="Google Ads"
         estado={estado}
-        dica={
-          dm.liberado
-            ? "As conversões saem pela API do Google, com o ID de cliente (123-456-7890) e o ID de cada ação. O AW- identifica a conta no Rastreamento."
-            : "As conversões saem pelo AW- de cada conta, cadastrado no Rastreamento."
-        }
+        dica="As conversões saem do navegador do comprador, pela tag do Google, com o AW- e os rótulos de cada conta cadastrados no Rastreamento."
       />
 
       {d.lojas.length === 0 ? (
@@ -55,7 +41,6 @@ export function ConteudoGoogle({ d, dm }: { d: DadosAnuncios; dm: DadosDataManag
             lojas={d.lojas}
             estadoLeitura={estadoLeitura}
             envio={<EnvioCompras plataforma="google" destinos={d.destinos} lojas={d.lojas} erro={d.erroDestinos} />}
-            dataManager={dm.liberado ? <EnvioDataManager dados={dm} lojas={d.lojas} /> : null}
             tabela={{
               gastos: d.gastos,
               erroGasto: d.erroGasto,

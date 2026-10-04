@@ -9,7 +9,6 @@ import { STATUS, StatusBadge } from "@/components/ui/status-badge";
 import { Switch } from "@/components/ui/switch";
 import type { DestinoNaTela, LojaTracking } from "@/lib/tracking/queries";
 import type { ChaveEvento } from "@/lib/tracking/eventos";
-import { EVENTOS_DATA_MANAGER } from "@/lib/tracking/google-url";
 import {
   EVENTOS_DA_GRADE,
   NOME_CURTO,
@@ -19,7 +18,7 @@ import {
   testesNaTela,
   type LinhaConta,
 } from "./resumo";
-import { ROTULO_EVENTO, emModoTeste, numerosDoEvento, plural, type NumerosEvento } from "./saude";
+import { ROTULO_EVENTO, emModoTeste, numerosDoEvento, pelaTag, plural, type NumerosEvento } from "./saude";
 
 // ============================================================================
 // "Por conta": o que cada conta recebeu em 7 dias, evento a evento.
@@ -28,8 +27,12 @@ import { ROTULO_EVENTO, emModoTeste, numerosDoEvento, plural, type NumerosEvento
 // com o Gerenciador. O total enviado fica embaixo, em cinza. A falha nunca vai
 // para o cinza: aparece em vermelho, com o numero e o motivo.
 //
-// Uma linha por CONTA, nunca por plataforma: as 2 contas Google da Softnook
-// recebem o mesmo evento, e somadas dobrariam o numero.
+// Uma linha por CONTA, nunca por plataforma: dois pixels recebem o mesmo
+// evento, e somados dobrariam o numero.
+//
+// O Google sai do navegador, pela tag do Google: nao ha envio do servidor para
+// contar. A linha dele mostra, por evento, se a tag dispara ("pela tag") ou se
+// falta o rotulo -- quem conta e o Google Ads.
 // ============================================================================
 
 /** O motivo da falha, sem deixar uma resposta de 2 KB tomar a tela. */
@@ -38,19 +41,22 @@ function curto(texto: string, max = 220): string {
 }
 
 /**
- * Por que o destino nao manda este evento, para a caixa da grade. Pela Data
- * Manager so compra, carrinho e checkout tem acao: os outros "nao se aplicam"
- * -- nao ha o que configurar, entao `resolve` e false e a caixa nao fica
- * amarela.
+ * O texto da caixa quando o servidor nao conta o evento. No Google: com
+ * rotulo, a tag do navegador dispara ("pela tag", sem numero -- quem conta e o
+ * Google Ads); sem rotulo, falta configurar (`resolve`: a caixa fica amarela).
+ * Pagamento nao vira conversao no Google: "não se aplica".
  */
 export function semEnvioDoEvento(
-  d: Pick<DestinoNaTela, "acoes">,
+  d: Pick<DestinoNaTela, "plataforma" | "labels">,
   chave: ChaveEvento
 ): { texto: string; resolve: boolean } {
-  if (!d.acoes) return { texto: "sem rótulo", resolve: true };
-  return (EVENTOS_DATA_MANAGER as readonly string[]).includes(chave)
-    ? { texto: "sem ação", resolve: true }
-    : { texto: "não se aplica", resolve: false };
+  if (pelaTag(d)) {
+    if (chave === "payment_info") return { texto: "não se aplica", resolve: false };
+    return d.labels[chave]
+      ? { texto: "pela tag", resolve: false }
+      : { texto: "sem rótulo", resolve: true };
+  }
+  return { texto: "sem rótulo", resolve: true };
 }
 
 /**
@@ -153,7 +159,7 @@ function LinhaDaConta({
         </div>
       ))}
 
-      {c.falharam > 0 && (
+      {c.falharam > 0 && !pelaTag(destino) && (
         <p className="col-span-2 flex items-start gap-1.5 text-label text-err md:col-span-5">
           <CircleAlert aria-hidden className="mt-px size-3.5 shrink-0" />
           <span className="min-w-0 [overflow-wrap:anywhere]">
@@ -188,8 +194,8 @@ export function PorConta({
           Em destaque, de anúncio · em cinza, o total enviado · últimos 7 dias
           <Dica rotulo="Por que não bate exatamente com o Gerenciador">
             De anúncio é o evento com clique de anúncio, sem testes: aproxima o Gerenciador, mas
-            não iguala. O Google conta pela data do clique, e Carrinho e Checkout secundários só
-            aparecem em “Todas as conv.”. O Meta conta até 7 dias depois do clique e 1 dia
+            não iguala. O Google vai pela tag no navegador e é contado só no Google Ads. O Meta
+            conta até 7 dias depois do clique e 1 dia
             depois da visualização, inclusive sem clique. Teste é a visita pelo link com
             ?xcart_teste=1 ou o clique com TESTE no identificador.
           </Dica>

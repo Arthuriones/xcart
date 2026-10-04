@@ -8,17 +8,14 @@
  * enfileira uma linha por destino ativo da loja e tenta entregar na hora, e o
  * cron da producao reentrega o que ficar pendente. Entao:
  *
- *   - Google: nao existe modo de teste no endpoint /pagead/conversion. Destino
- *     Google ativo recebe uma compra de 12800 JPY que nunca aconteceu, soma no
- *     valor de conversao da conta e ensina o lance automatico com venda
- *     inventada. Nao ha como desfazer pelo app.
+ *   - Google: nada. O Google Ads sai do navegador (tag do Google no Web Pixel
+ *     do checkout), e o webhook nao enfileira nada para destino Google.
  *   - Meta: so cai na aba de teste do Events Manager se o destino tiver
  *     test_event_code. Sem ele, e uma compra (fbclid TESTE123) no pixel real.
  *
  * O modelo antigo ("ligue com test_event_code e o evento cai na aba de teste")
- * era de quando so havia Meta. Por isso o script agora RECUSA rodar quando a
- * loja tem destino Google ativo ou destino Meta ativo sem test_event_code, e
- * diz qual e. Nao ha flag para passar por cima: quem quer testar desliga o
+ * era de quando so havia Meta. Por isso o script RECUSA rodar quando a loja
+ * tem destino Meta ativo sem test_event_code, e diz qual e. Nao ha flag para passar por cima: quem quer testar desliga o
  * destino (ou poe o codigo de teste no Meta) e liga de novo depois.
  *
  * A trava vale para QUALQUER alvo, inclusive localhost: o servidor local le o
@@ -63,7 +60,8 @@ function destinosPerigosos(destinos: DestinoAtivo[]): string[] {
   for (const d of destinos) {
     const rotulo = `${d.plataforma} ${d.conta}${d.nome ? ` (${d.nome})` : ""}`;
     if (d.plataforma === "google") {
-      motivos.push(`${rotulo}: Google nao tem modo de teste -- a compra falsa entra na conta`);
+      // O webhook nao manda nada ao Google: a tag do navegador e que dispara.
+      continue;
     } else if (d.plataforma === "meta" && !d.test_event_code?.trim()) {
       motivos.push(`${rotulo}: Meta sem test_event_code -- a compra falsa entra no pixel real`);
     } else if (d.plataforma !== "meta") {

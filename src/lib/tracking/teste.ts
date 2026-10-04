@@ -15,24 +15,26 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 //   - click id com TEST/TESTE, que e o que o dono digita no lugar do gclid.
 //
 // Evento de teste e GRAVADO na fila, com payload.teste = true: e em Eventos ao
-// vivo que o dono confere o proprio teste. Mas nao vai ao Google, e ao Meta so
-// vai com o codigo de teste do destino (cai na aba Test Events, que nao conta
-// como conversao). Sem codigo, nao vai.
+// vivo que o dono confere o proprio teste. Ao Meta so vai com o codigo de teste
+// do destino (cai na aba Test Events, que nao conta como conversao). Sem
+// codigo, nao vai. O Google, que sai do navegador, nem dispara a tag em teste:
+// o snippet e o Web Pixel leem a mesma marca.
 //
 // CONSENTIMENTO
 //
 // Lido da Customer Privacy API da Shopify, no tema e no Web Pixel:
 //   'concedido' = marketing liberado; 'negado' = nao liberado; ausente = nao
 //   deu para ler. Nunca e cravado: sem leitura, fica sem valor.
-// Hoje so e GRAVADO (o Google vai precisar para a Data Manager API). O Meta
-// segue igual: nada aqui bloqueia envio ao Meta por consentimento.
+// No servidor so e GRAVADO: nada aqui bloqueia envio ao Meta por
+// consentimento. A tag do Google, no navegador, le o consentimento direto da
+// Customer Privacy API.
 //
 // O PAYLOAD DO META QUE SAI NAO GANHA CAMPO
 //
 // O payload do Meta e enviado CRU para a API deles, e chave desconhecida no
 // evento derruba o evento inteiro ("Unexpected key"). Entao as marcas so entram
-// onde o payload e nosso: Google, e linha que nao sai. O Meta em modo teste
-// (com codigo) ja e teste pelo destino.
+// na linha que nao sai. O Meta em modo teste (com codigo) ja e teste pelo
+// destino.
 // ============================================================================
 
 export type Consentimento = "concedido" | "negado";
@@ -143,7 +145,7 @@ export async function registrarSemEnviar(
   admin: ReturnType<typeof createAdminClient>,
   entrada: {
     storeId: string;
-    destination: "meta" | "google";
+    destination: "meta";
     destinationId: string;
     eventName: string;
     eventId: string;

@@ -18,7 +18,6 @@ import {
   type LojaGuia,
   type RotaGuia,
 } from "@/lib/leitura/guia-passos";
-import { limparAcoes, usaDataManager } from "@/lib/tracking/google-url";
 
 // ============================================================================
 // Leitura nova do Guia de configuracao. So SELECT, nada de API externa, e
@@ -74,9 +73,7 @@ export const lerFotoGuia = cache(async (): Promise<FotoGuia> => {
     supabase.from("tracking_configs").select("store_id").eq("user_id", user.id).eq("enabled", true),
     supabase
       .from("tracking_destinations")
-      // `*`: customer_id e acoes so existem depois da migration 054, e a lista
-      // explicita faria esta leitura inteira falhar antes dela.
-      .select("*")
+      .select("id, store_id, plataforma, ativo, labels, test_event_code")
       .eq("user_id", user.id),
     supabase.from("ad_accounts").select("plataforma, store_id, ativo, ultimo_erro").eq("user_id", user.id),
     supabase.from("fin_store_settings").select("store_id, custo_padrao_pct").eq("user_id", user.id),
@@ -176,9 +173,8 @@ export const lerFotoGuia = cache(async (): Promise<FotoGuia> => {
             recebeCompra:
               plataforma === "meta"
                 ? segredos.has(String(d.id))
-                : usaDataManager({ customerId: d.customer_id, acoes: limparAcoes(d.acoes) })
-                  ? Boolean(limparAcoes(d.acoes).purchase)
-                  : typeof labels.purchase === "string" && labels.purchase.trim() !== "",
+                : // Google: a tag do navegador dispara a compra pelo rotulo.
+                  typeof labels.purchase === "string" && labels.purchase.trim() !== "",
             modoTeste: plataforma === "meta" && Boolean(String(d.test_event_code ?? "").trim()),
           };
         })
