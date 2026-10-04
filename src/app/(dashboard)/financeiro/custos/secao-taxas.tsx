@@ -4,6 +4,7 @@ import { useId, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Dica } from "@/components/ui/dica";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Section } from "@/components/ui/section";
@@ -94,7 +95,14 @@ export function SecaoTaxas({
   return (
     <Section
       titulo="Taxa de pagamento"
-      descricao="Vale para todo pedido desta loja. Use a do seu contrato com o gateway; no Shopify Payments, ela fica em Configurações › Pagamentos."
+      descricao={
+        <span className="inline-flex items-center gap-1">
+          Vale para todo pedido desta loja.
+          <Dica rotulo="Onde achar a taxa">
+            Use a do seu contrato com o gateway. No Shopify Payments, ela fica em Configurações › Pagamentos.
+          </Dica>
+        </span>
+      }
       acoes={
         configurada ? (
           <StatusBadge tom="ok" tamanho="md">
@@ -172,7 +180,10 @@ function Campo({
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
-      <Label htmlFor={id}>{rotulo}</Label>
+      <span className="flex items-center gap-1">
+        <Label htmlFor={id}>{rotulo}</Label>
+        <Dica rotulo={`Sobre ${rotulo}`}>{ajuda}</Dica>
+      </span>
       <Input
         id={id}
         inputMode="decimal"
@@ -182,7 +193,7 @@ function Campo({
         onChange={(e) => onMudar(e.target.value)}
         placeholder={placeholder}
         aria-invalid={erro ? true : undefined}
-        aria-describedby={erro ? `${id}-erro ${id}-ajuda` : `${id}-ajuda`}
+        aria-describedby={erro ? `${id}-erro` : undefined}
         className="num h-ctl-lg sm:h-ctl-md"
       />
       {erro ? (
@@ -190,9 +201,6 @@ function Campo({
           {erro}
         </p>
       ) : null}
-      <p id={`${id}-ajuda`} className="text-label text-t2">
-        {ajuda}
-      </p>
     </div>
   );
 }

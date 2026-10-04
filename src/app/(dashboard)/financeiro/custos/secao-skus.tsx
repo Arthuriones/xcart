@@ -3,7 +3,7 @@
 import { useId, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ExternalLinkIcon, HistoryIcon, PackageIcon, SearchIcon } from "lucide-react";
+import { ExternalLinkIcon, HistoryIcon, PackageIcon, SearchIcon, Upload } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { cn } from "@/components/ui/cn";
@@ -78,6 +78,7 @@ export function SecaoSkus({
   onEditar,
   onDescartar,
   onSalvo,
+  onImportarCsv,
 }: {
   dados: DadosCustos;
   loja: { id: string; nome: string; dominio: string };
@@ -91,6 +92,8 @@ export function SecaoSkus({
   onDescartar: () => void;
   /** Gravou: a tela limpa as alteracoes junto com a releitura. */
   onSalvo: () => void;
+  /** Abre o painel da planilha (CSV). */
+  onImportarCsv: () => void;
 }) {
   const router = useRouter();
   const { sincronizar, emCurso } = useSincronizarLoja();
@@ -390,19 +393,32 @@ export function SecaoSkus({
         espaco="nenhum"
         aria-busy={recarregando || undefined}
         titulo="Custo por produto"
-        descricao={`Vendidos desde ${fmtDia(desde)} (60 dias). Custo e frete por unidade, na moeda em que você paga o fornecedor.`}
+        descricao={
+          <span className="inline-flex items-center gap-1">
+            Vendidos desde {fmtDia(desde)} (60 dias).
+            <Dica rotulo="Em que moeda lançar o custo">
+              Custo e frete por unidade, na moeda em que você paga o fornecedor.
+            </Dica>
+          </span>
+        }
         acoes={
-          dados.skus.length > 0 ? (
-            semCusto > 0 ? (
-              <StatusBadge tom="warn" tamanho="md">
-                {fmtInteiro(semCusto)} sem custo
-              </StatusBadge>
-            ) : (
-              <StatusBadge tom="ok" tamanho="md">
-                Todos com custo
-              </StatusBadge>
-            )
-          ) : null
+          <>
+            {dados.skus.length > 0 ? (
+              semCusto > 0 ? (
+                <StatusBadge tom="warn" tamanho="md">
+                  {fmtInteiro(semCusto)} sem custo
+                </StatusBadge>
+              ) : (
+                <StatusBadge tom="ok" tamanho="md">
+                  Todos com custo
+                </StatusBadge>
+              )
+            ) : null}
+            <Button variant="secondary" size="sm" className="h-ctl-lg sm:h-ctl-sm" onClick={onImportarCsv}>
+              <Upload aria-hidden />
+              Importar CSV
+            </Button>
+          </>
         }
       >
         {dados.unidadesSemSku > 0 || (!dados.sincronizado && dados.skus.length > 0) ? (
@@ -443,9 +459,9 @@ export function SecaoSkus({
               titulo="Nenhuma venda com SKU nos últimos 60 dias"
               descricao="Os produtos aparecem aqui depois da primeira venda."
               acao={
-                <a href="#planilha" className={buttonVariants({ variant: "secondary" })}>
-                  Lançar pela planilha
-                </a>
+                <Button variant="secondary" onClick={onImportarCsv}>
+                  Importar CSV
+                </Button>
               }
             />
           ) : (

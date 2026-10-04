@@ -22,17 +22,17 @@ import {
   type Situacao,
 } from "./apresentar";
 import { useAvisoAoSair } from "./aviso-ao-sair";
-import { SecaoEmBreve } from "./secao-em-breve";
-import { SecaoPlanilha } from "./secao-planilha";
+import { PainelPlanilha } from "./painel-planilha";
 import { SecaoSkus } from "./secao-skus";
 import { SecaoTaxas } from "./secao-taxas";
 
 // ============================================================================
 // Tela Custos e taxas de UMA loja (cliente).
 //
-// Quatro blocos, na ordem em que o lucro depende deles: a taxa de pagamento
-// vale para TODO pedido, o custo por produto para cada linha, a planilha e
-// so um atalho para lancar muitos de uma vez, e o "Em breve".
+// Dois blocos, na ordem em que o lucro depende deles: a taxa de pagamento
+// vale para TODO pedido, o custo por produto para cada linha. A planilha e
+// so um atalho para lancar muitos de uma vez: fica num painel, aberto pelo
+// "Importar CSV" da tabela.
 //
 // O que esta sendo digitado mora aqui (taxa, linhas da tabela, planilha
 // colada) para a tela saber se ha algo por salvar antes de sair ou trocar de
@@ -79,6 +79,7 @@ export function CustosScreen({
   );
 
   const [planilha, setPlanilha] = useState("");
+  const [planilhaAberta, setPlanilhaAberta] = useState(false);
 
   const taxasSujas = taxasMudaram(taxas, taxasBase);
   const partes = [
@@ -173,11 +174,17 @@ export function CustosScreen({
         onEditar={editar}
         onDescartar={() => setEdicoes({})}
         onSalvo={() => setEdicoes({})}
+        onImportarCsv={() => setPlanilhaAberta(true)}
       />
 
-      <SecaoPlanilha dados={dados} dominio={loja.dominio} texto={planilha} onTexto={setPlanilha} />
-
-      <SecaoEmBreve />
+      <PainelPlanilha
+        aberto={planilhaAberta}
+        onAberto={setPlanilhaAberta}
+        dados={dados}
+        dominio={loja.dominio}
+        texto={planilha}
+        onTexto={setPlanilha}
+      />
 
       {dialogo}
     </div>

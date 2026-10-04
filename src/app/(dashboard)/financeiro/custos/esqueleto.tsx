@@ -2,7 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 // ============================================================================
 // Carregando de Custos, com a geometria da tela da loja: a linha da loja, o
-// bloco da taxa (tres campos), a tabela de produtos e a planilha. Mesma altura
+// bloco da taxa (tres campos) e a tabela de produtos. Mesma altura
 // do conteudo -- nada pula quando os dados chegam.
 // ============================================================================
 
@@ -31,7 +31,6 @@ export function EsqueletoCustos() {
             <div key={i} className="flex flex-col gap-1.5">
               <Skeleton className="h-3.5 w-32" />
               <Skeleton className="h-ctl-md w-full rounded-control" />
-              <Skeleton className="h-3 w-3/4" />
             </div>
           ))}
         </div>
@@ -68,11 +67,6 @@ export function EsqueletoCustos() {
             </div>
           ))}
         </div>
-      </div>
-
-      <div className="flex h-40 flex-col gap-3 rounded-card border border-border bg-surface p-4">
-        <Skeleton className="h-4.5 w-44" />
-        <Skeleton className="h-12 w-full rounded-card" />
       </div>
     </div>
   );

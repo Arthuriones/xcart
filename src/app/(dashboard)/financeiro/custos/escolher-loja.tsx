@@ -59,13 +59,7 @@ export function EscolherLoja({ lojas }: { lojas: LojaParaEscolher[] }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-section text-ink">Escolha a loja</h2>
-        <p className="max-w-[62ch] text-dense text-t1">
-          Cada loja tem os próprios custos e a própria taxa: o mesmo SKU pode vir de fornecedores diferentes. A loja
-          escolhida também passa a valer na barra do topo.
-        </p>
-      </div>
+      <h2 className="text-section text-ink">Escolha a loja</h2>
 
       {ativas.length > 0 ? (
         <ul aria-label="Lojas ativas" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
