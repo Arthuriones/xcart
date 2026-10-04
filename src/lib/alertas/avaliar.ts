@@ -26,7 +26,8 @@ import { RE_DESINSTALADO } from "@/lib/leitura/lojas-estado";
 // externa falharia justamente quando a API estivesse fora -- que e quando ele
 // mais importa.
 //
-// So LE tracking_events, tracking_configs e stores. Escreve em `alertas`.
+// So LE tracking_events, tracking_configs, tracking_destinations e stores.
+// Escreve em `alertas`.
 // ============================================================================
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -262,6 +263,79 @@ export async function coletarCondicoesDetalhado(
         severidade: "critico",
         titulo: "Fila de envio parada",
         detalhe: `${plural(n, "evento esperando", "eventos esperando")} há mais de 30 min — o cron de envio parece parado.`,
+      });
+    }
+  });
+
+  // ---- R4b: rastreamento parado -------------------------------------------
+  // O snippet do tema e o Web Pixel deixam linha na fila COM visitor_id (o
+  // webhook de compra, nao). Loja que mandou evento na semana e nada em 24 h:
+  // tema trocado, snippet apagado ou loja sem visita. So loja com Meta ativo:
+  // o Google sai do navegador e nao deixa rastro no banco, entao loja so com
+  // Google nunca teria linha -- e alertaria por engano.
+  await rodar("rastreamento_parado", async () => {
+    const { data: cfgs, error } = await admin
+      .from("tracking_configs")
+      .select("store_id")
+      .eq("enabled", true);
+    if (error) throw new Error(error.message);
+    const ligadas = ((cfgs || []) as { store_id: string }[])
+      .map((c) => String(c.store_id))
+      // Desinstalada ja tem a R1, com a instrucao certa.
+      .filter((id) => lojas.has(id) && !lojas.get(id)!.uninstalled_at);
+    if (ligadas.length === 0) return;
+
+    const { data: metas, error: erroMeta } = await admin
+      .from("tracking_destinations")
+      .select("store_id")
+      .in("store_id", ligadas)
+      .eq("plataforma", "meta")
+      .eq("ativo", true);
+    if (erroMeta) throw new Error(erroMeta.message);
+    const comMeta = [
+      ...new Set(((metas || []) as { store_id: string }[]).map((m) => String(m.store_id))),
+    ];
+
+    const seteDias = new Date(agora.getTime() - 7 * 24 * HORA).toISOString();
+    const limite = agora.getTime() - 24 * HORA;
+    // Uma leitura por loja ligada, limit 1 no indice (store_id, created_at):
+    // cresce com o numero de lojas, nao com o trafego. Em lotes de 10.
+    const ultimos: { storeId: string; em: string | null }[] = [];
+    for (let i = 0; i < comMeta.length; i += 10) {
+      const lote = await Promise.all(
+        comMeta.slice(i, i + 10).map(async (storeId) => {
+          const { data, error: e } = await admin
+            .from("tracking_events")
+            .select("created_at")
+            .eq("store_id", storeId)
+            .not("visitor_id", "is", null)
+            .gte("created_at", seteDias)
+            .order("created_at", { ascending: false })
+            .limit(1);
+          if (e) throw new Error(e.message);
+          const em = ((data || []) as { created_at: string | null }[])[0]?.created_at ?? null;
+          return { storeId, em };
+        })
+      );
+      ultimos.push(...lote);
+    }
+
+    for (const { storeId, em } of ultimos) {
+      // Nada na semana: loja nova ou parada ha muito, nao "parou agora".
+      const t = em ? Date.parse(em) : NaN;
+      if (!Number.isFinite(t) || t >= limite) continue;
+      const loja = lojas.get(storeId);
+      if (!loja) continue;
+      const horas = Math.floor((agora.getTime() - t) / HORA);
+      const ha = horas < 48 ? `${horas} h` : `${Math.floor(horas / 24)} dias`;
+      condicoes.push({
+        user_id: loja.user_id,
+        store_id: storeId,
+        regra: "rastreamento_parado",
+        chave: "",
+        severidade: "aviso",
+        titulo: "Rastreamento sem eventos há 24 h",
+        detalhe: `Último evento há ${ha}. O código saiu do tema ou a loja ficou sem visitas.`,
       });
     }
   });

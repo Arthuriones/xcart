@@ -229,7 +229,8 @@ export function TelaAlertas({
    */
   function aoResolver(e: MouseEvent<HTMLAnchorElement>, a: AlertaNaTela) {
     if (!a.lojaId || a.lojaId === lojaAtual) return;
-    if (contextoDaRota(a.destino.href).tipo === "nenhum") return;
+    // Sem a query: "/tracking?loja=x" e a tela /tracking.
+    if (contextoDaRota(a.destino.href.split("?")[0]).tipo === "nenhum") return;
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     e.preventDefault();
     gravarCookie(COOKIE_LOJA, a.lojaId);
@@ -274,6 +275,16 @@ export function TelaAlertas({
         ) : (
           <>
             <div ref={listaRef} tabIndex={-1} className="flex flex-col gap-3 outline-none">
+              {/* Sem Telegram o cron abre o alerta e nao avisa ninguem. */}
+              {ativos.length > 0 && !telegramPronto && (
+                <p className="text-dense text-t1">
+                  Estes alertas só aparecem aqui.{" "}
+                  <Link href={TELA_NOTIFICACOES} className="font-medium text-brand underline-offset-2 hover:underline">
+                    Ligue o Telegram
+                  </Link>{" "}
+                  para receber no celular.
+                </p>
+              )}
               {ativos.length > 0 && confirmadoTexto && (
                 <p className="text-label text-t2">
                   Última confirmação {confirmadoTexto} · o xcart confere a cada{" "}

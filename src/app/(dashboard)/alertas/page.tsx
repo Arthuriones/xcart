@@ -26,20 +26,23 @@ async function Conteudo() {
   const lojasIndisponiveis = !!d.erros.lojas;
   const doUsuario = new Set(d.lojas.map((l) => l.id));
 
-  const abertos: AlertaNaTela[] = d.abertos.map((a) => ({
-    id: a.id,
-    severidade: a.severidade === "critico" ? "critico" : "aviso",
-    regraRotulo: ROTULO_REGRA[a.regra] ?? "Alerta",
-    titulo: a.titulo,
-    detalhe: a.detalhe,
-    loja: nomeDaLoja(a.store_id, d.lojas, lojasIndisponiveis),
-    lojaId: a.store_id && doUsuario.has(a.store_id) ? a.store_id : null,
-    aberto_em: a.aberto_em,
-    confirmado_em: a.confirmado_em,
-    silenciado_ate: a.silenciado_ate,
-    n_notificacoes: Number(a.n_notificacoes) || 0,
-    destino: destinoDoAlerta(a.regra, a.titulo),
-  }));
+  const abertos: AlertaNaTela[] = d.abertos.map((a) => {
+    const lojaId = a.store_id && doUsuario.has(a.store_id) ? a.store_id : null;
+    return {
+      id: a.id,
+      severidade: a.severidade === "critico" ? "critico" : "aviso",
+      regraRotulo: ROTULO_REGRA[a.regra] ?? "Alerta",
+      titulo: a.titulo,
+      detalhe: a.detalhe,
+      loja: nomeDaLoja(a.store_id, d.lojas, lojasIndisponiveis),
+      lojaId,
+      aberto_em: a.aberto_em,
+      confirmado_em: a.confirmado_em,
+      silenciado_ate: a.silenciado_ate,
+      n_notificacoes: Number(a.n_notificacoes) || 0,
+      destino: destinoDoAlerta(a.regra, a.titulo, lojaId),
+    };
+  });
 
   const telegramPronto =
     !d.erros.config && !!d.config.telegram_chat_id && d.temToken && d.config.ativo;

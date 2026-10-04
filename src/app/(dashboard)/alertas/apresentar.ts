@@ -222,16 +222,27 @@ const DESTINOS: Record<RegraAlerta, Destino> = {
   pedidos_sync_erro: { href: "/stores", tela: "Lojas" },
   ads_sync_atrasado: { href: "/integracoes/meta", tela: "Integrações · Meta" },
   gastou_sem_vender: { href: "/financeiro", tela: "Dashboard" },
+  // O detalhe da loja no Rastreamento mostra o tema e o ultimo evento.
+  rastreamento_parado: { href: "/tracking", tela: "Rastreamento" },
 };
 
 /**
  * `titulo` separa Meta de Google no ads_sync_atrasado: o cron grava
  * "Gasto do Google sem atualizar: ..." (avaliar.ts), e a conta do Google so
  * aparece em Integracoes -> Google.
+ *
+ * `lojaId` (so loja do usuario) abre o rastreamento parado ja no detalhe dela.
  */
-export function destinoDoAlerta(regra: RegraAlerta, titulo?: string | null): Destino {
+export function destinoDoAlerta(
+  regra: RegraAlerta,
+  titulo?: string | null,
+  lojaId?: string | null
+): Destino {
   if (regra === "ads_sync_atrasado" && titulo?.startsWith("Gasto do Google")) {
     return { href: "/integracoes/google", tela: "Integrações · Google" };
+  }
+  if (regra === "rastreamento_parado" && lojaId) {
+    return { href: `/tracking?loja=${encodeURIComponent(lojaId)}`, tela: "Rastreamento" };
   }
   return DESTINOS[regra] ?? { href: "/tracking", tela: "Rastreamento" };
 }
@@ -300,6 +311,13 @@ export function regrasNaTela(gastoMinimo: number): RegraNaTela[] {
       explicacao: "Compras e eventos esperando para sair, sem andar.",
       severidade: "critico",
       quando: "Depois de 30 min parada",
+    },
+    {
+      regra: "rastreamento_parado",
+      titulo: "Rastreamento sem eventos",
+      explicacao: "A loja mandava visitas, carrinhos e checkouts e parou: o código pode ter saído do tema.",
+      severidade: "aviso",
+      quando: "Depois de 24 h sem evento",
     },
     {
       regra: "pedidos_sync_erro",

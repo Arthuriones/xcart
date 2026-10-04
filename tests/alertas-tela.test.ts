@@ -190,6 +190,10 @@ describe("Resolver leva a uma tela que existe", () => {
       "/integracoes/meta"
     );
   });
+  it("rastreamento parado abre o detalhe da loja", () => {
+    expect(destinoDoAlerta("rastreamento_parado", null, "a b").href).toBe("/tracking?loja=a%20b");
+    expect(destinoDoAlerta("rastreamento_parado").href).toBe("/tracking");
+  });
 });
 
 describe("as regras da tela batem com o cron", () => {
