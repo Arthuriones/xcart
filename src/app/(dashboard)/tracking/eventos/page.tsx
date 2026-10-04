@@ -47,7 +47,7 @@ async function Conteudo({ searchParams }: { searchParams: Busca }) {
     dados = await carregar(searchParams);
   } catch (e) {
     console.error("[tracking/eventos]", e);
-    return <ErroEventos />;
+    return <ErroEventos detalhe={e instanceof Error ? e.message.slice(0, 300) : undefined} />;
   }
 
   if (dados.vazio) {

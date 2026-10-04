@@ -9,6 +9,7 @@ import {
   FONTE_TELA,
   STATUS_TELA,
   ehCompra,
+  ehTeste,
   formatarLatencia,
   horaDoEvento,
   nomeDoEvento,
@@ -21,7 +22,8 @@ import {
 // ============================================================================
 // A lista de eventos: tabela no desktop, cartoes no celular. Toda linha abre o
 // detalhe -- pelo botao da hora (teclado e leitor de tela) ou pelo clique em
-// qualquer ponto da linha (mouse). Linha recem-chegada pisca uma vez.
+// qualquer ponto da linha (mouse). Linha recem-chegada pisca uma vez. Evento
+// de teste do dono aparece com o selo "teste", nunca escondido.
 // ============================================================================
 
 export interface ContextoLista {
@@ -41,7 +43,17 @@ const TD = "h-11 border-b border-border-subtle px-2.5 align-middle";
 const FOCO = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
 
 function rotuloAbrir(e: EventoFeed, hora: string): string {
-  return `${nomeDoEvento(e.evento)} para ${nomePlataforma(e.plataforma)}, ${STATUS_TELA[e.status].rotulo}, ${hora}: abrir detalhe`;
+  const teste = ehTeste(e) ? " (teste)" : "";
+  return `${nomeDoEvento(e.evento)}${teste} para ${nomePlataforma(e.plataforma)}, ${STATUS_TELA[e.status].rotulo}, ${hora}: abrir detalhe`;
+}
+
+/** O selo do evento de teste: fica fora das contagens, nao desta lista. */
+export function SeloTeste() {
+  return (
+    <span className="ml-1.5 inline-flex h-4.5 shrink-0 items-center rounded-sm border border-info-border bg-info-bg px-1 align-middle text-label font-semibold text-info">
+      teste
+    </span>
+  );
 }
 
 function Status({ e }: { e: EventoFeed }) {
@@ -112,8 +124,9 @@ const Linha = memo(function Linha({
         )}
       </td>
       {ctx.todas && <td className={cn(TD, "whitespace-nowrap")}>{ctx.nomeLoja(e.store_id)}</td>}
-      <td className={cn(TD, "whitespace-nowrap", ehCompra(e) && "font-semibold")}>
-        {nomeDoEvento(e.evento)}
+      <td className={cn(TD, "whitespace-nowrap")}>
+        <span className={cn(ehCompra(e) && "font-semibold")}>{nomeDoEvento(e.evento)}</span>
+        {ehTeste(e) && <SeloTeste />}
       </td>
       <td className={cn(TD, "whitespace-nowrap text-t1")}>{FONTE_TELA[e.fonte]}</td>
       <td className={cn(TD, "whitespace-nowrap")}>
@@ -156,6 +169,7 @@ const Cartao = memo(function Cartao({
           <span className="flex min-w-0 flex-col">
             <span className="text-body font-semibold text-ink">
               {nomeDoEvento(e.evento)} · {nomePlataforma(e.plataforma)}
+              {ehTeste(e) && <SeloTeste />}
             </span>
             <span suppressHydrationWarning className="num text-label text-t2">
               {ctx.todas ? `${ctx.nomeLoja(e.store_id)} · ` : ""}

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ExternalLinkIcon } from "lucide-react";
 import type { EventoFeed } from "@/lib/financeiro/tipos";
 import { rotuloFuso } from "@/components/layout/contexto";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import {
   Sheet,
@@ -22,16 +22,19 @@ import {
   dataHoraCompleta,
   decodificarUtm,
   detalheClique,
+  ehTeste,
   explicarErro,
   formatarLatencia,
   nomeDoEvento,
   nomePlataforma,
 } from "./logica";
+import { SeloTeste } from "./lista";
 
 // ============================================================================
 // Detalhe de um evento (#25): so o que o feed ja traz. A resposta da
-// plataforma e o reenvio dependem de backend novo e aparecem como "Em breve".
-// O payload bruto nunca aparece: traz o IP e o navegador do comprador.
+// plataforma e o reenvio dependem de backend novo e ficam fora da tela ate
+// existirem. O payload bruto nunca aparece: traz o IP e o navegador do
+// comprador.
 // ============================================================================
 
 function Campo({ rotulo, children }: { rotulo: string; children: ReactNode }) {
@@ -94,6 +97,7 @@ function Conteudo({
         <StatusBadge tom={s.tom}>{s.rotulo}</StatusBadge>
         <SheetTitle>
           {nomeDoEvento(e.evento)} para {plataforma}
+          {ehTeste(e) && <SeloTeste />}
         </SheetTitle>
         <SheetDescription>
           {nomeLoja(e.store_id)} · {dataHoraCompleta(e.criado_em, fuso)} ({rotuloFuso(fuso)})
@@ -115,7 +119,7 @@ function Conteudo({
                 espremia a explicacao numa coluna estreita. */}
             {e.status === "falhou" && (
               <Link href="/tracking" className={buttonVariants({ size: "sm", className: "mt-2.5" })}>
-                Consertar em Saúde dos pixels
+                Consertar em Rastreamento
               </Link>
             )}
           </Callout>
@@ -136,6 +140,9 @@ function Conteudo({
           </Campo>
           <Campo rotulo="Latência">{formatarLatencia(e)}</Campo>
           <Campo rotulo="Clique do anúncio">{detalheClique(e)}</Campo>
+          {ehTeste(e) && (
+            <Campo rotulo="Teste">Sim: fica fora das contagens do Rastreamento</Campo>
+          )}
           <Campo rotulo="Origem">{e.origem_host || "—"}</Campo>
           <Campo rotulo="Fonte (UTM)">{decodificarUtm(e.utm_source) ?? "—"}</Campo>
           <Campo rotulo="Campanha (UTM)">{decodificarUtm(e.utm_campaign) ?? "—"}</Campo>
@@ -158,19 +165,6 @@ function Conteudo({
             )}
           </Campo>
         </dl>
-
-        <div className="flex flex-col gap-2 rounded-card border border-dashed border-border-strong p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-dense font-semibold text-ink">Resposta da plataforma e reenvio</p>
-            <span className="rounded-sm border border-border px-1 text-label text-t2">Em breve</span>
-          </div>
-          <p className="text-label text-t1">
-            Vai mostrar o que o Meta ou o Google respondeu e permitir reenviar este evento.
-          </p>
-          <Button variant="secondary" size="sm" disabled className="self-start">
-            Reenviar evento
-          </Button>
-        </div>
 
         <p className="text-label text-t2 text-pretty">
           O conteúdo bruto do evento não aparece aqui porque traz o IP e o navegador do comprador.

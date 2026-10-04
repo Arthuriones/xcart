@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { PageHeader } from "@/components/layout/page-header";
 import { filtroResolvido } from "@/lib/filtro-global";
+import { createClient } from "@/lib/supabase/server";
 import { TODAS } from "@/lib/financeiro/tipos";
 import { diagnosticarCadaLoja } from "@/lib/leitura/tracking-diagnostico";
 import { getPainelTracking } from "@/lib/tracking/queries";
@@ -16,7 +17,7 @@ import { TentarDeNovo } from "./tentar-de-novo";
 export const dynamic = "force-dynamic";
 
 // ============================================================================
-// Saude dos pixels (/tracking).
+// Rastreamento (/tracking).
 //
 // O diagnostico fala com a Shopify -- pedidos, aviso de pedidos e o tema -- e
 // leva segundos. Fica dentro do Suspense; o cabecalho fica FORA, para aparecer
@@ -31,10 +32,23 @@ export const dynamic = "force-dynamic";
 // conferida separada: a que falhar vira aviso so nela.
 // ============================================================================
 
+/**
+ * O usuario tem rota vitrine -> checkout? So entao "Como funciona" fala da
+ * vitrine. Leitura que falha conta como "tem": sobra um item, nao some um.
+ */
+async function temRota(): Promise<boolean> {
+  const supabase = await createClient();
+  const { count, error } = await supabase
+    .from("routed_checkout_configs")
+    .select("id", { count: "exact", head: true });
+  return error ? true : (count ?? 0) > 0;
+}
+
 async function carregar(abrir: string | null) {
-  const [{ filtro, lojas: doUsuario }, painel] = await Promise.all([
+  const [{ filtro, lojas: doUsuario }, painel, comRota] = await Promise.all([
     filtroResolvido(),
     getPainelTracking(),
+    temRota(),
   ]);
   const escolhida = filtro.lojaId === TODAS ? null : filtro.lojaId;
   const lojas = escolhida ? painel.lojas.filter((l) => l.storeId === escolhida) : painel.lojas;
@@ -62,6 +76,7 @@ async function carregar(abrir: string | null) {
     lojaEscolhida: Boolean(escolhida),
     abrir,
     lojaId: filtro.lojaId,
+    temRota: comRota,
     geradoEm: Date.now(),
   };
 }
@@ -72,14 +87,22 @@ async function Conteudo({ abrir }: { abrir: string | null }) {
     dados = await carregar(abrir);
   } catch (e) {
     console.error("[tracking] falha ao ler a tela", e);
+    const detalhe = e instanceof Error ? e.message.slice(0, 300) : "";
     return (
       <Callout
         tom="err"
         titulo="Não deu para ler o rastreamento agora"
         acao={<TentarDeNovo />}
       >
-        As compras continuam saindo normalmente; só a leitura desta tela falhou. Tente de novo em
-        instantes.
+        As compras continuam saindo normalmente.
+        {detalhe && (
+          <details className="mt-1.5 text-label text-t1">
+            <summary className="w-fit cursor-pointer rounded-sm hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+              Ver detalhes
+            </summary>
+            <p className="mt-1 [overflow-wrap:anywhere]">{detalhe}</p>
+          </details>
+        )}
       </Callout>
     );
   }
@@ -97,14 +120,14 @@ async function Conteudo({ abrir }: { abrir: string | null }) {
         geradoEm={dados.geradoEm}
         abrirInicial={dados.abrir}
       />
-      {dados.lojas.length > 0 && <ComoFunciona />}
+      {dados.lojas.length > 0 && <ComoFunciona temRota={dados.temRota} />}
     </div>
   );
 }
 
 function Esqueleto() {
   return (
-    <div aria-busy="true" aria-label="Carregando a saúde dos pixels" className="flex flex-col gap-4">
+    <div aria-busy="true" aria-label="Carregando o rastreamento" className="flex flex-col gap-4">
       <p className="flex items-center gap-2 text-dense text-t2">
         <Spinner size={14} />
         Conferindo pedidos e o tema na Shopify…
@@ -137,7 +160,7 @@ function Esqueleto() {
   );
 }
 
-export default async function SaudeDosPixelsPage({
+export default async function RastreamentoPage({
   searchParams,
 }: {
   searchParams: Promise<{ [chave: string]: string | string[] | undefined }>;
@@ -147,10 +170,7 @@ export default async function SaudeDosPixelsPage({
 
   return (
     <>
-      <PageHeader
-        title="Saúde dos pixels"
-        description="Se as compras de cada loja estão chegando ao Meta e ao Google pelo servidor, e o que consertar quando não estão."
-      >
+      <PageHeader title="Rastreamento" description="Compras e funil no Meta e no Google.">
         <Link href="/tracking/eventos" className={buttonVariants({ variant: "secondary" })}>
           Ver eventos ao vivo
         </Link>

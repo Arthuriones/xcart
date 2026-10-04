@@ -10,7 +10,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { cn } from "@/components/ui/cn";
 import { EmptyState } from "@/components/ui/empty-state";
-import { CabecalhoEventos, NotaEventos } from "./cabecalho";
+import { CabecalhoEventos, DicaEventos } from "./cabecalho";
 import { DetalheEvento } from "./detalhe";
 import { Chips, Contadores, Visoes } from "./filtros";
 import { ListaEventos, type ContextoLista } from "./lista";
@@ -462,9 +462,9 @@ export function EventosScreen({
 
         {eventos.length > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle px-4 py-3">
-            <span className="text-label text-t2">
-              Mostrando {visiveis.length} de {eventos.length} carregadas. A contagem do período
-              inteiro ainda não existe.
+            <span className="flex items-center gap-1 text-label text-t2">
+              Mostrando {visiveis.length} de {eventos.length} carregadas.
+              <DicaEventos />
             </span>
             {noTeto ? (
               <span className="text-label text-t2">Mostrando os {TETO} eventos mais recentes.</span>
@@ -484,8 +484,6 @@ export function EventosScreen({
           </div>
         )}
       </section>
-
-      <NotaEventos />
 
       <DetalheEvento
         evento={eventoDetalhe}

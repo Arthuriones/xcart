@@ -8,6 +8,7 @@ import {
   contarStatus,
   dataHoraCompleta,
   detalheClique,
+  ehTeste,
   explicarErro,
   filtroDaUrl,
   filtroParaQuery,
@@ -277,11 +278,53 @@ describe("CSV", () => {
     );
     const [cabecalho, linha] = csv.trim().split("\r\n");
     expect(cabecalho).toBe(
-      "Data e hora;Loja;Evento;Veio de;Plataforma;Destino;Status;Latência (s);Clique;Origem;Pedido"
+      "Data e hora;Loja;Evento;Veio de;Plataforma;Destino;Status;Latência (s);Clique;Teste;Origem;Pedido"
     );
     expect(linha).toBe(
-      "02/10/2026 14:32:05;Lumen;Compra;Webhook de pedido;Meta;Pixel Lumen;Enviado;1,3;Sim;google.com · =cmd;#1040"
+      "02/10/2026 14:32:05;Lumen;Compra;Webhook de pedido;Meta;Pixel Lumen;Enviado;1,3;Sim;;google.com · =cmd;#1040"
     );
     expect(csv).not.toMatch(/ip|user.?agent/i);
+  });
+
+  it("o teste sai marcado na coluna Teste", () => {
+    const csv = montarCsv([{ ...ev({ id: "1" }), teste: true } as EventoFeed], {
+      fuso: SP,
+      nomeLoja: () => "Lumen",
+      nomePedido: () => "",
+    });
+    expect(csv.trim().split("\r\n")[1].split(";")[9]).toBe("Sim");
+  });
+});
+
+describe("teste e clique", () => {
+  it("teste so com o campo do feed verdadeiro; sem o campo, nunca afirma", () => {
+    expect(ehTeste({ ...ev({ id: "1" }), teste: true } as EventoFeed)).toBe(true);
+    expect(ehTeste({ ...ev({ id: "1" }), teste: false } as EventoFeed)).toBe(false);
+    // Feed antigo, sem a 055: a linha fica sem selo, nao some.
+    expect(ehTeste(ev({ id: "1" }))).toBe(false);
+  });
+
+  it("filtra por clique, e o teste continua na lista", () => {
+    const linhas = [
+      { ...ev({ id: "a", com_clique: true }), teste: true } as EventoFeed,
+      ev({ id: "b", com_clique: true }),
+      ev({ id: "c", com_clique: false }),
+      ev({ id: "d", com_clique: null, plataforma: "outro" }),
+    ];
+    const com = { ...filtroVazio(), clique: ["sim"] };
+    expect(linhas.filter((e) => passa(e, com)).map((e) => e.id)).toEqual(["a", "b"]);
+    const sem = { ...filtroVazio(), clique: ["nao"] };
+    expect(linhas.filter((e) => passa(e, sem)).map((e) => e.id)).toEqual(["c"]);
+    expect(opcoesDe("clique", linhas, filtroVazio()).map((o) => [o.rotulo, o.n])).toEqual([
+      ["Com clique", 2],
+      ["Sem clique", 1],
+      ["Não se aplica", 1],
+    ]);
+  });
+
+  it("o clique vem da URL e volta para ela; valor inventado e ignorado", () => {
+    const f = filtroDaUrl({ clique: ["sim", "talvez"] });
+    expect(f.clique).toEqual(["sim"]);
+    expect(filtroParaQuery(f)).toBe("clique=sim");
   });
 });

@@ -8,9 +8,9 @@ import { EVENTOS, chaveDoEvento, definicaoDoEvento } from "@/lib/tracking/evento
 // as mesmas funcoes que a tela (navegador) usa para filtrar, e os testes
 // cobrem tudo daqui.
 //
-// O FILTRO VALE SO NAS LINHAS CARREGADAS. A RPC tracking_feed recebe lojas,
-// data e limite; filtrar no servidor e contar o periodo pedem migration (#33).
-// Por isso a tela sempre diz "nas N linhas carregadas".
+// O FILTRO VALE SO NAS LINHAS CARREGADAS. A RPC do feed recebe lojas, data e
+// limite; filtrar no servidor e contar o periodo pedem migration (#33). Por
+// isso a tela sempre diz "nas N linhas carregadas".
 // ============================================================================
 
 /** Quantos eventos a tela guarda no maximo (o resto sai pelo fim). */
@@ -190,6 +190,19 @@ export function formatarLatencia(e: Pick<EventoFeed, "status" | "latencia_s">): 
   return resto ? `${h} h ${resto} min` : `${h} h`;
 }
 
+/**
+ * O evento e TESTE do dono (link ?xcart_teste=1, click id com TEST)?
+ *
+ * Aqui o teste NAO some: e nesta tela que o dono confere o proprio teste, entao
+ * ele aparece com selo. Fora das contagens ele fica so no Rastreamento.
+ *
+ * O campo vem de tracking_feed_v2 (migration 055). Enquanto o feed nao o
+ * repassar, a linha simplesmente nao tem selo -- nunca um "nao" afirmado.
+ */
+export function ehTeste(e: EventoFeed): boolean {
+  return (e as EventoFeed & { teste?: boolean | null }).teste === true;
+}
+
 /** Coluna "Clique": o evento leva o identificador do clique do anuncio? */
 export function textoClique(e: Pick<EventoFeed, "com_clique">): string {
   if (e.com_clique === null) return "—";
@@ -278,7 +291,14 @@ export function explicarErro(
 // Filtros em chip
 // ---------------------------------------------------------------------------
 
-export type Dimensao = "status" | "evento" | "plataforma" | "fonte" | "destino" | "campanha";
+export type Dimensao =
+  | "status"
+  | "evento"
+  | "plataforma"
+  | "fonte"
+  | "destino"
+  | "clique"
+  | "campanha";
 export type Filtro = Record<Dimensao, string[]>;
 
 export const DIMENSOES: { id: Dimensao; rotulo: string }[] = [
@@ -287,6 +307,7 @@ export const DIMENSOES: { id: Dimensao; rotulo: string }[] = [
   { id: "plataforma", rotulo: "Plataforma" },
   { id: "fonte", rotulo: "Veio de" },
   { id: "destino", rotulo: "Destino" },
+  { id: "clique", rotulo: "Clique" },
   { id: "campanha", rotulo: "Campanha (UTM)" },
 ];
 const IDS_DIMENSAO = DIMENSOES.map((d) => d.id);
@@ -294,8 +315,20 @@ const IDS_DIMENSAO = DIMENSOES.map((d) => d.id);
 /** Valor das linhas sem campanha / sem destino (tambem vai assim na URL). */
 export const NENHUM = "-";
 
+/** Clique: com, sem, ou nao se aplica (destino que nao e Meta nem Google). */
+export const ORDEM_CLIQUE = ["sim", "nao"];
+const VALORES_CLIQUE = [...ORDEM_CLIQUE, NENHUM];
+
 export function filtroVazio(): Filtro {
-  return { status: [], evento: [], plataforma: [], fonte: [], destino: [], campanha: [] };
+  return {
+    status: [],
+    evento: [],
+    plataforma: [],
+    fonte: [],
+    destino: [],
+    clique: [],
+    campanha: [],
+  };
 }
 
 /** O valor da linha naquela dimensao (o que o filtro compara). */
@@ -311,6 +344,8 @@ export function valorDe(e: EventoFeed, dim: Dimensao): string {
       return e.fonte;
     case "destino":
       return e.destino_id ?? NENHUM;
+    case "clique":
+      return e.com_clique === null ? NENHUM : e.com_clique ? "sim" : "nao";
     case "campanha":
       return decodificarUtm(e.utm_campaign) ?? NENHUM;
   }
@@ -383,6 +418,8 @@ export function rotuloDoValor(dim: Dimensao, valor: string, eventos: EventoFeed[
       if (!e) return "Destino fora das linhas carregadas";
       return `${nomePlataforma(e.plataforma)} · ${e.destino_nome || "sem nome"}`;
     }
+    case "clique":
+      return valor === "sim" ? "Com clique" : valor === "nao" ? "Sem clique" : "Não se aplica";
     case "campanha":
       return valor === NENHUM ? "Sem campanha" : valor;
   }
@@ -405,6 +442,7 @@ export function opcoesDe(dim: Dimensao, eventos: EventoFeed[], f: Filtro): Opcao
   let valores: string[];
   if (dim === "status") valores = [...ORDEM_STATUS];
   else if (dim === "fonte") valores = [...ORDEM_FONTE];
+  else if (dim === "clique") valores = [...ORDEM_CLIQUE, ...(presentes.has(NENHUM) ? [NENHUM] : [])];
   else {
     const vistos = [...presentes];
     if (dim === "evento") {
@@ -478,6 +516,7 @@ export function filtroDaUrl(p: ParamsUrl): Filtro {
   f.evento = valoresDoParam(p, "evento").map((v) => chaveDoEvento(v) ?? v);
   f.plataforma = valoresDoParam(p, "plataforma").map((v) => v.toLowerCase());
   f.destino = valoresDoParam(p, "destino");
+  f.clique = valoresDoParam(p, "clique").filter((v) => VALORES_CLIQUE.includes(v));
   f.campanha = valoresDoParam(p, "campanha");
   return f;
 }
@@ -586,6 +625,7 @@ export function montarCsv(
     "Status",
     "Latência (s)",
     "Clique",
+    "Teste",
     "Origem",
     "Pedido",
   ];
@@ -604,6 +644,7 @@ export function montarCsv(
         STATUS_TELA[e.status].rotulo,
         latencia,
         textoClique(e) === "—" ? "" : textoClique(e),
+        ehTeste(e) ? "Sim" : "",
         textoOrigem(e) === "—" ? "" : textoOrigem(e),
         e.pedido ? ctx.nomePedido(e) : "",
       ]

@@ -3,14 +3,14 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { CabecalhoEventos, NotaEventos } from "./cabecalho";
+import { CabecalhoEventos } from "./cabecalho";
 
 /**
  * A primeira leitura falhou (banco ou sessao). Erro aparece como erro: lista
  * vazia diria "nenhum evento ainda", que e outra coisa e mandaria o lojista
- * procurar defeito no tema. O detalhe tecnico fica no log do servidor.
+ * procurar defeito no tema. O detalhe tecnico fica atras de "Ver detalhes".
  */
-export function ErroEventos() {
+export function ErroEventos({ detalhe }: { detalhe?: string }) {
   const router = useRouter();
   const [tentando, startTransition] = useTransition();
   return (
@@ -23,8 +23,16 @@ export function ErroEventos() {
         >
           <p className="text-section text-ink">Não conseguimos buscar os eventos</p>
           <p className="max-w-110 text-dense text-t1 text-pretty">
-            O rastreamento continua enviando normalmente. Só a lista desta tela não carregou.
+            O rastreamento continua enviando normalmente.
           </p>
+          {detalhe && (
+            <details className="max-w-110 text-label text-t2">
+              <summary className="mx-auto w-fit cursor-pointer rounded-sm hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+                Ver detalhes
+              </summary>
+              <p className="mt-1 [overflow-wrap:anywhere]">{detalhe}</p>
+            </details>
+          )}
           <Button
             className="mt-1"
             pending={tentando}
@@ -34,7 +42,6 @@ export function ErroEventos() {
           </Button>
         </div>
       </section>
-      <NotaEventos />
     </>
   );
 }
