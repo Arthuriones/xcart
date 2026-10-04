@@ -1250,8 +1250,25 @@
     return fora;
   }
 
-  function ligarRemarketing() {
-    var contas = contasDeRemarketing();
+  /** Contas que ja mandaram o hit de remarketing nesta pagina. */
+  var remarketingFeito = {};
+
+  /**
+   * O hit de remarketing para cada conta que ainda nao mandou.
+   *
+   * Chamado duas vezes: com as contas gravadas no tema na instalacao
+   * (data-xcart-remarketing) e com as que vem de /api/tracking/google-config.
+   * A segunda e o que faz uma conta cadastrada DEPOIS da instalacao ganhar
+   * remarketing sem reinstalar o snippet.
+   */
+  function remarketingPara(lista) {
+    var contas = [];
+    for (var n = 0; n < lista.length; n++) {
+      if (!remarketingFeito[lista[n]]) {
+        remarketingFeito[lista[n]] = true;
+        contas.push(lista[n]);
+      }
+    }
     if (contas.length === 0) return;
 
     // UM carregamento de gtag.js, nao um por conta: o arquivo e o mesmo e a
@@ -1263,8 +1280,10 @@
     var prod = dadosDoProduto();
 
     for (var i = 0; i < contas.length; i++) {
-      gtag("config", contas[i]);
-      configuradas[contas[i]] = true;
+      if (!configuradas[contas[i]]) {
+        gtag("config", contas[i]);
+        configuradas[contas[i]] = true;
+      }
 
       var params = { send_to: contas[i], ecomm_pagetype: pagina };
       if (prod && prod.id) {
@@ -1275,6 +1294,19 @@
       // Google so conta conversao no evento com nome `conversion` e um rotulo.
       gtag("event", "page_view", params);
     }
+  }
+
+  function ligarRemarketing() {
+    remarketingPara(contasDeRemarketing());
+  }
+
+  /** Espera o DOM (o produto vem do ShopifyAnalytics.meta) e faz o hit. */
+  function remarketingQuandoPronto(lista) {
+    var fazer = function () {
+      remarketingPara(lista);
+    };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", fazer);
+    else fazer();
   }
 
   if (document.readyState === "loading") {
@@ -1328,10 +1360,15 @@
       for (var j = 0; j < contas.length; j++) {
         if (configuradas[contas[j].conta]) continue;
         configuradas[contas[j].conta] = true;
-        // Sem page_view: o hit de remarketing e da secao 4, e so para as
-        // contas que o lojista ligou la.
+        // Sem page_view aqui: o hit de remarketing, com o produto, sai logo
+        // abaixo pela secao 4.
         gtag("config", contas[j].conta, { send_page_view: false });
       }
+      // Remarketing tambem para conta cadastrada depois da instalacao do
+      // snippet, que nao esta em data-xcart-remarketing.
+      var aws = [];
+      for (var r = 0; r < contas.length; r++) aws.push(contas[r].conta);
+      if (!TESTE) remarketingQuandoPronto(aws);
     }
     var fila = esperandoGoogle;
     esperandoGoogle = [];

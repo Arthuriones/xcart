@@ -283,6 +283,29 @@
     return algum ? u : null;
   }
 
+  /** gid://shopify/ProductVariant/123 -> "123". */
+  function numeroDoGid(gid) {
+    var m = /\/(\d+)$/.exec(String(gid || ""));
+    return m ? m[1] : gid ? String(gid) : null;
+  }
+
+  /** Itens da compra no formato do Google (id da variante, preco, quantidade). */
+  function itensDoCheckout(checkout) {
+    var saida = [];
+    var linhas = (checkout && checkout.lineItems) || [];
+    for (var i = 0; i < linhas.length; i++) {
+      var l = linhas[i] || {};
+      var v = l.variant || {};
+      var id = numeroDoGid(v.id);
+      if (!id) continue;
+      var preco = Number(v.price && v.price.amount);
+      var item = { id: id, quantity: Number(l.quantity) || 1, google_business_vertical: "retail" };
+      if (isFinite(preco)) item.price = preco;
+      saida.push(item);
+    }
+    return saida;
+  }
+
   /** "gid://shopify/Order/123" -> "123"; o resto como veio. */
   function idDoPedido(checkout) {
     var o = checkout && checkout.order;
@@ -312,11 +335,21 @@
         // Antes da conversao: e o que liga as conversoes otimizadas.
         if (contasGoogle.length && dados) gtag("set", "user_data", dados);
       });
-      converter("purchase", {
+      var params = {
         transaction_id: pedido,
         value: isFinite(valor) ? valor : 0,
         currency: total.currencyCode || checkout.currencyCode || undefined,
-      });
+      };
+      // Os itens e o "cliente novo", como o WeTracked manda: alimentam as
+      // conversoes com dados do carrinho e a meta de aquisicao de cliente
+      // novo do Google. Sem eles a conversao conta igual.
+      var itens = itensDoCheckout(checkout);
+      if (itens.length) params.items = itens;
+      var cliente = checkout.order && checkout.order.customer;
+      if (cliente && typeof cliente.isFirstOrder === "boolean") {
+        params.new_customer = cliente.isFirstOrder;
+      }
+      converter("purchase", params);
     }
   }
 

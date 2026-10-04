@@ -685,16 +685,33 @@ describe("snippet do tema: a tag do Google", () => {
     expect(sn.scripts).toEqual(["https://www.googletagmanager.com/gtag/js?id=AW-111111111"]);
     const ver = sn.beacons.find((b) => b.evento === "view_item")!;
     const carrinho = sn.beacons.find((b) => b.evento === "add_to_cart")!;
-    expect(sn.camada().filter((a) => a[0] === "event")).toEqual([
+    expect(sn.camada().filter((a) => a[0] === "event" && a[1] !== "page_view")).toEqual([
       ["event", "view_item", { send_to: "AW-111111111/V1", transaction_id: ver.eventId }],
       ["event", "add_to_cart", { send_to: "AW-111111111/C1", transaction_id: carrinho.eventId }],
       ["event", "add_to_cart", { send_to: "AW-222222222/C2", transaction_id: carrinho.eventId }],
     ]);
-    // Conta so de conversao: config sem page_view (o remarketing e a parte).
+    // Config sem page_view automatico: o hit de remarketing sai explicito,
+    // com o produto, logo abaixo.
     expect(sn.camada().filter((a) => a[0] === "config")).toEqual([
       ["config", "AW-111111111", { send_page_view: false }],
       ["config", "AW-222222222", { send_page_view: false }],
     ]);
+  });
+
+  it("conta cadastrada depois da instalacao ganha remarketing sem reinstalar", async () => {
+    // O tema foi instalado sem data-xcart-remarketing; as contas so existem
+    // na configuracao. Antes, essas contas ficavam sem remarketing.
+    const sn = rodarSnippet({ contas: CONTAS });
+    await assentarMuito();
+    const hits = sn.camada().filter((a) => a[0] === "event" && a[1] === "page_view");
+    expect(hits.map((a) => (a[2] as { send_to: string }).send_to)).toEqual([
+      "AW-111111111",
+      "AW-222222222",
+    ]);
+    // Um hit por conta, nao dois.
+    sn.adicionar();
+    await assentarMuito();
+    expect(sn.camada().filter((a) => a[0] === "event" && a[1] === "page_view")).toHaveLength(2);
   });
 
   it("begin_checkout so sai do tema quando o pixel NAO cobre o checkout", async () => {
