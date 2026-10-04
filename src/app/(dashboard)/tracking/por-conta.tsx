@@ -53,8 +53,10 @@ export function ValorDoEvento({
   extra?: ReactNode;
 }) {
   const valor = cn("num text-ink", grande ? "text-page" : "text-section");
+  // Neutro: no Google, deixar um evento sem rotulo pode ser escolha. O cartao
+  // do destino pinta a caixa de amarelo quando isso e o que falta.
   if (!n.envia) {
-    return <span className="text-dense font-semibold text-warn">sem rótulo</span>;
+    return <span className="text-dense text-t2">sem rótulo</span>;
   }
   if (semContagem) {
     return (
@@ -93,6 +95,8 @@ function LinhaDaConta({
   const { loja, destino } = linha;
   const c = destino.contagem;
   const metaDiz = comprasQueOMetaDiz(linha);
+  // Sem apelido, a conta ja e o titulo: nao repete embaixo.
+  const sub = [comLoja ? loja.nome : null, destino.nome ? destino.conta : null].filter(Boolean);
 
   return (
     <li className="grid grid-cols-2 gap-x-4 gap-y-3 border-b border-border-subtle p-4 last:border-b-0 md:grid-cols-[minmax(180px,1.4fr)_repeat(4,minmax(0,1fr))] md:gap-5">
@@ -106,10 +110,7 @@ function LinhaDaConta({
           </span>
           {emModoTeste(destino) && <StatusBadge {...STATUS.destino.modoTeste} />}
         </span>
-        <span className="truncate text-label text-t2">
-          {comLoja ? `${loja.nome} · ` : ""}
-          <span className="font-mono">{destino.conta}</span>
-        </span>
+        {sub.length > 0 && <span className="truncate text-label text-t2">{sub.join(" · ")}</span>}
       </div>
 
       {EVENTOS_DA_GRADE.map((chave) => (

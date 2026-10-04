@@ -615,7 +615,7 @@ export function DetalheLoja({
             open={confirmarDesligar}
             onOpenChange={setConfirmarDesligar}
             titulo={`Desligar o envio de compras de ${loja.nome}?`}
-            descricao="As compras desta loja param de chegar ao Meta e ao Google até você ligar de novo. Os destinos e o histórico continuam aqui."
+            descricao="As compras param de chegar ao Meta e ao Google até você religar."
             confirmar="Desligar envio"
             mensagemErro="Não deu para desligar agora. Tente de novo."
             onConfirmar={() => mudarEnvio(false)}

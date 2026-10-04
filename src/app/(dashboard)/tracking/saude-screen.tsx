@@ -281,7 +281,7 @@ export function SaudeScreen({
         descricao={
           lojaEscolhida
             ? "Para ver todas, escolha Todas as lojas na barra do topo."
-            : "Compras que chegaram à plataforma sobre os pedidos da Shopify nos últimos 7 dias."
+            : "Compras que chegaram, sobre os pedidos da Shopify · últimos 7 dias"
         }
         espaco="nenhum"
         acoes={

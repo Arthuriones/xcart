@@ -175,7 +175,7 @@ export interface LojaTracking {
    * ligadas a esta loja. So comparacao.
    *
    * null = nenhuma conta do Meta ligada a loja com dado no periodo. A tela
-   * nao mostra a linha -- nada de "Em breve" nem de zero inventado.
+   * nao mostra a linha -- nada de aviso de "ainda nao existe" nem de zero inventado.
    */
   comprasContadasPeloMeta: number | null;
 

@@ -427,7 +427,7 @@ export function EventosScreen({
                 </Button>
               }
             >
-              A lista abaixo é a da última leitura que deu certo. Tentamos de novo a cada 15 s.
+              A lista abaixo é a da última leitura que deu certo.
             </Callout>
           </div>
         )}

@@ -20,7 +20,7 @@ import {
 } from "./saude";
 
 // ============================================================================
-// O que a tela Saude dos pixels mostra de cada loja, sem React.
+// O que a tela de Rastreamento mostra de cada loja, sem React.
 //
 // A REGRA continua em saude.ts e nao muda aqui. Este arquivo so traduz o
 // resultado dela para a tela nova:
