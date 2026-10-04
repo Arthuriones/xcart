@@ -73,6 +73,13 @@ describe("avisos sem '(s)' e com acento", () => {
     expect(a.every((t) => !t.includes("(s)"))).toBe(true);
     expect(avisosDaConexao({ coveragePercent: 100 })).toEqual([]);
   });
+  it("mantém o motivo de cada SKU que não gravou na vitrine", () => {
+    const a = avisosDaConexao({
+      missingSkuCount: 1,
+      warnings: ["1 variante(s) continuam sem SKU (falha ao gravar na vitrine).", "Falha ao gravar SKU — Camisa: SKU inválido"],
+    });
+    expect(a).toEqual(["1 variante continua sem SKU: a rota casa só pelo SKU.", "Falha ao gravar SKU — Camisa: SKU inválido"]);
+  });
   it("depois de completar a loja de checkout", () => {
     const a = avisosDoTeste({ noSkuCount: 0, missingCount: 2, wrongCount: 1, shipping: { ok: false } });
     expect(a).toEqual([

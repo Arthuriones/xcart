@@ -50,6 +50,16 @@ const ORIGENS: {
   },
 ];
 
+/** O mesmo cabecalho na pagina e no loading.tsx: nada pula quando os dados chegam. */
+export function CabecalhoCentral() {
+  return (
+    <PageHeader
+      title="Importar"
+      description="Escolha de onde vêm os produtos. Eles entram numa das suas lojas Shopify conectadas."
+    />
+  );
+}
+
 /**
  * `lojas` null = a leitura falhou. As origens aparecem do mesmo jeito (nao
  * dependem das lojas); o aviso diz o que houve.
@@ -58,10 +68,7 @@ export function CentralImportacao({ lojas }: { lojas: LojaDestino[] | null }) {
   const comAcesso = lojas?.filter((l) => !l.semAcesso).length ?? 0;
   return (
     <>
-      <PageHeader
-        title="Importar"
-        description="Escolha de onde vêm os produtos. Eles entram numa das suas lojas Shopify conectadas."
-      />
+      <CabecalhoCentral />
 
       <div className="flex flex-col gap-6">
         {lojas === null ? (

@@ -158,7 +158,9 @@ export const AVISO_PIX_DIAS = 7;
 function formaDe(p: PerfilAssinatura): FormaPagamento | null {
   if (p.provedor === "stripe") return "legado";
   if (p.temAssinaturaCartao) return "cartao";
-  if (p.plano === "pro") return "pix";
+  // Todo Pix grava o fim dos 30 dias. Pro sem fim e sem cartao (liberado
+  // direto no banco, como a conta admin) nao e Pix: forma desconhecida.
+  if (p.plano === "pro" && p.fimPeriodo) return "pix";
   return null;
 }
 

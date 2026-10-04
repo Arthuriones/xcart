@@ -20,8 +20,8 @@ import { STATUS, StatusBadge, type TomStatus } from "@/components/ui/status-badg
 import { horaNoFuso, rotuloFuso } from "@/components/layout/contexto";
 import { FUSO_RELATORIO_PADRAO } from "@/lib/financeiro/tipos";
 import { DIAS_CARRINHOS, type DetalheRota, type RotaDaLista } from "@/lib/leitura/visao-rota";
+import { hrefRota } from "@/app/(dashboard)/clone/routed-checkout/logica";
 import {
-  CONSOLE,
   ROTULO_ESTRATEGIA,
   contarProblemas,
   destinosNaTela,
@@ -298,7 +298,7 @@ export function TelaVisao({
                 </div>
                 {ev.tom !== "ok" ? (
                   <Link
-                    href={CONSOLE}
+                    href={hrefRota(rota.id, "diagnostico")}
                     className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-ctl-lg sm:h-ctl-sm")}
                   >
                     Ver o diagnóstico

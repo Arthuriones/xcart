@@ -28,7 +28,7 @@ export function TelaImportarShopify({ escopo }: { escopo: Escopo }) {
 export function CabecalhoImportar() {
   return (
     <PageHeader
-      title="Importar de uma loja Shopify"
+      title="Importar da Shopify"
       description="Copie um produto, uma coleção ou a loja inteira de uma Shopify pública para uma das suas lojas, com tradução e troca de marca se quiser."
     >
       <Link href="/clone" className={buttonVariants({ variant: "secondary" })}>

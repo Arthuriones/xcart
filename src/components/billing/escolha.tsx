@@ -19,7 +19,8 @@ export interface OpcaoEscolha<V extends string> {
  * Cartoes de escolha unica (forma de pagamento, pacote de creditos). E um
  * radiogroup de verdade: Tab entra no marcado, setas trocam, e o estado nao
  * fica so na cor -- o marcado ganha borda forte e o circulo preenchido.
- * Local da Assinatura: a fundacao ainda nao tem RadioGroup em cartao.
+ * Usa o visual de ui/radio-group; fica em base-ui por causa do icone e do
+ * preco no nome acessivel.
  */
 export function Escolha<V extends string>({
   rotulo,
@@ -69,9 +70,9 @@ export function Escolha<V extends string>({
         >
           <span
             aria-hidden
-            className="mt-0.5 grid size-4 shrink-0 place-items-center rounded-full border border-control-border group-data-checked/opcao:border-ink"
+            className="mt-0.5 grid size-4 shrink-0 place-items-center rounded-full border border-control-border bg-surface group-data-checked/opcao:border-transparent group-data-checked/opcao:bg-solid"
           >
-            <span className="size-2 rounded-full bg-ink opacity-0 group-data-checked/opcao:opacity-100" />
+            <span className="size-1.5 rounded-full bg-on-solid opacity-0 group-data-checked/opcao:opacity-100" />
           </span>
           {o.icone ? (
             <span aria-hidden className="mt-px shrink-0 text-t2 [&_svg]:size-4">

@@ -4,7 +4,6 @@ import path from "node:path";
 import type { DestinoDaRota, EventoDaRota, RotaDaLista } from "../src/lib/leitura/visao-rota";
 import type { SalesRow } from "../src/lib/sales/types";
 import {
-  CONSOLE,
   contarProblemas,
   destinosNaTela,
   escolherRota,
@@ -209,7 +208,7 @@ describe("problemasDaRota", () => {
     const destinos = destinosNaTela([destino({ id: "a", mapeados: 0, peso: 0 })], false);
     const p = problemasDaRota({ ...base, falhas: 2, rota: rota({ ativa: false }), destinos });
     expect(p.map((x) => x.tom)).toEqual(["err", "warn", "info"]);
-    expect(p.every((x) => x.acao.href === CONSOLE)).toBe(true);
+    expect(p.every((x) => x.acao.href.includes("rota=r1"))).toBe(true);
   });
 });
 

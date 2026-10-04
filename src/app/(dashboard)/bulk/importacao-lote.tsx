@@ -292,7 +292,7 @@ export function ImportacaoEmLote({
             <div className="flex flex-col gap-4">
             <Grupo titulo="Publicação">
               <Opcao
-                rotulo="Publicar na loja virtual"
+                rotulo="Publicar na loja ao criar"
                 descricao="Desligado, o produto é criado mas fica fora da loja até você publicar."
                 checked={o.publicar}
                 onCheckedChange={(v) => muda("publicar", v)}
@@ -301,7 +301,7 @@ export function ImportacaoEmLote({
 
             <Grupo titulo="Tradução">
               <Opcao
-                rotulo="Traduzir título e descrição"
+                rotulo="Traduzir nome e descrição"
                 descricao="Para o idioma da loja de destino, com IA."
                 checked={o.traduzir}
                 onCheckedChange={(v) => muda("traduzir", v)}
@@ -335,7 +335,7 @@ export function ImportacaoEmLote({
             <Grupo titulo="Marca e fotos">
               {origem === "links" ? (
                 <Opcao
-                  rotulo="Tirar a marca do produto"
+                  rotulo="Tirar as marcas"
                   descricao="Título e descrição genéricos e fotos refeitas com IA, sem logotipo. Desliga a limpeza abaixo."
                   checked={o.tirarMarca}
                   onCheckedChange={(v) =>
@@ -354,8 +354,8 @@ export function ImportacaoEmLote({
                 }
               />
               <Opcao
-                rotulo="Aplicar o logo da loja nas fotos"
-                descricao="Usa o logo cadastrado na loja de destino."
+                rotulo="Aplicar a logo da loja nas imagens"
+                descricao="Usa a logo cadastrada na loja de destino."
                 checked={o.aplicarLogo}
                 onCheckedChange={(v) => muda("aplicarLogo", v)}
               />
@@ -414,7 +414,7 @@ export function ImportacaoEmLote({
                 onValorChange={(v) => muda("estoque", v)}
                 opcoes={[
                   { valor: "not_tracked", rotulo: "Sem controle" },
-                  { valor: "tracked", rotulo: "Definir quantidade" },
+                  { valor: "tracked", rotulo: "Estoque inicial" },
                 ]}
                 tamanho="md"
               />

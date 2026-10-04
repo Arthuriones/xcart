@@ -1,5 +1,5 @@
 import { lerLojasDestino, type LojaDestino } from "@/lib/leitura/importar";
-import { CentralImportacao } from "./central-importacao";
+import { CentralImportacao } from "../central-importacao";
 
 export const dynamic = "force-dynamic";
 

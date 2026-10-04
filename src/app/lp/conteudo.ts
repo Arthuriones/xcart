@@ -1,4 +1,4 @@
-import { POLITICA_TESTE } from "./plano";
+import { CREDITOS_INCLUSOS, POLITICA_TESTE } from "./plano";
 
 // ============================================================================
 // O texto da landing, separado do layout para o Arthur revisar num lugar so.
@@ -51,7 +51,7 @@ export const RECURSOS_PRINCIPAIS: RecursoPrincipal[] = [
     tela: "Alertas",
     titulo: "Alertas antes do prejuízo",
     resumo:
-      "Quando algo quebra, o aviso chega no Telegram com o atalho para a tela que resolve.",
+      "Quando algo quebra, o aviso chega no Telegram com a loja e o problema; na tela Alertas, cada um leva direto à tela que resolve.",
     pontos: [
       "Gastou com anúncio e não vendeu hoje.",
       "Compra que não chegou ao Meta ou ao Google.",
@@ -169,7 +169,7 @@ export const PERGUNTAS: Pergunta[] = [
   {
     pergunta: "O que é um crédito de IA?",
     resposta:
-      "Cada crédito refaz com IA a foto de um produto, sem a marca. Tradução e texto não gastam crédito. Os créditos do plano renovam a cada mês pago; os comprados à parte não expiram.",
+      `Cada crédito refaz com IA a foto de um produto, sem a marca. Tradução e texto não gastam crédito. Os créditos comprados à parte somam ao saldo; na renovação do cartão, o saldo volta para ${CREDITOS_INCLUSOS}.`,
   },
   {
     pergunta: "Posso cancelar?",

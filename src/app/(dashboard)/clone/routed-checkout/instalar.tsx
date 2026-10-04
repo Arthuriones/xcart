@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
+import { plural } from "@/lib/leitura/lojas-estado";
 import { codigoDoScript } from "./logica";
 
 // ============================================================================
@@ -69,11 +70,11 @@ export function Instalador({
         if (comCodigo) setManual(true);
         return;
       }
-      const lojas = d.targetCount === 1 ? "1 loja de checkout" : `${d.targetCount ?? 0} lojas de checkout`;
-      const skus = (d.skuCount ?? 0).toLocaleString("pt-BR");
+      const lojas = plural(d.targetCount ?? 0, "loja de checkout", "lojas de checkout");
+      const skus = plural(d.skuCount ?? 0, "SKU ligado", "SKUs ligados");
       setResultado({
         ok: true,
-        texto: `Enviado ao tema da vitrine às ${horaAgora()}: ${lojas}, ${skus} SKUs ligados.`,
+        texto: `Enviado ao tema da vitrine às ${horaAgora()}: ${lojas}, ${skus}.`,
       });
       startTransition(() => router.refresh());
     } catch {

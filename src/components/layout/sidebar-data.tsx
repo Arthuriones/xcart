@@ -1,8 +1,10 @@
 import { cookies } from "next/headers";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { createClient } from "@/lib/supabase/server";
+import { listarLojasDoUsuario } from "@/lib/filtro-global";
 import { contarAlertasAbertos } from "@/lib/leitura/notificacoes";
 import { lerFotoGuia, lerGuiaDaConta } from "@/lib/leitura/guia-configuracao";
+import { COOKIE_GUIA_DISPENSADO } from "@/lib/leitura/guia-passos";
 import { COOKIE_MENU } from "./contexto";
 import { Sidebar, type DadosMenu } from "./sidebar";
 
@@ -18,27 +20,34 @@ import { Sidebar, type DadosMenu } from "./sidebar";
  * melhor que sem menu.
  */
 export async function SidebarData() {
-  // lerGuiaDaConta e lerFotoGuia sao cache() por requisicao: a foto e lida uma
-  // vez so, e de novo nenhuma quando a pagina aberta e o proprio /setup.
-  const [user, guiaDaConta, foto, creditos, alertas, rotas, jar] = await Promise.all([
+  // A foto do guia so serve ao cartao: com o guia dispensado (cookie) ela nem
+  // e lida. lerGuiaDaConta e lerFotoGuia sao cache() por requisicao: a foto e
+  // lida uma vez so, e de novo nenhuma quando a pagina aberta e o proprio
+  // /setup. As lojas sao as do seletor do topo (cache, mesma requisicao).
+  const jar = await cookies();
+  const dispensado = jar.get(COOKIE_GUIA_DISPENSADO)?.value === "1";
+  const [user, guiaDaConta, foto, lojas, creditos, alertas, rotas] = await Promise.all([
     getCurrentUser(),
-    lerGuiaDaConta().catch(() => null),
-    lerFotoGuia().catch(() => null),
+    dispensado ? null : lerGuiaDaConta().catch(() => null),
+    dispensado ? null : lerFotoGuia().catch(() => null),
+    listarLojasDoUsuario()
+      .then((l) => l.length)
+      .catch(() => 0),
     lerCreditos(),
     contarAlertasAbertos().catch(() => 0),
-    contarRotas(),
-    cookies(),
+    dispensado ? contarRotas() : null,
   ]);
   const meta = (user?.user_metadata || {}) as { full_name?: string; name?: string };
   // Leitura que falhou (null) nao vira "Ativar roteamento" para quem tem rota.
-  const temRota = rotas !== 0;
+  // Com a foto lida, as rotas vem dela; senao, da contagem.
+  const temRota = dispensado ? rotas !== 0 : foto?.rotas ? foto.rotas.length > 0 : true;
 
   return (
     <Sidebar
       dados={{
         nome: meta.full_name || meta.name || user?.email || "",
         email: user?.email || "",
-        lojas: foto?.lojas?.length ?? 0,
+        lojas,
         creditos,
         alertas,
         temRota,

@@ -130,6 +130,15 @@ describe("situacaoDoPlano", () => {
     expect(s.aviso).toBeNull();
   });
 
+  it("Pro sem fim e sem cartao (liberado no banco) nao vira Pix", () => {
+    const s = situacaoDoPlano({ ...PIX, fimPeriodo: null }, AGORA);
+    expect(s.pro).toBe(true);
+    expect(s.forma).toBeNull();
+    expect(s.podeRenovarPix).toBe(false);
+    expect(s.podeCancelar).toBe(false);
+    expect(s.linha).toBeNull();
+  });
+
   it("Pro por Pix perto do fim avisa com os dias que faltam", () => {
     const s = situacaoDoPlano({ ...PIX, fimPeriodo: emDias(3) }, AGORA);
     expect(s.selo).toEqual({ tom: "warn", texto: "Vence em 3 dias" });

@@ -1,8 +1,8 @@
 import { PRO_INCLUDED_CREDITS } from "@/lib/billing/plans";
 
 /**
- * O que o Pro inclui: UMA lista, para a Assinatura, o paywall e (quando a
- * landing for refeita) a pagina de precos. Antes eram tres listas diferentes
+ * O que o Pro inclui: UMA lista, para a Assinatura, o paywall e o cartao de
+ * preco da landing (/lp). Antes eram tres listas diferentes
  * e nenhuma citava lucro ou rastreamento.
  *
  * Ordem da decisao 2 do brief: primeiro o dinheiro (lucro), depois o

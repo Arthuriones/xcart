@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CircleCheckIcon, OctagonAlertIcon, TriangleAlertIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
@@ -52,7 +52,8 @@ const ICONE: Record<LinhaTeste["tom"], typeof CircleCheckIcon> = {
 
 /**
  * Aba Diagnostico: testar a rota, ver o resultado colado no botao, corrigir,
- * a checagem automatica de hora em hora e como testar com um carrinho real.
+ * a checagem automatica (o cron pega 4 destinos por hora) e como testar com
+ * um carrinho real.
  * "Conferir agora" (aviso de mapa velho na Visao) chega aqui com ?conferir=1
  * e o teste ja comeca.
  */
@@ -68,8 +69,12 @@ export function AbaDiagnostico({
   lojaCheckout: string;
 }) {
   const router = useRouter();
+  const params = useSearchParams();
+  // A prop vem congelada do servidor; a URL perde o ?conferir quando o teste
+  // termina ou quando troca de aba. Voltar ao Diagnostico nao testa de novo.
+  const conferirAgora = conferirAoAbrir && params.get("conferir") === "1";
   const [, startTransition] = useTransition();
-  const [testando, setTestando] = useState(conferirAoAbrir);
+  const [testando, setTestando] = useState(conferirAgora);
   const [teste, setTeste] = useState<Teste | null>(null);
   const [corrigindo, setCorrigindo] = useState(false);
   const [conserto, setConserto] = useState<{ ok: boolean; texto: string } | null>(null);
@@ -77,7 +82,7 @@ export function AbaDiagnostico({
   // Veio do "Conferir agora": testa uma vez e tira o pedido da URL, para
   // recarregar a pagina nao testar de novo. O estado so muda na resposta.
   useEffect(() => {
-    if (!conferirAoAbrir) return;
+    if (!conferirAgora) return;
     let vivo = true;
     void testarRota(rotaId).then((t) => {
       if (!vivo) return;
@@ -90,7 +95,7 @@ export function AbaDiagnostico({
     return () => {
       vivo = false;
     };
-  }, [conferirAoAbrir, rotaId]);
+  }, [conferirAgora, rotaId]);
 
   async function testar() {
     setTestando(true);
@@ -210,7 +215,7 @@ export function AbaDiagnostico({
 
       <Section
         titulo="Checagem automática"
-        descricao="De hora em hora o xcart confere a rota e liga os produtos novos da vitrine."
+        descricao="O xcart confere a rota sozinho e liga os produtos novos da vitrine."
       >
         {ultimaChecagem ? (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">

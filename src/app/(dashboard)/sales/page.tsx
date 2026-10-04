@@ -4,6 +4,7 @@ import { getRouteGraph } from "@/lib/checkout-routes/graph";
 import { filtroResolvido, lerFiltroGlobal } from "@/lib/filtro-global";
 import { FUSO_RELATORIO_PADRAO, TODAS } from "@/lib/financeiro/tipos";
 import { getSales, type Sales, type SalesPeriod } from "@/lib/sales/queries";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 import { ErroLeitura } from "../overview/estados";
 import { RotaSemCheckout, SemRota } from "../overview/sem-rota";
 import { periodoValido } from "./apresentar";
@@ -17,10 +18,36 @@ function mensagem(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+type Leitura = { dados: Sales; em: number };
+
+/**
+ * Ultima leitura por usuario e periodo, por 60 s. Trocar a loja na barra (ou
+ * "Limpar loja") so muda o foco: getSales ignora a loja, entao o refresh que
+ * vem dessa troca reaproveita a leitura em vez de perguntar de novo a Shopify
+ * por todas as lojas de checkout. Com a mesma loja ("Atualizar", "Tentar de
+ * novo") consulta sempre. A chave tem o usuario: a instancia e compartilhada.
+ */
+const LEITURAS = new Map<string, { leitura: Leitura; lojaId: string; ate: number }>();
+const VALIDADE_MS = 60_000;
+
 /** As vendas e a hora da consulta (o relogio fica fora do componente). */
-async function lerVendas(periodo: SalesPeriod): Promise<{ dados: Sales; em: number }> {
+async function lerVendas(periodo: SalesPeriod, lojaId: string): Promise<Leitura> {
+  const user = await getCurrentUser();
+  const chave = user ? `${user.id}:${periodo}` : null;
+  const salva = chave ? LEITURAS.get(chave) : undefined;
+  if (salva && salva.ate > Date.now() && salva.lojaId !== lojaId) {
+    salva.lojaId = lojaId;
+    return salva.leitura; // o "em" continua sendo a hora real da consulta
+  }
   const dados = await getSales(periodo);
-  return { dados, em: Date.now() };
+  const leitura = { dados, em: Date.now() };
+  if (chave) {
+    for (const [k, v] of LEITURAS) if (v.ate <= leitura.em) LEITURAS.delete(k);
+    // Loja que falhou nao fica guardada: a proxima troca tenta de novo.
+    if (dados.rows.some((r) => r.problem)) LEITURAS.delete(chave);
+    else LEITURAS.set(chave, { leitura, lojaId, ate: leitura.em + VALIDADE_MS });
+  }
+  return leitura;
 }
 
 /**
@@ -44,11 +71,11 @@ async function lojaDoFiltro(): Promise<{ id: string; nome: string } | null> {
  * segundos, entao a consulta fica dentro do Suspense: o cabecalho e o periodo
  * aparecem na hora e o resto chega quando as lojas responderem.
  */
-async function Conteudo({ periodo }: { periodo: SalesPeriod }) {
-  let leitura: { dados: Sales; em: number };
+async function Conteudo({ periodo, lojaId }: { periodo: SalesPeriod; lojaId: string }) {
+  let leitura: Leitura;
   let loja: { id: string; nome: string } | null;
   try {
-    [leitura, loja] = await Promise.all([lerVendas(periodo), lojaDoFiltro()]);
+    [leitura, loja] = await Promise.all([lerVendas(periodo, lojaId), lojaDoFiltro()]);
   } catch (e) {
     console.error("[vendas] leitura", e);
     return (
@@ -99,7 +126,7 @@ export default async function SalesPage({
       <CabecalhoVendas />
       <BarraPeriodo periodo={periodo} />
       <Suspense key={`${periodo}:${filtro.lojaId}`} fallback={<EsqueletoVendas />}>
-        <Conteudo periodo={periodo} />
+        <Conteudo periodo={periodo} lojaId={filtro.lojaId} />
       </Suspense>
     </>
   );

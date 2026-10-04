@@ -10,6 +10,7 @@ import { cn } from "@/components/ui/cn";
 import { Section } from "@/components/ui/section";
 import { AvisoAoSair } from "./aviso-sair";
 import { Progresso } from "@/components/routed-checkout/cartoes";
+import { plural } from "@/lib/leitura/lojas-estado";
 import { PassoAtivar, type DiagnosticoRota, type FilaImagens } from "./passo-ativar";
 import { PassoLojas, type Loja, type Opcoes } from "./passo-lojas";
 import {
@@ -698,12 +699,12 @@ function PassoCriar({
           {lote && lote.total > 0 ? <Progresso valor={pct} rotulo="Produtos processados" /> : null}
           <p aria-live="polite" className="text-dense text-t1">
             {lote && lote.total > 0
-              ? `${lote.processed.toLocaleString("pt-BR")} de ${lote.total.toLocaleString("pt-BR")} produtos`
+              ? `${lote.processed.toLocaleString("pt-BR")} de ${plural(lote.total, "produto", "produtos")}`
               : lote && lote.processed > 0
-                ? `${lote.processed.toLocaleString("pt-BR")} produtos até agora`
+                ? `${plural(lote.processed, "produto", "produtos")} até agora`
                 : "Contando os produtos da origem…"}
             {lote && (lote.created > 0 || lote.failed > 0)
-              ? ` · ${lote.created.toLocaleString("pt-BR")} criados${lote.skipped ? ` · ${lote.skipped.toLocaleString("pt-BR")} já existiam` : ""}${lote.failed ? ` · ${lote.failed.toLocaleString("pt-BR")} com falha` : ""}`
+              ? ` · ${plural(lote.created, "criado", "criados")}${lote.skipped ? ` · ${plural(lote.skipped, "já existia", "já existiam")}` : ""}${lote.failed ? ` · ${lote.failed.toLocaleString("pt-BR")} com falha` : ""}`
               : ""}
           </p>
         </Section>

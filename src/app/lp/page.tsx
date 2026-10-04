@@ -35,7 +35,8 @@ import {
   PreviaLucro,
   PreviaRastreamento,
 } from "./ilustracoes";
-import { BENEFICIOS_PRO, PACOTES, POLITICA_TESTE, PRECO_PRO } from "./plano";
+import { BENEFICIOS_PRO } from "@/components/billing/beneficios";
+import { PACOTES, POLITICA_TESTE, PRECO_PRO } from "./plano";
 
 /**
  * A landing comercial (raiz do host publico e /lp).
@@ -264,7 +265,7 @@ export default function Landing() {
                 "Rodízio entre várias lojas de checkout: se uma conta de pagamento cair, as outras continuam vendendo.",
                 "O sorteio só acontece entre lojas que cobrem o carrinho inteiro. Nenhum item fica para trás.",
                 "A loja de checkout recebe o catálogo com texto e fotos sem marca, refeitos por IA.",
-                "De hora em hora o xcart confere a rota e conserta o SKU que ficou sem par.",
+                "O xcart confere as rotas sozinho e conserta o SKU que ficou sem par.",
               ]}
             />
             <DiagramaRota />
@@ -304,7 +305,7 @@ export default function Landing() {
               <h3 className="text-section text-ink">Créditos extras</h3>
               <p className="text-dense text-pretty text-t2">
                 Cada crédito refaz com IA a foto de um produto, sem a marca. Compra avulsa por
-                Pix, que não expira.
+                Pix; os créditos somam ao saldo.
               </p>
               <table className="w-full text-dense">
                 <caption className="sr-only">Pacotes de créditos e preços</caption>

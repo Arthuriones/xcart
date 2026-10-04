@@ -10,10 +10,11 @@ import { AbaDiagnostico } from "./aba-diagnostico";
 import { AbaInstalacao } from "./aba-instalacao";
 import { AbaLojas } from "./aba-lojas";
 import { AbaVisao } from "./aba-visao";
+import { AbasRota } from "./abas-rota";
 import { AcoesRota } from "./acoes-rota";
 import { ErroConsole, SemRotas } from "./estados";
 import { ListaRotas, type ResumoRota } from "./lista-rotas";
-import { ABAS, SELO_ROTA, estadoDaRota, hrefRota, lojasRecebendo, type AbaRota } from "./logica";
+import { SELO_ROTA, estadoDaRota, lojasRecebendo } from "./logica";
 
 /** O relogio do servidor, lido fora do corpo do componente. */
 function instante(): number {
@@ -28,12 +29,10 @@ function instante(): number {
  */
 export async function Console({
   rotaParam,
-  aba,
   conferir,
   origem,
 }: {
   rotaParam: string | null;
-  aba: AbaRota;
   conferir: boolean;
   origem: string;
 }) {
@@ -53,15 +52,14 @@ export async function Console({
   const rota = rotaParam ? grafo.routes.find((r) => r.id === rotaParam) : grafo.routes[0];
   if (!rota) notFound();
 
-  // O sinal do script so e lido onde aparece (Visao e Instalacao).
+  // O sinal do script (Visao e Instalacao) e lido sempre: e uma consulta com
+  // limit 1, e as abas trocam no navegador, sem voltar ao servidor.
   let sinal = { em: null as string | null, erro: false };
-  if (aba === "visao" || aba === "instalacao") {
-    try {
-      sinal = { em: await lerUltimoSinalDoScript(rota.id), erro: false };
-    } catch (erro) {
-      console.error("[rotas] sinal do script", erro);
-      sinal = { em: null, erro: true };
-    }
+  try {
+    sinal = { em: await lerUltimoSinalDoScript(rota.id), erro: false };
+  } catch (erro) {
+    console.error("[rotas] sinal do script", erro);
+    sinal = { em: null, erro: true };
   }
 
   return (
@@ -69,7 +67,6 @@ export async function Console({
       grafo={grafo}
       rota={rota}
       rotaParam={rotaParam}
-      aba={aba}
       conferir={conferir}
       origem={origem}
       sinal={sinal}
@@ -83,7 +80,6 @@ export function ConsoleView({
   grafo,
   rota,
   rotaParam,
-  aba,
   conferir,
   origem,
   sinal,
@@ -92,7 +88,6 @@ export function ConsoleView({
   grafo: RouteGraph;
   rota: GraphRoute;
   rotaParam: string | null;
-  aba: AbaRota;
   conferir: boolean;
   origem: string;
   sinal: { em: string | null; erro: boolean };
@@ -145,76 +140,57 @@ export function ConsoleView({
           <AcoesRota id={rota.id} nome={rota.name} ligada={rota.enabled} />
         </div>
 
-        <nav aria-label="Seções da rota" className="flex gap-4 overflow-x-auto border-b border-border [scrollbar-width:none]">
-          {ABAS.map((a) => {
-            const ativa = a.id === aba;
-            return (
-              <Link
-                key={a.id}
-                href={hrefRota(rota.id, a.id)}
-                aria-current={ativa ? "page" : undefined}
-                scroll={false}
-                className={cn(
-                  "-mb-px inline-flex h-10 shrink-0 items-center border-b-2 text-dense font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus",
-                  ativa ? "border-ink text-ink" : "border-transparent text-t2 hover:text-ink"
-                )}
-              >
-                {a.rotulo}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {aba === "visao" ? (
-          <AbaVisao rota={rota} lojas={lojas} sinal={sinal} origem={origem} agora={agora} />
-        ) : null}
-        {aba === "lojas" ? (
-          <AbaLojas
-            rotaId={rota.id}
-            rotaLigada={rota.enabled}
-            vitrineId={rota.sourceStoreId}
-            estrategia={rota.rotationStrategy}
-            token={rota.publicToken}
-            origem={origem}
-            lojas={rota.targets.map((t) => ({
-              id: t.id,
-              storeId: t.storeId,
-              nome: lojas.get(t.storeId)?.name || "Loja removida",
-              dominio: lojas.get(t.storeId)?.shopDomain || "",
-              enabled: t.enabled,
-              weight: t.weight,
-              sharePercent: t.sharePercent,
-              mappedSkuCount: t.mappedSkuCount,
-              legacy: t.legacy,
-            }))}
-            disponiveis={grafo.stores
-              .filter((s) => s.id !== rota.sourceStoreId && !rota.targets.some((t) => t.storeId === s.id))
-              .map((s) => ({ id: s.id, nome: s.name || s.shopDomain, dominio: s.shopDomain }))}
-          />
-        ) : null}
-        {aba === "diagnostico" ? (
-          <AbaDiagnostico
-            rotaId={rota.id}
-            conferirAoAbrir={conferir}
-            lojaCheckout={
-              rota.targets.length === 1
-                ? lojas.get(rota.targets[0].storeId)?.name || "a loja de checkout"
-                : "uma das lojas de checkout"
-            }
-            ultimaChecagem={
-              rota.lastHeal
-                ? {
-                    quando: quandoFoi(rota.lastHeal.at, new Date(agora)),
-                    ok: rota.lastHeal.ok,
-                    mensagem: rota.lastHeal.message ?? null,
-                  }
-                : null
-            }
-          />
-        ) : null}
-        {aba === "instalacao" ? (
-          <AbaInstalacao rota={rota} vitrine={vitrine} sinal={sinal} origem={origem} agora={agora} />
-        ) : null}
+        <AbasRota
+          rotaId={rota.id}
+          conteudo={{
+            visao: <AbaVisao rota={rota} lojas={lojas} sinal={sinal} origem={origem} agora={agora} />,
+            lojas: (
+              <AbaLojas
+                rotaId={rota.id}
+                rotaLigada={rota.enabled}
+                vitrineId={rota.sourceStoreId}
+                estrategia={rota.rotationStrategy}
+                token={rota.publicToken}
+                origem={origem}
+                lojas={rota.targets.map((t) => ({
+                  id: t.id,
+                  storeId: t.storeId,
+                  nome: lojas.get(t.storeId)?.name || "Loja removida",
+                  dominio: lojas.get(t.storeId)?.shopDomain || "",
+                  enabled: t.enabled,
+                  weight: t.weight,
+                  sharePercent: t.sharePercent,
+                  mappedSkuCount: t.mappedSkuCount,
+                  legacy: t.legacy,
+                }))}
+                disponiveis={grafo.stores
+                  .filter((s) => s.id !== rota.sourceStoreId && !rota.targets.some((t) => t.storeId === s.id))
+                  .map((s) => ({ id: s.id, nome: s.name || s.shopDomain, dominio: s.shopDomain }))}
+              />
+            ),
+            diagnostico: (
+              <AbaDiagnostico
+                rotaId={rota.id}
+                conferirAoAbrir={conferir}
+                lojaCheckout={
+                  rota.targets.length === 1
+                    ? lojas.get(rota.targets[0].storeId)?.name || "a loja de checkout"
+                    : "uma das lojas de checkout"
+                }
+                ultimaChecagem={
+                  rota.lastHeal
+                    ? {
+                        quando: quandoFoi(rota.lastHeal.at, new Date(agora)),
+                        ok: rota.lastHeal.ok,
+                        mensagem: rota.lastHeal.message ?? null,
+                      }
+                    : null
+                }
+              />
+            ),
+            instalacao: <AbaInstalacao rota={rota} vitrine={vitrine} sinal={sinal} origem={origem} agora={agora} />,
+          }}
+        />
       </section>
     </div>
   );

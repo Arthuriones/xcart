@@ -1,5 +1,6 @@
 import { mapaVelho, targetState } from "@/components/routed-checkout/target-state";
 import { quandoFoi } from "@/lib/leitura/lojas-estado";
+import { hrefRota } from "@/app/(dashboard)/clone/routed-checkout/logica";
 import { repartirCem } from "@/lib/sales/share";
 // So tipos: o modulo de leitura e do servidor e nao entra aqui.
 import type { DestinoDaRota, EventoDaRota, RotaDaLista } from "@/lib/leitura/visao-rota";
@@ -122,7 +123,7 @@ export function tempoDeHoras(horas: number): string {
  * perdendo a compra agora) ao informativo (rota pausada de proposito).
  */
 export function problemasDaRota(entrada: {
-  rota: Pick<RotaDaLista, "ativa" | "ultimoConserto">;
+  rota: Pick<RotaDaLista, "id" | "ativa" | "ultimoConserto">;
   destinos: DestinoNaTela[];
   /** Falhas de roteamento nos ultimos 7 dias; null = nao deu para contar. */
   falhas: number | null;
@@ -137,7 +138,7 @@ export function problemasDaRota(entrada: {
       tom: "err",
       titulo: "A rota não tem loja de checkout",
       detalhe: "Sem uma loja para cobrar, o comprador fica no checkout da vitrine.",
-      acao: { rotulo: "Adicionar loja de checkout", href: CONSOLE },
+      acao: { rotulo: "Adicionar loja de checkout", href: hrefRota(rota.id, "lojas") },
     });
   } else if (rota.ativa && !destinos.some((d) => d.estado === "ok")) {
     lista.push({
@@ -145,7 +146,7 @@ export function problemasDaRota(entrada: {
       tom: "err",
       titulo: "Nenhuma loja de checkout está recebendo comprador",
       detalhe: "Com a rota ligada assim, o comprador fica no checkout da vitrine, que não cobra.",
-      acao: { rotulo: "Ajustar a divisão", href: CONSOLE },
+      acao: { rotulo: "Ajustar a divisão", href: hrefRota(rota.id, "lojas") },
     });
   }
 
@@ -161,7 +162,7 @@ export function problemasDaRota(entrada: {
       detalhe: recebendo
         ? "Nenhum produto tem par por SKU nesta loja: todo carrinho que cair nela falha."
         : "Ela ainda não recebe comprador, mas os carrinhos falhariam se ganhasse uma fatia do tráfego.",
-      acao: { rotulo: "Consertar o mapa", href: CONSOLE },
+      acao: { rotulo: "Consertar o mapa", href: hrefRota(rota.id, "lojas") },
     });
   }
 
@@ -171,7 +172,7 @@ export function problemasDaRota(entrada: {
       tom: "err",
       titulo: `${plural(falhas, "carrinho falhou", "carrinhos falharam")} ao rotear nos últimos 7 dias`,
       detalhe: "O comprador clicou em finalizar e não foi levado para a loja de checkout.",
-      acao: { rotulo: "Ver o diagnóstico", href: CONSOLE },
+      acao: { rotulo: "Ver o diagnóstico", href: hrefRota(rota.id, "diagnostico") },
     });
   }
 
@@ -180,8 +181,8 @@ export function problemasDaRota(entrada: {
       id: "conserto",
       tom: "warn",
       titulo: "A conferência automática encontrou um problema",
-      detalhe: "O xcart confere o mapa de produtos de hora em hora e não conseguiu ligar tudo nesta rota.",
-      acao: { rotulo: "Ver a rota", href: CONSOLE },
+      detalhe: "O xcart confere o mapa de produtos sozinho e não conseguiu ligar tudo nesta rota.",
+      acao: { rotulo: "Ver a rota", href: hrefRota(rota.id, "diagnostico") },
       suporte: rota.ultimoConserto.mensagem,
     });
   }
@@ -203,7 +204,7 @@ export function problemasDaRota(entrada: {
           ? "O mapa de produtos de uma loja nunca foi conferido"
           : `O mapa de produtos não é conferido há ${tempoDeHoras(velho.horas)}`,
         detalhe: "Produto criado na vitrine depois da última conferência não tem par e sai sem rota.",
-        acao: { rotulo: "Conferir agora", href: CONSOLE },
+        acao: { rotulo: "Conferir agora", href: hrefRota(rota.id, "diagnostico", { conferir: "1" }) },
       });
     }
   }
@@ -214,7 +215,7 @@ export function problemasDaRota(entrada: {
       tom: "info",
       titulo: "A rota está pausada",
       detalhe: "Enquanto estiver pausada, a vitrine não manda comprador para as lojas de checkout.",
-      acao: { rotulo: "Retomar no console", href: CONSOLE },
+      acao: { rotulo: "Retomar no console", href: hrefRota(rota.id) },
     });
   }
 

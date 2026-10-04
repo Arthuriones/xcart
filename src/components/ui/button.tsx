@@ -18,7 +18,7 @@ import { Spinner } from "@/components/ui/spinner"
  * `pending` mostra o spinner, poe aria-busy e bloqueia novo clique sem tirar
  * o foco do botao (duplo envio nao passa).
  */
-const buttonVariants = cva(
+const variantesBotao = cva(
   "group/button relative inline-flex shrink-0 items-center justify-center gap-2 rounded-control border border-transparent bg-clip-padding text-dense font-medium whitespace-nowrap transition-colors duration-150 select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus data-disabled:cursor-not-allowed aria-busy:cursor-progress [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
@@ -60,8 +60,18 @@ const buttonVariants = cva(
   }
 )
 
+/**
+ * As classes do botao, ja passadas pelo `cn`. O cva so concatena: o
+ * "border-transparent" da base ficava junto com a borda do secundario (e o
+ * "text-dense" com o "text-body" do lg), e o contorno sumia em todo
+ * `<Link className={buttonVariants(...)}>` sem `cn` em volta.
+ */
+function buttonVariants(props?: Parameters<typeof variantesBotao>[0]): string {
+  return cn(variantesBotao(props))
+}
+
 type ButtonProps = ButtonPrimitive.Props &
-  VariantProps<typeof buttonVariants> & {
+  VariantProps<typeof variantesBotao> & {
     /** Acao em andamento: spinner, aria-busy e clique bloqueado. */
     pending?: boolean
   }
@@ -83,7 +93,7 @@ function Button({
       // Pendente continua focavel: o foco nao pula para o <body> no meio do envio.
       focusableWhenDisabled={pending || focusableWhenDisabled}
       aria-busy={pending || undefined}
-      className={cn(buttonVariants({ variant, size, className }))}
+      className={buttonVariants({ variant, size, className })}
       {...props}
     >
       {pending ? <Spinner size={size === "sm" || size === "xs" ? 12 : 14} /> : null}

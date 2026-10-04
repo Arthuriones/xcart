@@ -21,7 +21,7 @@ const PONTOS: { Icone: LucideIcon; titulo: string; texto: string }[] = [
   {
     Icone: Bell,
     titulo: "Alertas com o caminho para resolver",
-    texto: "Pixel parado, loja sem acesso ou gasto fora do limite, também no Telegram.",
+    texto: "Gastou com anúncio e não vendeu, compra que não chegou ao Meta ou ao Google, pedidos ou gasto sem atualizar, também no Telegram.",
   },
 ];
 

@@ -33,7 +33,7 @@ export const TITULO: Record<Modo, string> = {
 
 export const SUBTITULO: Record<Modo, string> = {
   entrar: "Use o e-mail e a senha da sua conta.",
-  criar: "Com a conta criada, você escolhe o plano e conecta a primeira loja Shopify.",
+  criar: "Com a conta criada, você conecta a primeira loja Shopify.",
   link: "Mandamos um link que entra na sua conta sem pedir a senha.",
   esqueci: "Mandamos um link que entra na sua conta. Lá você cria uma senha nova.",
 };

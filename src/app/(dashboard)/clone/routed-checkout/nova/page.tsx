@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getRouteGraph } from "@/lib/checkout-routes/graph";
+import { lerRotas } from "@/lib/leitura/visao-rota";
 import { getPublicAppUrl } from "@/lib/public-url";
 import { ConectarLojaProvider } from "@/app/(dashboard)/stores/conectar-loja";
 import { ErroConsole } from "../estados";
@@ -16,8 +16,8 @@ export const dynamic = "force-dynamic";
 export default async function NovaRotaPage() {
   let lojas: { id: string; nome: string; dominio: string }[];
   try {
-    const grafo = await getRouteGraph();
-    lojas = grafo.stores.map((s) => ({ id: s.id, nome: s.name || s.shopDomain, dominio: s.shopDomain }));
+    // So o nome e o dominio das lojas: sem o grafo, que traz os mapas de SKU.
+    lojas = (await lerRotas()).lojas;
   } catch (erro) {
     console.error("[rotas] nova rota: falha ao ler lojas", erro);
     return <ErroConsole />;

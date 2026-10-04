@@ -3,10 +3,11 @@
 import { useId, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { CheckIcon, MoreHorizontalIcon } from "lucide-react";
+import { MoreHorizontalIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
+import { Caixa } from "@/components/ui/checkbox";
 import { cn } from "@/components/ui/cn";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
@@ -471,15 +472,7 @@ function AdicionarLojas({
                       marcada ? "border-ink bg-nav-active" : "border-border hover:bg-hover"
                     )}
                   >
-                    <span
-                      aria-hidden
-                      className={cn(
-                        "grid size-4 shrink-0 place-items-center rounded-sm border",
-                        marcada ? "border-ink bg-solid text-on-solid" : "border-control-border bg-surface"
-                      )}
-                    >
-                      {marcada ? <CheckIcon className="size-3" strokeWidth={3} /> : null}
-                    </span>
+                    <Caixa estado={marcada} />
                     <span className="flex min-w-0 flex-col">
                       <span className="truncate text-dense font-medium text-ink">{d.nome}</span>
                       <span className="truncate font-mono text-label text-t2">{d.dominio}</span>

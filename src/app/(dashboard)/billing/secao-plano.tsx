@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Section } from "@/components/ui/section";
+import { Spinner } from "@/components/ui/spinner";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { AssinarPro } from "@/components/billing/assinar-pro";
 import {
@@ -50,6 +51,9 @@ export function SecaoPlano({
   const [, iniciar] = useTransition();
   const [cartaoFinal, setCartaoFinal] = useState<string | null>(null);
   const [renovando, setRenovando] = useState(false);
+  // Pagamento aceito: o formulario sai da tela ate o refresh trazer o Pro
+  // (como a fase "liberando" do paywall), para nao pagar duas vezes.
+  const [assinou, setAssinou] = useState(false);
   const [erroCancelar, setErroCancelar] = useState<string>(ERRO_PADRAO.cancelar);
   const atualizar = () => iniciar(() => router.refresh());
 
@@ -156,7 +160,30 @@ export function SecaoPlano({
         </Callout>
       ) : null}
 
-      {situacao.podeAssinar ? <AssinarPro onPronto={atualizar} temDocumento={temDocumento} /> : null}
+      {situacao.podeAssinar ? (
+        assinou ? (
+          <div role="status" className="flex flex-col items-start gap-2">
+            <p className="flex items-center gap-2 text-dense font-medium text-ink">
+              <Spinner size={14} />
+              Conferindo o pagamento…
+            </p>
+            <p className="text-dense text-t1">
+              O Pro libera assim que o banco confirmar. Não precisa pagar de novo.
+            </p>
+            <Button variant="secondary" size="sm" onClick={atualizar}>
+              Conferir de novo
+            </Button>
+          </div>
+        ) : (
+          <AssinarPro
+            onPronto={() => {
+              setAssinou(true);
+              atualizar();
+            }}
+            temDocumento={temDocumento}
+          />
+        )
+      ) : null}
 
       {situacao.podeRenovarPix ? (
         renovando ? (

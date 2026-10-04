@@ -6,20 +6,20 @@
 
 export type Modo = "generate" | "reuse" | "connect";
 
-export const MODOS: { valor: Modo; rotulo: string; descricao: string }[] = [
+export const MODOS: { valor: Modo; titulo: string; descricao: string }[] = [
   {
     valor: "generate",
-    rotulo: "Gerar do zero",
+    titulo: "Gerar do zero",
     descricao: "Cria os produtos na loja de checkout a partir da vitrine, tirando a marca do texto e, se quiser, da imagem.",
   },
   {
     valor: "reuse",
-    rotulo: "Reaproveitar uma loja",
+    titulo: "Reaproveitar uma loja",
     descricao: "Copia os produtos já sem marca de outra loja de checkout sua, sem usar IA, e liga a vitrine pelo SKU.",
   },
   {
     valor: "connect",
-    rotulo: "Só conectar",
+    titulo: "Só conectar",
     descricao: "As duas lojas já têm os produtos. O xcart casa as variantes pelo SKU e cria na loja de checkout o que sobrar sem par.",
   },
 ];
@@ -127,13 +127,15 @@ function contar(n: number, um: string, varios: string): string {
 /**
  * Os avisos depois de casar pelo SKU, montados dos numeros que
  * /api/checkout-routes/connect-by-sku devolve (as frases prontas de la vem
- * sem acento e com "(s)").
+ * sem acento e com "(s)"). A excecao e o motivo de cada SKU que nao gravou na
+ * vitrine: vem cru da Shopify e so existe em `warnings`, entao passa adiante.
  */
 export function avisosDaConexao(d: {
   coveragePercent?: number;
   missingSkuCount?: number;
   duplicateSkuCount?: number;
   matchedByLabel?: number;
+  warnings?: string[];
 }): string[] {
   const avisos: string[] = [];
   const semSku = d.missingSkuCount ?? 0;
@@ -142,6 +144,9 @@ export function avisosDaConexao(d: {
   const peloNome = d.matchedByLabel ?? 0;
   if (semSku > 0) {
     avisos.push(`${contar(semSku, "variante continua", "variantes continuam")} sem SKU: a rota casa só pelo SKU.`);
+  }
+  for (const w of d.warnings ?? []) {
+    if (typeof w === "string" && w.startsWith("Falha ao gravar SKU")) avisos.push(w);
   }
   if (repetidos > 0) {
     avisos.push(

@@ -6,8 +6,9 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { RadioGroup } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
-import { CartoesEscolha, Progresso } from "@/components/routed-checkout/cartoes";
+import { Progresso } from "@/components/routed-checkout/cartoes";
 
 // ============================================================================
 // Refazer as imagens de uma loja de checkout sem marca, em segundo plano.
@@ -34,15 +35,15 @@ interface SwapImagesDialogProps {
 
 type Modo = "stock-neutralize" | "external-references";
 
-const MODOS: { valor: Modo; rotulo: string; descricao: string }[] = [
+const MODOS: { valor: Modo; titulo: string; descricao: string }[] = [
   {
     valor: "stock-neutralize",
-    rotulo: "Tirar a marca do produto",
+    titulo: "Tirar a marca do produto",
     descricao: "Remove logos e marcas e recria a foto limpa.",
   },
   {
     valor: "external-references",
-    rotulo: "Só tirar selo e marca d’água",
+    titulo: "Só tirar selo e marca d’água",
     descricao: "Mantém o produto como está e limpa o selo do vendedor.",
   },
 ];
@@ -226,7 +227,14 @@ export function SwapImagesDialog({ open, onOpenChange, storeId, storeLabel }: Sw
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
-          <CartoesEscolha rotulo="O que fazer com a imagem" colunas={2} valor={mode} onValorChange={setMode} opcoes={MODOS} />
+          <RadioGroup
+            rotulo="O que fazer com a imagem"
+            arranjo="grade"
+            className="sm:grid-cols-2"
+            valor={mode}
+            onValor={setMode}
+            opcoes={MODOS}
+          />
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={idInstrucoes}>Instruções extras (opcional)</Label>

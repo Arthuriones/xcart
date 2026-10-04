@@ -217,9 +217,9 @@ export function resumoDasOpcoes(origem: Origem, o: OpcoesLote): string[] {
   if (o.traduzir) s.push("Traduzir");
   if (o.traduzirVariacoes) s.push("Traduzir variações");
   if (o.categoria) s.push(o.categoriaComIa ? "Categoria (com IA)" : "Categoria");
-  if (origem === "links" && o.tirarMarca) s.push("Tirar a marca");
+  if (origem === "links" && o.tirarMarca) s.push("Tirar marcas");
   if (o.limparReferencias) s.push("Limpar referências");
-  if (o.aplicarLogo) s.push("Logo nas fotos");
+  if (o.aplicarLogo) s.push("Logo da loja nas imagens");
   if (o.estoque === "tracked") s.push(`Estoque: ${o.quantidade || 0}`);
   return s;
 }

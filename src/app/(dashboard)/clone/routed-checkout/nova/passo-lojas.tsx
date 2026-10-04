@@ -7,12 +7,12 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup } from "@/components/ui/radio-group";
 import { Section } from "@/components/ui/section";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { BotaoConectar } from "@/app/(dashboard)/stores/conectar-loja";
-import { CartoesEscolha } from "@/components/routed-checkout/cartoes";
 import {
   IDIOMAS,
   MODOS,
@@ -166,7 +166,7 @@ export function PassoLojas({
       ) : null}
 
       <Section titulo="Como montar a loja de checkout">
-        <CartoesEscolha rotulo="Como montar a loja de checkout" valor={modo} onValorChange={onModo} opcoes={MODOS} />
+        <RadioGroup rotulo="Como montar a loja de checkout" arranjo="grade" valor={modo} onValor={onModo} opcoes={MODOS} />
       </Section>
 
       <Section titulo="Lojas" descricao="Cada loja tem um papel só. A mesma loja não pode ser vitrine e checkout.">
@@ -186,20 +186,21 @@ export function PassoLojas({
               ligado={opcoes.neutralize}
               onMudar={(v) => onOpcao("neutralize", v)}
             >
-              <CartoesEscolha
+              <RadioGroup
                 rotulo="Imagens"
-                colunas={2}
+                arranjo="grade"
+                className="sm:grid-cols-2"
                 valor={opcoes.imageMode}
-                onValorChange={(v) => onOpcao("imageMode", v)}
+                onValor={(v) => onOpcao("imageMode", v)}
                 opcoes={[
                   {
                     valor: "queue",
-                    rotulo: "Recriar a imagem sem marca",
+                    titulo: "Recriar a imagem sem marca",
                     descricao: "Uma imagem por produto, trocada aos poucos depois que os produtos entram.",
                   },
                   {
                     valor: "none",
-                    rotulo: "Manter a imagem original",
+                    titulo: "Manter a imagem original",
                     descricao: "Mais rápido. Dá para refazer as imagens depois, pela própria rota.",
                   },
                 ]}

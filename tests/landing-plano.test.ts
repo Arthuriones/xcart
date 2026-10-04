@@ -4,7 +4,8 @@ import {
   PRO_INCLUDED_CREDITS,
   PRO_PRICE_CENTS,
 } from "@/lib/billing/plans";
-import { BENEFICIOS_PRO, PACOTES, POLITICA_TESTE, PRECO_PRO } from "@/app/lp/plano";
+import { BENEFICIOS_PRO } from "@/components/billing/beneficios";
+import { PACOTES, POLITICA_TESTE, PRECO_PRO } from "@/app/lp/plano";
 import {
   OUTROS_RECURSOS,
   PERGUNTAS,
@@ -35,10 +36,11 @@ describe("preço na landing", () => {
   });
 });
 
+// A landing le a mesma lista de /billing e do paywall (decisao 2).
 describe("lista de benefícios do plano", () => {
   it("começa por lucro, rastreamento e alertas (decisão 2)", () => {
     expect(BENEFICIOS_PRO[0]).toMatch(/^Lucro/);
-    expect(BENEFICIOS_PRO[1]).toMatch(/Meta e ao Google pelo servidor/);
+    expect(BENEFICIOS_PRO[1]).toMatch(/Meta e ao Google/);
     expect(BENEFICIOS_PRO[2]).toMatch(/^Alertas/);
   });
 
@@ -48,8 +50,8 @@ describe("lista de benefícios do plano", () => {
     expect(comCreditos[0].startsWith(`${PRO_INCLUDED_CREDITS} créditos`)).toBe(true);
   });
 
-  it("deixa o roteamento como módulo, por último", () => {
-    expect(BENEFICIOS_PRO.at(-1)).toMatch(/^Roteamento/);
+  it("deixa o roteamento como módulo, depois de lucro, rastreamento e alertas", () => {
+    expect(BENEFICIOS_PRO.findIndex((b) => /^Roteamento/.test(b))).toBeGreaterThan(2);
   });
 });
 
