@@ -147,7 +147,11 @@ export default async function FinanceiroPage() {
   const [filtro, comparacao] = await Promise.all([lerFiltroGlobal(), lerComparacao()]);
   return (
     <>
-      <PageHeader title="Lucro" />
+      {/* Sem descricao, no celular o cabecalho fica vazio (o titulo ja esta no
+          topo da casca): escondido, nao deixa um vao antes das pendencias. */}
+      <div className="hidden md:block">
+        <PageHeader title="Lucro" />
+      </div>
       <Suspense key={JSON.stringify({ filtro, comparacao })} fallback={<EsqueletoLucro />}>
         <Conteudo />
       </Suspense>

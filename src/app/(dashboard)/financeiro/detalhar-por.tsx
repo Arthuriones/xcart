@@ -88,7 +88,10 @@ function Etiqueta({ children }: { children: ReactNode }) {
   );
 }
 
-/** Titulo de coluna com a explicacao no (i). */
+/**
+ * Texto com a explicacao no (i). Fora de titulo de coluna ordenavel: ali o
+ * titulo ja e um botao, e a Dica e outro.
+ */
 function ComDica({ titulo, rotulo, children }: { titulo: string; rotulo: string; children: ReactNode }) {
   return (
     <span className="inline-flex items-center gap-1">
@@ -460,15 +463,8 @@ export function DetalharPor({
     },
     {
       chave: "lucro",
-      titulo: (
-        <ComDica titulo="Lucro antes do anúncio" rotulo="Por que antes do anúncio">
-          O gasto do Meta e do Google não é por produto: aqui sai só produto, frete e taxa. A receita do pedido é
-          dividida entre os itens pelo preço de cada um.
-        </ComDica>
-      ),
-      tituloCsv: "Lucro antes do anúncio",
+      titulo: "Lucro antes do anúncio",
       alinhar: "direita",
-      className: "whitespace-normal",
       celula: (l) => <span className={clsx("font-semibold", corLucro(l.lucro))}>{din(l.lucro)}</span>,
       csv: (l) => l.lucro,
     },
@@ -536,19 +532,7 @@ export function DetalharPor({
     { chave: "gasto", titulo: "Gasto", alinhar: "direita", celula: (l) => din(l.gasto), csv: (l) => l.gasto },
     { chave: "impressoes", titulo: "Impressões", alinhar: "direita", celula: (l) => inteiro(l.impressoes), csv: (l) => l.impressoes },
     { chave: "cliques", titulo: "Cliques", alinhar: "direita", celula: (l) => inteiro(l.cliques), csv: (l) => l.cliques },
-    {
-      chave: "compras",
-      titulo: (
-        <ComDica titulo="Compras (plataforma)" rotulo="De onde vêm as compras">
-          Compras e valor que a própria plataforma reporta. O ROAS real da loja usa os pedidos da Shopify.
-        </ComDica>
-      ),
-      tituloCsv: "Compras (plataforma)",
-      alinhar: "direita",
-      className: "whitespace-normal",
-      celula: (l) => inteiro(l.compras),
-      csv: (l) => l.compras,
-    },
+    { chave: "compras", titulo: "Compras (plataforma)", alinhar: "direita", celula: (l) => inteiro(l.compras), csv: (l) => l.compras },
     { chave: "valor", titulo: "Valor (plataforma)", alinhar: "direita", celula: (l) => din(l.valor), csv: (l) => l.valor },
     { chave: "roasPlataforma", titulo: "ROAS da plataforma", alinhar: "direita", celula: (l) => vezes(l.roasPlataforma), csv: (l) => l.roasPlataforma },
     {
@@ -699,6 +683,21 @@ export function DetalharPor({
             { valor: "menos", rotulo: "Menos lucrativos" },
           ]}
         />
+      )}
+      {abaAtual === "produto" && (
+        <span className="text-label text-t2">
+          <ComDica titulo="Antes do anúncio" rotulo="Por que antes do anúncio">
+            O gasto do Meta e do Google não é por produto: aqui sai só produto, frete e taxa. A receita do pedido é
+            dividida entre os itens pelo preço de cada um.
+          </ComDica>
+        </span>
+      )}
+      {abaAtual === "campanha" && (
+        <span className="text-label text-t2">
+          <ComDica titulo="Compras da plataforma" rotulo="De onde vêm as compras">
+            Compras e valor que a própria plataforma reporta. O ROAS real da loja usa os pedidos da Shopify.
+          </ComDica>
+        </span>
       )}
       <span className="flex-1" />
       <Button variant="secondary" size="sm" onClick={exportar} aria-label="Exportar esta tabela em CSV">

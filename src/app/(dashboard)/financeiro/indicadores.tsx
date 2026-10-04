@@ -167,7 +167,7 @@ export function Indicadores({
         variacao={variacao}
         bom={d.bom}
         formatoVariacao={d.formatoVariacao}
-        anterior={compara && va !== null ? formatarMetrica(id, va, moeda, true) : undefined}
+        anterior={compara && va !== null ? valorComSinal(formatarMetrica(id, va, moeda, true), va).texto : undefined}
         estado={
           destaque && temMovimento(atual)
             ? atual.lucro < 0
