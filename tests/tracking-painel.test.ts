@@ -69,6 +69,8 @@ function linha(p: Partial<LinhaPainel>): LinhaPainel {
     ultimo_erro: null,
     ultimo_erro_em: null,
     order_ids: [],
+    n_teste: 0,
+    n_de_anuncio: 0,
     ...p,
   };
 }
@@ -203,6 +205,66 @@ describe("contagem do painel de rastreamento", () => {
   });
 });
 
+describe("de anuncio, testes e falhas (migration 055)", () => {
+  it("separa de anuncio e teste por evento, por conta", () => {
+    // Softnook, carrinho no Google, 7 dias: 150 enviados, 38 com clique, 26
+    // deles TESTE. Cada conta e julgada sozinha -- nunca somadas.
+    const { contagens } = contagensDoPainel(
+      [
+        linha({ event_key: "add_to_cart", n: 75, n_sem_atribuicao: 56, n_teste: 13, n_de_anuncio: 6 }),
+        linha({
+          destination_id: "g2",
+          event_key: "add_to_cart",
+          n: 75,
+          n_sem_atribuicao: 56,
+          n_teste: 13,
+          n_de_anuncio: 6,
+        }),
+      ],
+      new Map()
+    );
+    for (const id of ["g1", "g2"]) {
+      const c = contagens.get(id)!;
+      expect(c.porEvento.add_to_cart).toBe(75);
+      expect(c.testesPorEvento.add_to_cart).toBe(13);
+      expect(c.deAnuncioPorEvento?.add_to_cart).toBe(6);
+    }
+  });
+
+  it("falha fica fora do total enviado e e contada por evento", () => {
+    const { contagens } = contagensDoPainel(
+      [
+        linha({ event_key: "purchase", n: 2, n_de_anuncio: 1, order_ids: ["1", "2"] }),
+        linha({
+          event_key: "purchase",
+          status: "falhou",
+          n: 3,
+          n_de_anuncio: 3,
+          ultimo_erro: "Invalid OAuth access token",
+          ultimo_erro_em: "2026-10-02T00:00:00+00:00",
+        }),
+      ],
+      new Map()
+    );
+    const c = contagens.get("g1")!;
+    expect(c.porEvento.purchase).toBe(2);
+    expect(c.deAnuncioPorEvento?.purchase).toBe(1);
+    expect(c.falhasPorEvento.purchase).toBe(3);
+    expect(c.ultimoErro).toBe("Invalid OAuth access token");
+  });
+
+  it("sem a 055 (funcao antiga), de anuncio e null -- nunca um numero com teste dentro", () => {
+    const antiga = linha({ event_key: "add_to_cart", n: 10, n_sem_atribuicao: 4 });
+    delete antiga.n_teste;
+    delete antiga.n_de_anuncio;
+    const { contagens } = contagensDoPainel([antiga], new Map());
+    const c = contagens.get("g1")!;
+    expect(c.deAnuncioPorEvento).toBeNull();
+    expect(c.porEvento.add_to_cart).toBe(10);
+    expect(c.semAtribPorEvento.add_to_cart).toBe(4);
+  });
+});
+
 describe("getPainelTracking", () => {
   beforeEach(() => {
     chamadas.length = 0;
@@ -239,6 +301,71 @@ describe("getPainelTracking", () => {
     expect(chamadas[0]).toMatchObject({ cliente: "usuario", fn: "tracking_painel_v2" });
     expect(lojas[0].destinos[0].contagem.porEvento.purchase).toBe(2);
     expect(lojas[0].desinstalada).toBe(false);
+  });
+
+  it("sem a 055 no banco, le pela funcao antiga em vez de dar a tela como falha", async () => {
+    tabelas.stores = [
+      { id: "loja1", name: "Loja", shop_domain: "a.myshopify.com", uninstalled_at: null },
+    ];
+    tabelas.tracking_configs = [{ store_id: "loja1", enabled: true }];
+    destinos.set("loja1", [
+      {
+        id: "g1",
+        storeId: "loja1",
+        plataforma: "google",
+        nome: null,
+        conta: "AW-1",
+        labels: { purchase: "x" },
+        testEventCode: null,
+        idTemplate: null,
+        ativo: true,
+        temToken: false,
+      },
+    ]);
+    erroDaRpc.tracking_painel_v2 = {
+      code: "PGRST202",
+      message: "Could not find the function public.tracking_painel_v2",
+    };
+    const antiga = linha({ event_key: "purchase", n: 2, order_ids: ["1", "2"] });
+    delete antiga.n_teste;
+    delete antiga.n_de_anuncio;
+    linhasDoPainel = [antiga];
+
+    const { lojas } = await getPainelTracking();
+
+    expect(chamadas.map((c) => c.fn)).toEqual(["tracking_painel_v2", "tracking_painel"]);
+    expect(lojas[0].contagemIndisponivel).toBe(false);
+    expect(lojas[0].destinos[0].contagem.porEvento.purchase).toBe(2);
+    expect(lojas[0].destinos[0].contagem.deAnuncioPorEvento).toBeNull();
+  });
+
+  it("outro erro da contagem nao cai na funcao antiga: a tela diz que nao contou", async () => {
+    tabelas.stores = [
+      { id: "loja1", name: "Loja", shop_domain: "a.myshopify.com", uninstalled_at: null },
+    ];
+    erroDaRpc.tracking_painel_v2 = { code: "57014", message: "statement timeout" };
+
+    const { lojas } = await getPainelTracking();
+
+    expect(chamadas.map((c) => c.fn)).toEqual(["tracking_painel_v2"]);
+    expect(lojas[0].contagemIndisponivel).toBe(true);
+  });
+
+  it("compras que o Meta atribuiu: soma por loja; sem conta ligada, null", async () => {
+    tabelas.stores = [
+      { id: "lash", name: "Lash", shop_domain: "l.myshopify.com", uninstalled_at: null },
+      { id: "soft", name: "Soft", shop_domain: "s.myshopify.com", uninstalled_at: null },
+    ];
+    tabelas.ad_accounts = [{ id: "act1", store_id: "lash" }];
+    tabelas.ad_spend_daily = [
+      { ad_account_id: "act1", compras: "2" },
+      { ad_account_id: "act1", compras: 3 },
+    ];
+
+    const { lojas } = await getPainelTracking();
+
+    expect(lojas.find((l) => l.storeId === "lash")!.comprasContadasPeloMeta).toBe(5);
+    expect(lojas.find((l) => l.storeId === "soft")!.comprasContadasPeloMeta).toBeNull();
   });
 
   it("mostra loja desinstalada so se o rastreamento ficou ligado", async () => {

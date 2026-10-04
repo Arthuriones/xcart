@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { DestinoNaTela, LojaTracking } from "../src/lib/tracking/queries";
 import type { DiagnosticoLoja } from "../src/lib/tracking/diagnostico";
 import {
+  comprasSemTeste,
   faltasDaLoja,
+  numerosDoEvento,
   pedidosEsperados,
   pedidosSemCompra,
   saudeDaLoja,
@@ -272,6 +274,98 @@ describe("textoProblema", () => {
     expect(textoProblema(null)).toBe("Webhook, tema e pedidos ficaram sem verificar.");
     expect(textoProblema("loja sem credencial do app")).toBe(
       "Loja sem credencial do app"
+    );
+  });
+});
+
+describe("numeros de um evento: de anuncio x total", () => {
+  // Lash Bestie, carrinho no Meta, 7 dias: 113 enviados, 37 com clique. Dos
+  // com clique, 3 eram teste do dono; mais 2 testes sem clique.
+  const lash = destino({
+    plataforma: "meta",
+    labels: {},
+    contagem: {
+      porEvento: { add_to_cart: 113 },
+      semAtribPorEvento: { add_to_cart: 76 },
+      testesPorEvento: { add_to_cart: 5 },
+      deAnuncioPorEvento: { add_to_cart: 34 },
+      falhasPorEvento: { add_to_cart: 2 },
+    } as never,
+  });
+
+  it("teste fora por padrao: de anuncio sem teste, total sem teste", () => {
+    expect(numerosDoEvento(lash, "add_to_cart", false)).toEqual({
+      envia: true,
+      deAnuncio: 34,
+      total: 108,
+      falhas: 2,
+    });
+  });
+
+  it("mostrar testes: tudo com clique e o total inteiro", () => {
+    expect(numerosDoEvento(lash, "add_to_cart", true)).toEqual({
+      envia: true,
+      deAnuncio: 37,
+      total: 113,
+      falhas: 2,
+    });
+  });
+
+  it("sem a 055 nao afirma de anuncio sem teste", () => {
+    const antigo = destino({
+      contagem: { porEvento: { purchase: 3 }, deAnuncioPorEvento: null } as never,
+    });
+    expect(numerosDoEvento(antigo, "purchase", false).deAnuncio).toBeNull();
+    // Com os testes a vista nao ha o que separar: "com clique" e o numero.
+    expect(numerosDoEvento(antigo, "purchase", true).deAnuncio).toBe(3);
+  });
+
+  it("Google sem rotulo no evento nao envia", () => {
+    const g = destino({ labels: { purchase: "abc" } });
+    expect(numerosDoEvento(g, "add_to_cart", false).envia).toBe(false);
+    expect(numerosDoEvento(g, "purchase", false).envia).toBe(true);
+  });
+});
+
+describe("venda sem clique de anuncio ignora o teste", () => {
+  it("compra de teste com gclid TESTE nao cala o alarme", () => {
+    // 3 compras: 1 teste com clique, 2 reais sem clique. Pela regra antiga
+    // (com clique >= 1) o alarme ficava mudo.
+    const l = loja({
+      destinos: [
+        destino({
+          contagem: {
+            porEvento: { purchase: 3 },
+            semAtribPorEvento: { purchase: 2 },
+            testesPorEvento: { purchase: 1 },
+            deAnuncioPorEvento: { purchase: 0 },
+          } as never,
+        }),
+      ],
+    });
+    expect(comprasSemTeste(l.destinos[0])).toEqual({ enviadas: 2, deAnuncio: 0 });
+    expect(saudeDaLoja(l, true, diag(), true).motivos).toContainEqual({
+      tom: "warn",
+      texto: "Nenhuma venda creditada a anúncio no Google",
+    });
+  });
+
+  it("so teste na janela: nada a acusar", () => {
+    const l = loja({
+      destinos: [
+        destino({
+          contagem: {
+            porEvento: { purchase: 1 },
+            semAtribPorEvento: {},
+            testesPorEvento: { purchase: 1 },
+            deAnuncioPorEvento: {},
+          } as never,
+        }),
+      ],
+    });
+    expect(comprasSemTeste(l.destinos[0])).toEqual({ enviadas: 0, deAnuncio: 0 });
+    expect(saudeDaLoja(l, true, diag(), true).motivos.map((m) => m.texto)).not.toContain(
+      "Nenhuma venda creditada a anúncio no Google"
     );
   });
 });

@@ -4,12 +4,15 @@ import type { DiagnosticoLoja } from "../src/lib/tracking/diagnostico";
 import { saudeDaLoja } from "../src/app/(dashboard)/tracking/saude";
 import {
   colunaDaPlataforma,
+  comprasQueOMetaDiz,
+  contasDaTela,
   formatarFracao,
   linhaDaLoja,
   ordenarLinhas,
   problemasDaLoja,
   proximoPassoDesligada,
   resumoDaTela,
+  testesNaTela,
   textoCobertura,
   textoDaColuna,
   textoPrecisam,
@@ -149,6 +152,23 @@ const casos: Record<string, { loja: LojaTracking; diag: DiagnosticoLoja | null; 
   semClique: {
     loja: loja({
       destinos: [destino({ contagem: { semAtribPorEvento: { purchase: 3 } } as never })],
+    }),
+    diag: diag(),
+  },
+  // Compra de teste com gclid TESTE: a unica "com clique". Sem teste, nenhuma
+  // venda foi ligada a anuncio -- e o alarme tem de aparecer nos dois lados.
+  testeComClique: {
+    loja: loja({
+      destinos: [
+        destino({
+          contagem: {
+            porEvento: { purchase: 3 },
+            semAtribPorEvento: { purchase: 2 },
+            testesPorEvento: { purchase: 1 },
+            deAnuncioPorEvento: { purchase: 0 },
+          } as never,
+        }),
+      ],
     }),
     diag: diag(),
   },
@@ -346,6 +366,11 @@ describe("ordem e numeros do topo", () => {
     expect(resumoDaTela([l], { s1: diag() }).enviadas).toBe(3);
   });
 
+  it("contagem que falhou vira \"—\", nunca zero compras enviadas", () => {
+    const l = linhaDaLoja(casos.contagemIndisponivel.loja, diag(), true);
+    expect(resumoDaTela([l], { s1: diag() }).enviadas).toBeNull();
+  });
+
   it("loja sem resposta da Shopify fica fora da soma de pedidos, nao vira zero", () => {
     const r = resumoDaTela(
       [linhaDaLoja(loja({ storeId: "a" }), diag(), true), linhaDaLoja(loja({ storeId: "b" }), null, true)],
@@ -394,5 +419,52 @@ describe("respostaJson", () => {
   it("sucesso devolve o corpo", async () => {
     const r = new Response(JSON.stringify({ ok: true, codigo: "x" }), { status: 200 });
     await expect(respostaJson(r, "falhou")).resolves.toEqual({ ok: true, codigo: "x" });
+  });
+});
+
+describe("por conta", () => {
+  it("uma linha por conta ativa de loja ligada; as contas nunca somadas", () => {
+    const softnook = loja({
+      storeId: "soft",
+      destinos: [
+        destino({ id: "g1", conta: "AW-18463882690" }),
+        destino({ id: "g2", conta: "AW-18463833677" }),
+        destino({ id: "g3", ativo: false }),
+      ],
+    });
+    const desligada = loja({ storeId: "off", ligado: false });
+    expect(contasDaTela([softnook, desligada]).map((c) => c.destino.id)).toEqual(["g1", "g2"]);
+  });
+
+  it("testes na tela somam as contas; leitura que falhou nao entra", () => {
+    const com = loja({
+      destinos: [
+        destino({
+          contagem: { testesPorEvento: { add_to_cart: 13, begin_checkout: 7 } } as never,
+        }),
+      ],
+    });
+    const semContagem = loja({
+      storeId: "s2",
+      contagemIndisponivel: true,
+      destinos: [destino({ contagem: { testesPorEvento: { add_to_cart: 9 } } as never })],
+    });
+    expect(testesNaTela(contasDaTela([com, semContagem]))).toBe(20);
+  });
+
+  it("o que o Meta diz so aparece com um pixel na loja e dado do Meta", () => {
+    const umPixel = loja({ comprasContadasPeloMeta: 4, destinos: [meta(), destino()] });
+    const [m, g] = contasDaTela([umPixel]);
+    expect(comprasQueOMetaDiz(m)).toBe(4);
+    expect(comprasQueOMetaDiz(g)).toBeNull();
+
+    const doisPixels = loja({
+      comprasContadasPeloMeta: 4,
+      destinos: [meta(), meta({ id: "m2" })],
+    });
+    expect(comprasQueOMetaDiz(contasDaTela([doisPixels])[0])).toBeNull();
+
+    const semDado = loja({ destinos: [meta()] });
+    expect(comprasQueOMetaDiz(contasDaTela([semDado])[0])).toBeNull();
   });
 });
