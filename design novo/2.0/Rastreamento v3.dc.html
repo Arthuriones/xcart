@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <title>xcart · Rastreamento v3</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Public+Sans:wght@400;500;600;700&amp;display=swap">
+  <link rel="stylesheet" href="xcart-tokens.css">
+</helmet>
+<div style="min-height:100vh; background:#e9e8e5; display:flex; flex-direction:column;">
+  <dc-import name="Revisao" tela="Rastreamento v3" theme="{{ theme }}" width="{{ width }}" cenario="{{ tela }}" cenarios="{{ telas }}" anot="{{ false }}" onTheme="{{ setTheme }}" onWidth="{{ setWidth }}" onCenario="{{ irTela }}" hint-size="100%,48px"></dc-import>
+  <div style="flex:1; padding:24px 16px 48px; display:flex; justify-content:center;">
+    <div style="width:{{ wrapW }}; height:{{ wrapH }}; flex:none;">
+      <div data-theme="{{ theme }}" style="position:relative; width:{{ frameW }}; height:{{ frameH }}; transform:scale({{ escala }}); transform-origin:top left; overflow:hidden; border-radius:{{ frameRaio }}; box-shadow:0 0 0 1px rgba(0,0,0,.12), 0 24px 64px rgba(0,0,0,.16); background:var(--surface); display:flex; flex-direction:{{ frameDir }};">
+
+        <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}">
+          <aside aria-label="Menu principal" style="width:232px; flex:none; height:100%; display:flex; flex-direction:column; background:var(--surface-2); border-right:1px solid var(--border);">
+            <div style="height:52px; display:flex; align-items:center; gap:8px; padding:0 16px;"><span style="font-size:16px; font-weight:700; letter-spacing:-0.02em;">xcart</span></div>
+            <nav aria-label="Telas" style="flex:1; padding:4px 8px; display:flex; flex-direction:column;">
+              <sc-for list="{{ menu }}" as="g" hint-placeholder-count="3">
+                <div style="display:flex; flex-direction:column; gap:2px; padding:8px 0; border-bottom:1px solid var(--border-subtle);">
+                  <span style="padding:4px 8px 6px; font-size:var(--fs-label); color:var(--t2);">{{ g.t }}</span>
+                  <sc-for list="{{ g.itens }}" as="m" hint-placeholder-count="3">
+                    <a href="#" onClick="{{ m.ir }}" aria-current="{{ m.atual }}" style="display:flex; align-items:center; gap:10px; height:32px; padding:0 8px; border-radius:var(--r-control); text-decoration:none; font-size:var(--fs-dense); background:{{ m.bg }}; color:var(--ink); font-weight:{{ m.fw }};" style-hover="background:var(--hover); color:var(--ink); text-decoration:none;">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--t1);"><path d="{{ m.icon }}"></path></svg>
+                      <span style="flex:1;">{{ m.label }}</span>
+                      <sc-if value="{{ m.n }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--fs-label); color:var(--t2); font-variant-numeric:tabular-nums;">{{ m.n }}</span></sc-if>
+                    </a>
+                  </sc-for>
+                </div>
+              </sc-for>
+            </nav>
+            <div style="padding:10px 16px; border-top:1px solid var(--border); display:flex; align-items:center; gap:10px; font-size:var(--fs-dense);">
+              <span aria-hidden="true" style="width:24px; height:24px; border-radius:50%; background:var(--track); display:grid; place-items:center; font-size:var(--fs-label); font-weight:600;">A</span>Arthur
+            </div>
+          </aside>
+        </sc-if>
+
+        <div style="flex:1; min-width:0; min-height:0; display:flex; flex-direction:column;">
+          <header style="flex:none; height:52px; display:flex; align-items:center; gap:8px; padding:0 20px; border-bottom:1px solid var(--border); font-size:var(--fs-dense);">
+            <sc-if value="{{ tLista }}" hint-placeholder-val="{{ true }}"><span style="color:var(--ink);">Lojas</span></sc-if>
+            <sc-if value="{{ tLoja }}" hint-placeholder-val="{{ false }}">
+              <a href="#" onClick="{{ voltar }}" style="color:var(--t2); text-decoration:none;" style-hover="color:var(--ink);">Lojas</a>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color:var(--t3);"><path d="M9 18l6-6-6-6"></path></svg>
+              <span style="color:var(--ink);">{{ loja.dominio }}</span>
+            </sc-if>
+          </header>
+
+          <main style="flex:1; min-height:0; overflow-y:auto;">
+            <div style="max-width:820px; margin:0 auto; padding:{{ pad }}; display:flex; flex-direction:column; gap:20px;">
+
+              <sc-if value="{{ tLista }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex; flex-direction:column; gap:6px; padding-top:{{ tituloTop }};">
+                  <h1 style="font-size:var(--fs-page); font-weight:600; letter-spacing:-0.01em;">Lojas</h1>
+                  <p style="font-size:var(--fs-body); color:var(--t2);">Rastreamento de cada loja Shopify conectada.</p>
+                </div>
+                <button type="button" style="height:var(--h-md); border:1px solid var(--border); background:var(--surface); border-radius:var(--r-card); font-size:var(--fs-dense); font-weight:500; color:var(--ink); cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;" style-hover="background:var(--surface-2);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14 M5 12h14"></path></svg>Conectar loja</button>
+                <div style="display:flex; align-items:center; justify-content:space-between;">
+                  <span style="font-size:var(--fs-dense); color:var(--t2);">{{ totalTexto }}</span>
+                  <button type="button" onClick="{{ atualizar }}" aria-label="Atualizar" style="width:var(--h-sm); height:var(--h-sm); display:grid; place-items:center; border:1px solid var(--border); background:var(--surface); border-radius:var(--r-control); color:var(--t1); cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true" style="animation:{{ giro }};"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8 M21 3v5h-5 M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16 M8 16H3v5"></path></svg></button>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                  <sc-for list="{{ lojas }}" as="l" hint-placeholder-count="4">
+                    <div onClick="{{ l.abrir }}" style="display:flex; align-items:center; gap:14px; padding:14px 16px; border:1px solid var(--border); border-radius:var(--r-card); background:var(--surface); cursor:pointer; opacity:{{ l.op }};" style-hover="border-color:var(--border-strong);">
+                      <img src="{{ logoShopify }}" alt="" width="20" height="20">
+                      <span style="flex:1; min-width:0; display:flex; flex-direction:column; gap:2px;">
+                        <span style="display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;"><button type="button" onClick="{{ l.abrir }}" style="border:0; background:transparent; padding:0; font-size:var(--fs-dense); font-weight:600; color:var(--ink); cursor:pointer;">{{ l.dominio }}</button><span style="font-size:var(--fs-dense); color:var(--t2);">{{ l.principal }}</span></span>
+                        <span style="display:flex; align-items:center; gap:10px; font-size:var(--fs-label); color:var(--t2);">
+                          <sc-for list="{{ l.plats }}" as="p" hint-placeholder-count="2"><span style="display:inline-flex; align-items:center; gap:5px;"><img src="{{ p.logo }}" alt="{{ p.nome }}" width="12" height="12"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:{{ p.dot }};"></span></span></sc-for>
+                          <span>{{ l.sub }}</span>
+                        </span>
+                      </span>
+                      <button type="button" role="switch" aria-checked="{{ l.on }}" aria-label="{{ l.swAria }}" onClick="{{ l.alternar }}" style="width:40px; height:22px; flex:none; border-radius:11px; border:0; padding:0; background:{{ l.trilho }}; position:relative; cursor:pointer;"><span style="position:absolute; top:3px; left:{{ l.bola }}; width:16px; height:16px; border-radius:50%; background:var(--surface); transition:left 150ms var(--ease);"></span></button>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ tLoja }}" hint-placeholder-val="{{ false }}">
+                <div style="display:grid; grid-template-columns:repeat({{ kpiCols }}, minmax(0,1fr)); border:1px solid var(--border); border-radius:var(--r-card); overflow:hidden; margin-top:{{ tituloTop }};">
+                  <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="3">
+                    <div style="padding:16px 18px; display:flex; flex-direction:column; gap:8px; border-right:1px solid var(--border); border-bottom:1px solid var(--border); margin:0 -1px -1px 0;">
+                      <span style="display:flex; justify-content:space-between; font-size:var(--fs-dense); color:var(--t1);"><span>{{ k.l }}</span><a href="#" style="font-size:var(--fs-label);">Ver</a></span>
+                      <span style="font-size:var(--fs-kpi); font-weight:500; font-variant-numeric:tabular-nums;">{{ k.v }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+
+                <section style="background:var(--surface-2); border-radius:var(--r-overlay); padding:4px;">
+                  <div style="display:flex; align-items:center; gap:12px; padding:12px 12px 12px 14px;">
+                    <img src="{{ logoShopify }}" alt="" width="22" height="22">
+                    <span style="flex:1; display:flex; flex-direction:column;"><span style="font-size:var(--fs-dense); font-weight:600;">Loja Shopify</span><span style="font-size:var(--fs-label); color:var(--t2);">Conectada em 03/10/2026</span></span>
+                    <button type="button" role="switch" aria-checked="true" aria-label="Rastreamento desta loja" style="width:40px; height:22px; border-radius:11px; border:0; padding:0; background:var(--ink); position:relative; cursor:pointer;"><span style="position:absolute; top:3px; left:21px; width:16px; height:16px; border-radius:50%; background:var(--surface);"></span></button>
+                  </div>
+                  <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card);">
+                    <sc-for list="{{ campos }}" as="c" hint-placeholder-count="4">
+                      <div style="padding:14px 16px; border-bottom:1px solid var(--border-subtle); display:flex; flex-direction:column; gap:8px;">
+                        <span style="font-size:var(--fs-dense); font-weight:500;">{{ c.l }}</span>
+                        <div style="display:flex; align-items:center; gap:8px; min-height:var(--h-md); padding:0 12px; background:var(--surface-2); border-radius:var(--r-control); font-size:var(--fs-dense); color:var(--t1);"><span style="flex:1;">{{ c.v }}</span><sc-if value="{{ c.acao }}" hint-placeholder-val="{{ false }}"><button type="button" style="border:0; background:transparent; color:var(--brand); font-size:var(--fs-label); cursor:pointer; padding:0;">{{ c.acao }}</button></sc-if></div>
+                        <sc-if value="{{ c.d }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--fs-label); color:var(--t2);">{{ c.d }}</span></sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                </section>
+
+                <sc-for list="{{ plataformas }}" as="p" hint-placeholder-count="2">
+                  <section style="background:var(--surface-2); border-radius:var(--r-overlay); padding:4px;">
+                    <div style="display:flex; align-items:center; gap:12px; padding:10px 12px 10px 10px;">
+                      <span style="width:34px; height:34px; flex:none; border-radius:var(--r-card); background:var(--surface); border:1px solid var(--border); display:grid; place-items:center;"><img src="{{ p.logo }}" alt="" width="18" height="18"></span>
+                      <span style="flex:1; font-size:var(--fs-dense); font-weight:600;">{{ p.nome }}</span>
+                      <button type="button" role="switch" aria-checked="{{ p.on }}" aria-label="{{ p.swAria }}" onClick="{{ p.alternar }}" style="width:40px; height:22px; border-radius:11px; border:0; padding:0; background:{{ p.trilho }}; position:relative; cursor:pointer;"><span style="position:absolute; top:3px; left:{{ p.bola }}; width:16px; height:16px; border-radius:50%; background:var(--surface); transition:left 150ms var(--ease);"></span></button>
+                    </div>
+                    <sc-if value="{{ p.on }}" hint-placeholder-val="{{ true }}">
+                      <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card);">
+                        <sc-for list="{{ p.pixels }}" as="x" hint-placeholder-count="1">
+                          <div style="display:flex; align-items:center; gap:10px; padding:12px 12px 12px 16px; border-bottom:1px solid var(--border-subtle);">
+                            <span aria-hidden="true" style="width:8px; height:8px; border-radius:50%; background:{{ x.dot }}; flex:none;"></span>
+                            <span style="flex:1; min-width:0; display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;"><span style="font-size:var(--fs-dense); font-weight:500;">{{ x.nome }}</span><span style="font-size:var(--fs-label); color:var(--t2); font-family:var(--font-mono);">{{ x.id }}</span><sc-if value="{{ x.nota }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--fs-label); color:{{ x.notaFg }};">{{ x.nota }}</span></sc-if></span>
+                            <span style="font-size:var(--fs-label); color:var(--t2); font-variant-numeric:tabular-nums;">{{ x.compras }}</span>
+                            <button type="button" aria-label="{{ x.editarAria }}" style="width:var(--h-sm); height:var(--h-sm); display:grid; place-items:center; border:1px solid var(--border); background:var(--surface); border-radius:var(--r-control); color:var(--t1); cursor:pointer;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9 M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg></button>
+                            <button type="button" aria-label="{{ x.removerAria }}" style="width:var(--h-sm); height:var(--h-sm); display:grid; place-items:center; border:1px solid var(--border); background:var(--surface); border-radius:var(--r-control); color:var(--err); cursor:pointer;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18 M8 6V4h8v2 M19 6l-1 14H6L5 6"></path></svg></button>
+                          </div>
+                        </sc-for>
+                        <div style="display:flex; justify-content:center; padding:12px;">
+                          <button type="button" onClick="{{ p.adicionar }}" style="display:flex; align-items:center; gap:6px; height:var(--h-sm); padding:0 12px; border:1px solid var(--border); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer;" style-hover="background:var(--surface-2);"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14 M5 12h14"></path></svg>Adicionar pixel</button>
+                        </div>
+                      </div>
+                    </sc-if>
+                  </section>
+                </sc-for>
+
+                <section style="background:var(--surface-2); border-radius:var(--r-overlay); padding:4px;">
+                  <div style="display:flex; align-items:center; gap:12px; padding:10px 12px 10px 10px;">
+                    <span style="width:34px; height:34px; flex:none; border-radius:var(--r-card); background:var(--surface); border:1px solid var(--border); display:grid; place-items:center;"><img src="{{ logoShopify }}" alt="" width="18" height="18"></span>
+                    <span style="flex:1; font-size:var(--fs-dense); font-weight:600;">Pixel do checkout</span>
+                    <span style="display:inline-flex; align-items:center; gap:6px; font-size:var(--fs-label); color:var(--t2);"><span aria-hidden="true" style="width:7px; height:7px; border-radius:50%; background:var(--ok);"></span>Instalado</span>
+                  </div>
+                  <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
+                    <p style="font-size:var(--fs-label); color:var(--t1);">Na Shopify: Configurações › Eventos do cliente › Adicionar pixel personalizado. Um só para todos os pixels.</p>
+                    <div style="position:relative; border:1px solid var(--border); border-radius:var(--r-control); background:var(--surface-2); overflow:hidden;">
+                      <pre style="margin:0; padding:10px 12px; font-family:var(--font-mono); font-size:var(--fs-label); line-height:18px; color:var(--t1); white-space:pre; overflow:hidden; max-height:{{ codigoH }};">{{ codigo }}</pre>
+                      <div style="position:absolute; right:8px; top:8px; display:flex; gap:6px;">
+                        <button type="button" onClick="{{ toggleCodigo }}" style="height:var(--h-sm); padding:0 10px; border:1px solid var(--border); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-label); cursor:pointer;">{{ codigoRot }}</button>
+                        <button type="button" onClick="{{ copiar }}" style="height:var(--h-sm); padding:0 10px; border:1px solid var(--border); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-label); cursor:pointer;">{{ copiarRot }}</button>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              </sc-if>
+            </div>
+          </main>
+        </div>
+
+        <sc-if value="{{ dlg }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute; inset:0; z-index:80; display:flex; align-items:{{ dlgAlign }}; justify-content:center; padding:{{ dlgPad }};">
+            <div onClick="{{ fechar }}" style="position:absolute; inset:0; background:var(--scrim);"></div>
+            <div role="dialog" aria-modal="true" aria-labelledby="ap-t" style="position:relative; width:100%; max-width:500px; max-height:100%; display:flex; flex-direction:column; background:var(--surface); border-radius:{{ dlgRaio }}; box-shadow:var(--shadow); animation:xc-in 160ms var(--ease);">
+              <div style="padding:22px 22px 0; display:flex; flex-direction:column; gap:6px;">
+                <h2 id="ap-t" style="font-size:var(--fs-overlay); font-weight:600;">Adicionar pixel</h2>
+                <p style="font-size:var(--fs-dense); color:var(--t2);">As compras de {{ loja.principal }} passam a chegar nesse pixel pelo servidor.</p>
+              </div>
+              <div style="flex:1; overflow-y:auto; padding:20px 22px; display:flex; flex-direction:column; gap:20px;">
+                <div role="radiogroup" aria-labelledby="ap-plat" style="display:flex; flex-direction:column; gap:8px;">
+                  <span id="ap-plat" style="font-size:var(--fs-dense); font-weight:500;">Plataforma</span>
+                  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <sc-for list="{{ dPlats }}" as="o" hint-placeholder-count="2">
+                      <button type="button" role="radio" aria-checked="{{ o.on }}" onClick="{{ o.pick }}" style="display:flex; align-items:center; gap:8px; height:40px; padding:0 14px; border:1px solid {{ o.borda }}; background:{{ o.bg }}; border-radius:var(--r-card); font-size:var(--fs-dense); color:var(--ink); cursor:pointer; box-shadow:{{ o.sh }};"><img src="{{ o.logo }}" alt="" width="16" height="16">{{ o.nome }}</button>
+                    </sc-for>
+                  </div>
+                </div>
+                <div role="radiogroup" aria-labelledby="ap-met" style="display:flex; flex-direction:column; gap:8px;">
+                  <span id="ap-met" style="font-size:var(--fs-dense); font-weight:500;">Como</span>
+                  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <sc-for list="{{ dMetodos }}" as="o" hint-placeholder-count="2">
+                      <button type="button" role="radio" aria-checked="{{ o.on }}" onClick="{{ o.pick }}" style="display:flex; align-items:center; gap:8px; height:40px; padding:0 14px; border:1px solid {{ o.borda }}; background:{{ o.bg }}; border-radius:var(--r-card); font-size:var(--fs-dense); color:var(--ink); cursor:pointer; box-shadow:{{ o.sh }};"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ o.icon }}"></path></svg>{{ o.l }}</button>
+                    </sc-for>
+                  </div>
+                </div>
+
+                <sc-if value="{{ dNovo }}" hint-placeholder-val="{{ true }}">
+                  <sc-for list="{{ dCampos }}" as="c" hint-placeholder-count="3">
+                    <div style="display:flex; flex-direction:column; gap:6px;">
+                      <label for="{{ c.id }}" style="font-size:var(--fs-dense); font-weight:500;">{{ c.l }}<sc-if value="{{ c.opc }}" hint-placeholder-val="{{ false }}"><span style="color:var(--t2); font-weight:400;"> (opcional)</span></sc-if></label>
+                      <input id="{{ c.id }}" value="{{ c.v }}" onInput="{{ c.digitar }}" type="{{ c.tipo }}" placeholder="{{ c.ph }}" aria-invalid="{{ c.inv }}" aria-describedby="{{ c.idAjuda }}" style="height:40px; padding:0 12px; border:1px solid {{ c.borda }}; border-radius:var(--r-control); background:var(--surface); font-size:var(--fs-body); font-family:{{ c.fonte }}; color:var(--ink);">
+                      <span id="{{ c.idAjuda }}" style="font-size:var(--fs-label); color:{{ c.ajudaFg }};">{{ c.ajuda }}<sc-if value="{{ c.link }}" hint-placeholder-val="{{ false }}"> <a href="#" style="color:var(--ink); font-weight:500; text-decoration:underline;">Ver como</a>.</sc-if></span>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{ dGoogle }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex; flex-direction:column; gap:8px;">
+                      <span style="font-size:var(--fs-dense); font-weight:500;">Rótulos de conversão</span>
+                      <sc-for list="{{ dRotulos }}" as="r" hint-placeholder-count="1">
+                        <div style="display:grid; grid-template-columns:{{ rotCols }}; gap:8px; align-items:center;">
+                          <span style="height:40px; display:flex; align-items:center; padding:0 12px; border:1px solid var(--control-border); border-radius:var(--r-control); font-size:var(--fs-dense);">{{ r.ev }}</span>
+                          <input value="{{ r.v }}" onInput="{{ r.digitar }}" aria-label="{{ r.aria }}" placeholder="ex.: kP3xCJ7l8Y0Z" style="height:40px; min-width:0; padding:0 12px; border:1px solid var(--control-border); border-radius:var(--r-control); background:var(--surface); font-family:var(--font-mono); font-size:var(--fs-dense); color:var(--ink);">
+                          <button type="button" onClick="{{ r.remover }}" aria-label="{{ r.removerAria }}" style="width:40px; height:40px; display:grid; place-items:center; border:1px solid var(--border); background:var(--surface); border-radius:var(--r-control); color:var(--t1); cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18 M6 6l12 12"></path></svg></button>
+                        </div>
+                      </sc-for>
+                      <sc-if value="{{ podeAddRotulo }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ addRotulo }}" style="height:36px; display:flex; align-items:center; justify-content:center; gap:6px; border:1px solid var(--border); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); cursor:pointer;" style-hover="background:var(--surface-2);"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14 M5 12h14"></path></svg>{{ addRotuloTxt }}</button></sc-if>
+                      <span style="font-size:var(--fs-label); color:var(--t2);">A compra é obrigatória; os outros eventos são opcionais. <a href="#" style="color:var(--ink); font-weight:500; text-decoration:underline;">Ver como</a>.</span>
+                    </div>
+                  </sc-if>
+                </sc-if>
+
+                <sc-if value="{{ dExistente }}" hint-placeholder-val="{{ false }}">
+                  <div role="radiogroup" aria-label="Pixels de outras lojas" style="display:flex; flex-direction:column; gap:8px;">
+                    <span style="font-size:var(--fs-dense); font-weight:500;">Pixels das suas outras lojas</span>
+                    <sc-for list="{{ dExistentes }}" as="e" hint-placeholder-count="2">
+                      <button type="button" role="radio" aria-checked="{{ e.on }}" onClick="{{ e.pick }}" style="display:flex; align-items:center; gap:12px; padding:12px 14px; border:1px solid {{ e.borda }}; background:{{ e.bg }}; border-radius:var(--r-card); cursor:pointer; text-align:left;">
+                        <span aria-hidden="true" style="width:16px; height:16px; border-radius:50%; border:1px solid var(--control-border); display:grid; place-items:center;"><span style="width:8px; height:8px; border-radius:50%; background:{{ e.dot }};"></span></span>
+                        <span style="flex:1; display:flex; flex-direction:column;"><span style="font-size:var(--fs-dense); font-weight:500; color:var(--ink);">{{ e.nome }}</span><span style="font-size:var(--fs-label); color:var(--t2); font-family:var(--font-mono);">{{ e.id }}</span></span>
+                        <span style="font-size:var(--fs-label); color:var(--t2);">{{ e.loja }}</span>
+                      </button>
+                    </sc-for>
+                    <span style="font-size:var(--fs-label); color:var(--t2);">Usa o mesmo ID e token. Nada muda na outra loja.</span>
+                  </div>
+                </sc-if>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px; padding:14px 22px; border-top:1px solid var(--border-subtle);">
+                <a href="#" style="display:flex; align-items:center; gap:6px; font-size:var(--fs-dense); color:var(--t1); text-decoration:none;" style-hover="color:var(--ink);">Ajuda<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20 M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3 M12 17h.01"></path></svg></a>
+                <span style="flex:1;"></span>
+                <button type="button" onClick="{{ fechar }}" style="height:var(--h-md); padding:0 14px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;">Cancelar</button>
+                <button type="button" onClick="{{ salvar }}" aria-busy="{{ salvando }}" style="height:var(--h-md); padding:0 16px; border:0; background:var(--solid); color:var(--on-solid); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer; min-width:132px;">{{ salvarRot }}</button>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ mobile }}" hint-placeholder-val="{{ false }}">
+          <nav aria-label="Menu principal" style="flex:none; height:60px; display:flex; background:var(--surface); border-top:1px solid var(--border);">
+            <sc-for list="{{ barra }}" as="b" hint-placeholder-count="4">
+              <a href="#" onClick="{{ b.ir }}" aria-current="{{ b.atual }}" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; text-decoration:none; font-size:var(--fs-label); color:{{ b.fg }};"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ b.icon }}"></path></svg>{{ b.label }}</a>
+            </sc-for>
+          </nav>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { theme: 'light', width: 'desktop', vw: 1400, tela: 'lista', loja: 'lumen', desligadas: ['alto'], platOff: [], codigo: false, copiado: false, giro: false };
+  componentDidMount() {
+    try { const t = localStorage.getItem('xcart-mock-tema'); const w = localStorage.getItem('xcart-mock-largura'); const s = { vw: window.innerWidth }; if (t) s.theme = t; if (w) s.width = w; this.setState(s); } catch (e) { this.setState({ vw: window.innerWidth }); }
+    this._rs = () => this.setState({ vw: window.innerWidth }); window.addEventListener('resize', this._rs);
+    window.addEventListener('keydown', e => { if (e.key === 'Escape') this.setState({ d: null }); });
+  }
+  abrirDlg(plat) { this.setState({ d: { plat, metodo: 'novo', v: {}, rotulos: [''], exist: 0, erro: false, salvando: false } }); }
+  componentWillUnmount() { window.removeEventListener('resize', this._rs); }
+  renderVals() {
+    const st = this.state; const mobile = st.width === 'mobile'; const set = o => this.setState(o);
+    const LOGO = { meta: 'https://cdn.simpleicons.org/meta/0866FF', google: 'https://cdn.simpleicons.org/googleads/4285F4', shopify: 'https://cdn.simpleicons.org/shopify/7AB55C' };
+    const I = { lojas: 'M3 9l1.5-5h15L21 9 M4 9v11h16V9 M3 9h18 M10 20v-5h4v5', ev: 'M16.2 7.8a6 6 0 0 1 0 8.4 M7.8 16.2a6 6 0 0 1 0-8.4 M12 10a2 2 0 1 0 0 4a2 2 0 1 0 0-4', al: 'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9 M10.3 21a1.94 1.94 0 0 0 3.4 0', lucro: 'M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20 M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8 M12 18V6', custos: 'M6 2h12v20H6Z M9 6h6 M9 11h.01 M12 11h.01 M15 11h.01 M9 15h.01 M12 15h.01 M15 15h.01', int: 'M12 22v-5 M9 8V2 M15 8V2 M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z', card: 'M2 5h20v14H2Z M2 10h20', conta: 'M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2 M12 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8', mais: 'M4 6h16 M4 12h16 M4 18h16' };
+    const L = [
+      { id: 'lumen', dominio: 'lumencasa.myshopify.com', principal: 'lumencasa.com', plats: [['meta', 'ok'], ['google', 'ok']], sub: '182 pedidos em 7 dias', moeda: 'USD (Dólar americano)', fuso: '(GMT−04:00) Nova York', kpis: ['R$ 104.231', '720', 'R$ 144,77'] },
+      { id: 'orla', dominio: 'orlawear.myshopify.com', principal: 'orlawear.com', plats: [['meta', 'err'], ['google', 'ok']], sub: '96 pedidos em 7 dias', moeda: 'USD (Dólar americano)', fuso: '(GMT−04:00) Nova York', kpis: ['R$ 67.230', '410', 'R$ 163,98'] },
+      { id: 'kova', dominio: 'kovahome.myshopify.com', principal: 'kovahome.eu', plats: [['meta', 'ok']], sub: '94 pedidos em 7 dias', moeda: 'EUR (Euro)', fuso: '(GMT+02:00) Berlim', kpis: ['R$ 34.006', '201', 'R$ 169,18'] },
+      { id: 'alto', dominio: 'altofit.myshopify.com', principal: 'altofit.co', plats: [], sub: 'Rastreamento desligado', moeda: 'USD (Dólar americano)', fuso: '(GMT−04:00) Nova York', kpis: ['R$ 11.533', '78', 'R$ 147,86'] },
+    ];
+    const sw = on => ({ trilho: on ? 'var(--ink)' : 'var(--border-strong)', bola: on ? '21px' : '3px' });
+    const lojas = L.map(l => { const on = !st.desligadas.includes(l.id); return { ...l, on, ...sw(on), op: on ? 1 : 0.7, swAria: `Rastreamento de ${l.dominio}`,
+      sub: on ? l.sub : 'Rastreamento desligado',
+      plats: on ? l.plats.map(([p, tom]) => ({ nome: p === 'meta' ? 'Meta' : 'Google Ads', logo: LOGO[p], dot: `var(--${tom})` })) : [],
+      alternar: e => { e.stopPropagation(); set({ desligadas: on ? [...st.desligadas, l.id] : st.desligadas.filter(x => x !== l.id) }); },
+      abrir: e => { e && e.stopPropagation && e.stopPropagation(); set({ tela: 'loja', loja: l.id }); } }; });
+    const loja = L.find(l => l.id === st.loja) || L[0];
+    const kpis = [['Faturamento', loja.kpis[0]], ['Pedidos', loja.kpis[1]], ['Ticket médio', loja.kpis[2]]].map(([l, v]) => ({ l, v }));
+    const campos = [
+      { l: 'Domínio permanente', v: loja.dominio },
+      { l: 'Domínio principal', v: loja.principal, d: 'Atualiza sozinho quando muda na Shopify.' },
+      { l: 'Moeda e fuso', v: `${loja.moeda} · ${loja.fuso}` },
+      { l: 'Script no tema', v: 'Instalado em 28/09', acao: 'Reinstalar' },
+    ];
+    const PIX = {
+      meta: { lumen: [['Lumen principal', '4829 1735 0021', 'ok', '178 de 182 compras']], orla: [['Orla principal', '7710 2284 1100', 'err', '0 de 96 compras', 'Token recusado']], kova: [['Kova EU', '3391 0457 8822', 'ok', '92 de 94 compras']], alto: [] },
+      google: { lumen: [['Lumen Pesquisa', 'AW-1128430917', 'ok', '144 de 182 compras']], orla: [['Orla', 'AW-9920113845', 'ok', '88 de 96 compras']], kova: [], alto: [] },
+    };
+    const plataformas = ['meta', 'google'].map(p => { const lista = PIX[p][loja.id] || []; const k = loja.id + p; const on = lista.length > 0 && !st.platOff.includes(k); return { nome: p === 'meta' ? 'Meta Ads' : 'Google Ads', logo: LOGO[p], on, ...sw(on), swAria: `${p === 'meta' ? 'Meta Ads' : 'Google Ads'} nesta loja`,
+      alternar: () => set({ platOff: st.platOff.includes(k) ? st.platOff.filter(x => x !== k) : [...st.platOff, k] }),
+      pixels: lista.map(([nome, id, tom, compras, nota]) => ({ nome, id, compras, nota: nota || null, notaFg: `var(--${tom})`, dot: `var(--${tom})`, editarAria: `Editar ${nome}`, removerAria: `Remover ${nome}` })) }; });
+    plataformas.forEach((pl, i) => { pl.adicionar = () => this.abrirDlg(i === 0 ? 'meta' : 'google'); });
+    const d = st.d || {};
+    const dPlats = ['meta', 'google'].map(p => { const on = d.plat === p; return { nome: p === 'meta' ? 'Meta' : 'Google Ads', logo: LOGO[p], on, pick: () => set({ d: { ...d, plat: p, erro: false } }), borda: on ? 'var(--ink)' : 'var(--border)', bg: on ? 'var(--surface-2)' : 'var(--surface)', sh: on ? '0 0 0 1px var(--ink)' : 'none' }; });
+    const dMetodos = [['novo', 'Novo pixel', 'M12 5v14 M5 12h14'], ['existente', 'Pixel de outra loja', 'M8 8h12v12H8Z M4 16V4h12']].map(([id, l, icon]) => { const on = d.metodo === id; return { l, icon, on, pick: () => set({ d: { ...d, metodo: id, erro: false } }), borda: on ? 'var(--ink)' : 'var(--border)', bg: on ? 'var(--surface-2)' : 'var(--surface)', sh: on ? '0 0 0 1px var(--ink)' : 'none' }; });
+    const campo = (k, l, ph, ajuda, o = {}) => { const v = (d.v || {})[k] || ''; const inv = d.erro && o.obrig && !v.trim(); return { id: `ap-${k}`, idAjuda: `ap-${k}-a`, l, ph, v, opc: !!o.opc, tipo: o.tipo || 'text', fonte: o.mono ? 'var(--font-mono)' : 'inherit', link: !!o.link, inv: inv ? 'true' : undefined, borda: inv ? 'var(--err)' : 'var(--control-border)', ajuda: inv ? o.erroTxt : ajuda, ajudaFg: inv ? 'var(--err)' : 'var(--t2)', digitar: e => set({ d: { ...d, v: { ...(d.v || {}), [k]: e.target.value } } }) }; };
+    const dCampos = d.plat === 'meta'
+      ? [campo('nome', 'Nome', 'ex.: Lumen principal', 'Só aparece no xcart.', { opc: true }), campo('pid', 'ID do pixel', 'ex.: 482917350021', 'No Gerenciador de Eventos, abaixo do nome do pixel.', { obrig: true, mono: true, link: true, erroTxt: 'Cole o ID do pixel.' }), campo('tok', 'Token de conversões', 'começa com EAA', 'Em Configurações do pixel › API de conversões › Gerar token.', { obrig: true, mono: true, tipo: 'password', link: true, erroTxt: 'Cole o token de conversões.' }), campo('teste', 'Código de teste', 'ex.: TEST4821', 'Para ver os eventos em “Testar eventos” no Meta.', { opc: true, mono: true })]
+      : [campo('nome', 'Nome', 'ex.: Lumen Pesquisa', 'Só aparece no xcart.', { opc: true }), campo('aw', 'ID de conversão', 'ex.: AW-1128430917', 'No Google Ads: Metas › Conversões › Tag.', { obrig: true, mono: true, link: true, erroTxt: 'Cole o ID que começa com AW-.' })];
+    const EVS = ['Compra', 'Checkout', 'Carrinho', 'Ver produto'];
+    const rot = d.rotulos || [];
+    const dRotulos = rot.map((r, i) => ({ ev: EVS[i], v: r, aria: `Rótulo de ${EVS[i]}`, removerAria: `Remover rótulo de ${EVS[i]}`, digitar: e => { const n = [...rot]; n[i] = e.target.value; set({ d: { ...d, rotulos: n } }); }, remover: () => set({ d: { ...d, rotulos: rot.filter((_, j) => j !== i) } }) }));
+    const OUTROS = d.plat === 'meta' ? [['Lumen principal', '4829 1735 0021', 'Lumen Casa'], ['Kova EU', '3391 0457 8822', 'Kova Home']] : [['Lumen Pesquisa', 'AW-1128430917', 'Lumen Casa'], ['Orla', 'AW-9920113845', 'Orla Wear']];
+    const dExistentes = OUTROS.map(([nome, id, lj], i) => { const on = d.exist === i; return { nome, id, loja: lj, on, dot: on ? 'var(--ink)' : 'transparent', borda: on ? 'var(--ink)' : 'var(--border)', bg: on ? 'var(--surface-2)' : 'var(--surface)', pick: () => set({ d: { ...d, exist: i } }) }; });
+    const salvar = () => {
+      if (d.metodo === 'novo') { const v = d.v || {}; const falta = d.plat === 'meta' ? !(v.pid && v.tok) : !v.aw; if (falta) { set({ d: { ...d, erro: true } }); return; } }
+      set({ d: { ...d, salvando: true } }); setTimeout(() => this.setState({ d: null }), 1000);
+    };
+    const codigo = "analytics.subscribe('checkout_completed', (event) => {\n  const d = event.data.checkout;\n  fetch('https://user.xcart.app/api/tracking/pixel', {\n    method: 'POST', keepalive: true,\n    body: JSON.stringify({ shop: init.data.shop.myshopifyDomain, d })\n  });\n});";
+    const atual = 'lojas';
+    const MENU = [['Rastreamento', [['lojas', 'Lojas', I.lojas, String(L.length)], ['eventos', 'Eventos ao vivo', I.ev], ['alertas', 'Alertas', I.al, '2']]], ['Financeiro', [['lucro', 'Lucro', I.lucro], ['custos', 'Custos e taxas', I.custos]]], ['Configurações', [['int', 'Integrações', I.int], ['ass', 'Assinatura', I.card], ['conta', 'Conta', I.conta]]]];
+    const menu = MENU.map(([t, itens]) => ({ t, itens: itens.map(([id, label, icon, n]) => { const on = id === atual; return { label, icon, n: n || null, atual: on ? 'page' : undefined, bg: on ? 'var(--track)' : 'transparent', fw: on ? 500 : 400, ir: e => { e.preventDefault(); if (id === 'lojas') set({ tela: 'lista' }); } }; }) }));
+    const barra = [['lojas', 'Lojas', I.lojas], ['eventos', 'Eventos', I.ev], ['alertas', 'Alertas', I.al], ['mais', 'Mais', I.mais]].map(([id, label, icon]) => { const on = id === atual; return { label, icon, atual: on ? 'page' : undefined, fg: on ? 'var(--ink)' : 'var(--t2)', ir: e => { e.preventDefault(); if (id === 'lojas') set({ tela: 'lista' }); } }; });
+    const fw = mobile ? 375 : 1440, fh = mobile ? 812 : 900;
+    const escala = mobile ? 1 : Math.min(1, Math.max(0.4, (st.vw - 32) / fw));
+    return {
+      theme: st.theme, width: st.width, tela: st.d ? 'pixel' : st.tela, telas: [{ id: 'lista', label: 'Lojas' }, { id: 'loja', label: 'Detalhe da loja' }, { id: 'pixel', label: 'Adicionar pixel' }],
+      irTela: v => { if (v === 'pixel') { set({ tela: 'loja', loja: 'lumen' }); this.abrirDlg('google'); } else set({ tela: v, loja: 'lumen', d: null }); },
+      dlg: !!st.d, fechar: () => set({ d: null }), dPlats, dMetodos, dNovo: d.metodo === 'novo', dExistente: d.metodo === 'existente', dGoogle: d.plat === 'google', dCampos, dRotulos, dExistentes,
+      podeAddRotulo: rot.length < 4, addRotuloTxt: rot.length ? `Adicionar rótulo de ${EVS[rot.length] ? EVS[rot.length].toLowerCase() : ''}` : 'Adicionar rótulo de compra', addRotulo: () => set({ d: { ...d, rotulos: [...rot, ''] } }),
+      rotCols: mobile ? '96px 1fr 40px' : '130px 1fr 40px', salvar, salvando: !!d.salvando, salvarRot: d.salvando ? 'Adicionando…' : 'Adicionar pixel',
+      dlgAlign: mobile ? 'flex-end' : 'center', dlgPad: mobile ? '0' : '32px', dlgRaio: mobile ? 'var(--r-overlay) var(--r-overlay) 0 0' : 'var(--r-overlay)',
+      setTheme: v => { try { localStorage.setItem('xcart-mock-tema', v); } catch (e) {} set({ theme: v }); },
+      setWidth: v => { try { localStorage.setItem('xcart-mock-largura', v); } catch (e) {} set({ width: v }); },
+      desktop: !mobile, mobile, frameDir: mobile ? 'column' : 'row', frameW: `${fw}px`, frameH: `${fh}px`, escala, wrapW: `${fw * escala}px`, wrapH: `${fh * escala}px`, frameRaio: mobile ? '28px' : '10px',
+      pad: mobile ? '20px 16px 40px' : '40px 32px 64px', tituloTop: mobile ? '0' : '16px', kpiCols: mobile ? 1 : 3,
+      menu, barra, tLista: st.tela === 'lista', tLoja: st.tela === 'loja', voltar: e => { e.preventDefault(); set({ tela: 'lista' }); },
+      logoShopify: LOGO.shopify, totalTexto: `${L.length} lojas`, lojas, loja, kpis, campos, plataformas,
+      giro: st.giro ? 'xc-spin 800ms linear infinite' : 'none', atualizar: () => { set({ giro: true }); setTimeout(() => this.setState({ giro: false }), 900); },
+      codigo, codigoH: st.codigo ? '400px' : '38px', codigoRot: st.codigo ? 'Mostrar menos' : 'Mostrar tudo', toggleCodigo: () => set({ codigo: !st.codigo }),
+      copiarRot: st.copiado ? 'Copiado' : 'Copiar', copiar: () => { set({ copiado: true }); setTimeout(() => this.setState({ copiado: false }), 1800); },
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -4,25 +4,26 @@ import type { DiagnosticoLoja } from "../src/lib/tracking/diagnostico";
 import { saudeDaLoja } from "../src/app/(dashboard)/tracking/saude";
 import {
   colunaDaPlataforma,
-  comprasQueOMetaDiz,
-  contasDaTela,
   formatarFracao,
   linhaDaLoja,
   ordenarLinhas,
-  problemasDaLoja,
-  proximoPassoDesligada,
   resumoDaTela,
-  testesNaTela,
-  textoCobertura,
-  textoDaColuna,
-  textoPrecisam,
 } from "../src/app/(dashboard)/tracking/resumo";
+import {
+  avisosDaLoja,
+  comprasDoPixel,
+  estadoDoPixel,
+  instalacaoDaLoja,
+  pontosDaLinha,
+  subDaLinha,
+} from "../src/app/(dashboard)/tracking/vista";
 import { respostaJson } from "../src/app/(dashboard)/tracking/resposta";
 
-// A tela nova mostra UM problema por loja, com UM botao. A regra de saude e a
-// de saude.ts; o que este teste trava e que a traducao nao descola dela: cada
-// motivo vira um problema, na mesma ordem e com o mesmo tom, e a loja vermelha
-// nunca aparece com "Nada a fazer agora".
+// A lista mostra so um ponto de cor e um numero por plataforma; o motivo de
+// um problema aparece dentro da loja, no pixel afetado ou na instalacao. A
+// regra de saude e a de saude.ts; o que este teste trava e que a traducao nao
+// descola dela: loja amarela ou vermelha sempre tem um motivo visivel no
+// detalhe, e o Google nunca ganha numero do servidor.
 
 // O destino padrao e Meta: so ele passa pela fila do servidor e tem contagem.
 // O Google vai pela tag do navegador (`google()`, e "Google pela tag" abaixo).
@@ -210,143 +211,127 @@ const casos: Record<string, { loja: LojaTracking; diag: DiagnosticoLoja | null; 
   conferenciaFalhou: { loja: loja(), diag: null },
 };
 
-describe("problemasDaLoja espelha a regra de saude", () => {
+/** Os tons que o detalhe da loja mostra: avisos, pixels e campos. */
+function tonsDoDetalhe(c: { loja: LojaTracking; diag: DiagnosticoLoja | null; temDiag?: boolean }) {
+  const falhou = (c.temDiag ?? true) && c.diag === null;
+  const inst = instalacaoDaLoja(c.loja, c.diag, falhou);
+  return [
+    ...avisosDaLoja(c.loja, inst).map((a) => a.tom),
+    ...c.loja.destinos.map((d) => estadoDoPixel(d, c.loja, c.diag).tom),
+    inst.tom,
+  ];
+}
+
+describe("o detalhe sempre mostra o motivo", () => {
   for (const [nome, c] of Object.entries(casos)) {
     it(nome, () => {
-      const temDiag = c.temDiag ?? true;
-      const s = saudeDaLoja(c.loja, c.loja.ligado, c.diag, temDiag);
-      const p = problemasDaLoja(c.loja, c.diag, temDiag);
-      expect(p.map((x) => x.tom)).toEqual(s.motivos.map((m) => m.tom));
-      // Loja vermelha ou amarela sempre tem um problema para mostrar.
-      const linha = linhaDaLoja(c.loja, c.diag, temDiag);
-      expect(linha.principal === null).toBe(s.saude === "ok");
-      if (s.saude === "parado") expect(linha.principal?.tom).toBe("err");
+      const s = saudeDaLoja(c.loja, c.loja.ligado, c.diag, c.temDiag ?? true);
+      const tons = tonsDoDetalhe(c);
+      if (s.saude === "ok") expect(tons.every((t) => t === "ok" || t === "neutral")).toBe(true);
+      else expect(tons.some((t) => t === "warn" || t === "err")).toBe(true);
+      if (s.saude === "parado") expect(tons).toContain("err");
     });
   }
 
-  it("o primeiro problema e o mais grave, com o conserto certo", () => {
-    expect(problemasDaLoja(casos.faltandoComRecusa.loja, casos.faltandoComRecusa.diag, true)[0])
-      .toMatchObject({
-        tom: "err",
-        texto: "3 pedidos sem compra enviada ao Meta \"Principal\".",
-        acao: { tipo: "editar-destino", destinoId: "m1" },
-      });
-    expect(problemasDaLoja(casos.faltandoComRecusa.loja, casos.faltandoComRecusa.diag, true)[0].detalhe)
-      .toContain("Invalid OAuth access token");
-    // Sem o aviso de pedidos, o conserto da falta e o aviso, nao o destino.
-    expect(
-      problemasDaLoja(casos.faltandoSemAviso.loja, casos.faltandoSemAviso.diag, true)[0].acao?.tipo
-    ).toBe("webhook");
-    expect(problemasDaLoja(casos.semScript.loja, casos.semScript.diag, true)[0].acao?.rotulo).toBe(
-      "Instalar script"
+  it("o pixel diz o problema em poucas palavras", () => {
+    const recusa = casos.faltandoComRecusa;
+    expect(estadoDoPixel(recusa.loja.destinos[0], recusa.loja, recusa.diag)).toEqual({
+      nota: "Envio recusado",
+      tom: "err",
+      erro: "Invalid OAuth access token",
+    });
+    // Sem o aviso de pedidos, o motivo esta no campo da loja.
+    const semAviso = casos.faltandoSemAviso;
+    expect(estadoDoPixel(semAviso.loja.destinos[0], semAviso.loja, semAviso.diag).nota).toBe(
+      "Sem aviso de pedidos"
     );
-    expect(problemasDaLoja(casos.semDestino.loja, casos.semDestino.diag, true)[0].acao?.tipo).toBe(
-      "adicionar-destino"
-    );
-    expect(
-      problemasDaLoja(casos.conferenciaFalhou.loja, null, true).at(-1)?.acao?.tipo
-    ).toBe("rechecar");
+    expect(instalacaoDaLoja(semAviso.loja, semAviso.diag, false).itens.aviso?.tom).toBe("err");
+    const incompleto = casos.incompleto.loja;
+    expect(estadoDoPixel(incompleto.destinos[1], incompleto, diag()).nota).toBe("Sem token");
+    expect(estadoDoPixel(destino(), loja(), diag())).toEqual({ nota: null, tom: "ok", erro: null });
   });
 
-  it("duas contas Google: alguma creditou, nada de 'nenhuma venda ligada'", () => {
-    const p = problemasDaLoja(casos.duasContasGoogle.loja, casos.duasContasGoogle.diag, true);
-    expect(p.map((x) => x.texto).join(" ")).not.toContain("Nenhuma venda foi ligada");
-  });
-
-  it("o limite de eventos nao tem botao: nao ha o que o lojista faca", () => {
-    const p = problemasDaLoja(casos.teto.loja, casos.teto.diag, true);
-    expect(p).toHaveLength(1);
-    expect(p[0].acao).toBeNull();
-    expect(p[0].texto).not.toMatch(/avise/i);
-  });
-
-  it("texto sem jargao de CAPI nem snippet", () => {
-    for (const c of Object.values(casos)) {
-      for (const p of problemasDaLoja(c.loja, c.diag, c.temDiag ?? true)) {
-        expect(`${p.texto} ${p.detalhe ?? ""}`).not.toMatch(/CAPI|snippet|webhook|npm run/i);
-      }
+  it("duas contas: alguma creditou, nada de 'sem clique de anuncio'", () => {
+    const c = casos.duasContasGoogle;
+    for (const d of c.loja.destinos) {
+      expect(estadoDoPixel(d, c.loja, c.diag).nota).not.toBe("Sem clique de anúncio");
     }
   });
+
+  it("conferencia que falhou pede 'tentar de novo', nao acusa falta", () => {
+    const i = instalacaoDaLoja(loja(), null, true);
+    expect(i.semConferir).toBe(true);
+    expect(i.itens.aviso?.tom).toBe("neutral");
+    expect(avisosDaLoja(loja(), i).map((a) => a.acao)).toContain("conferir");
+  });
+
+  it("remarketing e opcional: desligado nao pinta a loja", () => {
+    const l = loja({ destinos: [google()] });
+    const i = instalacaoDaLoja(l, diag({ temRemarketing: false }), false);
+    expect(i.itens.remarketing?.valor).toBe("Desligado (opcional)");
+    expect(i.tom).toBe("ok");
+    expect(instalacaoDaLoja(loja(), diag(), false).itens.remarketing).toBeNull();
+  });
+
+  it("o limite de eventos e aviso sem botao", () => {
+    const l = casos.teto.loja;
+    expect(avisosDaLoja(l, instalacaoDaLoja(l, diag(), false))).toEqual([
+      {
+        tom: "warn",
+        texto: "A loja passou do limite de eventos por hora nas últimas 24 h.",
+        acao: null,
+      },
+    ]);
+  });
 });
 
-describe("loja desligada", () => {
-  it("nao tem problema, tem o proximo passo", () => {
-    expect(problemasDaLoja(loja({ ligado: false }), null, false)).toEqual([]);
-    expect(proximoPassoDesligada(loja({ ligado: false })).acao?.tipo).toBe("ligar");
-    expect(proximoPassoDesligada(loja({ ligado: false, destinos: [] })).acao?.tipo).toBe(
-      "adicionar-destino"
+describe("pontos da lista", () => {
+  it("Meta: chegaram de esperados; Google: so a tag", () => {
+    const l = linhaDaLoja(
+      loja({
+        destinos: [meta({ contagem: { pedidosComCompra: ["1", "2"] } as never }), google()],
+      }),
+      diag(),
+      true
     );
-    expect(
-      proximoPassoDesligada(
-        loja({ ligado: false, destinos: [google({ labels: { add_to_cart: "x" } })] })
-      ).acao
-    ).toMatchObject({ tipo: "editar-destino", destinoId: "g1" });
-    // So Google com rotulo de compra ja pode ligar: a tag dispara a compra.
-    expect(proximoPassoDesligada(loja({ ligado: false, destinos: [google()] })).acao?.tipo).toBe(
-      "ligar"
-    );
+    expect(pontosDaLinha(l).map((p) => [p.plataforma, p.tom, p.rotulo])).toEqual([
+      ["meta", "warn", "Meta: 2 de 3 compras"],
+      ["google", "ok", "Google Ads: tag ativa"],
+    ]);
   });
 
-  it("as colunas dizem desligado, sem barra", () => {
-    const c = colunaDaPlataforma(loja({ ligado: false }), null, "meta");
-    expect(c).toEqual({ tipo: "desligado", motivo: "envio desligado nesta loja" });
-    expect(textoDaColuna(c, "meta").fracao).toBeNull();
-  });
-});
-
-describe("colunas Meta e Google", () => {
-  it("sem destino da plataforma", () => {
-    expect(colunaDaPlataforma(loja(), diag(), "google")).toEqual({
-      tipo: "desligado",
-      motivo: "sem destino nesta loja",
-    });
+  it("loja desligada nao tem ponto; a linha diz desligado", () => {
+    const off = loja({ ligado: false });
+    expect(pontosDaLinha(linhaDaLoja(off, null, false))).toEqual([]);
+    expect(subDaLinha(off, null)).toBe("Rastreamento desligado");
+    expect(subDaLinha(loja(), diag())).toBe("3 pedidos em 7 dias");
+    expect(subDaLinha(loja(), null)).toBeNull();
   });
 
-  it("com varias contas vale a pior", () => {
-    const l = loja({
-      destinos: [
-        destino({ id: "a" }),
-        destino({ id: "b", contagem: { pedidosComCompra: ["1"] } as never }),
-      ],
-    });
-    const c = colunaDaPlataforma(l, diag(), "meta");
-    expect(c).toMatchObject({ tipo: "razao", chegaram: 1, esperados: 3, faltam: 2, contas: 2 });
-    expect(textoDaColuna(c, "meta")).toEqual({
-      texto: "1 de 3",
-      sub: "faltam 2 · pior de 2 contas",
-      fracao: 1 / 3,
-      tom: "warn",
-    });
-  });
-
-  it("compra sem clique aparece na sub-linha", () => {
-    const c = colunaDaPlataforma(casos.semClique.loja, casos.semClique.diag, "meta");
-    expect(textoDaColuna(c, "meta").sub).toBe("todas chegaram · 3 sem clique do Meta");
-  });
-
-  it("modo teste e destino sem rotulo da compra nao recebem", () => {
-    expect(colunaDaPlataforma(casos.soMetaEmTeste.loja, diag(), "meta")).toEqual({
-      tipo: "nao-recebe",
-      motivo: "em modo teste",
-    });
-    expect(
-      colunaDaPlataforma(loja({ destinos: [google({ labels: { add_to_cart: "x" } })] }), diag(), "google")
-    ).toEqual({ tipo: "nao-recebe", motivo: "falta o rótulo da compra" });
-  });
-
-  it("falha de leitura nunca vira zero", () => {
-    const c = colunaDaPlataforma(casos.contagemIndisponivel.loja, diag(), "meta");
-    expect(textoDaColuna(c, "meta")).toMatchObject({ texto: "—", fracao: null });
-    const s = colunaDaPlataforma(loja(), null, "meta");
-    expect(textoDaColuna(s, "meta")).toMatchObject({
-      texto: "3 compras enviadas",
-      sub: "pedidos não conferidos",
-    });
+  it("modo teste, sem token e sem rotulo da compra ficam amarelos", () => {
+    const tom = (l: LojaTracking) => pontosDaLinha(linhaDaLoja(l, diag(), true))[0].tom;
+    expect(tom(casos.soMetaEmTeste.loja)).toBe("warn");
+    expect(tom(loja({ destinos: [meta({ temToken: false, completo: false })] }))).toBe("warn");
+    expect(tom(loja({ destinos: [google({ labels: { add_to_cart: "x" } })] }))).toBe("warn");
   });
 
   it("nenhuma compra chegou fica vermelho", () => {
-    const c = colunaDaPlataforma(casos.faltandoComRecusa.loja, diag(), "meta");
-    expect(textoDaColuna(c, "meta")).toMatchObject({ texto: "0 de 3", tom: "err", fracao: 0 });
+    const c = casos.faltandoComRecusa;
+    expect(pontosDaLinha(linhaDaLoja(c.loja, c.diag, true))[0].tom).toBe("err");
+  });
+});
+
+describe("compras do pixel", () => {
+  it("Meta: chegaram de esperados; falha de leitura nunca vira zero", () => {
+    expect(comprasDoPixel(destino(), loja(), diag())).toBe("3 de 3 compras");
+    const l = casos.contagemIndisponivel.loja;
+    expect(comprasDoPixel(l.destinos[0], l, diag())).toBe("—");
+    expect(comprasDoPixel(destino(), loja(), null)).toBe("3 compras");
+  });
+
+  it("Google: nunca numero do servidor", () => {
+    const g = google();
+    expect(comprasDoPixel(g, loja({ destinos: [g] }), diag())).toBe("pela tag");
   });
 });
 
@@ -383,8 +368,6 @@ describe("ordem e numeros do topo", () => {
       porPlataforma: { meta: { chegaram: 7, esperados: 9, lojas: 3 }, google: null },
       lojasForaDaCobertura: 0,
     });
-    expect(textoPrecisam(r)).toBe("1 parada · 1 com atenção");
-    expect(textoCobertura(r.porPlataforma)).toBe("Meta 77,8% dos pedidos");
   });
 
   it("o Google pela tag nao entra na cobertura nem esconde o Meta sem receber", () => {
@@ -398,7 +381,6 @@ describe("ordem e numeros do topo", () => {
     const r = resumoDaTela([l], { s1: diag() });
     expect(r.porPlataforma.meta).toEqual({ chegaram: 0, esperados: 3, lojas: 1 });
     expect(r.porPlataforma.google).toBeNull();
-    expect(textoCobertura(r.porPlataforma)).toBe("Meta 0% dos pedidos");
   });
 
   it("vendas enviadas usam o maior destino, nao a soma", () => {
@@ -425,21 +407,28 @@ describe("ordem e numeros do topo", () => {
     const r = resumoDaTela([linhaDaLoja(loja({ destinos: [] }), diag(), true)], { s1: diag() });
     expect(r.pedidosComparaveis).toBe(3);
     expect(r.porPlataforma).toEqual({ meta: null, google: null });
-    expect(textoCobertura(r.porPlataforma)).toBeNull();
   });
 
   it("formata como o lojista le", () => {
     expect(formatarFracao(0.745)).toBe("74,5%");
-    expect(textoPrecisam({ paradas: 0, atencao: 0 })).toBe("nenhuma loja");
-    expect(textoPrecisam({ paradas: 2, atencao: 0 })).toBe("2 paradas");
   });
 
-  it("varias contas sem perda nao falam em pior", () => {
-    const l = loja({ destinos: [destino({ id: "a" }), destino({ id: "b" })] });
-    expect(textoDaColuna(colunaDaPlataforma(l, diag(), "meta"), "meta").sub).toBe(
-      "todas chegaram · 2 contas"
-    );
+  it("com varias contas vale a pior", () => {
+    const l = loja({
+      destinos: [
+        destino({ id: "a" }),
+        destino({ id: "b", contagem: { pedidosComCompra: ["1"] } as never }),
+      ],
+    });
+    expect(colunaDaPlataforma(l, diag(), "meta")).toMatchObject({
+      tipo: "razao",
+      chegaram: 1,
+      esperados: 3,
+      faltam: 2,
+      contas: 2,
+    });
   });
+
 });
 
 describe("respostaJson", () => {
@@ -462,68 +451,17 @@ describe("respostaJson", () => {
   });
 });
 
-describe("por conta", () => {
-  it("uma linha por conta ativa de loja ligada; as contas nunca somadas", () => {
-    const softnook = loja({
-      storeId: "soft",
-      destinos: [
-        destino({ id: "g1", conta: "AW-18463882690" }),
-        destino({ id: "g2", conta: "AW-18463833677" }),
-        destino({ id: "g3", ativo: false }),
-      ],
-    });
-    const desligada = loja({ storeId: "off", ligado: false });
-    expect(contasDaTela([softnook, desligada]).map((c) => c.destino.id)).toEqual(["g1", "g2"]);
-  });
-
-  it("testes na tela somam as contas; leitura que falhou nao entra", () => {
-    const com = loja({
-      destinos: [
-        destino({
-          contagem: { testesPorEvento: { add_to_cart: 13, begin_checkout: 7 } } as never,
-        }),
-      ],
-    });
-    const semContagem = loja({
-      storeId: "s2",
-      contagemIndisponivel: true,
-      destinos: [destino({ contagem: { testesPorEvento: { add_to_cart: 9 } } as never })],
-    });
-    expect(testesNaTela(contasDaTela([com, semContagem]))).toBe(20);
-  });
-
-  it("o que o Meta diz so aparece com um pixel na loja e dado do Meta", () => {
-    const umPixel = loja({ comprasContadasPeloMeta: 4, destinos: [meta(), google()] });
-    const [m, g] = contasDaTela([umPixel]);
-    expect(comprasQueOMetaDiz(m)).toBe(4);
-    expect(comprasQueOMetaDiz(g)).toBeNull();
-
-    const doisPixels = loja({
-      comprasContadasPeloMeta: 4,
-      destinos: [meta(), meta({ id: "m2" })],
-    });
-    expect(comprasQueOMetaDiz(contasDaTela([doisPixels])[0])).toBeNull();
-
-    const semDado = loja({ destinos: [meta()] });
-    expect(comprasQueOMetaDiz(contasDaTela([semDado])[0])).toBeNull();
-  });
-});
-
 // ---------------------------------------------------------------------------
 // O Google sai do navegador, pela tag do Google: a coluna dele mostra a tag,
 // nunca "x de y" do servidor, e linha 'google' antiga na fila nao vira falha.
 // ---------------------------------------------------------------------------
 describe("Google pela tag", () => {
-  it("a coluna diz tag ativa, sem barra e sem contagem", () => {
+  it("a coluna diz tag ativa, sem contagem", () => {
     const l = loja({ destinos: [google(), google({ id: "g2", conta: "AW-2" })] });
-    const c = colunaDaPlataforma(l, diag(), "google");
-    expect(c).toEqual({ tipo: "tag", contas: 2 });
-    expect(textoDaColuna(c, "google")).toEqual({
-      texto: "Tag ativa",
-      sub: "no navegador, contada no Google Ads · 2 contas",
-      fracao: null,
-      tom: "ok",
-    });
+    expect(colunaDaPlataforma(l, diag(), "google")).toEqual({ tipo: "tag", contas: 2 });
+    expect(pontosDaLinha(linhaDaLoja(l, diag(), true))).toEqual([
+      { plataforma: "google", tom: "ok", rotulo: "Google Ads: tag ativa" },
+    ]);
   });
 
   it("so Google: nada a fazer, e as compras enviadas nao contam o Google", () => {
@@ -543,14 +481,10 @@ describe("Google pela tag", () => {
       true
     );
     expect(l.saude).toBe("ok");
-    expect(l.problemas).toEqual([]);
-    expect(resumoDaTela([l], { s1: diag() }).enviadas).toBe(0);
-  });
-
-  it("testes do Google antigo nao entram no 'Mostrar testes'", () => {
-    const l = loja({
-      destinos: [google({ contagem: { testesPorEvento: { add_to_cart: 5 } } as never })],
+    expect(estadoDoPixel(l.loja.destinos[0], l.loja, diag())).toMatchObject({
+      nota: null,
+      tom: "ok",
     });
-    expect(testesNaTela(contasDaTela([l]))).toBe(0);
+    expect(resumoDaTela([l], { s1: diag() }).enviadas).toBe(0);
   });
 });

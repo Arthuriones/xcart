@@ -1,17 +1,11 @@
 import { Suspense } from "react";
-import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Spinner } from "@/components/ui/spinner";
-import { PageHeader } from "@/components/layout/page-header";
 import { filtroResolvido } from "@/lib/filtro-global";
-import { createClient } from "@/lib/supabase/server";
 import { TODAS } from "@/lib/financeiro/tipos";
 import { diagnosticarCadaLoja } from "@/lib/leitura/tracking-diagnostico";
 import { getPainelTracking } from "@/lib/tracking/queries";
-import { ComoFunciona } from "./como-funciona";
-import { SaudeScreen } from "./saude-screen";
+import { Rastreamento } from "./rastreamento";
 import { TentarDeNovo } from "./tentar-de-novo";
 
 export const dynamic = "force-dynamic";
@@ -20,8 +14,7 @@ export const dynamic = "force-dynamic";
 // Rastreamento (/tracking).
 //
 // O diagnostico fala com a Shopify -- pedidos, aviso de pedidos e o tema -- e
-// leva segundos. Fica dentro do Suspense; o cabecalho fica FORA, para aparecer
-// na hora.
+// leva segundos: fica dentro do Suspense, com o esqueleto da tela no lugar.
 //
 // Ele existe porque "12 compras enviadas" sozinho nao diz nada: pode ser 12 de
 // 12 ou 12 de 200. E a comparacao com os pedidos que revela que o envio
@@ -30,25 +23,15 @@ export const dynamic = "force-dynamic";
 // A loja vem da barra do topo (cookie, conferido contra as lojas do usuario).
 // Com uma loja escolhida, so ela e consultada na Shopify. Cada loja e
 // conferida separada: a que falhar vira aviso so nela.
+//
+// Detalhe da loja e Configurar sao a mesma pagina (?loja= e ?configurar=),
+// trocados no cliente: ver rastreamento.tsx.
 // ============================================================================
 
-/**
- * O usuario tem rota vitrine -> checkout? So entao "Como funciona" fala da
- * vitrine. Leitura que falha conta como "tem": sobra um item, nao some um.
- */
-async function temRota(): Promise<boolean> {
-  const supabase = await createClient();
-  const { count, error } = await supabase
-    .from("routed_checkout_configs")
-    .select("id", { count: "exact", head: true });
-  return error ? true : (count ?? 0) > 0;
-}
-
-async function carregar(abrir: string | null) {
-  const [{ filtro, lojas: doUsuario }, painel, comRota] = await Promise.all([
+async function carregar() {
+  const [{ filtro, lojas: doUsuario }, painel] = await Promise.all([
     filtroResolvido(),
     getPainelTracking(),
-    temRota(),
   ]);
   const escolhida = filtro.lojaId === TODAS ? null : filtro.lojaId;
   const lojas = escolhida ? painel.lojas.filter((l) => l.storeId === escolhida) : painel.lojas;
@@ -74,110 +57,87 @@ async function carregar(abrir: string | null) {
     falharam,
     ocultas,
     lojaEscolhida: Boolean(escolhida),
-    abrir,
     lojaId: filtro.lojaId,
-    temRota: comRota,
     geradoEm: Date.now(),
   };
 }
 
-async function Conteudo({ abrir }: { abrir: string | null }) {
+function Titulo() {
+  // No celular o titulo ja esta no topo da casca.
+  return (
+    <h1 className="mx-auto mb-5 hidden max-w-205 text-page font-semibold text-ink md:block">
+      Rastreamento
+    </h1>
+  );
+}
+
+async function Conteudo() {
   let dados: Awaited<ReturnType<typeof carregar>>;
   try {
-    dados = await carregar(abrir);
+    dados = await carregar();
   } catch (e) {
     console.error("[tracking] falha ao ler a tela", e);
     const detalhe = e instanceof Error ? e.message.slice(0, 300) : "";
     return (
-      <Callout
-        tom="err"
-        titulo="Não deu para ler o rastreamento agora"
-        acao={<TentarDeNovo />}
-      >
-        As compras continuam saindo normalmente.
-        {detalhe && (
-          <details className="mt-1.5 text-label text-t1">
-            <summary className="w-fit cursor-pointer rounded-sm hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
-              Ver detalhes
-            </summary>
-            <p className="mt-1 [overflow-wrap:anywhere]">{detalhe}</p>
-          </details>
-        )}
-      </Callout>
+      <>
+        <Titulo />
+        <Callout tom="err" titulo="Não deu para ler o rastreamento agora" acao={<TentarDeNovo />}>
+          As compras continuam saindo normalmente.
+          {detalhe && (
+            <details className="mt-1.5 text-label text-t1">
+              <summary className="w-fit cursor-pointer rounded-sm hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+                Ver detalhes
+              </summary>
+              <p className="mt-1 [overflow-wrap:anywhere]">{detalhe}</p>
+            </details>
+          )}
+        </Callout>
+      </>
     );
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* key: trocar a loja na barra do topo recomeca a tela (painel fechado). */}
-      <SaudeScreen
-        key={dados.lojaId}
-        lojas={dados.lojas}
-        diagnostico={dados.diagnostico}
-        falharam={dados.falharam}
-        ocultas={dados.ocultas}
-        lojaEscolhida={dados.lojaEscolhida}
-        geradoEm={dados.geradoEm}
-        abrirInicial={dados.abrir}
-      />
-      {dados.lojas.length > 0 && <ComoFunciona temRota={dados.temRota} />}
-    </div>
+    // key: trocar a loja na barra do topo recomeca a tela.
+    <Rastreamento
+      key={dados.lojaId}
+      lojas={dados.lojas}
+      diagnostico={dados.diagnostico}
+      falharam={dados.falharam}
+      ocultas={dados.ocultas}
+      lojaEscolhida={dados.lojaEscolhida}
+      geradoEm={dados.geradoEm}
+    />
   );
 }
 
+/** O esqueleto da lista: titulo e um cartao por loja. */
 function Esqueleto() {
   return (
-    <div aria-busy="true" aria-label="Carregando o rastreamento" className="flex flex-col gap-4">
-      <p className="flex items-center gap-2 text-dense text-t2">
-        <Spinner size={14} />
-        Conferindo pedidos e o tema na Shopify…
-      </p>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[0, 1, 2, 3].map((i) => (
-          <div
-            key={i}
-            className="flex h-26 flex-col gap-3 rounded-card border border-border bg-surface p-4"
-          >
-            <Skeleton className="h-3 w-1/2" />
-            <Skeleton className="h-6.5 w-2/5" />
-          </div>
-        ))}
-      </div>
-      <div className="flex flex-col overflow-hidden rounded-card border border-border bg-surface">
-        {[0, 1, 2, 3].map((i) => (
-          <div
-            key={i}
-            className="flex h-19 items-center gap-6 border-b border-border-subtle px-4 last:border-b-0"
-          >
-            <Skeleton className="h-3.5 w-40" />
-            <Skeleton className="hidden h-2 flex-1 md:block" />
-            <Skeleton className="hidden h-2 flex-1 md:block" />
-            <Skeleton className="ml-auto h-7 w-30 rounded-control" />
-          </div>
-        ))}
-      </div>
+    <div
+      aria-busy="true"
+      aria-label="Carregando o rastreamento"
+      className="mx-auto flex w-full max-w-205 flex-col gap-5"
+    >
+      <h1 className="hidden text-page font-semibold text-ink md:block">Rastreamento</h1>
+      <Skeleton className="h-ctl-md w-full rounded-card" />
+      {[0, 1, 2, 3].map((i) => (
+        <div
+          key={i}
+          className="flex h-16 items-center gap-3.5 rounded-card border border-border bg-surface px-4"
+        >
+          <Skeleton className="size-5 rounded-full" />
+          <Skeleton className="h-3.5 w-48" />
+          <Skeleton className="ml-auto h-6 w-10 rounded-full" />
+        </div>
+      ))}
     </div>
   );
 }
 
-export default async function RastreamentoPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ [chave: string]: string | string[] | undefined }>;
-}) {
-  const { loja } = await searchParams;
-  const abrir = typeof loja === "string" && loja ? loja : null;
-
+export default function RastreamentoPage() {
   return (
-    <>
-      <PageHeader title="Rastreamento" description="Compras e funil no Meta e no Google.">
-        <Link href="/tracking/eventos" className={buttonVariants({ variant: "secondary" })}>
-          Ver eventos ao vivo
-        </Link>
-      </PageHeader>
-      <Suspense fallback={<Esqueleto />}>
-        <Conteudo abrir={abrir} />
-      </Suspense>
-    </>
+    <Suspense fallback={<Esqueleto />}>
+      <Conteudo />
+    </Suspense>
   );
 }

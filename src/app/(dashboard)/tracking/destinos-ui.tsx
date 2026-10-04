@@ -1,12 +1,9 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
-import { CircleAlert, MoreHorizontal, Pencil, Power, Trash2, TriangleAlert } from "lucide-react";
-import clsx from "clsx";
+import { useState } from "react";
+import { CircleAlert, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/components/ui/cn";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -15,16 +12,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { STATUS, StatusBadge } from "@/components/ui/status-badge";
 import { EVENTOS } from "@/lib/tracking/eventos";
 import {
   TEMPLATE_PADRAO,
@@ -32,18 +21,7 @@ import {
   validarTemplate,
 } from "@/lib/tracking/id-produto";
 import type { DestinoNaTela } from "@/lib/tracking/queries";
-import {
-  NOME_DA_PLATAFORMA,
-  ROTULO_EVENTO,
-  numerosDoEvento,
-  oQueFalta,
-  pelaTag,
-  plural,
-  type Plataforma,
-  type VereditoDestino,
-} from "./saude";
-import { NOME_CURTO } from "./resumo";
-import { ValorDoEvento, semEnvioDoEvento } from "./por-conta";
+import { NOME_DA_PLATAFORMA, type Plataforma } from "./saude";
 import { respostaJson } from "./resposta";
 
 // ============================================================================
@@ -63,8 +41,6 @@ import { respostaJson } from "./resposta";
 // As chamadas (POST/PATCH/DELETE /api/tracking/destinos) e os corpos enviados
 // sao os mesmos de antes; mudou a apresentacao.
 // ============================================================================
-
-const NUMERO = new Intl.NumberFormat("pt-BR");
 
 /**
  * O formulario de um destino: cadastro e edicao no mesmo lugar.
@@ -396,271 +372,5 @@ export function FormularioDestino({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-/** O estado do destino em uma palavra (mapa unico da fundacao). */
-function estadoDoDestino(d: DestinoNaTela, faltam: number) {
-  if (!d.ativo) return STATUS.destino.desativado;
-  if (oQueFalta(d) !== null) return STATUS.destino.incompleto;
-  if (pelaTag(d)) return STATUS.destino.tagAtiva;
-  if (d.testEventCode) return STATUS.destino.modoTeste;
-  if (faltam > 0) return STATUS.destino.erro;
-  return STATUS.destino.enviando;
-}
-
-type TomNota = "err" | "warn" | "info" | "neutral";
-const PONTO: Record<TomNota, string> = {
-  err: "bg-err",
-  warn: "bg-warn",
-  info: "bg-info",
-  neutral: "bg-t3",
-};
-
-function Nota({ tom, children }: { tom: TomNota; children: ReactNode }) {
-  return (
-    <li className="flex items-start gap-2 text-label text-t1">
-      <span aria-hidden className={cn("mt-1.5 size-1.5 shrink-0 rounded-full", PONTO[tom])} />
-      <span className="min-w-0 break-words text-pretty">{children}</span>
-    </li>
-  );
-}
-
-/**
- * Um destino: a conta, o que saiu por ela em 7 dias (de anuncio em destaque,
- * total em cinza, falha em vermelho), e o menu.
- *
- * Por conta, nao por plataforma: com cinco contas de Google, a mesma venda gera
- * cinco envios, e somados dariam "5 compras" para 1 pedido -- a comparacao com
- * pedidos, que e o alarme, nunca mais acusaria falta.
- */
-export function CartaoDestino({
-  destino,
-  veredito,
-  mostrarTestes,
-  semContagem,
-  destacado,
-  onEditar,
-  aoMudar,
-}: {
-  destino: DestinoNaTela;
-  /** Compras x pedidos deste destino. null = nao recebe a compra (ou loja desligada). */
-  veredito: VereditoDestino | null;
-  /** Testes de volta nas contagens ("Mostrar testes" da tela). */
-  mostrarTestes: boolean;
-  /** A contagem da fila falhou: os numeros sao "—", nunca zero. */
-  semContagem: boolean;
-  destacado?: boolean;
-  onEditar: () => void;
-  aoMudar: () => void;
-}) {
-  const [alternando, setAlternando] = useState(false);
-  const [removendo, setRemovendo] = useState(false);
-
-  const nome = destino.nome || NOME_DA_PLATAFORMA[destino.plataforma];
-  const c = destino.contagem;
-  const faltam = veredito?.tipo === "razao" ? veredito.faltam : 0;
-  const estado = estadoDoDestino(destino, faltam);
-  const falta = destino.ativo ? oQueFalta(destino) : null;
-
-  async function alternar() {
-    setAlternando(true);
-    try {
-      const r = await fetch("/api/tracking/destinos", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: destino.id, ativo: !destino.ativo }),
-      });
-      await respostaJson(r, "Não deu para salvar.");
-      toast.success(destino.ativo ? "Envio desativado" : "Envio ativado", {
-        description: destino.ativo
-          ? `${nome} parou de receber eventos. O histórico continua aqui.`
-          : `${nome} volta a receber eventos a partir de agora.`,
-      });
-      aoMudar();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Não deu para salvar.");
-    } finally {
-      setAlternando(false);
-    }
-  }
-
-  async function remover() {
-    const r = await fetch(`/api/tracking/destinos?id=${encodeURIComponent(destino.id)}`, {
-      method: "DELETE",
-    });
-    await respostaJson(r, "Não deu para remover.");
-    toast.success("Destino removido", { description: "O envio para esse destino parou." });
-    aoMudar();
-  }
-
-  const notas: { tom: TomNota; texto: ReactNode }[] = [];
-  if (faltam > 0) {
-    notas.push({
-      tom: "err",
-      texto: `${plural(faltam, "pedido", "pedidos")} sem compra enviada nos últimos 7 dias.`,
-    });
-  }
-  if (falta) {
-    notas.push({
-      tom: "warn",
-      texto:
-        destino.plataforma === "meta"
-          ? "Falta o token de conversões: sem ele nenhum evento sai."
-          : "Falta o rótulo de pelo menos um evento: sem rótulo não há o que enviar.",
-    });
-  }
-  if (pelaTag(destino) && destino.ativo && !falta) {
-    notas.push({
-      tom: "info",
-      texto:
-        "Vai pela tag do Google, no navegador do comprador: as conversões são contadas no Google Ads, não aqui.",
-    });
-  }
-  if (destino.testEventCode) {
-    notas.push({
-      tom: "info",
-      texto:
-        "Em modo teste: os eventos vão para a aba de teste do Gerenciador de Eventos e não contam como conversão.",
-    });
-  }
-  // O Google pela tag nao passa pela fila: falha ou fila dele e resto de antes.
-  if (c.falharam > 0 && !pelaTag(destino)) {
-    notas.push({
-      tom: "err",
-      texto: (
-        <>
-          {c.falharam === 1 ? "1 envio falhou." : `${NUMERO.format(c.falharam)} envios falharam.`}
-          {c.ultimoErro ? ` A plataforma respondeu: “${c.ultimoErro}”` : ""}
-        </>
-      ),
-    });
-  }
-  if (c.pendentes > 0 && !pelaTag(destino)) {
-    notas.push({
-      tom: "neutral",
-      texto:
-        c.pendentes === 1
-          ? "1 envio na fila, aguardando nova tentativa."
-          : `${NUMERO.format(c.pendentes)} envios na fila, aguardando nova tentativa.`,
-    });
-  }
-
-  return (
-    <article
-      id={`destino-${destino.id}`}
-      aria-label={`${NOME_CURTO[destino.plataforma]} ${nome}`}
-      className={cn(
-        "flex scroll-mt-4 flex-col gap-3 rounded-card border border-border p-3",
-        !destino.ativo && "bg-surface-2",
-        destacado && "animate-xc-flash"
-      )}
-    >
-      <div className="flex items-start gap-2.5">
-        <span className="mt-0.5 shrink-0 rounded-sm border border-border-strong px-1.5 text-label font-semibold text-t1">
-          {NOME_CURTO[destino.plataforma]}
-        </span>
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-dense font-semibold text-ink">{nome}</span>
-          <span className="truncate font-mono text-label text-t2">{destino.conta}</span>
-        </span>
-        <StatusBadge {...estado} />
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            disabled={alternando}
-            render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                pending={alternando}
-                aria-label={`Ações do destino ${nome}`}
-                className="-my-1"
-              />
-            }
-          >
-            {alternando ? null : <MoreHorizontal aria-hidden />}
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuItem onClick={onEditar}>
-              <Pencil aria-hidden />
-              Editar destino
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={alternar}>
-              <Power aria-hidden />
-              {destino.ativo ? "Desativar envio" : "Ativar envio"}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onClick={() => setRemovendo(true)}>
-              <Trash2 aria-hidden />
-              Remover destino…
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      {/* O que saiu por ESTA conta, em 7 dias: de anuncio em destaque, total em
-          cinza. A compra fica vermelha quando falta pedido. */}
-      <dl
-        aria-label={`Eventos enviados a ${nome} em 7 dias`}
-        className="grid grid-cols-2 gap-2 sm:grid-cols-5"
-      >
-        {EVENTOS.map((ev) => {
-          const n = numerosDoEvento(destino, ev.chave, mostrarTestes);
-          const sem = semEnvioDoEvento(destino, ev.chave);
-          const tom = !n.envia
-            ? sem.resolve
-              ? "warn"
-              : null
-            : ev.chave === "purchase" && faltam > 0
-              ? "err"
-              : null;
-          return (
-            <div
-              key={ev.chave}
-              className={clsx(
-                "flex min-w-0 flex-col gap-0.5 rounded-control border p-2",
-                tom === "err"
-                  ? "border-err-border bg-err-bg"
-                  : tom === "warn"
-                    ? "border-warn-border bg-warn-bg"
-                    : "border-border-subtle bg-surface-2"
-              )}
-            >
-              <dt className="truncate text-label text-t1">{ROTULO_EVENTO[ev.chave]}</dt>
-              <dd className="flex min-w-0 flex-col gap-0.5">
-                <ValorDoEvento n={n} semContagem={semContagem} semEnvio={sem.texto} />
-              </dd>
-            </div>
-          );
-        })}
-      </dl>
-
-      {notas.length > 0 && (
-        <ul className="flex flex-col gap-1">
-          {notas.map((n, i) => (
-            <Nota key={i} tom={n.tom}>
-              {n.texto}
-            </Nota>
-          ))}
-        </ul>
-      )}
-
-      <ConfirmDialog
-        open={removendo}
-        onOpenChange={setRemovendo}
-        titulo={`Remover o destino ${nome}?`}
-        descricao={
-          <>
-            As compras desta loja param de chegar a esse destino agora. O histórico de envios
-            dele é apagado junto e não volta
-            {c.enviados > 0 ? ` (${plural(c.enviados, "envio", "envios")} dos últimos 7 dias)` : ""}.
-            Para só parar de enviar, desative em vez de remover.
-          </>
-        }
-        confirmar="Remover destino"
-        mensagemErro="Não deu para remover agora. Tente de novo."
-        onConfirmar={remover}
-      />
-    </article>
   );
 }
