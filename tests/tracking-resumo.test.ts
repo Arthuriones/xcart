@@ -83,6 +83,7 @@ function loja(p: Partial<LojaTracking> = {}): LojaTracking {
     ligado: true,
     desinstalada: false,
     pixelCheckoutAtivo: true,
+    pixelCheckoutVistoEm: "2026-10-04T00:00:00Z",
     pixelCheckoutDesatualizado: false,
     tetoAtingidoRecente: false,
     contagemIndisponivel: false,
@@ -153,7 +154,7 @@ const casos: Record<string, { loja: LojaTracking; diag: DiagnosticoLoja | null; 
   },
   semScript: { loja: loja(), diag: diag({ temSnippet: false, snippetComId: false }) },
   scriptAntigo: { loja: loja(), diag: diag({ snippetComId: false }) },
-  semPixel: { loja: loja({ pixelCheckoutAtivo: false }), diag: diag() },
+  semPixel: { loja: loja({ pixelCheckoutAtivo: false, pixelCheckoutVistoEm: null }), diag: diag() },
   pixelAntigo: { loja: loja({ pixelCheckoutDesatualizado: true }), diag: diag() },
   incompleto: {
     loja: loja({ destinos: [destino(), meta({ temToken: false, completo: false })] }),
@@ -265,12 +266,51 @@ describe("o detalhe sempre mostra o motivo", () => {
     expect(avisosDaLoja(loja(), i).map((a) => a.acao)).toContain("conferir");
   });
 
-  it("remarketing e opcional: desligado nao pinta a loja", () => {
+  it("remarketing sai pelo script: ativo com a loja ligada, sem a marca no tema", () => {
     const l = loja({ destinos: [google()] });
     const i = instalacaoDaLoja(l, diag({ temRemarketing: false }), false);
-    expect(i.itens.remarketing?.valor).toBe("Desligado (opcional)");
+    expect(i.itens.remarketing?.valor).toBe("Ativo");
     expect(i.tom).toBe("ok");
+    const off = loja({ ligado: false, destinos: [google()] });
+    expect(instalacaoDaLoja(off, null, false).itens.remarketing?.valor).toBe("Desligado com a loja");
     expect(instalacaoDaLoja(loja(), diag(), false).itens.remarketing).toBeNull();
+  });
+
+  it("loja desligada: Google nunca verde e o aviso oferece ligar", () => {
+    const off = loja({ ligado: false, destinos: [google()] });
+    expect(estadoDoPixel(off.destinos[0], off, null)).toEqual({ nota: null, tom: "neutral", erro: null });
+    expect(comprasDoPixel(off.destinos[0], off, null)).toBeNull();
+    expect(avisosDaLoja(off, instalacaoDaLoja(off, null, false))).toContainEqual({
+      tom: "warn",
+      texto: "Rastreamento desligado: nenhuma compra é enviada.",
+      acao: "ligar",
+    });
+    // O lojista acabou de ligar: o aviso some antes de a tela recarregar.
+    expect(avisosDaLoja(off, instalacaoDaLoja(off, null, false), true).map((a) => a.acao)).not.toContain(
+      "ligar"
+    );
+  });
+
+  it("Google sem o pixel do checkout nao fica verde", () => {
+    const l = loja({ destinos: [google()], pixelCheckoutAtivo: false, pixelCheckoutVistoEm: null });
+    expect(estadoDoPixel(l.destinos[0], l, diag())).toMatchObject({
+      nota: "Falta o pixel do checkout",
+      tom: "warn",
+    });
+    expect(comprasDoPixel(l.destinos[0], l, diag())).toBeNull();
+    expect(pontosDaLinha(linhaDaLoja(l, diag(), true))).toEqual([
+      { plataforma: "google", tom: "warn", rotulo: "Google Ads: falta o pixel do checkout" },
+    ]);
+  });
+
+  it("pixel visto ha mais de 24 h esta instalado, nao faltando", () => {
+    const l = loja({ pixelCheckoutAtivo: false, pixelCheckoutVistoEm: "2026-09-01T00:00:00Z" });
+    const i = instalacaoDaLoja(l, diag(), false);
+    expect(i.itens.pixel?.valor).toMatch(/^Instalado · último checkout /);
+    expect(i.itens.pixel?.tom).toBe("ok");
+    expect(saudeDaLoja(l, true, diag(), true).saude).toBe("ok");
+    const nunca = loja({ pixelCheckoutAtivo: false, pixelCheckoutVistoEm: null });
+    expect(instalacaoDaLoja(nunca, diag(), false).itens.pixel?.valor).toBe("Faltando");
   });
 
   it("o limite de eventos e aviso sem botao", () => {
@@ -339,7 +379,7 @@ describe("ordem e numeros do topo", () => {
   const linhas = [
     linhaDaLoja(loja({ storeId: "ok" }), diag(), true),
     linhaDaLoja(loja({ storeId: "off", ligado: false }), null, false),
-    linhaDaLoja(loja({ storeId: "warn", pixelCheckoutAtivo: false }), diag(), true),
+    linhaDaLoja(loja({ storeId: "warn", pixelCheckoutAtivo: false, pixelCheckoutVistoEm: null }), diag(), true),
     linhaDaLoja(
       loja({
         storeId: "err",

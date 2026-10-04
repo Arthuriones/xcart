@@ -8,8 +8,10 @@ import {
   definicaoDoEvento,
   eventoValido,
   idDoEventoDeNavegador,
+  lerRotulos,
   limparMapaDeRotulos,
   rotuloDoEvento,
+  separarRotulo,
 } from "../src/lib/tracking/eventos";
 
 /**
@@ -237,5 +239,29 @@ describe("o snippet do tema concorda com o catalogo", () => {
     const corpo = snippet.slice(snippet.indexOf("function mandar("));
     const enviado = corpo.slice(0, corpo.indexOf("JSON.stringify") + 600);
     expect(enviado).not.toMatch(/\bvalue\b|\bcurrency\b/);
+  });
+});
+
+describe("rotulo colado como AW-123/AbC", () => {
+  it("separa a conta do rotulo", () => {
+    expect(separarRotulo("AW-123456789/AbC-d_E")).toEqual({ conta: "123456789", rotulo: "AbC-d_E" });
+    expect(separarRotulo(" AbC ")).toEqual({ conta: null, rotulo: "AbC" });
+    expect(separarRotulo("AW-123456789/")).toBeNull();
+    expect(separarRotulo("ab c")).toBeNull();
+  });
+
+  it("preenche a conta vazia e recusa rotulo de outra conta", () => {
+    expect(lerRotulos({ purchase: "AW-123456789/AbC" }, "")).toEqual({
+      labels: { purchase: "AbC" },
+      conta: "AW-123456789",
+    });
+    expect(lerRotulos({ purchase: "AW-123456789/AbC", add_to_cart: "Xy" }, "AW-123456789")).toEqual({
+      labels: { purchase: "AbC", add_to_cart: "Xy" },
+      conta: "AW-123456789",
+    });
+    const outra = lerRotulos({ purchase: "AW-999999999/AbC" }, "AW-123456789");
+    expect(outra).toMatchObject({ evento: "purchase" });
+    expect("erro" in outra && outra.erro).toMatch(/outra conta/);
+    expect(lerRotulos({ purchase: "a/b/c" }, "AW-123456789")).toMatchObject({ evento: "purchase" });
   });
 });

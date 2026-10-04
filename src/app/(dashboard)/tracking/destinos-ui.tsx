@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { EVENTOS } from "@/lib/tracking/eventos";
+import { EVENTOS, lerRotulos, separarRotulo } from "@/lib/tracking/eventos";
 import {
   TEMPLATE_PADRAO,
   TEMPLATES_SUGERIDOS,
@@ -82,15 +82,31 @@ export function FormularioDestino({
   const [idTemplate, setIdTemplate] = useState(destino?.idTemplate ?? TEMPLATE_PADRAO);
   const [salvando, setSalvando] = useState(false);
 
+  // Rotulo colado como "AW-123/AbC" e lido aqui; o que nao der para ler vira
+  // erro na hora, nunca rotulo gravado errado.
+  const lidos = plataforma === "google" ? lerRotulos(rotulos, conta) : null;
+  const erroRotulo = lidos && "erro" in lidos ? lidos : null;
+
+  /** Colado inteiro: fica so o rotulo, e o AW preenche a conta vazia. */
+  function mudarRotulo(chave: string, valor: string) {
+    const s = separarRotulo(valor);
+    const atual = conta.match(/(\d{6,})/)?.[1];
+    if (s?.conta && (!atual || atual === s.conta)) {
+      if (!atual) setConta(`AW-${s.conta}`);
+      valor = s.rotulo;
+    }
+    setRotulos((r) => ({ ...r, [chave]: valor }));
+  }
+
   async function salvar() {
     setSalvando(true);
     try {
       const corpo: Record<string, unknown> = {
         nome,
-        conta,
+        conta: lidos && "conta" in lidos && lidos.conta ? lidos.conta : conta,
         idTemplate,
         ...(plataforma === "google"
-          ? { labels: rotulos }
+          ? { labels: lidos && "labels" in lidos ? lidos.labels : rotulos }
           : { accessToken: token, testEventCode: codigoTeste }),
       };
 
@@ -148,6 +164,7 @@ export function FormularioDestino({
   const quantosRotulos = Object.values(rotulos).filter((v) => v.trim()).length;
   const podeSalvar =
     !erroDoTemplate &&
+    !erroRotulo &&
     (plataforma === "google"
       ? Boolean(conta.trim()) && quantosRotulos > 0
       : Boolean(conta.trim()) && (editando ? true : Boolean(token.trim())));
@@ -226,9 +243,8 @@ export function FormularioDestino({
                   <Input
                     id={idCampo(`rotulo-${ev.chave}`)}
                     value={rotulos[ev.chave] ?? ""}
-                    onChange={(e) =>
-                      setRotulos((atual) => ({ ...atual, [ev.chave]: e.target.value }))
-                    }
+                    onChange={(e) => mudarRotulo(ev.chave, e.target.value)}
+                    aria-invalid={erroRotulo?.evento === ev.chave || undefined}
                     placeholder="vazio: não medir"
                     className="font-mono"
                     autoComplete="off"
@@ -236,13 +252,19 @@ export function FormularioDestino({
                 </div>
               ))}
 
+              {erroRotulo && (
+                <p role="alert" className="text-label text-err">
+                  {erroRotulo.erro}
+                </p>
+              )}
+
               {/* Isto confunde todo mundo uma vez, entao esta escrito. */}
               <p className="flex items-start gap-1.5 text-label text-t2">
                 <CircleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" />
                 <span>
                   Estes rótulos são de <strong className="font-medium text-ink">conversão</strong>:
                   a tag do Google, no navegador do comprador, dispara cada evento que tem rótulo.
-                  O público de remarketing é a linha “Remarketing do Google” no detalhe da loja.
+                  O remarketing sai sozinho pelo script do tema.
                 </span>
               </p>
             </fieldset>
@@ -308,8 +330,8 @@ export function FormularioDestino({
                 <TriangleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0 text-warn" />
                 <span>
                   Depois de mudar, clique em <strong className="font-medium">Reinstalar</strong>{" "}
-                  na linha “Remarketing do Google” do detalhe da loja: a tag do tema leva este
-                  formato e só muda quando o tema é gravado de novo.
+                  na linha “Script no tema” do detalhe da loja: a tag do tema leva este formato e
+                  só muda quando o tema é gravado de novo.
                 </span>
               </p>
             )}

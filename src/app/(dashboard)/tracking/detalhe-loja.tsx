@@ -107,13 +107,13 @@ export function DetalheLoja({
   const { loja } = linha;
   const id = loja.storeId;
   const inst = instalacaoDaLoja(loja, diag, falhou);
-  const avisos = avisosDaLoja(loja, inst);
+  const avisos = avisosDaLoja(loja, inst, ligado);
   const titulo = useRef<HTMLHeadingElement>(null);
 
   const [cab, setCab] = useState<CabecalhoLoja | null | "erro">(null);
   const [editando, setEditando] = useState<DestinoNaTela | null>(null);
   const [removendo, setRemovendo] = useState<DestinoNaTela | null>(null);
-  const [instalando, setInstalando] = useState<"script" | "remarketing" | null>(null);
+  const [instalando, setInstalando] = useState(false);
   const [plats, setPlats] = useState<Partial<Record<Plataforma, boolean>>>({});
 
   useEffect(() => {
@@ -129,18 +129,19 @@ export function DetalheLoja({
 
   const temGoogle = loja.destinos.some((d) => d.plataforma === "google" && d.ativo);
 
-  async function gravarScript(remarketing: boolean) {
-    setInstalando(remarketing ? "remarketing" : "script");
+  async function gravarScript() {
+    setInstalando(true);
     try {
-      // Reinstalar o script sem pedir o remarketing tiraria a tag de quem ja tem.
-      const manter = remarketing || (diag?.temRemarketing === true && temGoogle);
+      // Reinstalar sem pedir o remarketing tiraria a marca de quem ja tem. O
+      // hit sai de qualquer jeito pelas contas do google-config.
+      const manter = diag?.temRemarketing === true && temGoogle;
       await instalarScript(id, manter);
-      toast.success(remarketing ? "Remarketing ligado" : "Script gravado no tema");
+      toast.success("Script gravado no tema");
       ajustarDiag({ temSnippet: true, snippetComId: true, ...(manter ? { temRemarketing: true } : {}) });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Não deu para gravar no tema.");
     } finally {
-      setInstalando(null);
+      setInstalando(false);
     }
   }
 
@@ -175,25 +176,23 @@ export function DetalheLoja({
         </Link>
       );
     }
-    if ((item.id === "script" || item.id === "remarketing") && !loja.desinstalada) {
-      const remarketing = item.id === "remarketing";
+    // Remarketing nao tem botao: o script do tema ja o faz para cada conta Google.
+    if (item.id === "script" && !loja.desinstalada) {
       return (
         <button
           type="button"
           className={linkAcao}
-          disabled={instalando !== null}
-          aria-busy={instalando === item.id || undefined}
-          onClick={() => void gravarScript(remarketing)}
+          disabled={instalando}
+          aria-busy={instalando || undefined}
+          onClick={() => void gravarScript()}
         >
-          {instalando === item.id
+          {instalando
             ? "Gravando…"
             : item.tom === "ok"
               ? "Reinstalar"
-              : remarketing
-                ? "Ligar"
-                : item.valor === "Versão antiga"
-                  ? "Atualizar"
-                  : "Instalar"}
+              : item.valor === "Versão antiga"
+                ? "Atualizar"
+                : "Instalar"}
         </button>
       );
     }
@@ -276,6 +275,11 @@ export function DetalheLoja({
               Tentar de novo
             </Button>
           )}
+          {a.acao === "ligar" && (
+            <Button size="sm" variant="secondary" onClick={() => alternarEnvio(true)}>
+              Ligar
+            </Button>
+          )}
           {a.acao === "conferir" && (
             <Button size="sm" variant="secondary" pending={rechecando} onClick={rechecar}>
               Tentar de novo
@@ -322,6 +326,22 @@ export function DetalheLoja({
             />
           );
         })}
+        {!loja.desinstalada && (
+          <div className="flex flex-col gap-1 px-4 py-3.5">
+            <a
+              href={`https://${loja.dominio}/?xcart_teste=1`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(linkAcao, "self-start text-dense")}
+            >
+              Testar sem sujar os anúncios ↗
+            </a>
+            <span className="text-label text-t2">
+              Este navegador fica em modo teste por 1 dia: os eventos aparecem em Eventos ao vivo e
+              não contam no Meta nem no Google.
+            </span>
+          </div>
+        )}
       </Bloco>
 
       {(["meta", "google"] as const).map((p) => {
@@ -413,8 +433,8 @@ export function DetalheLoja({
         <div className="flex flex-col gap-2.5 px-4 py-3.5">
           <p className="text-label text-t1">
             {loja.pixelCheckoutDesatualizado
-              ? "Na Shopify: Configurações › Eventos do cliente › pixel do xcart. Troque o código pelo de baixo."
-              : "Na Shopify: Configurações › Eventos do cliente › Adicionar pixel personalizado. Um só para todos os pixels."}
+              ? "Na Shopify: Configurações › Eventos do cliente › pixel “xcart” › troque o código pelo de baixo › Salvar."
+              : "Na Shopify: Configurações › Eventos do cliente › Adicionar pixel personalizado › nome “xcart” › cole o código abaixo › Salvar › Conectar."}
           </p>
           <CodigoDoPixel storeId={id} />
         </div>

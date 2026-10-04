@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { apenasNumeroDaConversao } from "@/lib/tracking/normalizar";
-import { chaveDoEvento, limparMapaDeRotulos } from "@/lib/tracking/eventos";
+import { chaveDoEvento, lerRotulos } from "@/lib/tracking/eventos";
 import { TEMPLATE_PADRAO, validarTemplate } from "@/lib/tracking/id-produto";
 import { validarEscritaNoPixel } from "@/lib/tracking/meta-capi";
 
@@ -167,10 +167,25 @@ async function conferirTokenNoMeta(
     );
   }
 
+  // ID errado: o Graph responde 100 "Object with ID ... does not exist" /
+  // "Unsupported post request". Dizer "token recusado" mandava o lojista
+  // trocar o token certo. O 190 (token invalido) fica com a mensagem do token.
+  if (pixelNaoEncontrado(r.erro)) {
+    return NextResponse.json(
+      { error: "ID do pixel não encontrado nesta conta. Confira o ID no Gerenciador de Eventos." },
+      { status: 400 }
+    );
+  }
+
   return NextResponse.json(
     { error: `O Meta recusou o token: ${r.erro ?? `HTTP ${r.status}`}` },
     { status: 400 }
   );
+}
+
+/** O erro do Meta diz que o objeto (o pixel) nao existe para este token? */
+function pixelNaoEncontrado(erro: string | undefined): boolean {
+  return /does not exist|unsupported (get|post) request/i.test(erro ?? "");
 }
 
 /**
@@ -291,15 +306,16 @@ function validar(
   const idTemplate = template && template !== TEMPLATE_PADRAO ? template : null;
 
   if (plataforma === "google") {
-    const bruto = (corpo.conta || "").trim();
-    const numero = apenasNumeroDaConversao(bruto);
+    // Descarta evento desconhecido e rotulo vazio: o mapa nunca chega ao banco
+    // como {"purchase": ""}. Rotulo colado como "AW-123/AbC" vira "AbC", e o
+    // AW da frente preenche a conta vazia; de outra conta, e erro.
+    const lidos = lerRotulos(corpo.labels, (corpo.conta || "").trim());
+    if ("erro" in lidos) return { erro: lidos.erro };
+    const numero = apenasNumeroDaConversao(lidos.conta);
     if (!numero) {
       return { erro: "ID de conversão inválido. Esperado algo como AW-123456789." };
     }
-
-    // Descarta evento desconhecido e rotulo vazio: o mapa nunca chega ao banco
-    // como {"purchase": ""}.
-    const labels = limparMapaDeRotulos(corpo.labels);
+    const labels = lidos.labels;
     if (Object.keys(labels).length === 0) {
       return {
         erro:
@@ -424,10 +440,20 @@ export async function POST(request: NextRequest) {
   }
 
   // A linha de config precisa existir para o interruptor da loja ter onde
-  // morar. Nao liga nada aqui: ligar e um passo explicito do lojista.
+  // morar (e para o coletor carimbar o pixel do checkout). Primeiro pixel que
+  // recebe a compra ja nasce LIGADO: cadastrar e esquecer o interruptor era o
+  // jeito mais comum de nao rastrear nada. Linha que ja existe nao e tocada
+  // (ignoreDuplicates = ON CONFLICT DO NOTHING): loja que o lojista desligou
+  // continua desligada.
+  const recebeCompra =
+    (corpo.ativo ?? true) &&
+    (corpo.plataforma === "meta" ? Boolean(v.token) : Boolean(v.labels.purchase));
   await admin
     .from("tracking_configs")
-    .upsert({ store_id: loja.id, user_id: loja.user_id }, { onConflict: "store_id" });
+    .upsert(
+      { store_id: loja.id, user_id: loja.user_id, ...(recebeCompra ? { enabled: true } : {}) },
+      { onConflict: "store_id", ignoreDuplicates: true }
+    );
 
   return NextResponse.json({ ok: true, id: criado?.id ?? null });
 }

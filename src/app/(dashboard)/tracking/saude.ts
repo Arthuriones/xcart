@@ -69,6 +69,18 @@ export function tagComCompra(loja: LojaTracking): DestinoNaTela[] {
   return loja.destinos.filter((d) => d.ativo && pelaTag(d) && enviaEvento(d, "purchase"));
 }
 
+/**
+ * O Custom Pixel do checkout ja mandou evento alguma vez? Sem ele a compra do
+ * Google nao sai: o tema nunca dispara a compra, so o pixel, na pagina de
+ * obrigado. Visto ha mais de 24 h conta como instalado -- a loja so ficou sem
+ * checkout.
+ */
+export function pixelCheckoutJaVisto(
+  loja: Pick<LojaTracking, "pixelCheckoutAtivo" | "pixelCheckoutVistoEm">
+): boolean {
+  return loja.pixelCheckoutAtivo || Boolean(loja.pixelCheckoutVistoEm);
+}
+
 /** Os destinos que deveriam estar recebendo a compra COMO CONVERSAO. */
 export function recebemCompra(loja: LojaTracking): DestinoNaTela[] {
   return aceitamCompra(loja).filter((d) => !emModoTeste(d));
@@ -353,7 +365,7 @@ export function saudeDaLoja(
   }
   if (diag?.temSnippet === false) warn.push("Snippet faltando no tema");
   else if (diag?.snippetComId === false) warn.push("Snippet antigo no tema");
-  if (!loja.pixelCheckoutAtivo) warn.push("Pixel do checkout não instalado");
+  if (!pixelCheckoutJaVisto(loja)) warn.push("Pixel do checkout não instalado");
   else if (loja.pixelCheckoutDesatualizado) warn.push("Pixel do checkout com código antigo");
   for (const d of loja.destinos) {
     if (d.ativo && oQueFalta(d) !== null) warn.push(`${apelido(d)} incompleto`);

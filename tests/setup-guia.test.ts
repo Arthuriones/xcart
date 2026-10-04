@@ -129,6 +129,17 @@ describe("caminho direto", () => {
     expect(passo(foto, "rastreamento").estado).toBe("atencao");
   });
 
+  it("Google sem o pixel do checkout nao conta como pronto", () => {
+    const google = { storeId: "lash", plataforma: "google" as const, ativo: true, recebeCompra: true, modoTeste: false };
+    const semPixel = { ...ARTHUR, destinos: [google], pixelCheckoutVisto: [] };
+    const p = passo(semPixel, "rastreamento");
+    expect(p.estado).toBe("atencao");
+    expect(p.detalhe).toMatch(/pixel do checkout/);
+    expect(passo({ ...semPixel, pixelCheckoutVisto: ["lash"] }, "rastreamento").estado).toBe("feito");
+    // O Meta sai pelo servidor: nao depende do pixel.
+    expect(passo({ ...ARTHUR, pixelCheckoutVisto: [] }, "rastreamento").estado).toBe("feito");
+  });
+
   it("destino cadastrado com o interruptor desligado pede atencao", () => {
     const foto = { ...ARTHUR, rastreamentoLigado: [] };
     const p = passo(foto, "rastreamento");

@@ -146,6 +146,13 @@ export interface LojaTracking {
   pixelCheckoutAtivo: boolean;
 
   /**
+   * Ultima vez que o Custom Pixel mandou evento, em qualquer tempo. null =
+   * nunca. Loja sem checkout ha mais de 24 h nao tem o pixel "faltando": ele so
+   * nao teve o que mandar. `pixelCheckoutAtivo` continua com a janela de 24 h.
+   */
+  pixelCheckoutVistoEm: string | null;
+
+  /**
    * O pixel esta mandando, mas e o trecho ANTIGO, sem o id da loja.
    *
    * Funciona, mas sem a protecao contra outra conta cadastrar o mesmo dominio
@@ -534,6 +541,7 @@ export async function getPainelTracking(): Promise<PainelTracking> {
         pixelCheckoutAtivo: cfg?.web_pixel_visto_em
           ? Date.now() - new Date(cfg.web_pixel_visto_em).getTime() < 864e5
           : false,
+        pixelCheckoutVistoEm: cfg?.web_pixel_visto_em ?? null,
         contagemIndisponivel: painelFalhou,
         comprasContadasPeloMeta: doMeta.get(l.id) ?? null,
         destinos: (destinosPorLoja.get(l.id) || []).map((d) => ({

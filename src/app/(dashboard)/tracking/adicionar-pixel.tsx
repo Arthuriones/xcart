@@ -14,7 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import type { ChaveEvento } from "@/lib/tracking/eventos";
+import { lerRotulos, separarRotulo, type ChaveEvento } from "@/lib/tracking/eventos";
 import type { DestinoNaTela, LojaTracking } from "@/lib/tracking/queries";
 import { criarPixel } from "./acoes";
 import { Logo } from "./logos";
@@ -75,10 +75,42 @@ export function AdicionarPixel({
   const podeReusar = plat === "google" && outros.length > 0;
   const modo = podeReusar ? metodo : "novo";
 
+  // Rotulo colado como "AW-123/AbC" e lido aqui; o que nao der para ler vira
+  // erro na hora, nunca rotulo gravado errado.
+  const lidos =
+    plat === "google" && modo === "novo"
+      ? lerRotulos(Object.fromEntries(rotulos.map((r, i) => [EVENTOS_GOOGLE[i].chave, r])), v.aw)
+      : null;
+  const erroRotulo = lidos && "erro" in lidos ? lidos : null;
+
+  /** Colado inteiro: fica so o rotulo, e o AW preenche a conta vazia. */
+  function mudarRotulo(i: number, valor: string) {
+    const s = separarRotulo(valor);
+    const atual = v.aw.match(/(\d{6,})/)?.[1];
+    if (s?.conta && (!atual || atual === s.conta)) {
+      if (!atual) setV((x) => ({ ...x, aw: `AW-${s.conta}` }));
+      valor = s.rotulo;
+    }
+    setRotulos((lista) => lista.map((x, j) => (j === i ? valor : x)));
+  }
+
+  function mudar(chave: keyof typeof v, valor: string) {
+    // "AW-123/AbC" no campo da conta: a parte depois da barra e o rotulo da compra.
+    const s = chave === "aw" ? separarRotulo(valor) : null;
+    if (s?.conta && s.rotulo && !rotulos[0]?.trim()) {
+      setV((x) => ({ ...x, aw: `AW-${s.conta}` }));
+      setRotulos((lista) => [s.rotulo, ...lista.slice(1)]);
+      return;
+    }
+    setV((x) => ({ ...x, [chave]: valor }));
+  }
+
   async function salvar() {
     const falta =
       modo === "novo" &&
-      (plat === "meta" ? !v.pid.trim() || !v.tok.trim() : !v.aw.trim() || !rotulos[0]?.trim());
+      (plat === "meta"
+        ? !v.pid.trim() || !v.tok.trim()
+        : !lidos || "erro" in lidos || !lidos.conta || !lidos.labels.purchase);
     if (falta) {
       setErro(true);
       return;
@@ -103,17 +135,13 @@ export function AdicionarPixel({
           conta: o.conta,
           labels: o.labels,
         });
-      } else {
-        const labels: Record<string, string> = {};
-        rotulos.forEach((r, i) => {
-          if (r.trim()) labels[EVENTOS_GOOGLE[i].chave] = r.trim();
-        });
+      } else if (lidos && !("erro" in lidos)) {
         await criarPixel({
           storeId: loja.storeId,
           plataforma: "google",
           nome: v.nome.trim(),
-          conta: v.aw.trim(),
-          labels,
+          conta: lidos.conta,
+          labels: lidos.labels,
         });
       }
       toast.success("Pixel adicionado");
@@ -133,7 +161,7 @@ export function AdicionarPixel({
     ajuda: string,
     o: { opc?: boolean; mono?: boolean; senha?: boolean; erroTxt?: string } = {}
   ) {
-    const invalido = erro && !o.opc && !v[chave].trim();
+    const invalido = erro && !o.opc && !v[chave].trim() && !(chave === "aw" && lidos && "conta" in lidos && lidos.conta);
     const idCampo = `${id}-${chave}`;
     return (
       <div className="flex flex-col gap-1.5">
@@ -150,7 +178,7 @@ export function AdicionarPixel({
           aria-invalid={invalido || undefined}
           aria-describedby={`${idCampo}-a`}
           className={cn(CAMPO, o.mono && "font-mono")}
-          onChange={(e) => setV((s) => ({ ...s, [chave]: e.target.value }))}
+          onChange={(e) => mudar(chave, e.target.value)}
         />
         <span id={`${idCampo}-a`} className={cn("text-label", invalido ? "text-err" : "text-t2")}>
           {invalido ? o.erroTxt : ajuda}
@@ -237,15 +265,25 @@ export function AdicionarPixel({
                 mono: true,
                 erroTxt: "Cole o ID do pixel.",
               })}
+              <p className="-mt-3 text-label text-warn">
+                Usa o app Facebook & Instagram da Shopify com este pixel? Desligue o compartilhamento de
+                dados dele, senão a compra conta em dobro.
+              </p>
               {campo("tok", "Token de conversões", "começa com EAA", "Em Configurações do pixel › API de conversões › Gerar token.", {
                 mono: true,
                 senha: true,
                 erroTxt: "Cole o token de conversões.",
               })}
-              {campo("teste", "Código de teste", "ex.: TEST4821", "Para ver os eventos em “Testar eventos” no Meta.", {
-                opc: true,
-                mono: true,
-              })}
+              {campo(
+                "teste",
+                "Código de teste",
+                "ex.: TEST4821",
+                "Preenchido, todos os eventos vão para Testar eventos e param de contar como conversão. Deixe vazio ou tire depois do teste.",
+                {
+                  opc: true,
+                  mono: true,
+                }
+              )}
             </>
           )}
 
@@ -260,7 +298,7 @@ export function AdicionarPixel({
                 <span className="text-dense font-medium text-ink">Rótulos de conversão</span>
                 {rotulos.map((r, i) => {
                   const ev = EVENTOS_GOOGLE[i];
-                  const invalido = erro && i === 0 && !r.trim();
+                  const invalido = (erro && i === 0 && !r.trim()) || erroRotulo?.evento === ev.chave;
                   return (
                     <div key={ev.chave} className="grid grid-cols-[96px_1fr_40px] items-center gap-2 sm:grid-cols-[130px_1fr_40px]">
                       <span className="flex h-10 items-center rounded-control border border-control-border px-3 text-dense text-ink">
@@ -273,7 +311,7 @@ export function AdicionarPixel({
                         placeholder="ex.: kP3xCJ7l8Y0Z"
                         autoComplete="off"
                         className="h-10 min-w-0 font-mono"
-                        onChange={(e) => setRotulos((s) => s.map((x, j) => (j === i ? e.target.value : x)))}
+                        onChange={(e) => mudarRotulo(i, e.target.value)}
                       />
                       <Button
                         variant="secondary"
@@ -295,8 +333,11 @@ export function AdicionarPixel({
                     Adicionar rótulo de {EVENTOS_GOOGLE[rotulos.length].nome.toLowerCase()}
                   </Button>
                 )}
-                <span className={cn("text-label", erro && !rotulos[0]?.trim() ? "text-err" : "text-t2")}>
-                  A compra é obrigatória; os outros eventos são opcionais.
+                <span
+                  role={erroRotulo ? "alert" : undefined}
+                  className={cn("text-label", erroRotulo || (erro && !rotulos[0]?.trim()) ? "text-err" : "text-t2")}
+                >
+                  {erroRotulo?.erro ?? "A compra é obrigatória; os outros eventos são opcionais."}
                 </span>
               </div>
             </>

@@ -85,6 +85,11 @@ export interface FotoGuia {
   lojas: LojaGuia[] | null;
   /** Lojas com o interruptor do rastreamento ligado. */
   rastreamentoLigado: string[] | null;
+  /**
+   * Lojas cujo pixel do checkout ja mandou evento alguma vez. A compra do
+   * Google so sai por ele. Ausente = nao lido (o Google conta como antes).
+   */
+  pixelCheckoutVisto?: string[] | null;
   destinos: DestinoGuia[] | null;
   contas: ContaGuia[] | null;
   /** Lojas com taxa de pagamento gravada e lojas com custo (por SKU ou padrao). */
@@ -259,8 +264,12 @@ function passoRastreamento(foto: FotoGuia, b: Base, caminho: CaminhoGuia): Passo
   }
   const ativas = new Set(b.ativas.map((l) => l.id));
   const ligadas = new Set(foto.rastreamentoLigado.filter((id) => ativas.has(id)));
+  // A compra do Google so sai pelo pixel do checkout: com rotulo e sem pixel,
+  // nada chega ao Google.
+  const vistos = foto.pixelCheckoutVisto ? new Set(foto.pixelCheckoutVisto) : null;
+  const semPixel = (d: DestinoGuia) => d.plataforma === "google" && vistos !== null && !vistos.has(d.storeId);
   const prontos = foto.destinos.filter(
-    (d) => d.ativo && d.recebeCompra && !d.modoTeste && ligadas.has(d.storeId)
+    (d) => d.ativo && d.recebeCompra && !d.modoTeste && ligadas.has(d.storeId) && !semPixel(d)
   );
 
   if (prontos.length > 0) {
@@ -282,6 +291,17 @@ function passoRastreamento(foto: FotoGuia, b: Base, caminho: CaminhoGuia): Passo
       estado: "atencao",
       detalhe: "O Meta está em modo teste: a compra cai na aba de teste e não conta como conversão.",
       cta: "Tirar do modo teste",
+    };
+  }
+  const googleSemPixel = foto.destinos.some(
+    (d) => d.ativo && d.recebeCompra && ligadas.has(d.storeId) && semPixel(d)
+  );
+  if (googleSemPixel) {
+    return {
+      ...passo,
+      estado: "atencao",
+      detalhe: "Falta o pixel do checkout: sem ele a compra não chega ao Google.",
+      cta: "Instalar o pixel",
     };
   }
   if (ligadas.size > 0) {

@@ -201,6 +201,55 @@ export function limparMapaDeRotulos(bruto: unknown): MapaDeRotulos {
 }
 
 /**
+ * Um rotulo como o lojista cola. O Google Ads mostra a conversao como
+ * "AW-123456789/AbC-dEf": o rotulo e o que vem depois da barra, e a frente diz
+ * a conta. null = nao da para ler (espaco ou barra no meio) -- quem chama
+ * mostra o erro, nunca grava pela metade.
+ */
+export function separarRotulo(valor: string): { rotulo: string; conta: string | null } | null {
+  const limpo = (valor || "").trim();
+  const m = limpo.match(/^(?:AW-?)?\s*(\d{6,})\s*\/\s*([A-Za-z0-9_-]+)$/i);
+  if (m) return { conta: m[1], rotulo: m[2] };
+  if (/[\s/]/.test(limpo)) return null;
+  return { rotulo: limpo, conta: null };
+}
+
+/**
+ * Le os rotulos do formulario junto com o ID de conversao.
+ *
+ * Rotulo colado inteiro ("AW-123/AbC") vira so "AbC"; o AW da frente preenche
+ * a conta vazia, e se for de OUTRA conta e erro -- gravar o rotulo na conta
+ * errada faria a conversao sumir sem aviso. `conta` volta como AW-<digitos>,
+ * ou "" quando nem o campo nem os rotulos dizem qual e.
+ */
+export function lerRotulos(
+  bruto: unknown,
+  conta: string
+): { labels: MapaDeRotulos; conta: string } | { erro: string; evento: ChaveEvento } {
+  let numero = (conta || "").match(/(\d{6,})/)?.[1] ?? null;
+  const labels: MapaDeRotulos = {};
+  if (bruto && typeof bruto === "object") {
+    for (const [chave, valor] of Object.entries(bruto as Record<string, unknown>)) {
+      if (!eventoValido(chave) || typeof valor !== "string") continue;
+      const nome = EVENTOS.find((e) => e.chave === chave)?.nome ?? chave;
+      const s = separarRotulo(valor);
+      if (!s) {
+        return { erro: `Rótulo de ${nome} inválido. Cole só a parte depois da barra.`, evento: chave };
+      }
+      if (!s.rotulo) continue;
+      if (s.conta) {
+        if (!numero) numero = s.conta;
+        else if (s.conta !== numero) {
+          return { erro: `O rótulo de ${nome} é de outra conta (AW-${s.conta}).`, evento: chave };
+        }
+      }
+      labels[chave] = s.rotulo;
+    }
+  }
+  return { labels, conta: numero ? `AW-${numero}` : "" };
+}
+
+/**
  * Chave de deduplicacao de um evento de navegador.
  *
  * Diferente da compra, que usa o numero do pedido: aqui nao existe id estavel,

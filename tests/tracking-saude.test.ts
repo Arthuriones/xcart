@@ -60,6 +60,7 @@ function loja(p: Partial<LojaTracking> = {}): LojaTracking {
     ligado: true,
     desinstalada: false,
     pixelCheckoutAtivo: true,
+    pixelCheckoutVistoEm: "2026-10-04T00:00:00Z",
     pixelCheckoutDesatualizado: false,
     tetoAtingidoRecente: false,
     contagemIndisponivel: false,

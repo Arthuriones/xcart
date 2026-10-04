@@ -6,7 +6,9 @@ import {
   emModoTeste,
   faltasDaLoja,
   pelaTag,
+  pixelCheckoutJaVisto,
   plural,
+  quando,
   recebemCompra,
   tagComCompra,
   vereditoDoDestino,
@@ -56,7 +58,7 @@ export function pontosDaLinha(linha: LinhaLoja): PontoPlataforma[] {
       case "desligado":
         return ponto("neutral", "desativado");
       case "nao-recebe":
-        if (p === "google") return ponto("warn", "sem rótulo da compra");
+        if (p === "google") return ponto("warn", c.motivo);
         return loja.destinos.some((d) => d.ativo && emModoTeste(d))
           ? ponto("warn", "em modo teste")
           : ponto("warn", "sem token");
@@ -118,6 +120,10 @@ export function estadoDoPixel(
   if (pelaTag(d)) {
     if (Object.keys(d.labels).length === 0) return e("Sem rótulo", "warn");
     if (!d.labels.purchase) return e("Sem rótulo da compra", "warn");
+    // Loja desligada: o google-config devolve nenhuma conta, a tag nao dispara.
+    if (!loja.ligado) return e(null, "neutral");
+    // A compra do Google so sai pelo pixel do checkout.
+    if (!pixelCheckoutJaVisto(loja)) return e("Falta o pixel do checkout", "warn");
     return e(null, "ok");
   }
   if (!d.temToken) return e("Sem token", "warn");
@@ -154,8 +160,9 @@ export function comprasDoPixel(
   loja: LojaTracking,
   diag: DiagnosticoLoja | null
 ): string | null {
-  if (pelaTag(d)) return d.ativo && d.labels.purchase ? "pela tag" : null;
-  if (!d.ativo || !loja.ligado || !recebemCompra(loja).some((r) => r.id === d.id)) return null;
+  if (!d.ativo || !loja.ligado) return null;
+  if (pelaTag(d)) return d.labels.purchase && pixelCheckoutJaVisto(loja) ? "pela tag" : null;
+  if (!recebemCompra(loja).some((r) => r.id === d.id)) return null;
   const v = vereditoDoDestino(d, loja, diag);
   if (v.tipo === "sem-contagem") return "—";
   if (v.tipo === "sem-pedidos") return plural(v.compras, "compra", "compras");
@@ -213,19 +220,27 @@ export function instalacaoDaLoja(
           ? { valor: "Versão antiga", tom: "warn" as Tom }
           : { valor: "Instalado", tom: "ok" as Tom };
 
-  const pixel = !loja.pixelCheckoutAtivo
+  // "Faltando" so quando NUNCA mandou evento. Visto ha mais de 24 h esta
+  // instalado: a loja so ficou sem checkout nesse tempo.
+  const pixel = !pixelCheckoutJaVisto(loja)
     ? { valor: "Faltando", tom: "warn" as Tom }
     : loja.pixelCheckoutDesatualizado
       ? { valor: "Código antigo", tom: "warn" as Tom }
-      : { valor: "Instalado", tom: "ok" as Tom };
+      : !loja.pixelCheckoutAtivo && loja.pixelCheckoutVistoEm
+        ? { valor: `Instalado · último checkout ${quando(loja.pixelCheckoutVistoEm)}`, tom: "ok" as Tom }
+        : { valor: "Instalado", tom: "ok" as Tom };
 
-  // Opcional: so com Google, e nao entra no tom.
+  // So com Google, e nao entra no tom. O script do tema faz o remarketing
+  // sozinho para cada conta que o google-config devolve -- e ele so devolve
+  // conta com a loja ligada.
   const remarketing = loja.destinos.some((d) => d.plataforma === "google" && d.ativo)
-    ? semShopify || diag!.temRemarketing == null
-      ? naoVerificado
-      : diag!.temRemarketing
-        ? { valor: "Ligado", tom: "ok" as Tom }
-        : { valor: "Desligado (opcional)", tom: "neutral" as Tom }
+    ? !loja.ligado
+      ? { valor: "Desligado com a loja", tom: "neutral" as Tom }
+      : script === naoVerificado
+        ? naoVerificado
+        : script.valor === "Instalado"
+          ? { valor: "Ativo", tom: "ok" as Tom }
+          : { valor: "Precisa do script no tema", tom: "neutral" as Tom }
     : null;
 
   const semConferir = loja.ligado && !loja.desinstalada && (semShopify || semPedidos);
@@ -250,19 +265,36 @@ export function instalacaoDaLoja(
 export interface AvisoLoja {
   tom: "err" | "warn";
   texto: string;
-  acao: "lojas" | "recarregar" | "conferir" | null;
+  acao: "lojas" | "recarregar" | "conferir" | "ligar" | null;
 }
 
-/** O que vale para a loja inteira e nao mora num pixel nem num campo. */
-export function avisosDaLoja(loja: LojaTracking, inst: Instalacao): AvisoLoja[] {
+/**
+ * O que vale para a loja inteira e nao mora num pixel nem num campo.
+ *
+ * `ligado` e o que a tela mostra (o lojista pode ter acabado de clicar); sem
+ * ele, vale o que veio do servidor.
+ */
+export function avisosDaLoja(
+  loja: LojaTracking,
+  inst: Instalacao,
+  ligado: boolean = loja.ligado
+): AvisoLoja[] {
   const avisos: AvisoLoja[] = [];
   if (loja.desinstalada) {
     avisos.push({ tom: "err", texto: "O app foi desinstalado desta loja.", acao: "lojas" });
   }
+  // Desligada com pixel cadastrado: nada sai, nem pela tag do Google.
+  if (!ligado && !loja.desinstalada && loja.destinos.some((d) => d.ativo)) {
+    avisos.push({
+      tom: "warn",
+      texto: "Rastreamento desligado: nenhuma compra é enviada.",
+      acao: "ligar",
+    });
+  }
   // Com pixel e nenhum recebendo a compra (todos desativados, por exemplo),
   // nenhum pixel sozinho diz que a loja inteira parou.
   if (
-    loja.ligado &&
+    ligado &&
     aceitamCompra(loja).length === 0 &&
     tagComCompra(loja).length === 0
   ) {

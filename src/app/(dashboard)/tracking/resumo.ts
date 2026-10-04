@@ -7,6 +7,7 @@ import {
   melhorDa,
   numerosDoEvento,
   pelaTag,
+  pixelCheckoutJaVisto,
   recebemCompra,
   saudeDaLoja,
   tagComCompra,
@@ -89,9 +90,11 @@ export function colunaDaPlataforma(
   }
   if (p === "google") {
     const comCompra = tagComCompra(loja).length;
-    return comCompra > 0
-      ? { tipo: "tag", contas: comCompra }
-      : { tipo: "nao-recebe", motivo: "falta o rótulo da compra" };
+    if (comCompra === 0) return { tipo: "nao-recebe", motivo: "sem rótulo da compra" };
+    // A compra do Google so sai pelo pixel do checkout: sem ele, a tag nao
+    // dispara venda nenhuma, e "tag ativa" seria mentira.
+    if (!pixelCheckoutJaVisto(loja)) return { tipo: "nao-recebe", motivo: "falta o pixel do checkout" };
+    return { tipo: "tag", contas: comCompra };
   }
   const recebem = recebemCompra(loja).filter((d) => d.plataforma === p);
   if (recebem.length === 0) {

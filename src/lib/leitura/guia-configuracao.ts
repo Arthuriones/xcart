@@ -70,7 +70,11 @@ export const lerFotoGuia = cache(async (): Promise<FotoGuia> => {
       .from("fin_sync_state")
       .select("store_id, ultimo_erro_tipo, ultimo_erro, ultimo_sync_ok_em, carga_inicial_ok")
       .eq("user_id", user.id),
-    supabase.from("tracking_configs").select("store_id").eq("user_id", user.id).eq("enabled", true),
+    supabase
+      .from("tracking_configs")
+      .select("store_id, web_pixel_visto_em")
+      .eq("user_id", user.id)
+      .eq("enabled", true),
     supabase
       .from("tracking_destinations")
       .select("id, store_id, plataforma, ativo, labels, test_event_code")
@@ -247,6 +251,10 @@ export const lerFotoGuia = cache(async (): Promise<FotoGuia> => {
   return {
     lojas,
     rastreamentoLigado: ligadoRes.error ? null : (ligadoRes.data ?? []).map((c) => String(c.store_id)),
+    // So as ligadas: e o que o passo do rastreamento olha.
+    pixelCheckoutVisto: ligadoRes.error
+      ? null
+      : (ligadoRes.data ?? []).filter((c) => c.web_pixel_visto_em).map((c) => String(c.store_id)),
     destinos,
     contas,
     custos,
