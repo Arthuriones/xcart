@@ -1,6 +1,14 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rotuloDoEvento, type MapaDeRotulos } from "@/lib/tracking/eventos";
+import {
+  acaoDoEvento,
+  idDeCliente,
+  limparAcoes,
+  usaDataManager,
+  type AcoesDataManager,
+} from "@/lib/tracking/google-url";
+import { temCredencialDoGoogle } from "@/lib/tracking/google-dm";
 
 // ============================================================================
 // Os destinos de conversao de uma loja.
@@ -35,11 +43,45 @@ export interface Destino {
    */
   idTemplate: string | null;
   ativo: boolean;
+  /**
+   * So Google, pela Data Manager API (migration 054). Com `customerId` e ao
+   * menos uma acao, o destino sai por la; sem, continua no ping antigo pelos
+   * `labels`. Opcionais para nao obrigar quem monta Destino a mao.
+   */
+  customerId?: string | null;
+  loginCustomerId?: string | null;
+  acoes?: AcoesDataManager;
   /** So no Meta, e so quando o chamador pediu. Nunca sai para o cliente. */
   token?: string | null;
 }
 
 type Admin = ReturnType<typeof createAdminClient>;
+
+/**
+ * As colunas da linha. `*` e nao a lista: com a lista, um deploy que chegue
+ * antes da migration 054 faria TODA leitura de destino falhar -- e o coletor e
+ * o webhook param o Meta junto. Com `*`, antes da 054 as colunas novas so vem
+ * ausentes e o Google segue no caminho antigo.
+ */
+const COLUNAS = "*";
+
+/** Linha do banco -> Destino, sem o token. */
+function destinoDaLinha(d: Record<string, unknown>): Destino {
+  return {
+    id: String(d.id),
+    storeId: String(d.store_id),
+    plataforma: d.plataforma as "google" | "meta",
+    nome: (d.nome as string | null) ?? null,
+    conta: String(d.conta ?? ""),
+    labels: (d.labels as MapaDeRotulos | null) ?? {},
+    testEventCode: (d.test_event_code as string | null) ?? null,
+    idTemplate: (d.id_template as string | null) ?? null,
+    ativo: Boolean(d.ativo),
+    customerId: idDeCliente(d.customer_id),
+    loginCustomerId: idDeCliente(d.login_customer_id),
+    acoes: limparAcoes(d.acoes),
+  };
+}
 
 /**
  * Destinos ATIVOS de uma loja, com o token quando houver.
@@ -55,7 +97,7 @@ export async function destinosDaLoja(
 ): Promise<Destino[]> {
   const { data, error } = await admin
     .from("tracking_destinations")
-    .select("id, store_id, plataforma, nome, conta, labels, test_event_code, id_template, ativo")
+    .select(COLUNAS)
     .eq("store_id", storeId)
     .eq("ativo", true)
     .order("created_at", { ascending: true });
@@ -64,17 +106,7 @@ export async function destinosDaLoja(
   // webhook responder 200 'nenhum destino', e com 200 a Shopify nao reentrega.
   if (error) throw new Error(`falha ao ler os destinos da loja: ${error.message}`);
 
-  const destinos: Destino[] = (data || []).map((d) => ({
-    id: d.id,
-    storeId: d.store_id,
-    plataforma: d.plataforma as "google" | "meta",
-    nome: d.nome,
-    conta: d.conta,
-    labels: (d.labels as MapaDeRotulos | null) ?? {},
-    testEventCode: d.test_event_code,
-    idTemplate: d.id_template,
-    ativo: d.ativo,
-  }));
+  const destinos: Destino[] = (data || []).map(destinoDaLinha);
 
   if (!opcoes.comToken || destinos.length === 0) return destinos;
 
@@ -114,7 +146,7 @@ export async function destinosParaTela(
 
   const { data } = await admin
     .from("tracking_destinations")
-    .select("id, store_id, plataforma, nome, conta, labels, test_event_code, id_template, ativo")
+    .select(COLUNAS)
     .in("store_id", storeIds)
     .order("created_at", { ascending: true });
 
@@ -136,18 +168,7 @@ export async function destinosParaTela(
 
   for (const d of linhas) {
     const lista = porLoja.get(d.store_id) || [];
-    lista.push({
-      id: d.id,
-      storeId: d.store_id,
-      plataforma: d.plataforma as "google" | "meta",
-      nome: d.nome,
-      conta: d.conta,
-      labels: (d.labels as MapaDeRotulos | null) ?? {},
-      testEventCode: d.test_event_code,
-      idTemplate: d.id_template,
-      ativo: d.ativo,
-      temToken: comToken.has(d.id),
-    });
+    lista.push({ ...destinoDaLinha(d), temToken: comToken.has(d.id) });
     porLoja.set(d.store_id, lista);
   }
   return porLoja;
@@ -196,7 +217,7 @@ export async function destinoPorId(
 ): Promise<Destino | null> {
   const { data } = await admin
     .from("tracking_destinations")
-    .select("id, store_id, plataforma, nome, conta, labels, test_event_code, id_template, ativo")
+    .select(COLUNAS)
     .eq("id", destinationId)
     .maybeSingle();
 
@@ -208,30 +229,24 @@ export async function destinoPorId(
     .eq("destination_id", destinationId)
     .maybeSingle();
 
-  return {
-    id: data.id,
-    storeId: data.store_id,
-    plataforma: data.plataforma as "google" | "meta",
-    nome: data.nome,
-    conta: data.conta,
-    labels: (data.labels as MapaDeRotulos | null) ?? {},
-    testEventCode: data.test_event_code,
-    idTemplate: data.id_template,
-    ativo: data.ativo,
-    token: segredo?.access_token ?? null,
-  };
+  return { ...destinoDaLinha(data), token: segredo?.access_token ?? null };
 }
 
 /**
  * Este destino quer este evento?
  *
- * No Google cada evento e uma conversion action propria, com rotulo proprio --
- * evento sem rotulo e o lojista dizendo que nao quer aquele evento. No Meta um
- * pixel cobre todos, entao basta estar configurado.
+ * No Google cada evento e uma conversion action propria. Pela Data Manager, o
+ * evento sem ID de acao e o lojista dizendo que nao quer aquele evento -- e sem
+ * a credencial da service account no servidor nada sai, entao nada entra na
+ * fila (a tela mostra "falta configurar"). No caminho antigo vale o rotulo. No
+ * Meta um pixel cobre todos, entao basta estar configurado.
  */
 export function destinoAceita(destino: Destino, nomeDoEvento: string): boolean {
   if (!destino.ativo) return false;
   if (destino.plataforma === "meta") return Boolean(destino.conta && destino.token);
+  if (usaDataManager(destino)) {
+    return acaoDoEvento(destino.acoes, nomeDoEvento) !== null && temCredencialDoGoogle();
+  }
   return Boolean(destino.conta) && rotuloDoEvento(destino.labels, nomeDoEvento) !== null;
 }
 
@@ -241,6 +256,12 @@ export function porQueRecusa(destino: Destino, nomeDoEvento: string): string {
   if (!destino.conta) return "destino sem conta configurada";
   if (destino.plataforma === "meta") {
     return destino.token ? "" : "destino do Meta sem token do CAPI";
+  }
+  if (usaDataManager(destino)) {
+    if (acaoDoEvento(destino.acoes, nomeDoEvento) === null) {
+      return `sem ID de ação para o evento "${nomeDoEvento}"`;
+    }
+    return temCredencialDoGoogle() ? "" : "falta a credencial do Google (service account) no servidor";
   }
   return rotuloDoEvento(destino.labels, nomeDoEvento) !== null
     ? ""

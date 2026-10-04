@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { drenarFila } from "@/lib/tracking/fila";
+import { conferirDiagnosticos, drenarFila } from "@/lib/tracking/fila";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -18,9 +18,22 @@ export const maxDuration = 120;
 // De 10 em 10 minutos, e nao de hora em hora como os outros: evento de
 // conversao envelhece. O Meta aceita ate 7 dias, mas quanto mais fresco, melhor
 // a atribuicao.
+//
+// O Google pela Data Manager sai SO daqui: o coletor e o webhook so agendam
+// (6 h depois do evento, senao o Google recusa o clique como recente), e o
+// diagnostico de cada envio tambem e conferido aqui.
 // ============================================================================
 
 const POR_EXECUCAO = 50;
+
+/**
+ * Diagnosticos do Google (Data Manager) por rodada.
+ *
+ * Cada um e uma consulta ao Google. 20 a cada 10 min sao 120 por hora, folga
+ * para o volume de carrinho + checkout + compra COM clique das lojas de hoje;
+ * o que sobrar fica para a rodada seguinte, porque a fila e por `conferir_em`.
+ */
+const DIAGNOSTICOS_POR_EXECUCAO = 20;
 
 function segredoDoCron() {
   return process.env.CRON_SECRET || process.env.BULK_IMPORT_CRON_SECRET || "";
@@ -65,6 +78,18 @@ async function executar(request: NextRequest) {
   try {
     const r = await drenarFila(limite);
 
+    // ---- diagnostico do Google --------------------------------------------
+    //
+    // Depois da fila e com erro proprio: a consulta ao Google (ou a coluna da
+    // migration 054, se o deploy chegar antes dela) falhar nao pode fazer o
+    // cron responder 500 com a fila ja drenada.
+    let diagnostico: Awaited<ReturnType<typeof conferirDiagnosticos>> | string;
+    try {
+      diagnostico = await conferirDiagnosticos(DIAGNOSTICOS_POR_EXECUCAO);
+    } catch (e) {
+      diagnostico = `falhou: ${e instanceof Error ? e.message : String(e)}`;
+    }
+
     // ---- expurgo ----------------------------------------------------------
     //
     // `purge_tracking()` existe desde a migration 035, com comentario dizendo
@@ -83,7 +108,7 @@ async function executar(request: NextRequest) {
       expurgo = error ? `falhou: ${error.message}` : "ok";
     }
 
-    return NextResponse.json({ ok: true, ...r, expurgo });
+    return NextResponse.json({ ok: true, ...r, diagnostico, expurgo });
   } catch (e) {
     const mensagem = e instanceof Error ? e.message : "falha ao drenar a fila";
     return NextResponse.json({ error: mensagem }, { status: 500 });

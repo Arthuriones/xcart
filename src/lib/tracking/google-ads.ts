@@ -8,7 +8,13 @@ import { montarUrlDeConversao } from "@/lib/tracking/google-url";
 export { apenasNumeroDaConversao };
 
 // ============================================================================
-// Conversao do Google Ads enviada pelo servidor.
+// Conversao do Google Ads enviada pelo servidor -- CAMINHO ANTIGO.
+//
+// So para destino Google SEM `customer_id` + `acoes`. Com os dois, a fila manda
+// pela Data Manager API (google-dm.ts), que e o caminho oficial e devolve
+// diagnostico. Este ping ficou de pe para nada piorar ate cada conta ser
+// configurada -- mas nao conta: nos 26 cliques reais que passaram por ele
+// (01-02/10/2026) o Google respondeu 200 e registrou zero conversao.
 //
 // ------------------------------- LEIA ISTO --------------------------------
 //
