@@ -9,7 +9,7 @@ import { LogoXcart } from "@/components/layout/logo";
 import { APP_HOME } from "@/lib/app-home";
 import { textos } from "@/lib/textos";
 import { COOKIE_MENU, gravarCookie } from "./contexto";
-import { BARRA_CELULAR, gruposNav, itemAtivo, type ItemNav } from "./navegacao";
+import { BARRA_CELULAR, gruposNav, itemAcesoNoMenu, itemAtivo, type ItemNav } from "./navegacao";
 import { Folha, Pop } from "./sobreposicao";
 import { SeletorTema } from "./tema";
 
@@ -19,10 +19,12 @@ const t = textos("nav");
 export interface DadosMenu {
   nome: string;
   email: string;
-  lojas: number;
   creditos: number;
   alertas: number;
-  /** Tem rota de checkout? Sem rota, Roteamento vira "Ativar roteamento". */
+  /**
+   * Tem rota de checkout? Sem rota, o grupo Roteamento sai do menu (continua
+   * em Configuracoes > Modulos e na busca).
+   */
   temRota: boolean;
   /**
    * Guia de configuracao no caminho escolhido (direto ou com vitrine): so
@@ -52,9 +54,7 @@ async function sair(router: ReturnType<typeof useRouter>) {
 
 function Contador({ item, dados }: { item: ItemNav; dados: DadosMenu }) {
   if (!item.contador) return null;
-  const valor = { lojas: dados.lojas, creditos: dados.creditos, alertas: dados.alertas }[
-    item.contador
-  ];
+  const valor = item.contador === "alertas" ? dados.alertas : dados.creditos;
   if (!valor) return null;
   if (item.contador === "alertas") {
     return (
@@ -74,8 +74,12 @@ export function Sidebar({ dados }: { dados: DadosMenu }) {
   const [mais, setMais] = useState(false);
   const [conta, setConta] = useState(false);
 
-  const ativo = itemAtivo(pathname);
   const grupos = gruposNav(dados.temRota);
+  // O menu acende a tela ou Configuracoes, onde mora o que saiu do menu (ai o
+  // aria-current e "true", nao "page"). A barra do celular acende a tela em
+  // si: Alertas esta nela.
+  const aceso = itemAcesoNoMenu(pathname, grupos);
+  const ativo = itemAtivo(pathname);
   const aberto = !recolhido;
 
   function alternar() {
@@ -130,17 +134,17 @@ export function Sidebar({ dados }: { dados: DadosMenu }) {
           )}
         >
           {grupos.map((g) => (
-            <div key={g.id} className="flex flex-col gap-0.5">
+            <div key={g.id} className={clsx("flex flex-col gap-0.5", g.fim && "mt-auto")}>
               {g.rotulo && aberto && (
                 <div className="px-2 pb-1 text-label font-medium text-t3">{g.rotulo}</div>
               )}
               {g.itens.map((item) => {
-                const on = item.id === ativo;
+                const on = item.id === aceso;
                 return (
                   <Link
                     key={item.id}
                     href={item.href}
-                    aria-current={on ? "page" : undefined}
+                    aria-current={on ? (item.id === ativo ? "page" : true) : undefined}
                     aria-label={
                       aberto
                         ? undefined
@@ -150,11 +154,7 @@ export function Sidebar({ dados }: { dados: DadosMenu }) {
                     }
                     className={clsx(
                       "group relative flex h-8 items-center gap-2.5 rounded-control px-2 text-dense",
-                      on
-                        ? "bg-nav-active font-semibold text-ink"
-                        : item.convite
-                          ? "text-t3 hover:bg-hover hover:text-ink"
-                          : "text-t1 hover:bg-hover hover:text-ink"
+                      on ? "bg-nav-active font-semibold text-ink" : "text-t1 hover:bg-hover hover:text-ink"
                     )}
                   >
                     <item.icone className="size-4 shrink-0" strokeWidth={1.75} aria-hidden />
@@ -330,20 +330,16 @@ export function Sidebar({ dados }: { dados: DadosMenu }) {
             <div key={g.id} className="flex flex-col">
               {g.rotulo && <div className="px-2 py-1 text-label font-medium text-t3">{g.rotulo}</div>}
               {g.itens.map((item) => {
-                const on = item.id === ativo;
+                const on = item.id === aceso;
                 return (
                   <Link
                     key={item.id}
                     href={item.href}
                     onClick={() => setMais(false)}
-                    aria-current={on ? "page" : undefined}
+                    aria-current={on ? (item.id === ativo ? "page" : true) : undefined}
                     className={clsx(
                       "flex min-h-ctl-lg items-center gap-3 rounded-control px-2 text-body",
-                      on
-                        ? "bg-nav-active font-semibold text-ink"
-                        : item.convite
-                          ? "text-t3 hover:bg-hover"
-                          : "text-t1 hover:bg-hover hover:text-ink"
+                      on ? "bg-nav-active font-semibold text-ink" : "text-t1 hover:bg-hover hover:text-ink"
                     )}
                   >
                     <item.icone className="size-5 shrink-0" strokeWidth={1.75} aria-hidden />

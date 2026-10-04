@@ -1,7 +1,6 @@
 import { cookies } from "next/headers";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { createClient } from "@/lib/supabase/server";
-import { listarLojasDoUsuario } from "@/lib/filtro-global";
 import { contarAlertasAbertos } from "@/lib/leitura/notificacoes";
 import { lerFotoGuia, lerGuiaDaConta } from "@/lib/leitura/guia-configuracao";
 import { COOKIE_GUIA_DISPENSADO } from "@/lib/leitura/guia-passos";
@@ -23,22 +22,19 @@ export async function SidebarData() {
   // A foto do guia so serve ao cartao: com o guia dispensado (cookie) ela nem
   // e lida. lerGuiaDaConta e lerFotoGuia sao cache() por requisicao: a foto e
   // lida uma vez so, e de novo nenhuma quando a pagina aberta e o proprio
-  // /setup. As lojas sao as do seletor do topo (cache, mesma requisicao).
+  // /setup.
   const jar = await cookies();
   const dispensado = jar.get(COOKIE_GUIA_DISPENSADO)?.value === "1";
-  const [user, guiaDaConta, foto, lojas, creditos, alertas, rotas] = await Promise.all([
+  const [user, guiaDaConta, foto, creditos, alertas, rotas] = await Promise.all([
     getCurrentUser(),
     dispensado ? null : lerGuiaDaConta().catch(() => null),
     dispensado ? null : lerFotoGuia().catch(() => null),
-    listarLojasDoUsuario()
-      .then((l) => l.length)
-      .catch(() => 0),
     lerCreditos(),
     contarAlertasAbertos().catch(() => 0),
     dispensado ? contarRotas() : null,
   ]);
   const meta = (user?.user_metadata || {}) as { full_name?: string; name?: string };
-  // Leitura que falhou (null) nao vira "Ativar roteamento" para quem tem rota.
+  // Leitura que falhou (null) nao esconde o grupo Roteamento de quem tem rota.
   // Com a foto lida, as rotas vem dela; senao, da contagem.
   const temRota = dispensado ? rotas !== 0 : foto?.rotas ? foto.rotas.length > 0 : true;
 
@@ -47,7 +43,6 @@ export async function SidebarData() {
       dados={{
         nome: meta.full_name || meta.name || user?.email || "",
         email: user?.email || "",
-        lojas,
         creditos,
         alertas,
         temRota,

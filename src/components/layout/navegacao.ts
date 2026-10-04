@@ -1,6 +1,7 @@
 import {
   Activity,
   Bell,
+  Bot,
   Calculator,
   CircleDollarSign,
   CreditCard,
@@ -9,9 +10,9 @@ import {
   LayoutGrid,
   ListChecks,
   Plug,
-  Plus,
   Radio,
   Route,
+  Settings,
   Store,
   TrendingUp,
   type LucideIcon,
@@ -21,30 +22,34 @@ import { hrefAtivo } from "./nav-ativo";
 import type { ModoContexto } from "./contexto";
 
 // ============================================================================
-// O mapa do app: grupos do menu, titulo de cada tela, contexto da barra do
-// topo e atalhos "g + letra". Um lugar so -- o menu lateral, a barra do
-// celular, o topo e a busca (Ctrl K) leem daqui.
+// O mapa do app: grupos do menu, o indice de Configuracoes, titulo de cada
+// tela, contexto da barra do topo e atalhos "g + letra". Um lugar so -- o
+// menu lateral, a barra do celular, o topo, a busca (Ctrl K) e a pagina
+// /configuracoes leem daqui.
 //
-// Tela nova: um item em ITENS (se entra no menu), o titulo em TITULOS e, se
-// mostra numero, o modo em CONTEXTOS.
+// Tela nova: um item em ITENS (a busca e os atalhos ja a acham), o titulo em
+// TITULOS e, se mostra numero, o modo em CONTEXTOS. Fora do menu, ela entra
+// no indice de Configuracoes.
 // ============================================================================
 
 const t = textos("nav");
 
 export type IdItem =
   | "lucro"
-  | "custos"
   | "saude"
   | "eventos"
+  | "configuracoes"
+  | "assinatura"
   | "alertas"
+  | "custos"
   | "lojas"
-  | "importar"
-  | "atividade"
+  | "integracoes"
   | "rotas"
   | "visaoRota"
   | "vendasRota"
-  | "integracoes"
-  | "assinatura"
+  | "importar"
+  | "atividade"
+  | "claude"
   | "guia";
 
 export interface ItemNav {
@@ -56,24 +61,46 @@ export interface ItemNav {
   atalho?: string;
   /** Outras rotas que acendem este item (telas antigas que vao se juntar a ele). */
   tambem?: string[];
+  /** Outras palavras que acham o item na busca (Ctrl K). */
+  busca?: string;
   /** Numero a direita do item. */
-  contador?: "lojas" | "creditos" | "alertas";
-  /** Item de convite (ex.: "Ativar roteamento"): cor mais apagada. */
-  convite?: boolean;
+  contador?: "creditos" | "alertas";
 }
 
 export interface GrupoNav {
   id: string;
-  /** null = grupo sem cabecalho (Alertas fica sozinho). */
+  /** null = grupo sem cabecalho. */
   rotulo: string | null;
   itens: ItemNav[];
+  /** Vai para o pe do menu lateral (Configuracoes e Assinatura). */
+  fim?: boolean;
 }
 
+/**
+ * Todas as telas, na ordem em que a busca (Ctrl K) e a lista de atalhos as
+ * mostram: primeiro as do menu, depois as que moram em Configuracoes.
+ */
 export const ITENS: Record<IdItem, ItemNav> = {
   lucro: { id: "lucro", href: "/financeiro", rotulo: t("profit"), icone: CircleDollarSign, atalho: "l" },
-  custos: { id: "custos", href: "/financeiro/custos", rotulo: t("costs"), icone: Calculator, atalho: "c" },
   saude: { id: "saude", href: "/tracking", rotulo: t("trackingHealth"), icone: Activity, atalho: "s" },
   eventos: { id: "eventos", href: "/tracking/eventos", rotulo: t("liveEvents"), icone: Radio, atalho: "e" },
+  configuracoes: {
+    id: "configuracoes",
+    href: "/configuracoes",
+    rotulo: t("settings"),
+    icone: Settings,
+    busca: "módulos contas",
+  },
+  assinatura: {
+    id: "assinatura",
+    href: "/billing",
+    rotulo: t("billing"),
+    icone: CreditCard,
+    atalho: "b",
+    busca: "plano",
+    contador: "creditos",
+  },
+  // Alertas mora no sino do topo (e na barra do celular), nao no menu lateral.
   alertas: {
     id: "alertas",
     href: "/alertas",
@@ -82,7 +109,30 @@ export const ITENS: Record<IdItem, ItemNav> = {
     atalho: "a",
     contador: "alertas",
   },
-  lojas: { id: "lojas", href: "/stores", rotulo: t("stores"), icone: Store, atalho: "o", contador: "lojas" },
+  custos: { id: "custos", href: "/financeiro/custos", rotulo: t("costs"), icone: Calculator, atalho: "c" },
+  lojas: { id: "lojas", href: "/stores", rotulo: t("stores"), icone: Store, atalho: "o", busca: "shopify" },
+  integracoes: {
+    id: "integracoes",
+    href: "/integracoes",
+    rotulo: t("integrations"),
+    icone: Plug,
+    atalho: "i",
+    busca: "meta google contas de anúncio notificações telegram",
+    // As contas de anuncio moram em Integracoes.
+    tambem: ["/financeiro/anuncios"],
+  },
+  rotas: {
+    id: "rotas",
+    href: "/clone/routed-checkout",
+    rotulo: t("routes"),
+    icone: Route,
+    atalho: "r",
+    busca: "roteamento checkout vitrine",
+  },
+  // Visao da rota e Vendas por rota ficam no grupo Roteamento ate virarem abas
+  // do detalhe da rota.
+  visaoRota: { id: "visaoRota", href: "/overview", rotulo: t("routeOverview"), icone: LayoutGrid, busca: "roteamento" },
+  vendasRota: { id: "vendasRota", href: "/sales", rotulo: t("salesByRoute"), icone: TrendingUp, busca: "roteamento" },
   importar: {
     id: "importar",
     href: "/clone",
@@ -94,64 +144,48 @@ export const ITENS: Record<IdItem, ItemNav> = {
     tambem: ["/bulk", "/multi-site"],
   },
   atividade: { id: "atividade", href: "/activity", rotulo: t("activity"), icone: History, atalho: "t" },
-  rotas: {
-    id: "rotas",
-    href: "/clone/routed-checkout",
-    rotulo: t("routes"),
-    icone: Route,
-    atalho: "r",
-  },
-  // Visao da rota e Vendas por rota ficam no menu ate virarem abas do detalhe
-  // da rota; ai saem daqui.
-  visaoRota: { id: "visaoRota", href: "/overview", rotulo: t("routeOverview"), icone: LayoutGrid },
-  vendasRota: { id: "vendasRota", href: "/sales", rotulo: t("salesByRoute"), icone: TrendingUp },
-  integracoes: {
-    id: "integracoes",
-    href: "/integracoes",
-    rotulo: t("integrations"),
-    icone: Plug,
-    atalho: "i",
-    // Contas de anuncio e Claude (MCP) vao morar em Integracoes.
-    tambem: ["/financeiro/anuncios", "/claude"],
-  },
-  assinatura: {
-    id: "assinatura",
-    href: "/billing",
-    rotulo: t("billing"),
-    icone: CreditCard,
-    atalho: "b",
-    contador: "creditos",
+  // O Claude (MCP) mora em Integracoes -> Avancado; /claude redireciona para la.
+  claude: {
+    id: "claude",
+    href: "/integracoes/avancado",
+    rotulo: t("claude"),
+    icone: Bot,
+    busca: "mcp",
+    tambem: ["/claude"],
   },
   guia: { id: "guia", href: "/setup", rotulo: t("setupGuide"), icone: ListChecks },
 };
 
 /**
- * Os seis grupos, na ordem do trabalho do lojista: dinheiro, rastreamento, o
- * que quebrou, a operacao, a rota (modulo) e a conta.
+ * O menu: Lucro, Rastreamento e Configuracoes -- o que o lojista abre todo
+ * dia. Assinatura fica visivel no pe, com o saldo de creditos.
  *
- * Roteamento e modulo recolhido: quem nao tem rota ve so "Ativar roteamento",
- * sem checklist nem "Sem rota". Leva ao console atual.
+ * Alertas mora no sino. Custos, Lojas, Integracoes e os modulos (Roteamento,
+ * Importar, Atividade, Claude e Guia) moram em Configuracoes e na busca.
+ * Quem tem rota continua vendo o grupo Roteamento.
+ *
+ * Campanhas entra aqui quando a tela existir -- nao antes, para o menu nao
+ * abrir uma tela "em breve".
  */
 export function gruposNav(temRota: boolean): GrupoNav[] {
-  const rota: ItemNav = temRota
-    ? ITENS.rotas
-    : { ...ITENS.rotas, rotulo: t("enableRouting"), icone: Plus, convite: true, atalho: undefined };
-  return [
-    { id: "lucro", rotulo: t("profit"), itens: [ITENS.lucro, ITENS.custos] },
+  const grupos: GrupoNav[] = [
+    { id: "lucro", rotulo: null, itens: [ITENS.lucro] },
     { id: "rastreamento", rotulo: t("trackingGroup"), itens: [ITENS.saude, ITENS.eventos] },
-    { id: "alertas", rotulo: null, itens: [ITENS.alertas] },
-    { id: "operacao", rotulo: t("operation"), itens: [ITENS.lojas, ITENS.importar, ITENS.atividade] },
-    {
+  ];
+  if (temRota) {
+    grupos.push({
       id: "roteamento",
       rotulo: t("routingGroup"),
-      itens: temRota ? [ITENS.visaoRota, rota, ITENS.vendasRota] : [rota],
-    },
-    {
-      id: "configuracoes",
-      rotulo: t("settings"),
-      itens: [ITENS.integracoes, ITENS.assinatura, ITENS.guia],
-    },
-  ];
+      itens: [ITENS.visaoRota, ITENS.rotas, ITENS.vendasRota],
+    });
+  }
+  grupos.push({
+    id: "configuracoes",
+    rotulo: null,
+    itens: [ITENS.configuracoes, ITENS.assinatura],
+    fim: true,
+  });
+  return grupos;
 }
 
 const TODOS = Object.values(ITENS);
@@ -164,24 +198,78 @@ for (const item of TODOS) {
 }
 const CAMINHOS = [...DONO.keys()];
 
-/** O item do menu que acende nesta rota: vence o caminho mais longo. */
+/** A tela em que se esta, entre todas (menu ou nao): vence o caminho mais longo. */
 export function itemAtivo(pathname: string): IdItem | null {
   const caminho = hrefAtivo(pathname, CAMINHOS);
   return caminho ? (DONO.get(caminho) ?? null) : null;
 }
 
-/** Barra de baixo no celular: quatro destinos e o "Mais". */
+/**
+ * O item do MENU que acende nesta rota: a propria tela, se esta no menu; senao
+ * Configuracoes, onde toda tela fora do menu mora (Contas, Geral ou Modulos).
+ * Alertas e a excecao: mora no sino, e nada acende no menu.
+ */
+export function itemAcesoNoMenu(pathname: string, grupos: GrupoNav[]): IdItem | null {
+  const ativo = itemAtivo(pathname);
+  if (!ativo) return null;
+  if (grupos.some((g) => g.itens.some((i) => i.id === ativo))) return ativo;
+  return ativo === "alertas" ? null : "configuracoes";
+}
+
+/** Barra de baixo no celular: tres destinos e o "Mais" (o menu inteiro). */
 export const BARRA_CELULAR: { item: ItemNav; rotulo: string; acende: IdItem[] }[] = [
   { item: ITENS.lucro, rotulo: t("profit"), acende: ["lucro"] },
   { item: ITENS.saude, rotulo: t("trackingGroup"), acende: ["saude", "eventos"] },
   { item: ITENS.alertas, rotulo: t("alerts"), acende: ["alertas"] },
-  { item: ITENS.lojas, rotulo: t("stores"), acende: ["lojas"] },
 ];
 
 /** "g + letra" -> destino. A letra mora no proprio item. */
 export const ATALHOS_G: { tecla: string; item: ItemNav }[] = TODOS.filter(
   (item): item is ItemNav & { atalho: string } => !!item.atalho
 ).map((item) => ({ tecla: item.atalho!, item }));
+
+// ---------------------------------------------------------------------------
+// Indice de /configuracoes: tudo o que saiu do menu, num lugar so.
+// ---------------------------------------------------------------------------
+
+export interface LinkConfiguracao {
+  rotulo: string;
+  href: string;
+  dica: string;
+}
+
+export const SECOES_CONFIGURACOES: { id: string; titulo: string; links: LinkConfiguracao[] }[] = [
+  {
+    id: "contas",
+    titulo: t("accounts"),
+    links: [
+      { rotulo: "Meta", href: "/integracoes/meta", dica: "Gasto e envio das compras" },
+      { rotulo: "Google", href: "/integracoes/google", dica: "Gasto e envio das compras" },
+      { rotulo: "Shopify", href: "/integracoes/shopify", dica: "Acesso de cada loja" },
+      { rotulo: ITENS.lojas.rotulo, href: ITENS.lojas.href, dica: "Conectar, ver e remover lojas" },
+    ],
+  },
+  {
+    id: "geral",
+    titulo: t("general"),
+    links: [
+      { rotulo: ITENS.custos.rotulo, href: ITENS.custos.href, dica: "Custo do produto e taxa de pagamento" },
+      { rotulo: t("notifications"), href: "/integracoes/notificacoes", dica: "Onde os alertas chegam" },
+      { rotulo: ITENS.assinatura.rotulo, href: ITENS.assinatura.href, dica: "Plano e créditos de IA" },
+    ],
+  },
+  {
+    id: "modulos",
+    titulo: t("modules"),
+    links: [
+      { rotulo: t("routing"), href: ITENS.rotas.href, dica: "Da vitrine à loja de checkout, pelo SKU" },
+      { rotulo: ITENS.importar.rotulo, href: ITENS.importar.href, dica: "Produtos de outras lojas para as suas" },
+      { rotulo: ITENS.atividade.rotulo, href: ITENS.atividade.href, dica: "O que aconteceu na conta" },
+      { rotulo: ITENS.claude.rotulo, href: ITENS.claude.href, dica: "Usar o xcart pelo Claude" },
+      { rotulo: ITENS.guia.rotulo, href: ITENS.guia.href, dica: "Os passos para deixar a operação no ar" },
+    ],
+  },
+];
 
 // ---------------------------------------------------------------------------
 // Titulo de cada tela (o topo do celular mostra; no desktop o PageHeader).
@@ -208,6 +296,7 @@ const TITULOS: Record<string, string> = {
   "/billing": t("billing"),
   "/setup": t("setupGuide"),
   "/claude": t("claude"),
+  "/configuracoes": t("settings"),
 };
 const PREFIXOS_TITULO = Object.keys(TITULOS);
 

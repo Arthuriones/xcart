@@ -220,8 +220,9 @@ export function PaletaComandos({
 
   const resultados: Resultado[] = [];
   if (!soLojas && !soPedidos) {
+    // Todas as telas, no menu ou nao: o que saiu do menu se acha por aqui.
     for (const item of Object.values(ITENS)) {
-      if (!casa(item.rotulo)) continue;
+      if (!casa(`${item.rotulo} ${item.busca ?? ""}`)) continue;
       resultados.push({
         chave: `tela-${item.id}`,
         grupo: "Ir para",
