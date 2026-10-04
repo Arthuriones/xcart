@@ -4,7 +4,7 @@ import { resumoDoFluxo } from "@/lib/leitura/guia-passos";
 import { CabecalhoGuia } from "./cabecalho";
 import { ErroGuia } from "./erro-guia";
 import { EsqueletoGuia } from "./esqueleto";
-import { FluxoDireto, FluxoVitrine } from "./fluxo";
+import { FluxoVitrine } from "./fluxo";
 import { GuiaTela } from "./guia-tela";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +13,9 @@ export const dynamic = "force-dynamic";
  * /setup: o guia de configuracao, com os dois caminhos -- anuncio direto na
  * loja (conectar loja, rastreamento, contas de anuncio, custos e a primeira
  * venda rastreada) e com vitrine (os passos da rota antes dos mesmos quatro).
+ *
+ * Anunciar direto e o padrao: a escolha "Como voce anuncia" so aparece para
+ * quem tem rota ou ja escolheu a vitrine (o roteamento e um modulo escondido).
  *
  * Cada passo e conferido no banco a cada abertura (lerFotoGuia); nada e
  * marcado a mao. O caminho vem de ?caminho=, senao da ultima escolha (cookie),
@@ -44,17 +47,13 @@ async function Conteudo({ caminho }: { caminho: string | null }) {
     console.error("[setup] falha ao montar o guia", erro);
     return <ErroGuia />;
   }
-  const resumo = resumoDoFluxo(foto);
-
   return (
     <GuiaTela
       guias={guia.guias}
       caminhoInicial={guia.caminho}
       dispensadoInicial={guia.dispensado}
-      fluxo={{
-        direto: <FluxoDireto resumo={resumo} />,
-        vitrine: <FluxoVitrine resumo={resumo} />,
-      }}
+      escolheCaminho={guia.temRota || guia.caminho === "vitrine"}
+      fluxoVitrine={<FluxoVitrine resumo={resumoDoFluxo(foto)} />}
     />
   );
 }

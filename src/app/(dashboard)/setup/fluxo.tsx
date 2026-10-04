@@ -1,28 +1,18 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
 import { ArrowDown } from "lucide-react";
 import { cn } from "@/components/ui/cn";
 import type { ResumoFluxo } from "@/lib/leitura/guia-passos";
 
 // ============================================================================
-// O desenho ao lado dos passos: por onde passa o comprador e o dinheiro, com
-// os nomes reais das lojas. Sem numero -- so quem e quem. A caixa escura e o
-// xcart: e nele que algo acontece, nao e so mais um cartao.
+// O desenho ao lado dos passos, so no caminho com vitrine: por onde passa o
+// comprador, com os nomes reais das lojas. Sem numero -- so quem e quem. A
+// caixa escura e o xcart: e nele que algo acontece, nao e so mais um cartao.
+// No anuncio direto nao ha desenho: o caminho e obvio (anuncio -> loja).
 // ============================================================================
 
-function Caixa({
-  titulo,
-  detalhe,
-  ponto,
-  href,
-}: {
-  titulo: ReactNode;
-  detalhe: string;
-  ponto?: "vitrine" | "checkout";
-  href?: string;
-}) {
-  const corpo = (
-    <>
+function Caixa({ titulo, detalhe, ponto }: { titulo: ReactNode; detalhe: string; ponto?: "vitrine" | "checkout" }) {
+  return (
+    <div className="block rounded-card border border-border bg-surface px-3.5 py-3">
       <span className="flex min-w-0 items-center gap-2">
         {ponto ? (
           <span
@@ -33,21 +23,7 @@ function Caixa({
         <span className="min-w-0 truncate text-dense font-medium text-ink">{titulo}</span>
       </span>
       <span className={cn("mt-0.5 block text-label text-t2", ponto && "pl-3.5")}>{detalhe}</span>
-    </>
-  );
-  const classe = "block rounded-card border border-border bg-surface px-3.5 py-3";
-  return href ? (
-    <Link
-      href={href}
-      className={cn(
-        classe,
-        "hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-      )}
-    >
-      {corpo}
-    </Link>
-  ) : (
-    <div className={classe}>{corpo}</div>
+    </div>
   );
 }
 
@@ -81,25 +57,6 @@ function Lista({ titulo, children }: { titulo: string; children: ReactNode }) {
 function nomes(lista: string[] | null, generico: string): string {
   if (!lista || lista.length === 0) return generico;
   return lista.length <= 2 ? lista.join(" e ") : `${lista[0]} e mais ${lista.length - 1}`;
-}
-
-/** Anuncio direto: o anuncio leva a loja que cobra; o xcart mede o lucro. */
-export function FluxoDireto({ resumo }: { resumo: ResumoFluxo }) {
-  return (
-    <Lista titulo="O caminho do dinheiro">
-      <Caixa titulo="Anúncio" detalhe="Meta e Google levam o comprador" />
-      <Seta />
-      <Caixa
-        titulo={nomes(resumo.lojas, "Sua loja")}
-        detalhe={resumo.lojas?.length ? "recebe o comprador e cobra" : "ainda não conectada"}
-        ponto="checkout"
-      />
-      <Seta />
-      <CaixaXcart detalhe="lê pedidos, custos e gasto e envia cada compra ao Meta e ao Google" />
-      <Seta />
-      <Caixa titulo="Lucro" detalhe="estimado, por loja e no total" href="/financeiro" />
-    </Lista>
-  );
 }
 
 /** Com vitrine: a vitrine recebe, o xcart escolhe a loja de checkout pelo SKU. */
