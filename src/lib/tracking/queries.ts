@@ -34,8 +34,14 @@ import {
 // enche a janela (mil view_item num dia de trafego), e como a leitura vinha do
 // mais novo para o mais velho, as COMPRAS caiam fora do corte: a tela mostrava
 // "0 compras" com venda entrando, e o alarme nunca disparava. A funcao
-// `tracking_painel` (migration 049) devolve uma linha por (loja, destino,
-// evento, status) -- o tamanho nao depende mais do trafego.
+// `tracking_painel_v2` (migration 055; a primeira foi a 049) devolve uma linha
+// por (loja, destino, evento, status) -- o tamanho nao depende do trafego.
+//
+// "DE ANUNCIO" E O NUMERO QUE SE COMPARA COM O GERENCIADOR
+//
+// O total enviado mistura visita sem clique de anuncio e teste do dono, e o
+// lojista comparava esse total com o Gerenciador de Anuncios. A 055 separa,
+// por evento: com click id e sem teste ("de anuncio") e os testes.
 // ============================================================================
 
 /** Contagem de UM destino. */
@@ -59,6 +65,21 @@ export interface ContagemDestino {
    * anuncio nenhum, que e a informacao que decide se a campanha esta medindo.
    */
   semAtribPorEvento: Partial<Record<ChaveEvento, number>>;
+  /** Enviados que sao TESTE, por evento (link ?xcart_teste=1, click id com TEST). */
+  testesPorEvento: Partial<Record<ChaveEvento, number>>;
+  /**
+   * Enviados DE ANUNCIO, por evento: com click id e sem teste. E o numero que
+   * se compara com o Gerenciador de Anuncios.
+   *
+   * null = o banco ainda nao tem a migration 055 e nao separa o teste. A tela
+   * mostra "—", nunca um numero com os testes misturados chamado de anuncio.
+   */
+  deAnuncioPorEvento: Partial<Record<ChaveEvento, number>> | null;
+  /**
+   * Falhas por evento. Nunca entram no total enviado: aparecem como erro, com
+   * o numero, ao lado dele.
+   */
+  falhasPorEvento: Partial<Record<ChaveEvento, number>>;
   /**
    * Pedidos (id numerico da Shopify) cuja COMPRA saiu por este destino.
    *
@@ -148,6 +169,16 @@ export interface LojaTracking {
    */
   contagemIndisponivel: boolean;
 
+  /**
+   * Compras que o PROPRIO Meta diz ter atribuido, nos ultimos 7 dias: a soma
+   * de ad_spend_daily.compras (omni_purchase) das contas de anuncio do Meta
+   * ligadas a esta loja. So comparacao.
+   *
+   * null = nenhuma conta do Meta ligada a loja com dado no periodo. A tela
+   * nao mostra a linha -- nada de "Em breve" nem de zero inventado.
+   */
+  comprasContadasPeloMeta: number | null;
+
   destinos: DestinoNaTela[];
   ultimoEnvio: string | null;
 }
@@ -165,12 +196,15 @@ function contagemVazia(): ContagemDestino {
     ultimoErro: null,
     porEvento: {},
     semAtribPorEvento: {},
+    testesPorEvento: {},
+    deAnuncioPorEvento: {},
+    falhasPorEvento: {},
     pedidosComCompra: [],
     pedidosNaFila: [],
   };
 }
 
-/** Uma linha de `tracking_painel` (migration 049). */
+/** Uma linha de `tracking_painel_v2` (migration 055). */
 export interface LinhaPainel {
   store_id: string;
   destination_id: string | null;
@@ -184,6 +218,15 @@ export interface LinhaPainel {
   ultimo_erro: string | null;
   ultimo_erro_em: string | null;
   order_ids: string[] | null;
+  /** So na 055. Ausente = a linha veio da funcao antiga (banco sem a 055). */
+  n_teste?: number | string | null;
+  /** Com click id e sem teste. So na 055. */
+  n_de_anuncio?: number | string | null;
+}
+
+/** Soma `n` na chave do evento, sem criar chave com zero. */
+function somar(mapa: Partial<Record<ChaveEvento, number>>, chave: ChaveEvento | null, n: number) {
+  if (chave && n > 0) mapa[chave] = (mapa[chave] ?? 0) + n;
 }
 
 /**
@@ -233,6 +276,9 @@ export function contagensDoPainel(
   const erroEm = new Map<string, string | null>();
   const comCompra = new Map<string, Set<string>>();
   const naFila = new Map<string, Set<string>>();
+  // Uma linha da funcao antiga basta: sem a 055 nao ha como separar o teste,
+  // e "de anuncio" de nenhum destino pode ser afirmado.
+  let semSeparacao = false;
 
   const juntar = (mapa: Map<string, Set<string>>, id: string, ids: string[] | null) => {
     if (!ids?.length) return;
@@ -248,6 +294,7 @@ export function contagensDoPainel(
 
     const alvo = contagens.get(destinoId) ?? contagemVazia();
     const n = Number(l.n) || 0;
+    if (l.n_de_anuncio === undefined || l.n_de_anuncio === null) semSeparacao = true;
     // chaveDoEvento normaliza a caixa: a compra foi gravada como "Purchase".
     const chave = chaveDoEvento(l.event_key || "");
 
@@ -261,13 +308,18 @@ export function contagensDoPainel(
       const sem = Number(l.n_sem_atribuicao) || 0;
       if (sem > 0) {
         alvo.semAtribuicao += sem;
-        if (chave) {
-          alvo.semAtribPorEvento[chave] = (alvo.semAtribPorEvento[chave] ?? 0) + sem;
+        somar(alvo.semAtribPorEvento, chave, sem);
+      }
+      if (l.n_de_anuncio !== undefined && l.n_de_anuncio !== null) {
+        somar(alvo.testesPorEvento, chave, Number(l.n_teste) || 0);
+        if (alvo.deAnuncioPorEvento) {
+          somar(alvo.deAnuncioPorEvento, chave, Number(l.n_de_anuncio) || 0);
         }
       }
       if (chave === "purchase") juntar(comCompra, destinoId, l.order_ids);
     } else if (l.status === "falhou") {
       alvo.falharam += n;
+      somar(alvo.falhasPorEvento, chave, n);
       // O erro mais recente entre a linha legada e a nova: depois de trocar o
       // token, o erro velho mandaria consertar o que ja foi consertado.
       if (l.ultimo_erro) {
@@ -296,9 +348,53 @@ export function contagensDoPainel(
     // Compra que ja saiu numa linha e tem outra na fila nao esta "na fila":
     // ja chegou.
     alvo.pedidosNaFila = [...(naFila.get(id) ?? [])].filter((o) => !sairam.has(o));
+    if (semSeparacao) alvo.deAnuncioPorEvento = null;
   }
 
   return { contagens, ultimoDaLoja };
+}
+
+/**
+ * Compras que o Meta atribuiu, por loja, nos ultimos 7 dias (omni_purchase do
+ * sync de gasto). Loja sem conta do Meta com dado fica fora do mapa.
+ *
+ * Erro de leitura tambem fica fora: e so comparacao, e a falta dela nao pode
+ * virar "o Meta contou 0".
+ */
+async function comprasDoMeta(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  storeIds: string[]
+): Promise<Map<string, number>> {
+  const porLoja = new Map<string, number>();
+  const { data: contas, error } = await supabase
+    .from("ad_accounts")
+    .select("id, store_id")
+    .eq("plataforma", "meta")
+    .in("store_id", storeIds);
+  if (error || !contas?.length) return porLoja;
+
+  const lojaDaConta = new Map(
+    (contas as { id: string; store_id: string | null }[]).map((c) => [c.id, c.store_id])
+  );
+  // 7 dias de calendario contando hoje: a data e a do fuso da conta, entao o
+  // corte e aproximado -- a tela diz que e para comparar, nao para somar.
+  const desde = new Date(Date.now() - 6 * 864e5).toISOString().slice(0, 10);
+  const { data: dias, error: erroDias } = await supabase
+    .from("ad_spend_daily")
+    .select("ad_account_id, compras")
+    .eq("nivel", "conta")
+    .gte("data", desde)
+    .in("ad_account_id", [...lojaDaConta.keys()]);
+  if (erroDias) {
+    console.error("[tracking/painel] compras do Meta", erroDias.message);
+    return porLoja;
+  }
+  for (const d of (dias || []) as { ad_account_id: string; compras: number | string }[]) {
+    const loja = lojaDaConta.get(d.ad_account_id);
+    if (!loja) continue;
+    porLoja.set(loja, (porLoja.get(loja) ?? 0) + (Number(d.compras) || 0));
+  }
+  return porLoja;
 }
 
 /** Uma pagina do PostgREST. A funcao devolve pouco, mas nao ha teto garantido. */
@@ -336,9 +432,10 @@ export async function getPainelTracking(): Promise<PainelTracking> {
   const ids = lojas.map((l) => l.id);
   const admin = createAdminClient();
 
-  // A fila e lida com o cliente do USUARIO: tracking_painel e SECURITY INVOKER,
-  // entao a RLS de tracking_events vale la dentro. NUNCA pelo admin -- ai o
-  // uuid de uma loja alheia em p_store_ids devolveria os numeros dela.
+  // A fila e lida com o cliente do USUARIO: tracking_painel_v2 (e a antiga) sao
+  // SECURITY INVOKER, entao a RLS de tracking_events vale la dentro. NUNCA pelo
+  // admin -- ai o uuid de uma loja alheia em p_store_ids devolveria os numeros
+  // dela. As compras do Meta tambem: ad_spend_daily tem policy do dono.
   //
   // Os destinos vao pelo admin porque a existencia do token mora numa tabela sem
   // policy -- de proposito: o token posta evento na conta de anuncios do
@@ -350,13 +447,13 @@ export async function getPainelTracking(): Promise<PainelTracking> {
   // leitura INTEIRA: contagem parcial geraria alarme parcial, igualmente falso.
   let painelFalhou = false;
 
-  async function lerPainel(): Promise<LinhaPainel[]> {
+  async function lerPainel(funcao: string): Promise<LinhaPainel[] | "sem-funcao"> {
     const saida: LinhaPainel[] = [];
     for (let de = 0; ; de += PAGINA) {
       // Ordem total pelas colunas do agrupamento: sem ela a paginacao do
       // PostgREST pode repetir ou pular linha entre paginas.
       const { data, error } = await supabase
-        .rpc("tracking_painel", { p_store_ids: ids, p_desde: desde })
+        .rpc(funcao, { p_store_ids: ids, p_desde: desde })
         .order("store_id")
         .order("destination")
         .order("destination_id", { nullsFirst: true })
@@ -364,6 +461,9 @@ export async function getPainelTracking(): Promise<PainelTracking> {
         .order("status")
         .range(de, de + PAGINA - 1);
       if (error) {
+        // PGRST202: a funcao nao existe no banco. Acontece entre o deploy e a
+        // migration 055 ser aplicada; quem chama tenta a antiga.
+        if (error.code === "PGRST202" && de === 0) return "sem-funcao";
         console.error("[tracking/painel] falha ao contar a fila", error.message);
         painelFalhou = true;
         return [];
@@ -375,11 +475,24 @@ export async function getPainelTracking(): Promise<PainelTracking> {
     return saida;
   }
 
-  const [linhas, destinosPorLoja, { data: criados }] = await Promise.all([
-    lerPainel(),
+  // Sem a 055 a tela continua de pe pela funcao da 051: os totais e o alarme
+  // de pedidos funcionam, e "de anuncio" vira "—" (contagensDoPainel).
+  async function lerContagem(): Promise<LinhaPainel[]> {
+    const nova = await lerPainel("tracking_painel_v2");
+    if (nova !== "sem-funcao") return nova;
+    console.error("[tracking/painel] tracking_painel_v2 ausente: aplique a migration 055");
+    const antiga = await lerPainel("tracking_painel");
+    if (antiga !== "sem-funcao") return antiga;
+    painelFalhou = true;
+    return [];
+  }
+
+  const [linhas, destinosPorLoja, { data: criados }, doMeta] = await Promise.all([
+    lerContagem(),
     destinosParaTela(admin, ids),
     // created_at do destino: a policy do dono cobre a leitura.
     supabase.from("tracking_destinations").select("id, created_at").in("store_id", ids),
+    comprasDoMeta(supabase, ids),
   ]);
 
   const criadoEm = new Map(
@@ -419,6 +532,7 @@ export async function getPainelTracking(): Promise<PainelTracking> {
           ? Date.now() - new Date(cfg.web_pixel_visto_em).getTime() < 864e5
           : false,
         contagemIndisponivel: painelFalhou,
+        comprasContadasPeloMeta: doMeta.get(l.id) ?? null,
         destinos: (destinosPorLoja.get(l.id) || []).map((d) => ({
           id: d.id,
           plataforma: d.plataforma,

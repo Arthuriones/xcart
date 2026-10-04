@@ -32,12 +32,21 @@ import {
   validarTemplate,
 } from "@/lib/tracking/id-produto";
 import type { DestinoNaTela } from "@/lib/tracking/queries";
-import { NOME_DA_PLATAFORMA, oQueFalta, plural, type Plataforma, type VereditoDestino } from "./saude";
+import {
+  NOME_DA_PLATAFORMA,
+  ROTULO_EVENTO,
+  numerosDoEvento,
+  oQueFalta,
+  plural,
+  type Plataforma,
+  type VereditoDestino,
+} from "./saude";
 import { NOME_CURTO } from "./resumo";
+import { ValorDoEvento } from "./por-conta";
 import { respostaJson } from "./resposta";
 
 // ============================================================================
-// Os destinos de conversao de uma loja, no detalhe da Saude dos pixels.
+// Os destinos de conversao de uma loja, no detalhe do Rastreamento.
 //
 // POR QUE UMA LISTA, E NAO DOIS CAMPOS
 //
@@ -45,23 +54,14 @@ import { respostaJson } from "./resposta";
 // diferentes do mesmo catalogo. Ate a migration 043 isto era UMA coluna por
 // plataforma, e a segunda conta nao tinha onde morar.
 //
-// E seguro cadastrar todas: conversao cujo gclid nao pertence a conta e
-// DESCARTADA pelo Google -- a conta dona do clique conta, as outras ignoram.
-// Entao nao existe roteamento por produto a configurar aqui, e e de proposito
-// que a tela nao pede um.
+// E seguro cadastrar todas: so a conta dona do clique conta a conversao; nas
+// outras o Google nao credita nada. Entao nao existe roteamento por produto a
+// configurar aqui, e e de proposito que a tela nao pede um. Os numeros sao por
+// conta, nunca somados.
 //
 // As chamadas (POST/PATCH/DELETE /api/tracking/destinos) e os corpos enviados
 // sao os mesmos de antes; mudou a apresentacao.
 // ============================================================================
-
-/** Nome curto de cada evento no cartao do destino. */
-const ROTULO_CURTO: Record<string, string> = {
-  view_item: "Ver produto",
-  add_to_cart: "Carrinho",
-  begin_checkout: "Checkout",
-  payment_info: "Pagamento",
-  purchase: "Compra",
-};
 
 const NUMERO = new Intl.NumberFormat("pt-BR");
 
@@ -425,7 +425,8 @@ function Nota({ tom, children }: { tom: TomNota; children: ReactNode }) {
 }
 
 /**
- * Um destino: a conta, o que saiu por ela em 7 dias, e o menu.
+ * Um destino: a conta, o que saiu por ela em 7 dias (de anuncio em destaque,
+ * total em cinza, falha em vermelho), e o menu.
  *
  * Por conta, nao por plataforma: com cinco contas de Google, a mesma venda gera
  * cinco envios, e somados dariam "5 compras" para 1 pedido -- a comparacao com
@@ -434,6 +435,8 @@ function Nota({ tom, children }: { tom: TomNota; children: ReactNode }) {
 export function CartaoDestino({
   destino,
   veredito,
+  mostrarTestes,
+  semContagem,
   destacado,
   onEditar,
   aoMudar,
@@ -441,6 +444,10 @@ export function CartaoDestino({
   destino: DestinoNaTela;
   /** Compras x pedidos deste destino. null = nao recebe a compra (ou loja desligada). */
   veredito: VereditoDestino | null;
+  /** Testes de volta nas contagens ("Mostrar testes" da tela). */
+  mostrarTestes: boolean;
+  /** A contagem da fila falhou: os numeros sao "—", nunca zero. */
+  semContagem: boolean;
   destacado?: boolean;
   onEditar: () => void;
   aoMudar: () => void;
@@ -453,7 +460,6 @@ export function CartaoDestino({
   const faltam = veredito?.tipo === "razao" ? veredito.faltam : 0;
   const estado = estadoDoDestino(destino, faltam);
   const falta = destino.ativo ? oQueFalta(destino) : null;
-  const semCliqueCompra = c.semAtribPorEvento.purchase ?? 0;
 
   async function alternar() {
     setAlternando(true);
@@ -529,12 +535,6 @@ export function CartaoDestino({
           : `${NUMERO.format(c.pendentes)} envios na fila, aguardando nova tentativa.`,
     });
   }
-  if (semCliqueCompra > 0) {
-    notas.push({
-      tom: "neutral",
-      texto: `${plural(semCliqueCompra, "compra chegou", "compras chegaram")} sem o clique do ${NOME_CURTO[destino.plataforma]}. Contam como venda, mas sem ligação com um anúncio.`,
-    });
-  }
 
   return (
     <article
@@ -588,18 +588,15 @@ export function CartaoDestino({
         </DropdownMenu>
       </div>
 
-      {/* O que saiu por ESTA conta, em 7 dias. Compra comparada com os pedidos. */}
+      {/* O que saiu por ESTA conta, em 7 dias: de anuncio em destaque, total em
+          cinza. A compra fica vermelha quando falta pedido. */}
       <dl
         aria-label={`Eventos enviados a ${nome} em 7 dias`}
         className="grid grid-cols-2 gap-2 sm:grid-cols-5"
       >
         {EVENTOS.map((ev) => {
-          const n = c.porEvento[ev.chave] ?? 0;
-          const rotulado = destino.plataforma === "meta" || Boolean(destino.labels[ev.chave]);
-          const compra = ev.chave === "purchase";
-          const razao = compra && veredito?.tipo === "razao" && veredito.esperados > 0;
-          const tom =
-            !rotulado ? "warn" : razao && veredito.faltam > 0 ? "err" : null;
+          const n = numerosDoEvento(destino, ev.chave, mostrarTestes);
+          const tom = !n.envia ? "warn" : ev.chave === "purchase" && faltam > 0 ? "err" : null;
           return (
             <div
               key={ev.chave}
@@ -612,18 +609,9 @@ export function CartaoDestino({
                     : "border-border-subtle bg-surface-2"
               )}
             >
-              <dt className="truncate text-label text-t1">{ROTULO_CURTO[ev.chave] ?? ev.nome}</dt>
-              <dd
-                className={clsx(
-                  "num text-dense font-semibold",
-                  tom === "err" ? "text-err" : tom === "warn" ? "text-warn" : "text-ink"
-                )}
-              >
-                {!rotulado
-                  ? "sem rótulo"
-                  : razao
-                    ? `${NUMERO.format(veredito.chegaram)} de ${NUMERO.format(veredito.esperados)}`
-                    : NUMERO.format(n)}
+              <dt className="truncate text-label text-t1">{ROTULO_EVENTO[ev.chave]}</dt>
+              <dd className="flex min-w-0 flex-col gap-0.5">
+                <ValorDoEvento n={n} semContagem={semContagem} />
               </dd>
             </div>
           );
@@ -638,13 +626,6 @@ export function CartaoDestino({
             </Nota>
           ))}
         </ul>
-      )}
-
-      {destino.plataforma === "meta" && (
-        <p className="flex flex-wrap items-center gap-1.5 text-label text-t2">
-          Qualidade de correspondência do Meta
-          <span className="rounded-sm border border-border px-1.5">Em breve</span>
-        </p>
       )}
 
       <ConfirmDialog

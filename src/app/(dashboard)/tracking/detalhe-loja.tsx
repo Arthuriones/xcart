@@ -5,10 +5,10 @@ import Link from "next/link";
 import { Check, ExternalLink, Minus, Plus, X } from "lucide-react";
 import clsx from "clsx";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Dica } from "@/components/ui/dica";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,7 +48,7 @@ import {
 } from "./saude";
 
 // ============================================================================
-// Detalhe de uma loja, no painel lateral da Saude dos pixels.
+// Detalhe de uma loja, no painel lateral do Rastreamento.
 //
 // De cima para baixo: o que fazer (um problema, um botao), o interruptor do
 // envio, os pre-requisitos que moram na Shopify e os destinos. Cada acao
@@ -96,7 +96,6 @@ function LinhaPre({
   tom,
   titulo,
   sub,
-  emBreve,
   acao,
   destacado,
   children,
@@ -105,7 +104,6 @@ function LinhaPre({
   tom: TomPre;
   titulo: ReactNode;
   sub: ReactNode;
-  emBreve?: boolean;
   acao?: ReactNode;
   destacado?: boolean;
   children?: ReactNode;
@@ -131,12 +129,7 @@ function LinhaPre({
           <span className="text-dense font-medium text-ink">{titulo}</span>
           <span className="text-label text-t2 text-pretty">{sub}</span>
         </span>
-        {(emBreve || acao) && (
-          <span className="ml-8 flex items-center gap-2 sm:ml-0">
-            {emBreve && <Badge variant="outline">Em breve</Badge>}
-            {acao}
-          </span>
-        )}
+        {acao && <span className="ml-8 flex items-center gap-2 sm:ml-0">{acao}</span>}
       </div>
       {children}
     </li>
@@ -217,7 +210,18 @@ function PixelDoCheckout({
       id={`pre-pixel-${storeId}`}
       tom={estado === "atual" ? "ok" : "warn"}
       destacado={destacado}
-      titulo="Pixel do checkout"
+      titulo={
+        <span className="inline-flex items-center gap-1">
+          Pixel do checkout
+          <Dica rotulo="Para que serve o pixel do checkout">
+            O checkout da Shopify não é tema, então o script do xcart não entra lá: sem este
+            pixel, Checkout é só o clique no botão e Pagamento não existe. Ele avisa o xcart, e o
+            envio sai do servidor; com ele instalado, o checkout que vinha do tema é ignorado.
+            Depois de salvar na Shopify, esta linha passa sozinha para Instalado no próximo
+            checkout.
+          </Dica>
+        </span>
+      }
       sub={
         estado === "atual"
           ? "Instalado: Checkout e Pagamento vêm do checkout da Shopify."
@@ -287,25 +291,6 @@ function PixelDoCheckout({
               </span>
             </div>
           )}
-
-          <p className="text-label text-t2 text-pretty">
-            Depois de salvar na Shopify não precisa fazer mais nada aqui: o pixel se anuncia no
-            próximo checkout e esta linha passa sozinha para Instalado.
-            {estado !== "falta"
-              ? " O início de checkout que vinha do tema passou a ser ignorado: o do pixel é o checkout de verdade."
-              : ""}
-          </p>
-          <details className="text-label text-t2">
-            <summary className="w-fit cursor-pointer rounded-sm text-t1 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
-              Para que serve este pixel
-            </summary>
-            <p className="mt-1 text-pretty">
-              O checkout da Shopify não é tema, então o script do xcart não entra lá. Sem este
-              pixel, “iniciar checkout” é só o clique no botão e “dados de pagamento” não
-              existe. Ele não envia nada direto ao Meta nem ao Google: avisa o xcart, e o
-              envio continua saindo do servidor.
-            </p>
-          </details>
         </div>
       )}
     </LinhaPre>
@@ -321,6 +306,8 @@ export interface DetalheLojaProps {
   diag: DiagnosticoLoja | null;
   /** A conferencia desta loja falhou nesta carga. */
   falhou: boolean;
+  /** "Mostrar testes" da tela: os numeros dos destinos seguem a mesma escolha. */
+  mostrarTestes: boolean;
   rechecando: boolean;
   /** Busca de novo os numeros no servidor. */
   aoMudar: () => void;
@@ -334,6 +321,7 @@ export function DetalheLoja({
   linha,
   diag,
   falhou,
+  mostrarTestes,
   rechecando,
   aoMudar,
   rechecar,
@@ -363,6 +351,10 @@ export function DetalheLoja({
   }, [destaque]);
 
   const temGoogle = loja.destinos.some((d) => d.plataforma === "google" && d.ativo);
+  // Varias contas da mesma plataforma e seguro, e o motivo nao e obvio.
+  const variasContas = (["google", "meta"] as const).some(
+    (p) => loja.destinos.filter((d) => d.plataforma === p).length > 1
+  );
   const podeLigar = aceitamCompra(loja).length > 0;
   const recebem = new Set(recebemCompra(loja).map((d) => d.id));
   // Sem o app, ou com o envio desligado, a Shopify nao foi consultada.
@@ -631,8 +623,13 @@ export function DetalheLoja({
         </section>
 
         <section aria-labelledby={`pre-${id}`} className="flex flex-col gap-2">
-          <h3 id={`pre-${id}`} className="text-dense font-semibold text-ink">
+          <h3 id={`pre-${id}`} className="flex items-center gap-1 text-dense font-semibold text-ink">
             Pré-requisitos
+            {alcancavel && (
+              <Dica rotulo="Onde instalar grava">
+                Instalar e reinstalar gravam no tema publicado da loja.
+              </Dica>
+            )}
           </h3>
           <ul className="rounded-card border border-border">
             <LinhaPre
@@ -641,12 +638,6 @@ export function DetalheLoja({
               destacado={destaque === "webhook"}
               titulo="Aviso de pedidos da Shopify"
               sub={aviso.sub}
-              emBreve
-              acao={
-                <Button size="sm" variant="secondary" disabled>
-                  Reinscrever
-                </Button>
-              }
             />
             <LinhaPre
               id={`pre-script-${id}`}
@@ -699,17 +690,18 @@ export function DetalheLoja({
               destacado={destaque === "pixel"}
             />
           </ul>
-          {alcancavel && (
-            <p className="text-label text-t2">
-              Instalar e reinstalar gravam no tema publicado da loja.
-            </p>
-          )}
         </section>
 
         <section aria-labelledby={`dest-${id}`} className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-2">
-            <h3 id={`dest-${id}`} className="text-dense font-semibold text-ink">
+            <h3 id={`dest-${id}`} className="flex items-center gap-1 text-dense font-semibold text-ink">
               Destinos
+              {variasContas && (
+                <Dica rotulo="Várias contas na mesma loja">
+                  Cada conta recebe todos os eventos da loja; no Google, só a conta dona do
+                  clique conta a conversão. Os números aqui são por conta, nunca somados.
+                </Dica>
+              )}
             </h3>
             <MenuAdicionar rotulo="Adicionar destino" variante="secondary" tamanho="sm" onEscolher={setAdicionando} />
           </div>
@@ -726,25 +718,14 @@ export function DetalheLoja({
                   key={d.id}
                   destino={d}
                   veredito={loja.ligado && recebem.has(d.id) ? vereditoDoDestino(d, loja, diag) : null}
+                  mostrarTestes={mostrarTestes}
+                  semContagem={loja.contagemIndisponivel}
                   destacado={destaque === d.id}
                   onEditar={() => setEditando(d)}
                   aoMudar={aoMudar}
                 />
               ))}
             </div>
-          )}
-          {/* Varias contas da mesma plataforma e seguro, e o motivo nao e obvio. */}
-          {loja.destinos.filter((d) => d.plataforma === "google").length > 1 && (
-            <p className="text-label text-t2 text-pretty">
-              Todas as contas do Google recebem todos os eventos, e isso não infla nada: a
-              conversão cujo clique não é da conta é descartada pelo Google. A conta dona do
-              clique conta; as outras ignoram.
-            </p>
-          )}
-          {loja.destinos.filter((d) => d.plataforma === "meta").length > 1 && (
-            <p className="text-label text-t2">
-              Todos os pixels do Meta recebem todos os eventos, cada um com o seu token.
-            </p>
           )}
         </section>
 

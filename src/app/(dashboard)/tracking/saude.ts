@@ -1,5 +1,6 @@
 import type { DestinoNaTela, LojaTracking } from "@/lib/tracking/queries";
 import type { DiagnosticoLoja } from "@/lib/tracking/diagnostico";
+import type { ChaveEvento } from "@/lib/tracking/eventos";
 
 // ============================================================================
 // A saude de uma loja, sem React.
@@ -121,6 +122,63 @@ export function pedidosEsperados(
     if (!foraDaJanela(d, diag, id)) n += 1;
   }
   return n;
+}
+
+/** Nome curto de cada evento nas grades de numeros. */
+export const ROTULO_EVENTO: Record<ChaveEvento, string> = {
+  view_item: "Ver produto",
+  add_to_cart: "Carrinho",
+  begin_checkout: "Checkout",
+  payment_info: "Pagamento",
+  purchase: "Compra",
+};
+
+/** O que a tela mostra de UM evento de UM destino (uma conta). */
+export interface NumerosEvento {
+  /** No Google, evento sem rotulo nao e enviado: nao ha numero a mostrar. */
+  envia: boolean;
+  /**
+   * Com clique de anuncio -- e sem teste, salvo `comTestes`. E o que se
+   * compara com o Gerenciador. null = o banco nao separa o teste (sem a 055).
+   */
+  deAnuncio: number | null;
+  /** Enviados, sem os testes salvo `comTestes`. */
+  total: number;
+  /** Falharam. Nunca entram no total: aparecem ao lado, como erro. */
+  falhas: number;
+}
+
+/**
+ * Os numeros de um evento numa conta. Teste fica fora por padrao; com
+ * `comTestes` ele volta para o total, e "de anuncio" vira tudo com clique.
+ */
+export function numerosDoEvento(
+  d: DestinoNaTela,
+  chave: ChaveEvento,
+  comTestes: boolean
+): NumerosEvento {
+  const c = d.contagem;
+  const enviados = c.porEvento[chave] ?? 0;
+  let deAnuncio: number | null;
+  if (comTestes) deAnuncio = Math.max(0, enviados - (c.semAtribPorEvento[chave] ?? 0));
+  else deAnuncio = c.deAnuncioPorEvento ? (c.deAnuncioPorEvento[chave] ?? 0) : null;
+  return {
+    envia: d.plataforma === "meta" || Boolean(d.labels[chave]),
+    deAnuncio,
+    total: comTestes ? enviados : Math.max(0, enviados - (c.testesPorEvento[chave] ?? 0)),
+    falhas: c.falhasPorEvento[chave] ?? 0,
+  };
+}
+
+/**
+ * Compras de um destino, sem os testes: quantas sairam e quantas levavam
+ * clique de anuncio. Sem a 055, "de anuncio" cai para "com clique" -- a regra
+ * de antes, para o alarme nao ficar mudo durante a troca.
+ */
+export function comprasSemTeste(d: DestinoNaTela): { enviadas: number; deAnuncio: number } {
+  const n = numerosDoEvento(d, "purchase", false);
+  const comClique = Math.max(0, n.total - (d.contagem.semAtribPorEvento.purchase ?? 0));
+  return { enviadas: n.total, deAnuncio: n.deAnuncio ?? comClique };
 }
 
 /** O destino da plataforma que mais recebeu compra. */
@@ -279,11 +337,11 @@ export function saudeDaLoja(
   for (const p of ["google", "meta"] as const) {
     const m = melhorDa(recebem, p);
     if (!m) continue;
-    const total = m.contagem.porEvento.purchase ?? 0;
-    const semClique = m.contagem.semAtribPorEvento.purchase ?? 0;
     // O mesmo teste do "todas" da Atribuicao: so acusa quando NENHUMA venda
-    // foi creditada. Parte sem click id e trafego organico, normal.
-    if (total > 0 && semClique >= total) {
+    // foi creditada. Parte sem click id e trafego organico, normal. Teste do
+    // dono fica fora: uma compra com gclid TESTE nao pode calar o alarme.
+    const { enviadas, deAnuncio } = comprasSemTeste(m);
+    if (enviadas > 0 && deAnuncio === 0) {
       warn.push(
         `Nenhuma venda creditada a anúncio no ${p === "google" ? "Google" : "Meta"}`
       );

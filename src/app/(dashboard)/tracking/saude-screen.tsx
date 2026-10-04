@@ -20,6 +20,7 @@ import { COOKIE_LOJA } from "@/lib/financeiro/tipos";
 import type { DiagnosticoLoja } from "@/lib/tracking/diagnostico";
 import type { LojaTracking } from "@/lib/tracking/queries";
 import { DetalheLoja } from "./detalhe-loja";
+import { PorConta } from "./por-conta";
 import { respostaJson } from "./resposta";
 import {
   NOME_CURTO,
@@ -39,15 +40,16 @@ import {
 } from "./resumo";
 
 // ============================================================================
-// Saude dos pixels: as lojas da mais urgente para a mais tranquila, um
-// problema e um botao por loja, e o detalhe no painel lateral.
+// Rastreamento: as lojas da mais urgente para a mais tranquila, um problema e
+// um botao por loja, o que cada conta recebeu (de anuncio x total) e o
+// detalhe no painel lateral.
 //
 // A pergunta e "esta chegando?", nao "esta configurado?": o endpoint do Google
 // responde 200 mesmo quando ignora o conteudo, entao so a comparacao com os
 // pedidos denuncia que o envio quebrou.
 //
-// Estado so local: a loja aberta e os ajustes depois de uma acao. Os numeros
-// vem do servidor (router.refresh depois de cada mudanca).
+// Estado so local: a loja aberta, "Mostrar testes" e os ajustes depois de uma
+// acao. Os numeros vem do servidor (router.refresh depois de cada mudanca).
 // ============================================================================
 
 /** Ate quantas lojas desligadas aparecem sem precisar abrir. */
@@ -97,6 +99,8 @@ export function SaudeScreen({
   );
   const [mostrarDesligadas, setMostrarDesligadas] = useState(false);
   const [rechecando, setRechecando] = useState<string | null>(null);
+  // Teste fica fora das contagens por padrao; o painel da loja segue a mesma escolha.
+  const [mostrarTestes, setMostrarTestes] = useState(false);
 
   // Ajustes locais (nova conferencia de uma loja, script instalado) valem ate
   // o servidor mandar numeros novos.
@@ -248,8 +252,13 @@ export function SaudeScreen({
           />
           <KpiCard
             rotulo="Compras enviadas"
-            valor={formatarInteiro(resumo.enviadas)}
-            detalhe={textoCobertura(resumo.porPlataforma) ?? "nos últimos 7 dias"}
+            valor={resumo.enviadas === null ? null : formatarInteiro(resumo.enviadas)}
+            motivoSemDado="Não deu para contar agora"
+            detalhe={
+              resumo.enviadas === null
+                ? undefined
+                : (textoCobertura(resumo.porPlataforma) ?? "nos últimos 7 dias")
+            }
             definicao="Vendas que o xcart enviou para pelo menos um destino em 7 dias. A porcentagem de cada plataforma compara, pedido a pedido, com os pedidos da Shopify desde que o destino foi ligado."
           />
           <KpiCard
@@ -344,6 +353,12 @@ export function SaudeScreen({
         )}
       </Section>
 
+      <PorConta
+        lojas={lojas}
+        mostrarTestes={mostrarTestes}
+        onMostrarTestes={setMostrarTestes}
+      />
+
       {ligadas.length > 0 && <Comparativo resumo={resumo} />}
 
       <Sheet open={Boolean(linhaAberta)} onOpenChange={(v) => !v && setAberta(null)}>
@@ -353,6 +368,7 @@ export function SaudeScreen({
             linha={linhaAberta}
             diag={diag[linhaAberta.loja.storeId] ?? null}
             falhou={falhas.has(linhaAberta.loja.storeId)}
+            mostrarTestes={mostrarTestes}
             rechecando={rechecando === linhaAberta.loja.storeId}
             aoMudar={atualizar}
             rechecar={() => void rechecar(linhaAberta.loja)}
@@ -496,7 +512,7 @@ function LinhaDaLoja({
 }
 
 // ---------------------------------------------------------------------------
-// Pedidos x compras enviadas x compras contadas
+// Pedidos x compras enviadas
 // ---------------------------------------------------------------------------
 
 function Comparativo({ resumo }: { resumo: ReturnType<typeof resumoDaTela> }) {
@@ -504,7 +520,7 @@ function Comparativo({ resumo }: { resumo: ReturnType<typeof resumoDaTela> }) {
   const fora = resumo.lojasForaDaCobertura;
   return (
     <Section
-      titulo="Pedidos, compras enviadas e compras contadas"
+      titulo="Pedidos e compras enviadas"
       descricao={
         "Lojas rastreando, pedido a pedido · últimos 7 dias" +
         (fora > 0 ? ` · ${fora === 1 ? "1 loja sem conferência ficou" : `${fora} lojas sem conferência ficaram`} de fora` : "")
@@ -547,22 +563,6 @@ function Comparativo({ resumo }: { resumo: ReturnType<typeof resumoDaTela> }) {
           className="py-4"
         />
       )}
-      <ul className="flex flex-col gap-2 border-t border-border-subtle pt-3">
-        {(["meta", "google"] as const).map((p) => (
-          <li key={p} className="flex items-center justify-between gap-3 text-dense text-t1">
-            <span>Contadas pelo {NOME_CURTO[p]}</span>
-            <span className="rounded-full border border-border-strong px-2 text-label font-medium text-t2">
-              Em breve
-            </span>
-          </li>
-        ))}
-      </ul>
-      <p className="max-w-190 text-label text-t2 text-pretty">
-        “Enviada” é o que o xcart mandou. “Contada” é o que a plataforma diz que atribuiu a um
-        anúncio, e ela informa isso por conta de anúncio, não por pixel: ligar uma coisa à outra
-        ainda não existe. A diferença entre as duas é normal: a plataforma descarta compras sem
-        clique e usa a própria janela de atribuição.
-      </p>
     </Section>
   );
 }

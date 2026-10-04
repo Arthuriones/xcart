@@ -1,9 +1,11 @@
 import type { DestinoNaTela, LojaTracking } from "@/lib/tracking/queries";
 import type { DiagnosticoLoja } from "@/lib/tracking/diagnostico";
+import type { ChaveEvento } from "@/lib/tracking/eventos";
 import {
   ORDEM_SAUDE,
   aceitamCompra,
   apelido,
+  comprasSemTeste,
   emModoTeste,
   faltasDaLoja,
   melhorDa,
@@ -287,13 +289,12 @@ export function problemasDaLoja(
   for (const p of ["google", "meta"] as const) {
     const m = melhorDa(recebem, p);
     if (!m) continue;
-    const total = m.contagem.porEvento.purchase ?? 0;
-    const semClique = m.contagem.semAtribPorEvento.purchase ?? 0;
-    if (total > 0 && semClique >= total) {
+    const { enviadas, deAnuncio } = comprasSemTeste(m);
+    if (enviadas > 0 && deAnuncio === 0) {
       warn.push({
         tom: "warn",
         texto: `Nenhuma venda foi ligada a um anúncio do ${NOME_CURTO[p]}.`,
-        detalhe: `${plural(total, "compra chegou", "compras chegaram")} sem o identificador de clique (${p === "google" ? "gclid" : "fbc"}). Ou o tráfego não veio de anúncio, ou o clique se perdeu no caminho até a loja.`,
+        detalhe: `${plural(enviadas, "compra chegou", "compras chegaram")} sem o identificador de clique (${p === "google" ? "gclid" : "fbc"}). Ou o tráfego não veio de anúncio, ou o clique se perdeu no caminho até a loja.`,
         acao: { tipo: "eventos", rotulo: "Ver eventos" },
       });
     }
@@ -538,8 +539,11 @@ export interface ResumoTela {
   pedidos: number | null;
   /** Lojas ligadas cujos pedidos nao foram conferidos. */
   lojasSemPedidos: number;
-  /** Vendas que sairam para pelo menos um destino (o maior por loja, nunca a soma). */
-  enviadas: number;
+  /**
+   * Vendas que sairam para pelo menos um destino (o maior por loja, nunca a
+   * soma). null = a contagem da fila falhou: zero aqui seria mentira.
+   */
+  enviadas: number | null;
   /**
    * Pedidos das lojas que da para comparar (lista de pedidos e contagem da
    * fila em maos). null = nenhuma loja compara.
@@ -564,7 +568,7 @@ export function resumoDaTela(
   const ligadas = linhas.filter((l) => l.loja.ligado);
   let pedidos: number | null = null;
   let lojasSemPedidos = 0;
-  let enviadas = 0;
+  let enviadas: number | null = 0;
   let pedidosComparaveis: number | null = null;
   let lojasForaDaCobertura = 0;
   const porPlataforma: Record<Plataforma, CoberturaPlataforma | null> = {
@@ -579,10 +583,13 @@ export function resumoDaTela(
 
     // MAX entre os destinos, nao soma: a mesma venda rende uma linha para cada
     // conta configurada. Meta em modo teste fica fora -- vai para a aba de
-    // teste, nao para a campanha.
-    enviadas += loja.destinos
-      .filter((d) => !emModoTeste(d))
-      .reduce((m, d) => Math.max(m, d.contagem.porEvento.purchase ?? 0), 0);
+    // teste, nao para a campanha. Sem a contagem, o total inteiro e "—".
+    if (loja.contagemIndisponivel) enviadas = null;
+    else if (enviadas !== null) {
+      enviadas += loja.destinos
+        .filter((d) => !emModoTeste(d))
+        .reduce((m, d) => Math.max(m, d.contagem.porEvento.purchase ?? 0), 0);
+    }
 
     // Sem lista de pedidos ou sem contagem da fila nao ha comparacao: somar
     // como zero acusaria venda perdida que nao se perdeu.
@@ -616,6 +623,59 @@ export function resumoDaTela(
     paradas: ligadas.filter((l) => l.saude === "parado").length,
     atencao: ligadas.filter((l) => l.saude === "atencao").length,
   };
+}
+
+// ---------------------------------------------------------------------------
+// "Por conta": o que cada conta enviou, de anuncio x total.
+// ---------------------------------------------------------------------------
+
+/** Os eventos da grade da tela principal (Pagamento so no detalhe da loja). */
+export const EVENTOS_DA_GRADE: ChaveEvento[] = [
+  "view_item",
+  "add_to_cart",
+  "begin_checkout",
+  "purchase",
+];
+
+/** Uma conta na grade: a loja e o destino. */
+export interface LinhaConta {
+  loja: LojaTracking;
+  destino: DestinoNaTela;
+}
+
+/**
+ * As contas que estao enviando: loja ligada, destino ativo. POR CONTA, nunca
+ * somadas: as 2 contas Google da Softnook recebem o mesmo evento, e somar
+ * dobraria o numero que se compara com o Gerenciador.
+ */
+export function contasDaTela(lojas: LojaTracking[]): LinhaConta[] {
+  return lojas.flatMap((loja) =>
+    loja.ligado ? loja.destinos.filter((d) => d.ativo).map((destino) => ({ loja, destino })) : []
+  );
+}
+
+/** Quantos envios de teste ha nessas contas (o numero ao lado de "Mostrar testes"). */
+export function testesNaTela(contas: LinhaConta[]): number {
+  let n = 0;
+  for (const { loja, destino } of contas) {
+    if (loja.contagemIndisponivel) continue;
+    for (const v of Object.values(destino.contagem.testesPorEvento)) n += v ?? 0;
+  }
+  return n;
+}
+
+/**
+ * Quantas compras o Meta diz ter atribuido, para mostrar ao lado das nossas.
+ *
+ * O Meta informa por CONTA DE ANUNCIO, ligada a loja; o envio e por PIXEL.
+ * Com um pixel so na loja, as duas coisas se correspondem. Com dois, nao da
+ * para dizer de qual pixel e o numero -- e ele nao aparece.
+ */
+export function comprasQueOMetaDiz(linha: LinhaConta): number | null {
+  const { loja, destino } = linha;
+  if (destino.plataforma !== "meta" || loja.comprasContadasPeloMeta === null) return null;
+  const pixels = loja.destinos.filter((d) => d.plataforma === "meta" && d.ativo).length;
+  return pixels === 1 ? loja.comprasContadasPeloMeta : null;
 }
 
 const INTEIRO = new Intl.NumberFormat("pt-BR");

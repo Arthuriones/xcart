@@ -4,11 +4,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // de contagem e QUAL cliente le a fila. Mesmo padrao de store-ownership.test.ts.
 const chamadas: { cliente: string; fn: string; args: unknown }[] = [];
 let linhasDoPainel: unknown[] = [];
+/** Erro que a RPC devolve, por funcao (ex.: a 055 ainda nao aplicada). */
+const erroDaRpc: Record<string, { code: string; message: string }> = {};
 
-function consulta(dados: unknown) {
+function consulta(dados: unknown, erroDaLeitura: unknown = null) {
   const b: Record<string, unknown> = {
     then: (ok: (v: unknown) => unknown, erro: (e: unknown) => unknown) =>
-      Promise.resolve({ data: dados, error: null }).then(ok, erro),
+      Promise.resolve(
+        erroDaLeitura ? { data: null, error: erroDaLeitura } : { data: dados, error: null }
+      ).then(ok, erro),
   };
   for (const m of ["select", "in", "is", "eq", "gte", "order", "range"]) {
     b[m] = () => b;
@@ -22,7 +26,7 @@ const clienteDoUsuario = {
   from: (t: string) => consulta(tabelas[t] ?? []),
   rpc: (fn: string, args: unknown) => {
     chamadas.push({ cliente: "usuario", fn, args });
-    return consulta(linhasDoPainel);
+    return consulta(linhasDoPainel, erroDaRpc[fn] ?? null);
   },
 };
 
@@ -205,6 +209,7 @@ describe("getPainelTracking", () => {
     linhasDoPainel = [];
     destinos.clear();
     for (const k of Object.keys(tabelas)) delete tabelas[k];
+    for (const k of Object.keys(erroDaRpc)) delete erroDaRpc[k];
   });
 
   it("le a fila pela funcao, com o cliente do usuario", async () => {
@@ -231,7 +236,7 @@ describe("getPainelTracking", () => {
     const { lojas } = await getPainelTracking();
 
     expect(chamadas).toHaveLength(1);
-    expect(chamadas[0]).toMatchObject({ cliente: "usuario", fn: "tracking_painel" });
+    expect(chamadas[0]).toMatchObject({ cliente: "usuario", fn: "tracking_painel_v2" });
     expect(lojas[0].destinos[0].contagem.porEvento.purchase).toBe(2);
     expect(lojas[0].desinstalada).toBe(false);
   });

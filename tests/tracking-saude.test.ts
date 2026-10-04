@@ -37,6 +37,10 @@ function destino(p: Partial<DestinoNaTela> = {}): DestinoNaTela {
       ultimoErro: null,
       porEvento: { purchase: 3 },
       semAtribPorEvento: {},
+      // null = sem a separacao da 055: "de anuncio" cai para "com clique".
+      testesPorEvento: {},
+      deAnuncioPorEvento: null,
+      falhasPorEvento: {},
       pedidosComCompra: ["1", "2", "3"],
       pedidosNaFila: [],
       ...p.contagem,
@@ -55,6 +59,7 @@ function loja(p: Partial<LojaTracking> = {}): LojaTracking {
     pixelCheckoutDesatualizado: false,
     tetoAtingidoRecente: false,
     contagemIndisponivel: false,
+    comprasContadasPeloMeta: null,
     destinos: [destino()],
     ultimoEnvio: null,
     ...p,
