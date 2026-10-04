@@ -228,7 +228,7 @@ export function DetalheLoja({
           tabIndex={-1}
           className="truncate text-dense font-normal text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
         >
-          {loja.dominio}
+          {loja.nome}
         </h1>
       </nav>
 

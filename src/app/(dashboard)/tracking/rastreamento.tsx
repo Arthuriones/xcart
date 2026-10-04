@@ -130,9 +130,9 @@ export function Rastreamento({
         diag: novo ? { ...a.diag, [l.storeId]: novo } : a.diag,
         rechecadas: a.rechecadas.includes(l.storeId) ? a.rechecadas : [...a.rechecadas, l.storeId],
       }));
-      toast.success(`${l.dominio} conferida`);
+      toast.success(`${l.nome} conferida`);
     } catch (e) {
-      toast.error(`Ainda não deu para conferir ${l.dominio}`, {
+      toast.error(`Ainda não deu para conferir ${l.nome}`, {
         description: e instanceof Error ? e.message : "Tente de novo em instantes.",
       });
     } finally {
@@ -144,7 +144,7 @@ export function Rastreamento({
     <ConfirmDialog
       open={desligar !== null}
       onOpenChange={(v) => !v && setDesligar(null)}
-      titulo={`Desligar o rastreamento de ${desligar?.loja.dominio ?? ""}?`}
+      titulo={`Desligar o rastreamento de ${desligar?.loja.nome ?? ""}?`}
       descricao="As compras param de chegar ao Meta e ao Google até você religar."
       confirmar="Desligar"
       mensagemErro="Não deu para desligar agora. Tente de novo."

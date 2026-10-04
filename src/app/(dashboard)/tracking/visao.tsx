@@ -100,7 +100,7 @@ export function Visao({
                   data-linha-alvo=""
                   className="w-fit max-w-full truncate text-left text-dense font-semibold text-ink after:absolute after:inset-0 focus-visible:outline-none"
                 >
-                  {loja.dominio}
+                  {loja.nome}
                 </button>
                 {(pontos.length > 0 || sub) && (
                   <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-label text-t2">
@@ -117,7 +117,7 @@ export function Visao({
                 )}
               </span>
               <Switch
-                aria-label={`Rastreamento de ${loja.dominio}`}
+                aria-label={`Rastreamento de ${loja.nome}`}
                 checked={ligado}
                 onCheckedChange={(v) => alternarEnvio(l, v)}
                 className="relative z-10"
