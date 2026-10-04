@@ -1262,6 +1262,8 @@
    * remarketing sem reinstalar o snippet.
    */
   function remarketingPara(lista) {
+    // O dono testando (?xcart_teste=1) nao entra na lista de ninguem.
+    if (TESTE) return;
     var contas = [];
     for (var n = 0; n < lista.length; n++) {
       if (!remarketingFeito[lista[n]]) {
@@ -1279,9 +1281,15 @@
     var pagina = tipoDaPagina();
     var prod = dadosDoProduto();
 
+    // Consentimento antes do config, como nas conversoes: negado no banner,
+    // a tag nao grava cookie de anuncio.
+    aplicarConsentimentoGoogle();
+
     for (var i = 0; i < contas.length; i++) {
       if (!configuradas[contas[i]]) {
-        gtag("config", contas[i]);
+        // Sem page_view automatico: ele sairia sem ecomm_* e contaria a
+        // visita duas vezes. O hit com o produto sai logo abaixo.
+        gtag("config", contas[i], { send_page_view: false });
         configuradas[contas[i]] = true;
       }
 

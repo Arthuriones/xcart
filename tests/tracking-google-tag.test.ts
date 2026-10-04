@@ -6,6 +6,7 @@ import { apenasNumeroDaConversao } from "../src/lib/tracking/normalizar";
 import {
   contaDoGoogle,
   contasGoogleParaNavegador,
+  JANELA_PIXEL_CHECKOUT_MS,
   pixelCobrindoCheckout,
 } from "../src/lib/tracking/google-tag";
 
@@ -132,11 +133,26 @@ describe("contas Google para o navegador", () => {
     ]);
   });
 
-  it("pixel cobrindo o checkout: visto nas ultimas 24 h", () => {
-    const agora = Date.parse("2026-10-03T12:00:00Z");
-    expect(pixelCobrindoCheckout("2026-10-03T00:00:00Z", agora)).toBe(true);
-    expect(pixelCobrindoCheckout("2026-10-01T00:00:00Z", agora)).toBe(false);
+  it("pixel cobrindo o checkout: visto nos ultimos 7 dias", () => {
+    const agora = Date.parse("2026-10-10T12:00:00Z");
+    expect(JANELA_PIXEL_CHECKOUT_MS).toBe(7 * 864e5);
+    expect(pixelCobrindoCheckout("2026-10-10T00:00:00Z", agora)).toBe(true);
+    // Loja sem checkout ha dois dias continua coberta: com um dia, o tema
+    // voltava a disparar e o begin_checkout saia em dobro.
+    expect(pixelCobrindoCheckout("2026-10-08T00:00:00Z", agora)).toBe(true);
+    expect(pixelCobrindoCheckout("2026-10-03T00:00:00Z", agora)).toBe(false);
     expect(pixelCobrindoCheckout(null, agora)).toBe(false);
+  });
+
+  it("coletor e Google usam a mesma janela, e o pixel nao repete o checkout do tema", () => {
+    const coletor = fonte("src", "app", "api", "tracking", "collect", "route.ts");
+    expect(coletor).toContain("Date.now() - vistoEm < JANELA_PIXEL_CHECKOUT_MS");
+    expect(coletor).not.toMatch(/vistoEm < 864e5/);
+    expect(coletor).toMatch(
+      /doPixel && evento === "begin_checkout" && visitanteDoTema[\s\S]{0,400}\.eq\("visitor_id", visitanteDoTema\)/
+    );
+    // Identidade nova tem teto; estourado, so atualiza.
+    expect(coletor).toMatch(/>= TETO_IDENTIDADES_HORA\) \{\s+await admin\s+\.from\("tracking_identities"\)\s+\.update/);
   });
 });
 
@@ -332,6 +348,8 @@ function rodarPixel(opcoes: {
   privacidade?: Record<string, unknown> | null;
   contas?: unknown;
   store?: string;
+  /** Valor do cookie _xc_teste lido pelo sandbox; "falha" rejeita. */
+  cookieTeste?: string;
 }) {
   const handlers: Record<string, (e: unknown) => void> = {};
   const beacons: Record<string, unknown>[] = [];
@@ -348,6 +366,17 @@ function rodarPixel(opcoes: {
         beacons.push(JSON.parse(texto));
         return true;
       },
+      // `browser.cookie.get` da Web Pixel API: responde Promise.
+      ...(opcoes.cookieTeste === undefined
+        ? {}
+        : {
+            cookie: {
+              get: (nome: string) =>
+                opcoes.cookieTeste === "falha"
+                  ? Promise.reject(new Error("sem cookie"))
+                  : Promise.resolve(nome === "_xc_teste" ? opcoes.cookieTeste : ""),
+            },
+          }),
     },
     init: {
       data: { shop: { myshopifyDomain: SHOP } },
@@ -516,6 +545,30 @@ describe("Web Pixel: a tag do Google no checkout", () => {
     expect(px.beacons[0]).toMatchObject({ teste: true });
   });
 
+  it("Comprar agora: sem o atributo, o cookie _xc_teste ainda marca teste", async () => {
+    // "Comprar agora" pula o carrinho: o checkout nasce sem _xc_teste nos
+    // atributos. O cookie do tema e o que sobra.
+    const px = rodarPixel({ contas: DUAS_CONTAS, cookieTeste: "1" });
+    px.handlers.checkout_started(eventoCheckout({}));
+    px.handlers.checkout_completed(eventoCheckout(COMPRA));
+    await assentar();
+    expect(px.camada().filter((a) => a[0] === "event" || a[0] === "set")).toEqual([]);
+    expect(px.beacons).toHaveLength(1);
+    expect(px.beacons[0]).toMatchObject({ evento: "begin_checkout", teste: true });
+  });
+
+  it("cookie vazio ou API falhando: conversao normal", async () => {
+    for (const cookieTeste of ["", "falha"]) {
+      const px = rodarPixel({ contas: DUAS_CONTAS, cookieTeste });
+      px.handlers.checkout_started(eventoCheckout({}));
+      await assentar();
+      expect(px.camada().filter((a) => a[0] === "event")).toEqual([
+        ["event", "begin_checkout", { send_to: "AW-111111111/IC1", transaction_id: "begin_checkout_ck_T1" }],
+      ]);
+      expect(px.beacons[0]).not.toHaveProperty("teste");
+    }
+  });
+
   it("loja sem Google: nenhum script, nenhuma conversao", async () => {
     const px = rodarPixel({ contas: [] });
     await assentar();
@@ -553,6 +606,9 @@ function rodarSnippet(opcoes: {
   pixelCobre?: "1" | "0";
   url?: string;
   cookies?: string;
+  /** data-xcart-remarketing gravado no tema. */
+  remarketing?: string;
+  privacidade?: boolean;
 }) {
   const u = new URL(opcoes.url ?? "https://loja.test/products/camisa");
   const beacons: Record<string, unknown>[] = [];
@@ -595,7 +651,12 @@ function rodarSnippet(opcoes: {
     referrer: "",
     currentScript: {
       src: "https://app.test/xcart-click.js",
-      getAttribute: (n: string) => (n === "data-xcart-store" ? STORE : null),
+      getAttribute: (n: string) =>
+        n === "data-xcart-store"
+          ? STORE
+          : n === "data-xcart-remarketing"
+            ? (opcoes.remarketing ?? null)
+            : null,
     },
     addEventListener: (ev: string, fn: (e: unknown) => void) => {
       (ouvintes[ev] ||= []).push(fn);
@@ -643,7 +704,13 @@ function rodarSnippet(opcoes: {
     setInterval: () => 0,
     clearInterval: () => {},
     addEventListener: () => {},
-    Shopify: { shop: SHOP, routes: { root: "/" } },
+    Shopify: {
+      shop: SHOP,
+      routes: { root: "/" },
+      ...(opcoes.privacidade === undefined
+        ? {}
+        : { customerPrivacy: { marketingAllowed: () => opcoes.privacidade } }),
+    },
     ShopifyAnalytics: { meta: { product: { id: 7, variants: [{ id: 11, sku: "S", price: 1000 }] } } },
   };
   ctx.window = ctx;
@@ -739,6 +806,35 @@ describe("snippet do tema: a tag do Google", () => {
     await assentarMuito();
     expect(sn.camada().filter((a) => a[0] === "event")).toEqual([]);
     expect(sn.beacons.find((b) => b.evento === "add_to_cart")).toMatchObject({ teste: true });
+  });
+
+  it("remarketing do tema: consentimento antes do config, sem page_view automatico", async () => {
+    const sn = rodarSnippet({ contas: [], remarketing: "AW-333333333", privacidade: false });
+    await assentarMuito();
+    const l = sn.camada();
+    const iConsent = l.findIndex((a) => a[0] === "consent");
+    const iConfig = l.findIndex((a) => a[0] === "config");
+    expect(iConsent).toBeGreaterThan(-1);
+    expect(iConsent).toBeLessThan(iConfig);
+    expect(l[iConsent][2]).toMatchObject({ ad_storage: "denied" });
+    expect(l.filter((a) => a[0] === "config")).toEqual([
+      ["config", "AW-333333333", { send_page_view: false }],
+    ]);
+    // Um hit so, o explicito, com o tipo da pagina.
+    const hits = l.filter((a) => a[0] === "event" && a[1] === "page_view");
+    expect(hits).toHaveLength(1);
+    expect(hits[0][2]).toMatchObject({ send_to: "AW-333333333", ecomm_pagetype: "product" });
+  });
+
+  it("remarketing do tema respeita o modo teste", async () => {
+    const sn = rodarSnippet({
+      contas: [],
+      remarketing: "AW-333333333",
+      url: "https://loja.test/products/camisa?xcart_teste=1",
+    });
+    await assentarMuito();
+    expect(sn.scripts).toEqual([]);
+    expect(sn.camada()).toEqual([]);
   });
 
   it("loja sem Google: nada carrega e o corpo do coletor nao muda", async () => {

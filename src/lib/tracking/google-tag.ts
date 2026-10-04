@@ -87,14 +87,25 @@ export function contasGoogleParaNavegador(
 }
 
 /**
+ * Por quanto tempo o ultimo sinal do Web Pixel vale como "cobrindo o checkout".
+ *
+ * Uma constante so, usada aqui (Google, no tema) e no coletor (Meta). Era um
+ * dia: loja com menos de um checkout por dia via o carimbo vencer, o tema
+ * voltava a disparar begin_checkout e o pixel disparava de novo -- dois
+ * checkouts no Meta e no Google para a mesma acao. Sete dias cobre loja
+ * parada no fim de semana e ainda se cura sozinho se o pixel for removido.
+ */
+export const JANELA_PIXEL_CHECKOUT_MS = 7 * 864e5;
+
+/**
  * O Web Pixel esta cobrindo o checkout?
  *
- * Mesma janela de um dia do coletor: o pixel se anuncia carimbando
- * `web_pixel_visto_em`. Cobrindo, o tema NAO dispara begin_checkout no Google
- * -- o clique no botao e o checkout_started descrevem a mesma acao, com
- * transaction_id diferentes, e o Google contaria duas.
+ * Mesma janela do coletor (JANELA_PIXEL_CHECKOUT_MS): o pixel se anuncia
+ * carimbando `web_pixel_visto_em`. Cobrindo, o tema NAO dispara begin_checkout
+ * no Google -- o clique no botao e o checkout_started descrevem a mesma acao,
+ * com transaction_id diferentes, e o Google contaria duas.
  */
 export function pixelCobrindoCheckout(vistoEm: string | null | undefined, agora = Date.now()): boolean {
   const ms = vistoEm ? Date.parse(vistoEm) : NaN;
-  return Number.isFinite(ms) && agora - ms < 864e5;
+  return Number.isFinite(ms) && agora - ms < JANELA_PIXEL_CHECKOUT_MS;
 }

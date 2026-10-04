@@ -6,6 +6,7 @@ import {
   type ChaveEvento,
 } from "@/lib/tracking/eventos";
 import { montarFbc, montarUserData } from "@/lib/tracking/normalizar";
+import { JANELA_PIXEL_CHECKOUT_MS } from "@/lib/tracking/google-tag";
 
 export const runtime = "nodejs";
 
@@ -67,6 +68,19 @@ const TETO_POR_VISITANTE = 120;
  * mais que o numero exato, porque nenhum numero serve para toda loja.
  */
 const TETO_POR_LOJA_HORA = 20000;
+
+/**
+ * Identidades NOVAS por loja por hora.
+ *
+ * O visitorId vem do cliente: cada id inventado era uma linha nova em
+ * `tracking_identities`, sem teto nenhum. Acima disto, so atualiza visitante
+ * que ja existe -- quem ja estava na loja segue com o clique, e o abuso para
+ * de crescer a tabela.
+ */
+const TETO_IDENTIDADES_HORA = 20000;
+
+/** Pixel e tema no mesmo checkout: o do tema chegou antes, nesta janela. */
+const JANELA_CHECKOUT_DO_TEMA_MS = 10 * 60 * 1000;
 
 function comCors(resposta: NextResponse, origem: string | null): NextResponse {
   // `*` de proposito, e sem Allow-Credentials: o dominio publico da loja nao
@@ -316,31 +330,52 @@ export async function POST(request: NextRequest) {
   /**
    * Grava a associacao visitante -> click ids.
    *
-   * Uma linha por visitante (`onConflict store_id,visitor_id`), entao reenviar
-   * so atualiza: nao ha crescimento de tabela para um abusador explorar.
+   * Uma linha por visitante (`onConflict store_id,visitor_id`): reenviar o
+   * mesmo visitorId so atualiza. Mas o visitorId vem do cliente, e cada id
+   * inventado e uma linha nova -- por isso o teto de identidades NOVAS por
+   * hora (TETO_IDENTIDADES_HORA). Estourado, so atualiza quem ja existe.
    */
   async function publicarIdentidade() {
+    const campos = {
+      shopify_client_id: clientId,
+      gclid: clique.gclid,
+      gbraid: clique.gbraid,
+      wbraid: clique.wbraid,
+      auid: clique.auid,
+      fbp,
+      fbc,
+      fbclid,
+      updated_at: new Date().toISOString(),
+    };
+
+    // `created_at` nao vai no upsert, entao so conta linha que NASCEU na
+    // ultima hora. Indice (store_id, created_at) na migration 056.
+    const { count, error: erroConta } = await admin
+      .from("tracking_identities")
+      .select("id", { count: "exact", head: true })
+      .eq("store_id", registro.id)
+      .gte("created_at", new Date(Date.now() - 36e5).toISOString());
+
+    // Falha na contagem nao derruba a identidade: melhor uma linha a mais que
+    // um clique perdido.
+    if (!erroConta && (count ?? 0) >= TETO_IDENTIDADES_HORA) {
+      await admin
+        .from("tracking_identities")
+        .update(campos)
+        .eq("store_id", registro.id)
+        .eq("visitor_id", visitorId);
+      return;
+    }
+
     await admin.from("tracking_identities").upsert(
-      {
-        store_id: registro.id,
-        visitor_id: visitorId,
-        shopify_client_id: clientId,
-        gclid: clique.gclid,
-        gbraid: clique.gbraid,
-        wbraid: clique.wbraid,
-        auid: clique.auid,
-        fbp,
-        fbc,
-        fbclid,
-        updated_at: new Date().toISOString(),
-      },
+      { store_id: registro.id, visitor_id: visitorId, ...campos },
       { onConflict: "store_id,visitor_id" }
     );
   }
 
   // O aviso de identidade termina aqui: sem fila, sem destino, sem conversao.
-  // Por isso tambem nao passa pelos tetos abaixo -- eles contam linhas de
-  // `tracking_events`, e este caminho nao cria nenhuma.
+  // Nao passa pelos tetos de `tracking_events` abaixo -- este caminho nao cria
+  // linha la. O teto dele e o de identidades novas, em publicarIdentidade.
   if (ehIdentidade) {
     if (!clientId) return recusado("identidade sem clientId");
     await publicarIdentidade();
@@ -365,7 +400,7 @@ export async function POST(request: NextRequest) {
   // sempre, e o evento sumiria em silencio.
   //
   // Nao carimba a cada evento: seria uma escrita por pageview de checkout sem
-  // mudar a decisao. Uma vez por hora basta para a janela de um dia.
+  // mudar a decisao. Uma vez por hora basta para a janela de 7 dias.
   const vistoEm = cfg.web_pixel_visto_em
     ? new Date(cfg.web_pixel_visto_em).getTime()
     : 0;
@@ -394,9 +429,10 @@ export async function POST(request: NextRequest) {
   // `checkout_started` (pixel) descrevem a MESMA acao, e nao tem como
   // compartilhar event_id -- um nasce do clique, o outro do checkout de verdade.
   //
-  // A janela de um dia e o que faz isto se curar: se o pixel parar de mandar,
-  // o tema volta a cobrir sozinho, sem ninguem precisar notar.
-  const pixelCobrindo = Date.now() - vistoEm < 864e5;
+  // A janela (JANELA_PIXEL_CHECKOUT_MS, 7 dias, a mesma do Google) e o que faz
+  // isto se curar: se o pixel parar de mandar, o tema volta a cobrir sozinho.
+  // Era um dia, e loja com menos de um checkout por dia contava dois.
+  const pixelCobrindo = Date.now() - vistoEm < JANELA_PIXEL_CHECKOUT_MS;
   if (!doPixel && evento === "begin_checkout" && pixelCobrindo) {
     return ok({ ignorado: "checkout coberto pelo Web Pixel" });
   }
@@ -495,6 +531,23 @@ export async function POST(request: NextRequest) {
       fbp = fbp || id.fbp || null;
       fbc = fbc || id.fbc || null;
       visitanteDoTema = id.visitorId || null;
+    }
+  }
+
+  // O outro lado da supressao acima. Quando o carimbo do pixel venceu, o tema
+  // manda o begin_checkout do clique; o pixel chega logo depois com o do
+  // checkout_started, e o carimbo so se renova AGORA. Mesmo visitante, mesma
+  // acao: o do tema ja contou.
+  if (doPixel && evento === "begin_checkout" && visitanteDoTema) {
+    const { count: doTema } = await admin
+      .from("tracking_events")
+      .select("id", { count: "exact", head: true })
+      .eq("store_id", registro.id)
+      .eq("visitor_id", visitanteDoTema)
+      .eq("event_name", "begin_checkout")
+      .gte("created_at", new Date(Date.now() - JANELA_CHECKOUT_DO_TEMA_MS).toISOString());
+    if ((doTema ?? 0) > 0) {
+      return ok({ ignorado: "checkout ja contado pelo tema" });
     }
   }
 

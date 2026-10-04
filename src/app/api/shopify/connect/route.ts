@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   ShopifyClientError,
+  ensureUninstallWebhook,
+  ensureWebhook,
   getShopInfo,
   getThemes,
 } from "@/lib/shopify/client";
@@ -142,6 +144,31 @@ export async function POST(request: NextRequest) {
         { error: "Failed to save store" },
         { status: 500 }
       );
+    }
+
+    // Os webhooks, como no callback do OAuth (auth/route.ts). Reconectar loja
+    // que ja tem o app nao passa por la, e sem orders/create a compra nunca
+    // chega ao rastreamento. Melhor esforco: falha so vai para o log.
+    const urlDosWebhooks = `${request.nextUrl.origin}/api/shopify/webhooks`;
+    try {
+      const [saida, pedidos] = await Promise.all([
+        ensureUninstallWebhook(creds, urlDosWebhooks),
+        ensureWebhook(creds, "ORDERS_CREATE", urlDosWebhooks),
+      ]);
+      if (!saida.ok) {
+        console.warn("[shopify/connect] webhook app/uninstalled nao inscrito", {
+          shopDomain,
+          motivo: saida.message,
+        });
+      }
+      if (!pedidos.ok) {
+        console.warn("[shopify/connect] webhook orders/create nao inscrito", {
+          shopDomain,
+          motivo: pedidos.message,
+        });
+      }
+    } catch (e) {
+      console.error("[shopify/connect] falha ao inscrever webhooks", e);
     }
 
     return NextResponse.json({

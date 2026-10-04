@@ -97,6 +97,54 @@
     return privacidade.marketingAllowed ? "concedido" : "negado";
   }
 
+  // O cookie de teste do tema (?xcart_teste=1). O sandbox nao le
+  // document.cookie; `browser.cookie.get` le o da loja e responde Promise.
+  // Lido UMA vez, no carregamento: os eventos esperam a resposta (comTeste)
+  // para nao sair uma conversao do dono antes de saber que era teste.
+  var testeDoCookie = false;
+  var cookieLido = false;
+  var esperandoCookie = [];
+
+  function cookieRespondeu(valor) {
+    if (cookieLido) return;
+    cookieLido = true;
+    testeDoCookie = valor === "1";
+    var fila = esperandoCookie;
+    esperandoCookie = [];
+    for (var i = 0; i < fila.length; i++) {
+      try {
+        fila[i]();
+      } catch (e) {
+        /* um evento com problema nao segura os outros */
+      }
+    }
+  }
+
+  try {
+    var apiCookie = ctx.browser && ctx.browser.cookie;
+    if (apiCookie && typeof apiCookie.get === "function") {
+      Promise.resolve(apiCookie.get("_xc_teste")).then(cookieRespondeu, function () {
+        cookieRespondeu(null);
+      });
+      // Sem resposta em 2 s, segue sem o cookie: o checkout nao pode esperar.
+      if (typeof setTimeout === "function") {
+        setTimeout(function () {
+          cookieRespondeu(null);
+        }, 2000);
+      }
+    } else {
+      cookieRespondeu(null);
+    }
+  } catch (e) {
+    cookieRespondeu(null);
+  }
+
+  /** Roda `fn` quando o cookie de teste tiver resposta (ou ja). */
+  function comTeste(fn) {
+    if (cookieLido) fn();
+    else esperandoCookie.push(fn);
+  }
+
   // =========================================================================
   // GOOGLE ADS PELA TAG DO GOOGLE (gtag.js)
   // =========================================================================
@@ -355,12 +403,15 @@
 
   /**
    * O dono testando: o tema grava `_xc_teste` no carrinho (?xcart_teste=1), e
-   * os atributos do carrinho chegam ate aqui. O sandbox nao le o cookie.
+   * os atributos do carrinho chegam ate aqui. Mas "Comprar agora" pula o
+   * carrinho, e o checkout nasce sem o atributo -- por isso vale tambem o
+   * cookie `_xc_teste` do tema, lido por `browser.cookie` (testeDoCookie).
    */
   function deTeste(checkout) {
+    if (testeDoCookie) return true;
     var lista = (checkout && checkout.attributes) || [];
     for (var i = 0; i < lista.length; i++) {
-      if (lista[i] && lista[i].key === "_xc_teste") return lista[i].value === "1";
+      if (lista[i] && lista[i].key === "_xc_teste" && lista[i].value === "1") return true;
     }
     return false;
   }
@@ -445,14 +496,17 @@
   for (var i = 0; i < EVENTOS.length; i++) {
     (function (par) {
       ctx.analytics.subscribe(par[0], function (event) {
-        enviar(par[1], event);
-        if (par[1] === "begin_checkout") {
-          try {
-            googleNoCheckout("begin_checkout", event);
-          } catch (e) {
-            // Erro na tag nao pode derrubar o checkout nem o evento do Meta.
+        // Espera o cookie de teste: o coletor e o Google precisam saber.
+        comTeste(function () {
+          enviar(par[1], event);
+          if (par[1] === "begin_checkout") {
+            try {
+              googleNoCheckout("begin_checkout", event);
+            } catch (e) {
+              // Erro na tag nao pode derrubar o checkout nem o evento do Meta.
+            }
           }
-        }
+        });
       });
     })(EVENTOS[i]);
   }
@@ -460,10 +514,12 @@
   // A compra do GOOGLE sai daqui, pela tag. A do Meta continua vindo do webhook
   // orders/create: este evento NAO vai para o coletor.
   ctx.analytics.subscribe("checkout_completed", function (event) {
-    try {
-      googleNoCheckout("purchase", event);
-    } catch (e) {
-      // Erro na tag nao pode derrubar a pagina de obrigado.
-    }
+    comTeste(function () {
+      try {
+        googleNoCheckout("purchase", event);
+      } catch (e) {
+        // Erro na tag nao pode derrubar a pagina de obrigado.
+      }
+    });
   });
 })();
