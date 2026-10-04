@@ -122,7 +122,7 @@ export function montarTag(
     `<script src="${getPublicAppUrl()}/${MARCA}.js" data-xcart-click` +
     ` data-xcart-store="${storeId}"` +
     (contas.length ? ` data-xcart-remarketing="${contas.join(",")}"` : "") +
-    (contas.length && template ? ` data-xcart-id-template="${template}"` : "") +
+    (template ? ` data-xcart-id-template="${template}"` : "") +
     ` defer></script>`
   );
 }

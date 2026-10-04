@@ -326,22 +326,6 @@ export function DetalheLoja({
             />
           );
         })}
-        {!loja.desinstalada && (
-          <div className="flex flex-col gap-1 px-4 py-3.5">
-            <a
-              href={`https://${loja.dominio}/?xcart_teste=1`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={cn(linkAcao, "self-start text-dense")}
-            >
-              Testar sem sujar os anúncios ↗
-            </a>
-            <span className="text-label text-t2">
-              Este navegador fica em modo teste por 1 dia: os eventos aparecem em Eventos ao vivo e
-              não contam no Meta nem no Google.
-            </span>
-          </div>
-        )}
       </Bloco>
 
       {(["meta", "google"] as const).map((p) => {

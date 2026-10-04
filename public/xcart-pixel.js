@@ -106,7 +106,12 @@
   var esperandoCookie = [];
 
   function cookieRespondeu(valor) {
-    if (cookieLido) return;
+    if (cookieLido) {
+      // Resposta que chegou depois do tempo limite: a fila ja saiu, mas os
+      // eventos seguintes desta pagina ainda respeitam o teste.
+      if (valor === "1") testeDoCookie = true;
+      return;
+    }
     cookieLido = true;
     testeDoCookie = valor === "1";
     var fila = esperandoCookie;

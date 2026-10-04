@@ -74,12 +74,13 @@ export async function POST(request: NextRequest) {
   // O `ecomm_prodid` do remarketing e montado no NAVEGADOR e tem que casar com
   // o id do Merchant Center igual aos eventos do servidor -- entao o formato
   // viaja junto, dentro da tag.
-  let idTemplate: string | null = null;
-  if (corpo.remarketing) {
-    const { remarketingDaLoja } = await import("@/lib/tracking/destinos");
-    const r = await remarketingDaLoja(admin, loja.id);
+  // O formato vale tambem SEM o atributo de remarketing: o remarketing pelas
+  // contas do google-config usa o mesmo `ecomm_prodid`.
+  const { remarketingDaLoja } = await import("@/lib/tracking/destinos");
+  const r = corpo.remover ? null : await remarketingDaLoja(admin, loja.id);
+  const idTemplate: string | null = r?.idTemplate ?? null;
+  if (corpo.remarketing && r) {
     remarketing = r.contas;
-    idTemplate = r.idTemplate;
     if (remarketing.length === 0) {
       return NextResponse.json(
         {

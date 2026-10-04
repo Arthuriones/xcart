@@ -348,8 +348,18 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString(),
     };
 
-    // `created_at` nao vai no upsert, entao so conta linha que NASCEU na
-    // ultima hora. Indice (store_id, created_at) na migration 056.
+    // Visitante que ja existe (quase todo evento) so atualiza: nao paga a
+    // contagem do teto.
+    const { data: existente, error: erroUpdate } = await admin
+      .from("tracking_identities")
+      .update(campos)
+      .eq("store_id", registro.id)
+      .eq("visitor_id", visitorId)
+      .select("id");
+    if (!erroUpdate && existente && existente.length > 0) return;
+
+    // Linha NOVA: conta as que nasceram na ultima hora. Indice
+    // (store_id, created_at) na migration 056.
     const { count, error: erroConta } = await admin
       .from("tracking_identities")
       .select("id", { count: "exact", head: true })
@@ -358,14 +368,7 @@ export async function POST(request: NextRequest) {
 
     // Falha na contagem nao derruba a identidade: melhor uma linha a mais que
     // um clique perdido.
-    if (!erroConta && (count ?? 0) >= TETO_IDENTIDADES_HORA) {
-      await admin
-        .from("tracking_identities")
-        .update(campos)
-        .eq("store_id", registro.id)
-        .eq("visitor_id", visitorId);
-      return;
-    }
+    if (!erroConta && (count ?? 0) >= TETO_IDENTIDADES_HORA) return;
 
     await admin.from("tracking_identities").upsert(
       { store_id: registro.id, visitor_id: visitorId, ...campos },

@@ -82,6 +82,8 @@ export function AdicionarPixel({
       ? lerRotulos(Object.fromEntries(rotulos.map((r, i) => [EVENTOS_GOOGLE[i].chave, r])), v.aw)
       : null;
   const erroRotulo = lidos && "erro" in lidos ? lidos : null;
+  // Texto no campo da conta sem um AW legivel (ex.: o ID do cliente 123-456-7890).
+  const awIlegivel = Boolean(lidos && !("erro" in lidos) && !lidos.conta && v.aw.trim());
 
   /** Colado inteiro: fica so o rotulo, e o AW preenche a conta vazia. */
   function mudarRotulo(i: number, valor: string) {
@@ -97,9 +99,10 @@ export function AdicionarPixel({
   function mudar(chave: keyof typeof v, valor: string) {
     // "AW-123/AbC" no campo da conta: a parte depois da barra e o rotulo da compra.
     const s = chave === "aw" ? separarRotulo(valor) : null;
-    if (s?.conta && s.rotulo && !rotulos[0]?.trim()) {
+    if (s?.conta && s.rotulo) {
       setV((x) => ({ ...x, aw: `AW-${s.conta}` }));
-      setRotulos((lista) => [s.rotulo, ...lista.slice(1)]);
+      if (!rotulos[0]?.trim()) setRotulos((lista) => [s.rotulo, ...lista.slice(1)]);
+      else if (rotulos[0].trim() !== s.rotulo) toast.info("A parte depois da barra é um rótulo: cole na linha do evento.");
       return;
     }
     setV((x) => ({ ...x, [chave]: valor }));
@@ -161,7 +164,9 @@ export function AdicionarPixel({
     ajuda: string,
     o: { opc?: boolean; mono?: boolean; senha?: boolean; erroTxt?: string } = {}
   ) {
-    const invalido = erro && !o.opc && !v[chave].trim() && !(chave === "aw" && lidos && "conta" in lidos && lidos.conta);
+    const ilegivel = chave === "aw" && erro && awIlegivel;
+    const invalido =
+      ilegivel || (erro && !o.opc && !v[chave].trim() && !(chave === "aw" && lidos && "conta" in lidos && lidos.conta));
     const idCampo = `${id}-${chave}`;
     return (
       <div className="flex flex-col gap-1.5">
@@ -181,7 +186,7 @@ export function AdicionarPixel({
           onChange={(e) => mudar(chave, e.target.value)}
         />
         <span id={`${idCampo}-a`} className={cn("text-label", invalido ? "text-err" : "text-t2")}>
-          {invalido ? o.erroTxt : ajuda}
+          {ilegivel ? "ID de conversão inválido. Ex.: AW-1128430917 (não é o ID do cliente)." : invalido ? o.erroTxt : ajuda}
         </span>
       </div>
     );

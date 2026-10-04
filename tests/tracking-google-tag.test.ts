@@ -151,8 +151,8 @@ describe("contas Google para o navegador", () => {
     expect(coletor).toMatch(
       /doPixel && evento === "begin_checkout" && visitanteDoTema[\s\S]{0,400}\.eq\("visitor_id", visitanteDoTema\)/
     );
-    // Identidade nova tem teto; estourado, so atualiza.
-    expect(coletor).toMatch(/>= TETO_IDENTIDADES_HORA\) \{\s+await admin\s+\.from\("tracking_identities"\)\s+\.update/);
+    // Quem ja existe so atualiza; identidade NOVA tem teto e, estourado, nao nasce.
+    expect(coletor).toMatch(/\.update\(campos\)[\s\S]{0,200}\.select\("id"\)[\s\S]{0,700}>= TETO_IDENTIDADES_HORA\) return;/);
   });
 });
 

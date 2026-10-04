@@ -296,7 +296,16 @@ export async function coletarCondicoesDetalhado(
       ...new Set(((metas || []) as { store_id: string }[]).map((m) => String(m.store_id))),
     ];
 
-    const seteDias = new Date(agora.getTime() - 7 * 24 * HORA).toISOString();
+    // A semana so barra a ABERTURA (loja parada ha muito nao "parou agora").
+    // Alerta ja aberto continua ate o evento voltar, por mais velho que fique.
+    const { data: abertos, error: erroAbertos } = await admin
+      .from("alertas")
+      .select("store_id")
+      .eq("regra", "rastreamento_parado")
+      .is("resolvido_em", null);
+    if (erroAbertos) throw new Error(erroAbertos.message);
+    const jaAberto = new Set(((abertos || []) as { store_id: string }[]).map((a) => String(a.store_id)));
+    const seteDias = agora.getTime() - 7 * 24 * HORA;
     const limite = agora.getTime() - 24 * HORA;
     // Uma leitura por loja ligada, limit 1 no indice (store_id, created_at):
     // cresce com o numero de lojas, nao com o trafego. Em lotes de 10.
@@ -309,7 +318,6 @@ export async function coletarCondicoesDetalhado(
             .select("created_at")
             .eq("store_id", storeId)
             .not("visitor_id", "is", null)
-            .gte("created_at", seteDias)
             .order("created_at", { ascending: false })
             .limit(1);
           if (e) throw new Error(e.message);
@@ -321,13 +329,13 @@ export async function coletarCondicoesDetalhado(
     }
 
     for (const { storeId, em } of ultimos) {
-      // Nada na semana: loja nova ou parada ha muito, nao "parou agora".
       const t = em ? Date.parse(em) : NaN;
-      if (!Number.isFinite(t) || t >= limite) continue;
+      const aberto = jaAberto.has(storeId);
+      if (Number.isFinite(t) ? t >= limite || (t < seteDias && !aberto) : !aberto) continue;
       const loja = lojas.get(storeId);
       if (!loja) continue;
-      const horas = Math.floor((agora.getTime() - t) / HORA);
-      const ha = horas < 48 ? `${horas} h` : `${Math.floor(horas / 24)} dias`;
+      const horas = Number.isFinite(t) ? Math.floor((agora.getTime() - t) / HORA) : null;
+      const ha = horas === null ? "mais de 30 dias" : horas < 48 ? `${horas} h` : `${Math.floor(horas / 24)} dias`;
       condicoes.push({
         user_id: loja.user_id,
         store_id: storeId,
@@ -362,6 +370,10 @@ export async function coletarCondicoesDetalhado(
     for (const s of syncs) {
       const loja = lojas.get(String(s.store_id));
       if (!loja || loja.uninstalled_at) continue;
+      // Loja que nunca leu pedido com sucesso (chave errada, loja fechada,
+      // app nunca instalado): nao "parou", nunca funcionou. A tela Lojas ja
+      // mostra a conexao; aqui so viraria um aviso eterno sem dono.
+      if (!s.ultimo_sync_ok_em) continue;
       // "App nao esta instalado": a loja tirou o app sem o webhook marcar.
       // Nao e sync atrasado que se resolve sozinho, e o erro cru da Shopify
       // nao diz o que fazer. Continua UM aviso (aviso nao renotifica; o
@@ -427,13 +439,15 @@ export async function coletarCondicoesDetalhado(
 
   await rodar("ads_sync_atrasado", async () => {
     for (const c of await lerContas()) {
+      // Gasto do Google nao e lido hoje (decisao de 04/10): conta Google
+      // parada nao e problema de ninguem.
+      if (c.plataforma === "google") continue;
       const loja = lojas.get(String(c.store_id));
       if (!loja) continue;
-      const tolerancia = c.plataforma === "google" ? 3 * HORA : 90 * MIN;
       const okEm = c.ultimo_sync_ok_em ? Date.parse(c.ultimo_sync_ok_em) : null;
       const criada = c.created_at ? Date.parse(c.created_at) : 0;
       const atrasado =
-        okEm !== null ? agora.getTime() - okEm > tolerancia : agora.getTime() - criada > 2 * HORA;
+        okEm !== null ? agora.getTime() - okEm > 90 * MIN : agora.getTime() - criada > 2 * HORA;
       if (!c.ultimo_erro && !atrasado) continue;
       const nome = c.nome || c.external_id;
       const plataforma = nomePlataforma(c.plataforma);
@@ -448,9 +462,7 @@ export async function coletarCondicoesDetalhado(
           ? cortar(c.ultimo_erro, 200)
           : okEm === null
             ? "A conta ainda não recebeu nenhum dado de gasto."
-            : c.plataforma === "google"
-              ? "O script do Google Ads não manda dados há mais de 3 h."
-              : "A leitura do gasto no Meta não roda com sucesso há mais de 90 min.",
+            : "A leitura do gasto no Meta não roda com sucesso há mais de 90 min.",
       });
     }
   });

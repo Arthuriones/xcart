@@ -18,6 +18,8 @@ interface Cenario {
   meta?: boolean;
   /** created_at do ultimo evento do tema na semana; null = nenhum. */
   ultimoEvento?: string | null;
+  /** Ja ha alerta aberto desta regra para a loja. */
+  aberto?: boolean;
 }
 
 function admin(c: Cenario) {
@@ -37,6 +39,9 @@ function admin(c: Cenario) {
     }
     if (tabela === "tracking_configs") {
       return c.ligado === false ? [] : [{ store_id: LOJA, enabled: true }];
+    }
+    if (tabela === "alertas") {
+      return c.aberto && tem("eq", "regra", "rastreamento_parado") ? [{ store_id: LOJA }] : [];
     }
     if (tabela === "tracking_destinations") return c.meta === false ? [] : [{ store_id: LOJA }];
     if (tabela === "tracking_events") {
@@ -93,6 +98,13 @@ describe("rastreamento parado", () => {
 
   it("sem evento na semana nao e 'parou agora'", async () => {
     expect(await parado({ ultimoEvento: null })).toHaveLength(0);
+    expect(await parado({ ultimoEvento: ha(24 * 8) })).toHaveLength(0);
+  });
+
+  it("alerta aberto nao fecha sozinho depois de 7 dias parado", async () => {
+    expect(await parado({ ultimoEvento: ha(24 * 8), aberto: true })).toHaveLength(1);
+    expect(await parado({ ultimoEvento: null, aberto: true })).toHaveLength(1);
+    expect(await parado({ ultimoEvento: ha(2), aberto: true })).toHaveLength(0);
   });
 
   it("ignora loja desligada, desinstalada ou sem Meta ativo", async () => {

@@ -172,7 +172,7 @@ async function conferirTokenNoMeta(
   // trocar o token certo. O 190 (token invalido) fica com a mensagem do token.
   if (pixelNaoEncontrado(r.erro)) {
     return NextResponse.json(
-      { error: "ID do pixel não encontrado nesta conta. Confira o ID no Gerenciador de Eventos." },
+      { error: "ID do pixel não encontrado, ou o token não tem acesso a ele. Confira o ID e gere o token nesse pixel, no Gerenciador de Eventos." },
       { status: 400 }
     );
   }
