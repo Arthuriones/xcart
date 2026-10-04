@@ -2,8 +2,8 @@ import { ChevronRight } from "lucide-react";
 
 // ============================================================================
 // "Como calculamos": as regras do numero, em linguagem de lojista. Server
-// component; cada item e um <details> (abre por toque, teclado e leitor de
-// tela sem JavaScript). O id e o alvo do "Ver como calculamos" das pendencias.
+// component; cada item e um <details> fechado (abre por toque, teclado e
+// leitor de tela sem JavaScript).
 // ============================================================================
 
 const ITENS: { titulo: string; texto: string }[] = [
@@ -54,8 +54,8 @@ export function ComoCalculamos() {
       <h2 id="como-calculamos-t" className="border-b border-border-subtle px-4 py-3.5 text-section text-ink">
         Como calculamos
       </h2>
-      {ITENS.map((item, i) => (
-        <details key={item.titulo} open={i === 0} className="group border-b border-border-subtle last:border-b-0">
+      {ITENS.map((item) => (
+        <details key={item.titulo} className="group border-b border-border-subtle last:border-b-0">
           <summary className="flex min-h-ctl-lg cursor-pointer list-none items-center gap-2.5 px-4 text-dense font-medium text-ink hover:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus [&::-webkit-details-marker]:hidden">
             <ChevronRight
               aria-hidden

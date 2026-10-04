@@ -4,7 +4,7 @@ import { useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ChevronRight, Download, Info, Search, TriangleAlert } from "lucide-react";
+import { ChevronRight, Download, Search, TriangleAlert } from "lucide-react";
 import clsx from "clsx";
 import { Button } from "@/components/ui/button";
 import { DataTable, type ColunaTabela } from "@/components/ui/data-table";
@@ -41,12 +41,12 @@ import {
 } from "./lucro-dados";
 
 // ============================================================================
-// "Detalhar por": Loja · Dia · Produto · Campanha · Pais. Cada aba e uma
-// DataTable (ordena, Shift + clique desempata, vira cartao no celular) com
-// busca, densidade e CSV da tabela visivel, gerado aqui no navegador (#19).
+// "Detalhar por": Loja · Dia · Produto · Campanha. Cada aba e uma DataTable
+// (ordena, vira cartao no celular) com busca e o CSV da tabela visivel, gerado
+// aqui no navegador (#19). Explicacao de coluna fica na Dica do titulo.
 // ============================================================================
 
-export type Aba = "loja" | "dia" | "produto" | "campanha" | "pais";
+export type Aba = "loja" | "dia" | "produto" | "campanha";
 
 type Situacao = Semaforo | "sem-acesso";
 
@@ -88,12 +88,13 @@ function Etiqueta({ children }: { children: ReactNode }) {
   );
 }
 
-function Aviso({ children }: { children: ReactNode }) {
+/** Titulo de coluna com a explicacao no (i). */
+function ComDica({ titulo, rotulo, children }: { titulo: string; rotulo: string; children: ReactNode }) {
   return (
-    <div className="mx-4 mt-3 flex items-start gap-2.5 rounded-control border border-info-border bg-info-bg px-3 py-2.5 text-dense text-ink">
-      <Info aria-hidden className="mt-px size-4 shrink-0 text-info" strokeWidth={1.75} />
-      <div className="flex flex-col gap-1 text-pretty">{children}</div>
-    </div>
+    <span className="inline-flex items-center gap-1">
+      {titulo}
+      <Dica rotulo={rotulo}>{children}</Dica>
+    </span>
   );
 }
 
@@ -104,15 +105,13 @@ function ErroSecao({ detalhe }: { detalhe: string | null }) {
     <div role="alert" className="flex min-h-70 flex-col items-center justify-center gap-2.5 px-4 py-8 text-center">
       <TriangleAlert aria-hidden className="size-6 text-err" strokeWidth={1.75} />
       <p className="text-section text-ink">Não conseguimos carregar o detalhamento</p>
-      <p className="max-w-110 text-dense text-t1">
-        Os indicadores e o gráfico acima estão certos. Tente de novo em alguns segundos.
-      </p>
+      <p className="max-w-110 text-dense text-t1">Os indicadores acima estão certos.</p>
       <Button pending={tentando} onClick={() => startTransition(() => router.refresh())} className="min-w-35">
         {tentando ? "Tentando…" : "Tentar de novo"}
       </Button>
       {detalhe && (
         <details className="text-label text-t2">
-          <summary className="cursor-pointer">Detalhes para o suporte</summary>
+          <summary className="cursor-pointer">Ver detalhes</summary>
           <p className="mt-1.5 max-w-110 break-words font-mono">{detalhe}</p>
         </details>
       )}
@@ -170,7 +169,6 @@ export function DetalharPor({
   const [aba, setAba] = useState<Aba>(mostrarLoja ? "loja" : "dia");
   const [busca, setBusca] = useState("");
   const [situacoes, setSituacoes] = useState<Situacao[]>([]);
-  const [densidade, setDensidade] = useState<"compacta" | "confortavel">("compacta");
   const [ordemProduto, setOrdemProduto] = useState<"mais" | "menos">("mais");
   const [semAcessoAberto, setSemAcessoAberto] = useState(false);
 
@@ -257,18 +255,15 @@ export function DetalharPor({
     {
       chave: "situacao",
       titulo: (
-        <span className="inline-flex items-center gap-1">
-          Situação
-          <Dica rotulo="O que cada situação quer dizer">
-            <span className="flex flex-col gap-1">
-              <span>Lucro: ROAS real pelo menos 1,2× o ROAS de equilíbrio.</span>
-              <span>No limite: tem lucro, mas o ROAS real está abaixo de 1,2× o equilíbrio.</span>
-              <span>Prejuízo: o lucro estimado está negativo.</span>
-              <span>Sem gasto: nenhum anúncio no período.</span>
-              <span>Sem acesso: a Shopify não deixa ler os pedidos novos.</span>
-            </span>
-          </Dica>
-        </span>
+        <ComDica titulo="Situação" rotulo="O que cada situação quer dizer">
+          <span className="flex flex-col gap-1">
+            <span>Lucro: ROAS real pelo menos 1,2× o ROAS de equilíbrio.</span>
+            <span>No limite: tem lucro, mas o ROAS real está abaixo de 1,2× o equilíbrio.</span>
+            <span>Prejuízo: o lucro estimado está negativo.</span>
+            <span>Sem gasto: nenhum anúncio no período.</span>
+            <span>Sem acesso: os pedidos novos não estão sendo lidos.</span>
+          </span>
+        </ComDica>
       ),
       tituloCsv: "Situação",
       ordenavel: false,
@@ -465,8 +460,15 @@ export function DetalharPor({
     },
     {
       chave: "lucro",
-      titulo: "Lucro antes do anúncio",
+      titulo: (
+        <ComDica titulo="Lucro antes do anúncio" rotulo="Por que antes do anúncio">
+          O gasto do Meta e do Google não é por produto: aqui sai só produto, frete e taxa. A receita do pedido é
+          dividida entre os itens pelo preço de cada um.
+        </ComDica>
+      ),
+      tituloCsv: "Lucro antes do anúncio",
       alinhar: "direita",
+      className: "whitespace-normal",
       celula: (l) => <span className={clsx("font-semibold", corLucro(l.lucro))}>{din(l.lucro)}</span>,
       csv: (l) => l.lucro,
     },
@@ -534,7 +536,19 @@ export function DetalharPor({
     { chave: "gasto", titulo: "Gasto", alinhar: "direita", celula: (l) => din(l.gasto), csv: (l) => l.gasto },
     { chave: "impressoes", titulo: "Impressões", alinhar: "direita", celula: (l) => inteiro(l.impressoes), csv: (l) => l.impressoes },
     { chave: "cliques", titulo: "Cliques", alinhar: "direita", celula: (l) => inteiro(l.cliques), csv: (l) => l.cliques },
-    { chave: "compras", titulo: "Compras (plataforma)", alinhar: "direita", celula: (l) => inteiro(l.compras), csv: (l) => l.compras },
+    {
+      chave: "compras",
+      titulo: (
+        <ComDica titulo="Compras (plataforma)" rotulo="De onde vêm as compras">
+          Compras e valor que a própria plataforma reporta. O ROAS real da loja usa os pedidos da Shopify.
+        </ComDica>
+      ),
+      tituloCsv: "Compras (plataforma)",
+      alinhar: "direita",
+      className: "whitespace-normal",
+      celula: (l) => inteiro(l.compras),
+      csv: (l) => l.compras,
+    },
     { chave: "valor", titulo: "Valor (plataforma)", alinhar: "direita", celula: (l) => din(l.valor), csv: (l) => l.valor },
     { chave: "roasPlataforma", titulo: "ROAS da plataforma", alinhar: "direita", celula: (l) => vezes(l.roasPlataforma), csv: (l) => l.roasPlataforma },
     {
@@ -582,7 +596,7 @@ export function DetalharPor({
     setSituacoes([]);
   }
 
-  const TITULO_CSV: Record<Exclude<Aba, "pais">, string> = {
+  const TITULO_CSV: Record<Aba, string> = {
     loja: "Lucro por loja",
     dia: "Lucro dia a dia",
     produto: "Lucro antes do anúncio por produto",
@@ -590,7 +604,6 @@ export function DetalharPor({
   };
 
   function exportar() {
-    if (abaAtual === "pais") return;
     const [colunas, linhas]: [Coluna<never>[], Record<string, unknown>[]] =
       abaAtual === "loja"
         ? [colunasLoja as Coluna<never>[], filtradas.loja]
@@ -628,7 +641,6 @@ export function DetalharPor({
     dia: "Buscar data",
     produto: "Buscar SKU",
     campanha: "Buscar campanha",
-    pais: "",
   };
 
   const barra = (
@@ -689,17 +701,6 @@ export function DetalharPor({
         />
       )}
       <span className="flex-1" />
-      <span className="hidden text-label text-t2 xl:inline">Shift + clique ordena por mais de uma coluna</span>
-      <Segmented
-        className="hidden sm:inline-flex"
-        rotulo="Densidade"
-        valor={densidade}
-        onValorChange={setDensidade}
-        opcoes={[
-          { valor: "compacta", rotulo: "Compacta" },
-          { valor: "confortavel", rotulo: "Confortável" },
-        ]}
-      />
       <Button variant="secondary" size="sm" onClick={exportar} aria-label="Exportar esta tabela em CSV">
         <Download aria-hidden />
         CSV
@@ -730,12 +731,7 @@ export function DetalharPor({
   );
 
   function rodape(texto: ReactNode) {
-    return (
-      <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 border-t border-border-subtle px-4 py-2.5 text-label text-t2">
-        <span>{texto}</span>
-        <span>Valores em {moeda} · convertidos pela cotação de cada dia</span>
-      </div>
-    );
+    return <p className="border-t border-border-subtle px-4 py-2.5 text-label text-t2">{texto}</p>;
   }
 
   function tabela<T extends Record<string, unknown>>(opcoes: {
@@ -776,7 +772,6 @@ export function DetalharPor({
             colunas={colunas}
             linhas={opcoes.linhas}
             ordenacaoInicial={opcoes.ordem}
-            densidade={densidade}
             rodape={filtroAtivo ? undefined : opcoes.rodapeTabela}
           />
         </div>
@@ -824,7 +819,7 @@ export function DetalharPor({
                       <span className="text-dense text-ink">{nomeDaLoja(l)}</span>
                       <span className="font-mono text-label text-t2">{l.dominio}</span>
                     </span>
-                    <StatusBadge tom="neutral">A Shopify não deixa ler os pedidos</StatusBadge>
+                    <StatusBadge tom="neutral">Sem acesso aos pedidos</StatusBadge>
                     <Link
                       href="/stores"
                       className="rounded-sm text-dense font-medium text-brand underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
@@ -837,7 +832,6 @@ export function DetalharPor({
             )}
           </div>
         )}
-        {rodape("Clique no nome de uma loja para ver só ela em todas as telas.")}
       </>
     ),
     dia: () => (
@@ -850,7 +844,6 @@ export function DetalharPor({
           rodapeTabela: rodapeDia,
           vazio: semPedido,
         })}
-        {rodape("O dia de hoje está incompleto até a meia-noite. Cada dia segue o fuso da loja.")}
       </>
     ),
     produto: () =>
@@ -858,13 +851,6 @@ export function DetalharPor({
         <ErroSecao detalhe={erroExtras} />
       ) : (
         <>
-          <Aviso>
-            <span>
-              <strong className="font-semibold">Lucro antes do anúncio.</strong> O gasto do Meta e do Google
-              não é por produto, então esta aba desconta só produto, frete e taxa.
-            </span>
-            <span className="text-t1">Nome e foto do produto ainda não aparecem: o pedido guarda só o SKU.</span>
-          </Aviso>
           {tabela({
             legenda: "Lucro antes do anúncio por produto",
             colunas: colunasProduto,
@@ -874,14 +860,8 @@ export function DetalharPor({
             chave: ordemProduto,
             vazio: semPedido,
           })}
-          {rodape(
-            <>
-              SKU sem custo aparece como “—” e não entra na margem. A receita do pedido é dividida entre os itens
-              pelo preço de cada um.
-              {produtos.receitaSemItem > 0 &&
-                ` ${dinheiro(produtos.receitaSemItem, moeda)} de pedidos sem item (só frete ou ajuste) ficam de fora.`}
-            </>
-          )}
+          {produtos.receitaSemItem > 0 &&
+            rodape(`${dinheiro(produtos.receitaSemItem, moeda)} de pedidos sem item (só frete ou ajuste) ficam de fora.`)}
         </>
       ),
     campanha: () =>
@@ -889,12 +869,6 @@ export function DetalharPor({
         <ErroSecao detalhe={erroExtras} />
       ) : (
         <>
-          <Aviso>
-            <span>
-              Compras e valor são os que a própria plataforma reporta. O ROAS real da loja usa os pedidos da
-              Shopify, para você comparar.
-            </span>
-          </Aviso>
           {tabela({
             legenda: "Desempenho por campanha",
             colunas: colunasCampanha,
@@ -911,26 +885,15 @@ export function DetalharPor({
               />
             ),
           })}
-          {rodape("Lucro por campanha depende de ligar cada pedido à campanha: ainda não existe.")}
         </>
       ),
-    pais: () => (
-      <EmptyState
-        variante="simples"
-        selo="Em breve"
-        titulo="Lucro por país ainda não existe"
-        descricao="O pedido sincronizado ainda não guarda o país do comprador."
-        className="min-h-60"
-      />
-    ),
   };
 
-  const ABAS: { id: Aba; rotulo: string; emBreve?: boolean }[] = [
+  const ABAS: { id: Aba; rotulo: string }[] = [
     ...(mostrarLoja ? [{ id: "loja" as const, rotulo: "Loja" }] : []),
     { id: "dia", rotulo: "Dia" },
     { id: "produto", rotulo: "Produto" },
     { id: "campanha", rotulo: "Campanha" },
-    { id: "pais", rotulo: "País", emBreve: true },
   ];
 
   return (
@@ -948,9 +911,6 @@ export function DetalharPor({
             {ABAS.map((a) => (
               <TabsTrigger key={a.id} value={a.id} className="h-11 px-1">
                 {a.rotulo}
-                {a.emBreve && (
-                  <span className="rounded-sm border border-border px-1 text-label font-normal text-t2">Em breve</span>
-                )}
               </TabsTrigger>
             ))}
           </TabsList>

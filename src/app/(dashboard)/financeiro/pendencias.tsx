@@ -15,8 +15,9 @@ import { useListaGuardada } from "./preferencia";
 // ============================================================================
 // Central de pendencias: o que deixa o numero do Lucro errado ou incompleto,
 // agrupado por gravidade. Fechada, mostra so a mais grave; cada uma leva a
-// tela que resolve. So o informativo pode ser dispensado (fica guardado neste
-// navegador).
+// tela que resolve. E o unico bloco de aviso da tela. O que pode ser de
+// proposito (loja que vende sem anunciar) pode ser dispensado: fica guardado
+// neste navegador.
 // ============================================================================
 
 const CHAVE_DISPENSADAS = "xc_lucro_dispensadas";
@@ -122,7 +123,9 @@ function Item({
       </span>
       <div className="flex min-w-0 flex-1 basis-56 flex-col gap-0.5">
         <p className="text-dense font-semibold text-ink">
-          <span className={t.texto}>{t.sev}:</span> {p.titulo}
+          {/* O icone ja diz a gravidade; o leitor de tela ouve a palavra. */}
+          <span className="sr-only">{t.sev}: </span>
+          {p.titulo}
         </p>
         {p.detalhe && <p className="break-words text-dense text-t1 text-pretty">{p.detalhe}</p>}
       </div>
@@ -189,7 +192,7 @@ export function Pendencias({ itens }: { itens: Pendencia[] }) {
       Mostrar de novo
     </button>
   );
-  const textoEscondidas = `${escondidas} ${escondidas === 1 ? "informativa dispensada" : "informativas dispensadas"}.`;
+  const textoEscondidas = `${escondidas} ${escondidas === 1 ? "aviso dispensado" : "avisos dispensados"}.`;
 
   if (ativas.length === 0) {
     return escondidas > 0 ? (

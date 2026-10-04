@@ -13,13 +13,13 @@ import { dinheiro } from "./lucro-dados";
 const pct0 = new Intl.NumberFormat("pt-BR", { style: "percent", maximumFractionDigits: 0 });
 const pct1 = new Intl.NumberFormat("pt-BR", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
-export function Cascata({ atual, moeda, contexto }: { atual: Totais; moeda: string; contexto: string }) {
+export function Cascata({ atual, moeda }: { atual: Totais; moeda: string }) {
   const r = atual.receita;
   const titulo = "Para onde foi o faturamento";
 
   if (r <= 0) {
     return (
-      <Section titulo={titulo} descricao={contexto}>
+      <Section titulo={titulo}>
         <EmptyState
           variante="tracejado"
           titulo="Sem faturamento no período"
@@ -67,11 +67,8 @@ export function Cascata({ atual, moeda, contexto }: { atual: Totais; moeda: stri
   ];
 
   return (
-    <Section titulo={titulo} descricao={contexto}>
+    <Section titulo={titulo}>
       <BarList itens={itens} maximo={r} rotulo="Composição do lucro" />
-      <p className="mt-auto text-label text-t2 text-pretty">
-        Cada barra mostra quanto aquele custo tira do faturamento. Lucro estimado, não contábil.
-      </p>
     </Section>
   );
 }

@@ -5,13 +5,17 @@ import {
   derivar,
   dinheiro,
   granularidades,
+  haQuanto,
   lerListaGuardada,
+  momentoAtualizado,
   montarCsv,
+  montarDicas,
   montarGrafico,
   montarPendencias,
-  ordenarFixados,
   porcento,
   semInicioVazio,
+  situacaoDasLojas,
+  valorComSinal,
   vezes,
   type EntradaPendencias,
 } from "@/app/(dashboard)/financeiro/lucro-dados";
@@ -133,10 +137,11 @@ describe("montarGrafico", () => {
   });
 });
 
-describe("KPI fixado", () => {
-  it("fixados primeiro, na ordem padrao; lixo e ignorado", () => {
-    expect(ordenarFixados(["margem", "lucro", "xyz"]).slice(0, 3)).toEqual(["lucro", "margem", "receita"]);
-    expect(ordenarFixados([])).toHaveLength(8);
+describe("valor do KPI e lista guardada", () => {
+  it("negativo leva o sinal tipografico junto do tom", () => {
+    expect(valorComSinal("-R$ 1,2 mil", -1200)).toEqual({ texto: "−R$ 1,2 mil", negativo: true });
+    expect(valorComSinal("R$ 1,2 mil", 1200)).toEqual({ texto: "R$ 1,2 mil", negativo: false });
+    expect(valorComSinal("—", null)).toEqual({ texto: "—", negativo: false });
   });
 
   it("lista guardada invalida volta ao padrao", () => {
@@ -150,6 +155,12 @@ describe("KPI fixado", () => {
 describe("montarPendencias", () => {
   const A = "a";
   const B = "b";
+  const emDia = {
+    carga_inicial_ok: true,
+    ultimo_erro: null,
+    ultimo_erro_tipo: null,
+    ultimo_sync_ok_em: "2026-10-03T12:00:00Z",
+  } as const;
   const base: EntradaPendencias = {
     lojas: [
       { id: A, nome: "Lumen", dominio: "lumen.myshopify.com" },
@@ -157,8 +168,8 @@ describe("montarPendencias", () => {
     ],
     lojaIds: [A, B],
     estados: [
-      { store_id: A, carga_inicial_ok: true, ultimo_erro: null, ultimo_erro_tipo: null },
-      { store_id: B, carga_inicial_ok: true, ultimo_erro: null, ultimo_erro_tipo: null },
+      { store_id: A, ...emDia },
+      { store_id: B, ...emDia },
     ],
     contas: { total: 1, semLoja: 0, comErro: [], googleSemDado3h: [] },
     avisos: {
@@ -173,13 +184,15 @@ describe("montarPendencias", () => {
       { storeId: A, receita: 100, pedidos: 1 },
       { storeId: B, receita: 0, pedidos: 0 },
     ],
+    desinstaladas: {},
+    lojasComConta: [A, B],
   };
 
   it("tudo certo: nenhuma pendencia", () => {
     expect(montarPendencias(base)).toEqual([]);
   });
 
-  it("critico antes de atencao antes de informativo; so o informativo se dispensa", () => {
+  it("critico antes de atencao; o que so explica um numero nao vira caixa", () => {
     const p = montarPendencias({
       ...base,
       coberturaCusto: 0.8,
@@ -190,10 +203,25 @@ describe("montarPendencias", () => {
       ["custo-faltando", "err"],
       ["google-3h", "warn"],
       ["taxa", "warn"],
-      ["cambio", "info"],
     ]);
     expect(s(p[0].titulo)).toBe("Lucro inflado: 20,0% da receita vendeu sem custo cadastrado");
-    expect(p.filter((x) => x.dispensavel).map((x) => x.id)).toEqual(["cambio"]);
+    expect(p.some((x) => x.dispensavel)).toBe(false);
+  });
+
+  it("custo padrao, cambio e fuso viram Dica no indicador afetado", () => {
+    const avisos = {
+      ...base.avisos,
+      cambioAproximado: true,
+      fusosDiferentes: [{ conta: "Meta X", fusoConta: "America/New_York", loja: "Lumen", fusoLoja: "America/Sao_Paulo" }],
+    };
+    expect(montarPendencias({ ...base, coberturaCusto: 0.9, avisos })).toEqual([]);
+    const d = montarDicas(avisos, 0.9);
+    expect(Object.keys(d).sort()).toEqual(["gasto", "lucro"]);
+    expect(d.lucro).toHaveLength(2);
+    expect(s(d.lucro?.[0] ?? "")).toBe("10,0% da receita usa o custo padrão da loja, não o do SKU.");
+    expect(d.gasto?.[0]).toContain("Meta X (America/New_York) e Lumen (America/Sao_Paulo)");
+    // Sem custo padrao, a falta de custo e pendencia critica, nao dica.
+    expect(montarDicas({ ...base.avisos, lojasSemCustoPadraoComFalta: ["Lumen"] }, 0.9)).toEqual({});
   });
 
   it("loja sem acesso que vendeu no periodo e critica; parada so pede atencao", () => {
@@ -201,8 +229,15 @@ describe("montarPendencias", () => {
       ...base,
       estados: [base.estados[0], { ...base.estados[1], ultimo_erro: "403", ultimo_erro_tipo: "negado" }],
     });
-    expect(parada.map((x) => [x.id, x.tom])).toEqual([["negado", "warn"]]);
-    expect(parada[0].titulo).toBe("A Shopify não deixa ler os pedidos de Tarn");
+    expect(parada).toEqual([
+      {
+        id: "negado",
+        tom: "warn",
+        titulo: "A Shopify não deixa ler os pedidos de Tarn",
+        detalhe: "Falta a permissão de pedidos. As vendas novas ficam de fora.",
+        acao: { rotulo: "Abrir Lojas", href: "/stores" },
+      },
+    ]);
 
     const vendeu = montarPendencias({
       ...base,
@@ -211,17 +246,155 @@ describe("montarPendencias", () => {
     expect(vendeu[0].tom).toBe("err");
   });
 
+  it("credencial vencida e sem acesso, com o motivo em uma frase e nunca o erro cru", () => {
+    const p = montarPendencias({
+      ...base,
+      estados: [
+        base.estados[0],
+        {
+          ...base.estados[1],
+          ultimo_erro: "Client ID ou Client Secret invalidos. Verifique as credenciais do app no Shopify.",
+          ultimo_erro_tipo: "falhou",
+        },
+      ],
+    });
+    expect(p.map((x) => x.id)).toEqual(["negado"]);
+    expect(p[0].detalhe).toBe("A credencial da loja não vale mais. As vendas novas ficam de fora.");
+  });
+
+  it("app desinstalado: um aviso com Abrir Lojas, sem erro cru nem Tentar agora", () => {
+    const erro =
+      "App nao esta instalado nessa loja. Instale o app primeiro: no dev.shopify.com, va em seu App > Distribution.";
+    const peloErro = montarPendencias({
+      ...base,
+      estados: [base.estados[0], { ...base.estados[1], ultimo_erro: erro, ultimo_erro_tipo: "falhou" }],
+    });
+    expect(peloErro).toEqual([
+      {
+        id: "desinstalado",
+        tom: "warn",
+        titulo: "App desinstalado em Tarn",
+        detalhe: "Reconecte ou remova a loja.",
+        acao: { rotulo: "Abrir Lojas", href: "/stores" },
+      },
+    ]);
+
+    // Marcada pelo webhook: a busca pula a loja, e o estado dela fica velho e
+    // sem erro. Vendeu no periodo: faltam vendas, critico.
+    const marcada = montarPendencias({ ...base, desinstaladas: { [A]: "2026-09-12T15:00:00Z" } });
+    expect(marcada.map((x) => [x.id, x.tom])).toEqual([["desinstalado", "err"]]);
+    expect(marcada[0].titulo).toBe("App desinstalado em Lumen");
+    expect(marcada[0].detalhe).toBe("Desde 12/09. Reconecte ou remova a loja.");
+
+    // Loja desinstalada antes da primeira carga nao fica "puxando" para sempre.
+    const semCarga = montarPendencias({
+      ...base,
+      estados: [base.estados[0], { ...base.estados[1], carga_inicial_ok: false }],
+      desinstaladas: { [B]: "2026-09-12T15:00:00Z" },
+    });
+    expect(semCarga.map((x) => x.id)).toEqual(["desinstalado"]);
+  });
+
+  it("falha passageira: Tentar agora, sem o erro cru", () => {
+    const p = montarPendencias({
+      ...base,
+      estados: [{ ...base.estados[0], ultimo_erro: "fetch failed: ECONNRESET", ultimo_erro_tipo: "falhou" }, base.estados[1]],
+    });
+    expect(p).toHaveLength(1);
+    expect(p[0]).toMatchObject({
+      id: "falhou",
+      tom: "warn",
+      titulo: "Os pedidos de Lumen não atualizaram na última rodada",
+      acao: { rotulo: "Tentar agora", sincronizar: true },
+    });
+    expect(p[0].detalhe).toBeUndefined();
+  });
+
+  it("conta de anuncio com erro: sem o motivo cru, com o caminho certo", () => {
+    const p = montarPendencias({
+      ...base,
+      contas: { ...base.contas, comErro: [{ nome: "Google Softnook", erro: "PERMISSION_DENIED: customer 123" }] },
+    });
+    expect(p).toEqual([
+      {
+        id: "conta-erro-Google Softnook",
+        tom: "err",
+        titulo: "O gasto de Google Softnook não está sendo lido",
+        detalhe: "O lucro pode estar alto demais.",
+        acao: { rotulo: "Contas de anúncio", href: "/integracoes/google" },
+      },
+    ]);
+  });
+
+  it("loja que vendeu sem conta de anuncio ligada: aviso dispensavel, pelas lojas", () => {
+    const p = montarPendencias({ ...base, lojasComConta: [B] });
+    expect(p).toEqual([
+      {
+        id: `sem-conta-anuncio:${A}`,
+        tom: "warn",
+        titulo: "Lumen vendeu sem conta de anúncio ligada",
+        detalhe: "O lucro não desconta o anúncio dela.",
+        acao: { rotulo: "Conectar contas", href: "/integracoes/meta" },
+        dispensavel: true,
+      },
+    ]);
+
+    const duas = montarPendencias({
+      ...base,
+      porLoja: [
+        { storeId: A, receita: 100, pedidos: 1 },
+        { storeId: B, receita: 50, pedidos: 1 },
+      ],
+      lojasComConta: [],
+    });
+    expect(duas.map((x) => [x.id, x.titulo, x.detalhe])).toEqual([
+      ["sem-conta-anuncio:a,b", "2 lojas venderam sem conta de anúncio ligada", "Lumen e Tarn. O lucro não desconta o anúncio delas."],
+    ]);
+
+    // Loja parada nao avisa; sem saber das contas, tambem nao.
+    expect(montarPendencias({ ...base, lojasComConta: [A] })).toEqual([]);
+    expect(montarPendencias({ ...base, lojasComConta: null })).toEqual([]);
+    // Nenhuma conta: o aviso geral, nao um por loja.
+    const nenhuma = montarPendencias({ ...base, contas: { ...base.contas, total: 0 }, lojasComConta: [] });
+    expect(nenhuma.map((x) => x.id)).toEqual(["sem-contas"]);
+  });
+
   it("um aviso por tipo, com as lojas listadas", () => {
     const p = montarPendencias({
       ...base,
       estados: [
-        { store_id: A, carga_inicial_ok: false, ultimo_erro: null, ultimo_erro_tipo: null },
-        { store_id: B, carga_inicial_ok: false, ultimo_erro: null, ultimo_erro_tipo: null },
+        { ...base.estados[0], carga_inicial_ok: false, ultimo_sync_ok_em: null },
+        { ...base.estados[1], carga_inicial_ok: false, ultimo_sync_ok_em: null },
       ],
     });
     expect(p).toHaveLength(1);
     expect(p[0]).toMatchObject({ id: "carga", acao: { sincronizar: true } });
     expect(p[0].detalhe).toContain("Lumen e Tarn");
+  });
+
+  it("situacao de cada loja: sem linha de estado ainda esta carregando", () => {
+    const m = situacaoDasLojas([A, B], [{ store_id: A, ...emDia }], {});
+    expect(m.get(A)?.situacao).toBe("ok");
+    expect(m.get(B)?.situacao).toBe("carregando");
+  });
+});
+
+describe("Atualizado ha X", () => {
+  it("vale a fonte mais atrasada entre pedidos e gasto, cada uma pela leitura mais nova", () => {
+    const pedidos = ["2026-10-03T12:00:00Z", "2026-10-01T00:00:00Z", null];
+    expect(momentoAtualizado(pedidos, ["2026-10-03T11:50:00Z"])).toBe(Date.parse("2026-10-03T11:50:00Z"));
+    expect(momentoAtualizado(pedidos, [])).toBe(Date.parse("2026-10-03T12:00:00Z"));
+    expect(momentoAtualizado([null], ["lixo"])).toBeNull();
+  });
+
+  it("texto curto", () => {
+    const agora = Date.parse("2026-10-03T12:00:00Z");
+    expect(haQuanto(agora - 30_000, agora)).toBe("agora");
+    expect(haQuanto(agora + 60_000, agora)).toBe("agora");
+    expect(haQuanto(agora - 12 * 60_000, agora)).toBe("há 12 min");
+    expect(haQuanto(agora - 3 * 3_600_000, agora)).toBe("há 3 h");
+    expect(haQuanto(agora - 26 * 3_600_000, agora)).toBe("há 1 dia");
+    expect(haQuanto(agora - 50 * 3_600_000, agora)).toBe("há 2 dias");
   });
 });
 

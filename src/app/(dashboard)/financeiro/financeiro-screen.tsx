@@ -1,6 +1,3 @@
-import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
-import { Callout } from "@/components/ui/callout";
 import { ROTULO_PERIODO, rotuloIntervalo, type Comparacao } from "@/components/layout/contexto";
 import { TODAS } from "@/lib/financeiro/tipos";
 import type { DadosFinanceiro } from "@/lib/financeiro/queries";
@@ -11,13 +8,13 @@ import { Cascata } from "./cascata";
 import { ComoCalculamos } from "./como-calculamos";
 import { DetalharPor } from "./detalhar-por";
 import { Indicadores } from "./indicadores";
-import { montarPendencias, nomeDaLoja } from "./lucro-dados";
+import { haQuanto, montarDicas, montarPendencias, nomeDaLoja, situacaoDasLojas } from "./lucro-dados";
 import { Pendencias } from "./pendencias";
 
 // ============================================================================
-// A tela Lucro, montada no servidor: pendencias, KPIs + grafico (com a
-// cascata ao lado), "Detalhar por" e "Como calculamos". So as partes que
-// reagem a clique sao client components.
+// A tela Lucro, montada no servidor: pendencias (o unico bloco de aviso),
+// KPIs + grafico (com a cascata ao lado), "Detalhar por" e "Como calculamos".
+// So as partes que reagem a clique sao client components.
 //
 // `dados` vem de getFinanceiro (o calculo de sempre). `extras` sao as leituras
 // novas (serie do periodo anterior, produto, campanha): se falharem, a tela
@@ -33,24 +30,46 @@ export interface ExtrasLucro {
   campanhas: LinhaCampanha[] | null;
 }
 
+/** O que a tela sabe das lojas e contas alem do calculo (page.tsx). */
+export interface ConexaoLucro {
+  /** stores.uninstalled_at das lojas marcadas (id -> ISO). */
+  desinstaladas: Record<string, string>;
+  /** Lojas com conta de anuncio ativa. null = nao deu para ler. */
+  lojasComConta: string[] | null;
+  /** Ate quando pedidos e gasto estao lidos (ms). null = nada lido ainda. */
+  atualizadoEm: number | null;
+}
+
+/** O relogio do servidor, lido fora do corpo do componente. */
+function instante(): number {
+  return Date.now();
+}
+
 export function FinanceiroScreen({
   dados,
   comparacao,
   extras,
   erroExtras,
+  conexao,
 }: {
   dados: DadosLucro;
   comparacao: Comparacao;
   extras: ExtrasLucro | null;
   erroExtras: string | null;
+  conexao: ConexaoLucro;
 }) {
   const { resultado: r, filtro } = dados;
   const moeda = r.moeda;
   const lojaEscolhida = filtro.lojaId !== TODAS ? dados.lojas.find((l) => l.id === filtro.lojaId) : undefined;
   const rotuloLoja = lojaEscolhida ? nomeDaLoja(lojaEscolhida) : "Todas as lojas";
+  // So para o leitor de tela do grafico: na tela, a barra do topo ja diz.
   const contexto = `${rotuloLoja} · ${ROTULO_PERIODO[filtro.periodo]} (${rotuloIntervalo(r.intervalos.atual)}) · ${moeda}`;
 
-  const negadas = new Set(dados.estados.filter((e) => e.ultimo_erro_tipo === "negado").map((e) => e.store_id));
+  const situacoes = situacaoDasLojas(dados.lojaIds, dados.estados, conexao.desinstaladas);
+  const semAcesso = (id: string) => {
+    const s = situacoes.get(id)?.situacao;
+    return s === "desinstalada" || s === "sem-acesso";
+  };
   const pendencias = montarPendencias({
     lojas: dados.lojas,
     lojaIds: dados.lojaIds,
@@ -59,7 +78,13 @@ export function FinanceiroScreen({
     avisos: r.avisos,
     coberturaCusto: r.atual.coberturaCusto,
     porLoja: r.porLoja.map((l) => ({ storeId: l.storeId, receita: l.receita, pedidos: l.pedidos })),
+    desinstaladas: conexao.desinstaladas,
+    lojasComConta: conexao.lojasComConta,
   });
+
+  // Relativo ao momento em que a pagina foi montada (force-dynamic): cada
+  // visita ou troca de filtro calcula de novo.
+  const atualizado = conexao.atualizadoEm === null ? null : haQuanto(conexao.atualizadoEm, instante());
 
   // porDia vem do mais novo para o mais antigo; o grafico quer o contrario.
   const pontos = [...r.porDia].reverse().map(pontoDeLinha);
@@ -67,22 +92,6 @@ export function FinanceiroScreen({
 
   return (
     <div className="flex flex-col gap-6">
-      {lojaEscolhida && negadas.has(lojaEscolhida.id) && (
-        <Callout
-          tom="err"
-          role="alert"
-          titulo={`Sem acesso aos pedidos de ${rotuloLoja}`}
-          acao={
-            <Link href="/stores" className={buttonVariants({ size: "sm" })}>
-              Reconectar loja
-            </Link>
-          }
-        >
-          A Shopify não deixa ler os pedidos desta loja. Os números abaixo só têm o que foi lido antes de
-          perder o acesso.
-        </Callout>
-      )}
-
       <Pendencias itens={pendencias} />
 
       <Indicadores
@@ -94,7 +103,13 @@ export function FinanceiroScreen({
         pontos={pontos}
         pontosAnteriores={extras ? extras.serie.anterior : null}
         contexto={contexto}
-        cascata={<Cascata atual={r.atual} moeda={moeda} contexto={contexto} />}
+        dicas={montarDicas(r.avisos, r.atual.coberturaCusto)}
+        atualizado={
+          atualizado && conexao.atualizadoEm !== null
+            ? { texto: atualizado, iso: new Date(conexao.atualizadoEm).toISOString() }
+            : null
+        }
+        cascata={<Cascata atual={r.atual} moeda={moeda} />}
       />
 
       <DetalharPor
@@ -104,7 +119,7 @@ export function FinanceiroScreen({
         mostrarLoja={filtro.lojaId === TODAS && dados.lojaIds.length >= 2}
         lojas={r.porLoja.map((l) => ({
           linha: l,
-          semAcesso: negadas.has(l.storeId),
+          semAcesso: semAcesso(l.storeId),
           lucroPorDia: lucroPorLoja.get(l.storeId) ?? null,
         }))}
         total={r.atual}

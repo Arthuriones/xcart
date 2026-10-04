@@ -3,11 +3,14 @@ import type { CorSerie, SerieGrafico } from "@/components/ui/line-chart";
 import type { TomStatus } from "@/components/ui/status-badge";
 import { diaCurto } from "@/components/layout/contexto";
 import {
+  FUSO_RELATORIO_PADRAO,
   ROTAS,
+  diaNoFuso,
   formatarDinheiro,
   type FinSyncStateRow,
   type LojaDoSeletor,
 } from "@/lib/financeiro/tipos";
+import { estadoConexao } from "@/lib/leitura/lojas-estado";
 // So tipos: o calculo e as leituras nao entram no bundle do navegador.
 import type { Avisos, Semaforo } from "@/lib/financeiro/calculo";
 import type { ResumoContas } from "@/lib/financeiro/queries";
@@ -81,16 +84,10 @@ export function nomeDaLoja(l: Pick<LojaDoSeletor, "nome" | "dominio">): string {
 
 export type IdMetrica = "receita" | "gasto" | "lucro" | "roas" | "pedidos" | "ticket" | "cpa" | "margem";
 
-export const ORDEM_METRICAS: IdMetrica[] = [
-  "receita",
-  "gasto",
-  "lucro",
-  "roas",
-  "pedidos",
-  "ticket",
-  "cpa",
-  "margem",
-];
+/** Sempre a vista: o Lucro em destaque e o que forma ele. */
+export const KPIS_PRINCIPAIS: IdMetrica[] = ["lucro", "receita", "gasto", "roas"];
+/** Atras do "+4 métricas". */
+export const KPIS_MAIS: IdMetrica[] = ["pedidos", "ticket", "cpa", "margem"];
 
 export interface DefinicaoMetrica {
   rotulo: string;
@@ -243,15 +240,12 @@ export function temMovimento(s: Pick<Soma, "receita" | "cmv" | "gastoMeta" | "ga
 }
 
 /**
- * Ordem dos KPIs: os fixados primeiro (na ordem padrao entre eles), depois
- * os outros. Id desconhecido na lista guardada e ignorado.
+ * Valor do KPI para a tela: o sinal de menos tipografico ("−R$ 1,2 mil") e o
+ * tom vermelho andam juntos, para o negativo nunca ser so cor.
  */
-export function ordenarFixados(fixados: readonly string[]): IdMetrica[] {
-  const set = new Set(fixados);
-  return [
-    ...ORDEM_METRICAS.filter((id) => set.has(id)),
-    ...ORDEM_METRICAS.filter((id) => !set.has(id)),
-  ];
+export function valorComSinal(texto: string, v: number | null): { texto: string; negativo: boolean } {
+  const negativo = v !== null && Number.isFinite(v) && v < 0;
+  return { texto: negativo ? texto.replace(/^-/, "−") : texto, negativo };
 }
 
 /** Lista guardada no navegador -> lista de texto. Lixo vira o padrao. */
@@ -424,19 +418,98 @@ export interface Pendencia {
   detalhe?: string;
   /** Link para a tela que resolve, ou "sincronizar agora" (pedidos e Meta). */
   acao?: { rotulo: string; href: string } | { rotulo: string; sincronizar: true };
-  /** So o informativo pode ser dispensado. */
+  /**
+   * Pode sair da tela (fica guardado neste navegador). So o que pode ser de
+   * proposito, como loja que vende sem anunciar.
+   */
   dispensavel?: boolean;
 }
+
+type EstadoPendencia = Pick<
+  FinSyncStateRow,
+  "store_id" | "carga_inicial_ok" | "ultimo_erro" | "ultimo_erro_tipo" | "ultimo_sync_ok_em"
+>;
 
 export interface EntradaPendencias {
   lojas: LojaDoSeletor[];
   lojaIds: string[];
-  estados: Pick<FinSyncStateRow, "store_id" | "carga_inicial_ok" | "ultimo_erro" | "ultimo_erro_tipo">[];
+  estados: EstadoPendencia[];
   contas: ResumoContas;
   avisos: Avisos;
   coberturaCusto: number | null;
   /** Movimento por loja no periodo: loja sem acesso que vendeu vira critica. */
   porLoja: { storeId: string; receita: number; pedidos: number }[];
+  /** stores.uninstalled_at, so das lojas marcadas (id -> ISO). */
+  desinstaladas: Record<string, string>;
+  /**
+   * Lojas com conta de anuncio ativa ligada. null = nao deu para saber: fica
+   * sem o aviso de "vendeu sem conta" em vez de inventar.
+   */
+  lojasComConta: string[] | null;
+}
+
+/** Como a loja esta para o Lucro: o que falta ler decide o aviso e a acao. */
+export type SituacaoLoja = "desinstalada" | "sem-acesso" | "falhou" | "carregando" | "ok";
+
+export interface SituacaoDaLoja {
+  situacao: SituacaoLoja;
+  /** "sem-acesso": o motivo em uma frase, nunca o erro cru. */
+  motivo?: string;
+  /** "desinstalada": quando o webhook marcou (ISO), se marcou. */
+  desde?: string | null;
+}
+
+/**
+ * A Shopify diz que o app saiu da loja (shopify/client.ts, APP_NOT_INSTALLED).
+ * Loja antiga pode nao ter a marca do webhook: o erro da busca e que conta.
+ */
+const RE_DESINSTALADO = /n[aã]o est[aá] (mais )?instalado|application_cannot_be_found|app_not_installed|not installed/i;
+
+const MOTIVO_SEM_ACESSO = {
+  semPermissao: "Falta a permissão de pedidos.",
+  pausada: "A loja está pausada ou sem plano na Shopify.",
+  tokenInvalido: "A credencial da loja não vale mais.",
+} as const;
+
+/**
+ * Situacao de cada loja pelo que o banco ja sabe: a marca de desinstalacao e
+ * o ultimo erro da busca de pedidos. Usa o estadoConexao da tela Lojas, para
+ * as duas telas dizerem a mesma coisa.
+ */
+export function situacaoDasLojas(
+  lojaIds: string[],
+  estados: EstadoPendencia[],
+  desinstaladas: Record<string, string>
+): Map<string, SituacaoDaLoja> {
+  const porLoja = new Map(estados.map((e) => [e.store_id, e]));
+  const saida = new Map<string, SituacaoDaLoja>();
+  for (const id of lojaIds) {
+    const e = porLoja.get(id);
+    const marcada = desinstaladas[id] ?? null;
+    if (marcada || RE_DESINSTALADO.test(e?.ultimo_erro ?? "")) {
+      saida.set(id, { situacao: "desinstalada", desde: marcada });
+      continue;
+    }
+    const c = estadoConexao({
+      desinstaladaEm: null,
+      sync: e
+        ? {
+            ultimoErro: e.ultimo_erro,
+            ultimoErroTipo: e.ultimo_erro_tipo,
+            ultimoSyncOkEm: e.ultimo_sync_ok_em,
+            cargaInicialOk: e.carga_inicial_ok,
+          }
+        : null,
+    });
+    if (c.chave === "semPermissao" || c.chave === "pausada" || c.chave === "tokenInvalido") {
+      saida.set(id, { situacao: "sem-acesso", motivo: MOTIVO_SEM_ACESSO[c.chave] });
+    } else if (c.chave === "falhaSync") {
+      saida.set(id, { situacao: "falhou" });
+    } else {
+      saida.set(id, { situacao: !e || !e.carga_inicial_ok ? "carregando" : "ok" });
+    }
+  }
+  return saida;
 }
 
 const ORDEM_TOM: Record<TomPendencia, number> = { err: 0, warn: 1, info: 2 };
@@ -444,15 +517,24 @@ const ORDEM_TOM: Record<TomPendencia, number> = { err: 0, warn: 1, info: 2 };
 /** Custos e taxas ja filtrado nos SKUs sem custo (a tela le ?situacao=). */
 const CUSTOS_SEM_CUSTO = `${ROTAS.custos}?situacao=semCusto`;
 
+/** Onde liga conta de anuncio a loja (Meta primeiro; o Google fica ao lado). */
+const CONECTAR_CONTAS = "/integracoes/meta";
+
 function listar(nomes: string[]): string {
   if (nomes.length <= 1) return nomes.join("");
   return `${nomes.slice(0, -1).join(", ")} e ${nomes[nomes.length - 1]}`;
 }
 
+/** "12/09" no fuso do relatorio; null quando nao ha data valida. */
+function diaDe(iso: string | null | undefined): string | null {
+  const ms = iso ? Date.parse(iso) : NaN;
+  return Number.isFinite(ms) ? diaCurto(diaNoFuso(new Date(ms), FUSO_RELATORIO_PADRAO)) : null;
+}
+
 /**
  * Os avisos da tela, um por tipo (com as lojas listadas, nunca uma caixa por
- * loja), do mais grave para o informativo. Critico e o que deixa o lucro
- * ERRADO para cima ou esconde venda que aconteceu.
+ * loja), do mais grave para o menos. So entra o que pede uma acao: o que so
+ * explica um numero vira Dica no indicador (montarDicas).
  */
 export function montarPendencias(d: EntradaPendencias): Pendencia[] {
   const saida: Pendencia[] = [];
@@ -461,46 +543,59 @@ export function montarPendencias(d: EntradaPendencias): Pendencia[] {
     const l = lojaPorId.get(id);
     return l ? nomeDaLoja(l) : "loja removida";
   };
-  const estadoPorLoja = new Map(d.estados.map((e) => [e.store_id, e]));
+  const situacoes = situacaoDasLojas(d.lojaIds, d.estados, d.desinstaladas);
+  const comSituacao = (s: SituacaoLoja) => d.lojaIds.filter((id) => situacoes.get(id)?.situacao === s);
+  const movimento = new Map(d.porLoja.map((l) => [l.storeId, l.receita > 0 || l.pedidos > 0]));
+  const vendeu = (id: string) => movimento.get(id) === true;
 
-  // Custo faltando: o produto entrou como zero e o lucro esta inflado.
+  // Custo faltando sem custo padrao: o produto entrou como zero e o lucro
+  // esta inflado. Com custo padrao e so estimativa: vira Dica.
   const cobertura = d.coberturaCusto;
-  if (cobertura !== null && cobertura < 0.95) {
-    const falta = porcento(1 - cobertura);
-    if (d.avisos.lojasSemCustoPadraoComFalta.length > 0) {
-      saida.push({
-        id: "custo-faltando",
-        tom: "err",
-        titulo: `Lucro inflado: ${falta} da receita vendeu sem custo cadastrado`,
-        detalhe: `${listar(d.avisos.lojasSemCustoPadraoComFalta)} ${d.avisos.lojasSemCustoPadraoComFalta.length === 1 ? "vendeu" : "venderam"} SKU sem custo e sem custo padrão. O produto entrou como zero.`,
-        acao: { rotulo: "Cadastrar custos", href: CUSTOS_SEM_CUSTO },
-      });
-    } else {
-      saida.push({
-        id: "custo-padrao",
-        tom: "info",
-        titulo: `${falta} da receita usa o custo padrão, não o custo do SKU`,
-        detalhe: "O lucro dessas vendas é uma estimativa pelo percentual da loja.",
-        acao: { rotulo: "Cadastrar custos", href: CUSTOS_SEM_CUSTO },
-        dispensavel: true,
-      });
-    }
+  const semCusto = d.avisos.lojasSemCustoPadraoComFalta;
+  if (cobertura !== null && cobertura < 0.95 && semCusto.length > 0) {
+    saida.push({
+      id: "custo-faltando",
+      tom: "err",
+      titulo: `Lucro inflado: ${porcento(1 - cobertura)} da receita vendeu sem custo cadastrado`,
+      detalhe: `${listar(semCusto)} ${semCusto.length === 1 ? "vendeu" : "venderam"} SKU sem custo. O produto entrou como zero.`,
+      acao: { rotulo: "Cadastrar custos", href: CUSTOS_SEM_CUSTO },
+    });
   }
 
-  // Shopify negando ler pedidos: critica se a loja vendeu no periodo (faltam
-  // vendas de agora); loja antiga, parada, so pede atencao.
-  const negadas = d.estados.filter((e) => e.ultimo_erro_tipo === "negado").map((e) => e.store_id);
-  if (negadas.length > 0) {
-    const movimento = new Map(d.porLoja.map((l) => [l.storeId, l.receita > 0 || l.pedidos > 0]));
-    const ativa = negadas.some((id) => movimento.get(id));
+  // App fora da loja: "Tentar agora" nao resolve, so reconectar ou remover.
+  // Critico se a loja vendeu no periodo (faltam vendas); parada so pede atencao.
+  const desinstaladas = comSituacao("desinstalada");
+  if (desinstaladas.length > 0) {
+    const desde = desinstaladas.length === 1 ? diaDe(situacoes.get(desinstaladas[0])?.desde) : null;
+    saida.push({
+      id: "desinstalado",
+      tom: desinstaladas.some(vendeu) ? "err" : "warn",
+      titulo:
+        desinstaladas.length === 1
+          ? `App desinstalado em ${nome(desinstaladas[0])}`
+          : `App desinstalado em ${desinstaladas.length} lojas`,
+      detalhe:
+        desinstaladas.length === 1
+          ? `${desde ? `Desde ${desde}. ` : ""}Reconecte ou remova a loja.`
+          : `${listar(desinstaladas.map(nome))}. Reconecte ou remova em Lojas.`,
+      acao: { rotulo: "Abrir Lojas", href: "/stores" },
+    });
+  }
+
+  // A Shopify nega ler pedidos (permissao, loja pausada, credencial vencida).
+  const semAcesso = comSituacao("sem-acesso");
+  if (semAcesso.length > 0) {
     saida.push({
       id: "negado",
-      tom: ativa ? "err" : "warn",
+      tom: semAcesso.some(vendeu) ? "err" : "warn",
       titulo:
-        negadas.length === 1
-          ? `A Shopify não deixa ler os pedidos de ${nome(negadas[0])}`
-          : `A Shopify não deixa ler os pedidos de ${negadas.length} lojas`,
-      detalhe: `${negadas.length > 1 ? `${listar(negadas.map(nome))}. ` : ""}Loja pausada, app desinstalado ou token vencido: as vendas novas ficam de fora. Se não usa mais, remova em Lojas; se usa, reconecte.`,
+        semAcesso.length === 1
+          ? `A Shopify não deixa ler os pedidos de ${nome(semAcesso[0])}`
+          : `A Shopify não deixa ler os pedidos de ${semAcesso.length} lojas`,
+      detalhe:
+        semAcesso.length === 1
+          ? `${situacoes.get(semAcesso[0])?.motivo ?? ""} As vendas novas ficam de fora.`.trim()
+          : `${listar(semAcesso.map(nome))}. As vendas novas ficam de fora.`,
       acao: { rotulo: "Abrir Lojas", href: "/stores" },
     });
   }
@@ -510,9 +605,9 @@ export function montarPendencias(d: EntradaPendencias): Pendencia[] {
       id: `conta-erro-${c.nome}`,
       tom: "err",
       titulo: `O gasto de ${c.nome} não está sendo lido`,
-      detalhe: `O lucro pode estar alto demais. Motivo: ${c.erro}`,
+      // O motivo cru fica na tela da conta, para onde o botao leva.
+      detalhe: "O lucro pode estar alto demais.",
       // O nome vem de nomeConta (queries.ts): "Google ..." ou "Meta ...".
-      // /financeiro/anuncios cai no Meta, onde a conta do Google nao aparece.
       acao: {
         rotulo: "Contas de anúncio",
         href: c.nome.startsWith("Google ") ? "/integracoes/google" : "/integracoes/meta",
@@ -520,32 +615,28 @@ export function montarPendencias(d: EntradaPendencias): Pendencia[] {
     });
   }
 
-  const carregando = d.lojaIds.filter((id) => {
-    const e = estadoPorLoja.get(id);
-    // Loja com erro fica so com o aviso do erro: loja morta nao prende o
-    // "ainda puxando" para sempre.
-    return !e || (!e.carga_inicial_ok && !e.ultimo_erro);
-  });
+  const carregando = comSituacao("carregando");
   if (carregando.length > 0) {
     saida.push({
       id: "carga",
       tom: "warn",
       titulo: "Ainda estamos puxando os pedidos da Shopify",
-      detalhe: `A primeira carga traz até 60 dias e completa nas próximas rodadas.${d.lojaIds.length > 1 ? ` Faltam: ${listar(carregando.map(nome))}.` : ""}`,
+      detalhe: `A primeira carga traz até 60 dias.${d.lojaIds.length > 1 ? ` Faltam: ${listar(carregando.map(nome))}.` : ""}`,
       acao: { rotulo: "Atualizar agora", sincronizar: true },
     });
   }
 
-  const falharam = d.estados.filter((e) => e.ultimo_erro_tipo !== "negado" && e.ultimo_erro);
+  // Falha passageira: aqui "Tentar agora" resolve. O erro cru fica em Lojas.
+  const falharam = comSituacao("falhou");
   if (falharam.length > 0) {
     saida.push({
       id: "falhou",
       tom: "warn",
       titulo:
         falharam.length === 1
-          ? `Os pedidos de ${nome(falharam[0].store_id)} não atualizaram na última rodada`
+          ? `Os pedidos de ${nome(falharam[0])} não atualizaram na última rodada`
           : `Os pedidos de ${falharam.length} lojas não atualizaram na última rodada`,
-      detalhe: `${falharam.length > 1 ? `${listar(falharam.map((e) => nome(e.store_id)))}. ` : ""}Motivo: ${falharam[0].ultimo_erro}`,
+      detalhe: falharam.length > 1 ? `${listar(falharam.map(nome))}.` : undefined,
       acao: { rotulo: "Tentar agora", sincronizar: true },
     });
   }
@@ -554,8 +645,8 @@ export function montarPendencias(d: EntradaPendencias): Pendencia[] {
     saida.push({
       id: "google-3h",
       tom: "warn",
-      titulo: `O gasto do Google está parado há mais de 3 h`,
-      detalhe: `${listar(d.contas.googleSemDado3h)}: confira se o script está colado e agendado de hora em hora. O lucro de hoje pode estar alto demais.`,
+      titulo: "O gasto do Google está parado há mais de 3 h",
+      detalhe: `${listar(d.contas.googleSemDado3h)}: confira se o script está agendado de hora em hora.`,
       acao: { rotulo: "Contas de anúncio", href: "/integracoes/google" },
     });
   }
@@ -568,17 +659,42 @@ export function montarPendencias(d: EntradaPendencias): Pendencia[] {
       detalhe: "Sem o gasto, o lucro mostrado é o que sobra antes do anúncio.",
       acao: { rotulo: "Conectar contas", href: ROTAS.anuncios },
     });
-  } else if (d.contas.semLoja > 0) {
-    saida.push({
-      id: "contas-sem-loja",
-      tom: "warn",
-      titulo:
-        d.contas.semLoja === 1
-          ? "1 conta de anúncio sem loja ligada"
-          : `${d.contas.semLoja} contas de anúncio sem loja ligada`,
-      detalhe: `O gasto ${d.contas.semLoja === 1 ? "dela" : "delas"} não entra em nenhuma loja.`,
-      acao: { rotulo: "Ligar à loja", href: ROTAS.anuncios },
-    });
+  } else {
+    if (d.contas.semLoja > 0) {
+      saida.push({
+        id: "contas-sem-loja",
+        tom: "warn",
+        titulo:
+          d.contas.semLoja === 1
+            ? "1 conta de anúncio sem loja ligada"
+            : `${d.contas.semLoja} contas de anúncio sem loja ligada`,
+        detalhe: `O gasto ${d.contas.semLoja === 1 ? "dela" : "delas"} não entra em nenhuma loja.`,
+        acao: { rotulo: "Ligar à loja", href: ROTAS.anuncios },
+      });
+    }
+
+    // Loja que vendeu e nao tem conta ligada: o lucro dela nao desconta
+    // anuncio nenhum. Pode ser de proposito (loja sem anuncio): dispensavel. O
+    // id leva as lojas, entao uma loja nova nessa situacao volta a avisar.
+    if (d.lojasComConta) {
+      const comConta = new Set(d.lojasComConta);
+      const semConta = d.lojaIds.filter(
+        (id) => vendeu(id) && !comConta.has(id) && situacoes.get(id)?.situacao !== "desinstalada"
+      );
+      if (semConta.length > 0) {
+        saida.push({
+          id: `sem-conta-anuncio:${[...semConta].sort().join(",")}`,
+          tom: "warn",
+          titulo:
+            semConta.length === 1
+              ? `${nome(semConta[0])} vendeu sem conta de anúncio ligada`
+              : `${semConta.length} lojas venderam sem conta de anúncio ligada`,
+          detalhe: `${semConta.length > 1 ? `${listar(semConta.map(nome))}. ` : ""}O lucro não desconta o anúncio ${semConta.length === 1 ? "dela" : "delas"}.`,
+          acao: { rotulo: "Conectar contas", href: CONECTAR_CONTAS },
+          dispensavel: true,
+        });
+      }
+    }
   }
 
   if (d.avisos.lojasSemTaxa.length > 0) {
@@ -586,7 +702,7 @@ export function montarPendencias(d: EntradaPendencias): Pendencia[] {
       id: "taxa",
       tom: "warn",
       titulo: `Taxa de pagamento não configurada em ${d.avisos.lojasSemTaxa.length === 1 ? "1 loja" : `${d.avisos.lojasSemTaxa.length} lojas`}`,
-      detalhe: `${listar(d.avisos.lojasSemTaxa)}. Sem ela, o lucro não desconta o que o gateway cobra de cada venda.`,
+      detalhe: `${listar(d.avisos.lojasSemTaxa)}. Sem ela, o lucro não desconta o gateway.`,
       acao: { rotulo: "Configurar taxa", href: ROTAS.custos },
     });
   }
@@ -596,32 +712,7 @@ export function montarPendencias(d: EntradaPendencias): Pendencia[] {
       id: "sem-cotacao",
       tom: "warn",
       titulo: `Valores em ${listar(d.avisos.moedasSemCotacao)} ficaram de fora`,
-      detalhe:
-        "Não há cotação para essa moeda. Preferimos um total menor e honesto a somar moedas diferentes como se fossem iguais.",
-      acao: { rotulo: "Ver como calculamos", href: "#como-calculamos" },
-    });
-  }
-
-  if (d.avisos.cambioAproximado) {
-    saida.push({
-      id: "cambio",
-      tom: "info",
-      titulo: "Câmbio aproximado em parte dos valores",
-      detalhe:
-        "Sem a cotação do dia, usamos uma tabela fixa. Os números se ajustam quando a cotação chegar.",
-      acao: { rotulo: "Ver como calculamos", href: "#como-calculamos" },
-      dispensavel: true,
-    });
-  }
-
-  if (d.avisos.fusosDiferentes.length > 0) {
-    saida.push({
-      id: "fusos",
-      tom: "info",
-      titulo: "Fuso da conta de anúncio diferente do fuso da loja",
-      detalhe: `${d.avisos.fusosDiferentes.map((f) => `${f.conta} (${f.fusoConta}) e ${f.loja} (${f.fusoLoja})`).join("; ")}. O gasto de um dia pode cair no dia vizinho do pedido.`,
-      acao: { rotulo: "Contas de anúncio", href: ROTAS.anuncios },
-      dispensavel: true,
+      detalhe: "Não há cotação para essa moeda.",
     });
   }
 
@@ -630,6 +721,67 @@ export function montarPendencias(d: EntradaPendencias): Pendencia[] {
     .map((p, i) => ({ p, i }))
     .sort((a, b) => ORDEM_TOM[a.p.tom] - ORDEM_TOM[b.p.tom] || a.i - b.i)
     .map((x) => x.p);
+}
+
+/**
+ * Avisos que so explicam um numero (custo padrao, cambio, fuso): viram Dica
+ * no indicador que eles afetam, em vez de caixa na tela.
+ */
+export function montarDicas(avisos: Avisos, coberturaCusto: number | null): Partial<Record<IdMetrica, string[]>> {
+  const dicas: Partial<Record<IdMetrica, string[]>> = {};
+  const juntar = (id: IdMetrica, texto: string) => {
+    (dicas[id] ??= []).push(texto);
+  };
+  if (coberturaCusto !== null && coberturaCusto < 0.95 && avisos.lojasSemCustoPadraoComFalta.length === 0) {
+    juntar("lucro", `${porcento(1 - coberturaCusto)} da receita usa o custo padrão da loja, não o do SKU.`);
+  }
+  if (avisos.cambioAproximado) {
+    juntar("lucro", "Parte dos valores usa câmbio aproximado: a cotação do dia ainda não chegou.");
+  }
+  if (avisos.fusosDiferentes.length > 0) {
+    const pares = avisos.fusosDiferentes.map((f) => `${f.conta} (${f.fusoConta}) e ${f.loja} (${f.fusoLoja})`);
+    juntar("gasto", `Fuso da conta diferente do da loja: ${pares.join("; ")}. O gasto pode cair no dia vizinho.`);
+  }
+  return dicas;
+}
+
+// ---------------------------------------------------------------------------
+// "Atualizado ha X"
+// ---------------------------------------------------------------------------
+
+function maisNova(datas: (string | null | undefined)[]): number | null {
+  let maior: number | null = null;
+  for (const d of datas) {
+    const ms = d ? Date.parse(d) : NaN;
+    if (Number.isFinite(ms) && (maior === null || ms > maior)) maior = ms;
+  }
+  return maior;
+}
+
+/**
+ * Ate quando os numeros estao em dia: a leitura mais nova de pedidos e a
+ * mais nova de gasto, e vale a mais atrasada das duas -- "há 2 min" nunca
+ * esconde um gasto parado ha 3 h. null = nada foi lido ainda.
+ */
+export function momentoAtualizado(
+  pedidos: (string | null | undefined)[],
+  gasto: (string | null | undefined)[]
+): number | null {
+  const p = maisNova(pedidos);
+  const g = maisNova(gasto);
+  if (p === null || g === null) return p ?? g;
+  return Math.min(p, g);
+}
+
+/** "agora", "há 12 min", "há 3 h", "há 2 dias". */
+export function haQuanto(momentoMs: number, agoraMs: number): string {
+  const min = Math.floor(Math.max(0, agoraMs - momentoMs) / 60_000);
+  if (min < 1) return "agora";
+  if (min < 60) return `há ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `há ${h} h`;
+  const dias = Math.floor(h / 24);
+  return `há ${dias} ${dias === 1 ? "dia" : "dias"}`;
 }
 
 // ---------------------------------------------------------------------------

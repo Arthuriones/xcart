@@ -4,21 +4,42 @@ import { Store } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { lerComparacao, lerFiltroGlobal } from "@/lib/filtro-global";
+import { filtroResolvido, lerComparacao, lerFiltroGlobal } from "@/lib/filtro-global";
 import { TODAS } from "@/lib/financeiro/tipos";
 import { getFinanceiro } from "@/lib/financeiro/queries";
 import { lerBaseLucro } from "@/lib/leitura/base-lucro";
 import { montarPorCampanha } from "@/lib/leitura/por-campanha";
 import { montarPorProduto } from "@/lib/leitura/por-produto";
 import { montarSerieDiaria } from "@/lib/leitura/serie-diaria";
+import { createClient } from "@/lib/supabase/server";
 import { ErroLucro } from "./erro-lucro";
 import { EsqueletoLucro } from "./esqueleto";
-import { FinanceiroScreen, type ExtrasLucro } from "./financeiro-screen";
+import { FinanceiroScreen, type ConexaoLucro, type ExtrasLucro } from "./financeiro-screen";
+import { momentoAtualizado } from "./lucro-dados";
 
 export const dynamic = "force-dynamic";
 
 function mensagem(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+/**
+ * stores.uninstalled_at das lojas do filtro (id -> ISO), so as marcadas. A
+ * busca de pedidos pula loja desinstalada, entao sem isto ela some calada do
+ * Lucro. Erro LANCA: quem chama segue sem a marca (o erro da busca ainda pega
+ * a loja antiga, que nao tem a marca do webhook).
+ */
+async function lerDesinstaladas(): Promise<Record<string, string>> {
+  const { lojaIds } = await filtroResolvido();
+  if (lojaIds.length === 0) return {};
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("stores").select("id, uninstalled_at").in("id", lojaIds);
+  if (error) throw new Error(error.message);
+  const saida: Record<string, string> = {};
+  for (const l of (data ?? []) as { id: string; uninstalled_at: string | null }[]) {
+    if (l.uninstalled_at) saida[String(l.id)] = l.uninstalled_at;
+  }
+  return saida;
 }
 
 /**
@@ -29,7 +50,11 @@ function mensagem(e: unknown): string {
  */
 async function Conteudo() {
   const comparacao = await lerComparacao();
-  const [principal, base] = await Promise.allSettled([getFinanceiro(), lerBaseLucro()]);
+  const [principal, base, marcas] = await Promise.allSettled([
+    getFinanceiro(),
+    lerBaseLucro(),
+    lerDesinstaladas(),
+  ]);
 
   if (principal.status === "rejected") {
     console.error("[lucro] calculo", principal.reason);
@@ -70,8 +95,33 @@ async function Conteudo() {
       erroExtras = mensagem(e);
     }
   }
+  if (marcas.status === "rejected") console.error("[lucro] lojas desinstaladas", marcas.reason);
 
-  return <FinanceiroScreen dados={dados} comparacao={comparacao} extras={extras} erroExtras={erroExtras} />;
+  // Contas ativas das lojas do filtro. getFinanceiro le a MESMA base
+  // (memorizada): se ele abriu, ela tambem. Sem ela, nada de inventar.
+  const lojaSet = new Set(dados.lojaIds);
+  const contasAtivas =
+    base.status === "fulfilled" && base.value
+      ? base.value.contas.filter((c) => c.ativo && c.store_id && lojaSet.has(c.store_id))
+      : null;
+  const conexao: ConexaoLucro = {
+    desinstaladas: marcas.status === "fulfilled" ? marcas.value : {},
+    lojasComConta: contasAtivas ? [...new Set(contasAtivas.map((c) => String(c.store_id)))] : null,
+    atualizadoEm: momentoAtualizado(
+      dados.estados.map((e) => e.ultimo_sync_ok_em),
+      (contasAtivas ?? []).map((c) => c.ultimo_sync_ok_em)
+    ),
+  };
+
+  return (
+    <FinanceiroScreen
+      dados={dados}
+      comparacao={comparacao}
+      extras={extras}
+      erroExtras={erroExtras}
+      conexao={conexao}
+    />
+  );
 }
 
 function SemLojas() {
@@ -79,7 +129,7 @@ function SemLojas() {
     <EmptyState
       icone={<Store />}
       titulo="Conecte uma loja para ver o lucro"
-      descricao="O xcart lê os pedidos da Shopify e cruza com o gasto do Meta e do Google. O lucro de cada dia aparece aqui."
+      descricao="Cruzamos os pedidos da Shopify com o gasto do Meta e do Google."
       acao={
         <Link href="/stores" className={buttonVariants({})}>
           Conectar loja
@@ -97,10 +147,7 @@ export default async function FinanceiroPage() {
   const [filtro, comparacao] = await Promise.all([lerFiltroGlobal(), lerComparacao()]);
   return (
     <>
-      <PageHeader
-        title="Lucro"
-        description="Lucro estimado por loja, já descontados produto, frete do fornecedor, taxa de pagamento e anúncios."
-      />
+      <PageHeader title="Lucro" />
       <Suspense key={JSON.stringify({ filtro, comparacao })} fallback={<EsqueletoLucro />}>
         <Conteudo />
       </Suspense>

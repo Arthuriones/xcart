@@ -25,15 +25,12 @@ export function ErroLucro({ detalhe }: { detalhe: string }) {
         <OctagonAlert className="size-5" strokeWidth={1.75} />
       </span>
       <p className="text-section text-ink">Não conseguimos calcular o lucro agora</p>
-      <p className="max-w-110 text-body text-t1">
-        Seus pedidos e custos continuam guardados. Tente de novo em alguns segundos; se repetir, fale com o
-        suporte.
-      </p>
+      <p className="max-w-110 text-body text-t1">Seus pedidos e custos continuam guardados.</p>
       <Button pending={tentando} onClick={() => startTransition(() => router.refresh())} className="min-w-35">
         {tentando ? "Tentando…" : "Tentar de novo"}
       </Button>
       <details className="text-label text-t2">
-        <summary className="cursor-pointer">Detalhes para o suporte</summary>
+        <summary className="cursor-pointer">Ver detalhes</summary>
         <p className="mt-1.5 max-w-110 break-words font-mono">{detalhe}</p>
       </details>
     </div>
