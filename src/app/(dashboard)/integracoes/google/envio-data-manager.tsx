@@ -262,12 +262,16 @@ export function EnvioDataManager({ dados, lojas }: { dados: DadosDataManager; lo
             return (
               <li key={d.id} className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0">
                 <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-dense">
-                  <span className="min-w-40 flex-1">
-                    <span className="text-ink">{nomeLoja.get(d.storeId) ?? "Loja removida"}</span>
-                    {d.nome ? <span className="text-t2"> · {d.nome}</span> : null}{" "}
-                    <span className="font-mono text-label whitespace-nowrap text-t2">
-                      {d.conta}
-                      {d.customerId ? ` · ${formatarCustomerId(d.customerId)}` : ""}
+                  <span className="flex min-w-0 flex-1 basis-48 flex-col gap-0.5">
+                    <span>
+                      <span className="text-ink">{nomeLoja.get(d.storeId) ?? "Loja removida"}</span>
+                      {d.nome ? <span className="text-t2"> · {d.nome}</span> : null}
+                    </span>
+                    <span className="flex flex-wrap gap-x-2 font-mono text-label text-t2">
+                      <span className="whitespace-nowrap">{d.conta}</span>
+                      {d.customerId ? (
+                        <span className="whitespace-nowrap">cliente {formatarCustomerId(d.customerId)}</span>
+                      ) : null}
                     </span>
                   </span>
                   <StatusBadge tom={e.tom}>{e.texto}</StatusBadge>
