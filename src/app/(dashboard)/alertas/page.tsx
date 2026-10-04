@@ -1,24 +1,23 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { Callout } from "@/components/ui/callout";
 import { lerAlertas } from "@/lib/leitura/alertas";
 import { FUSO_RELATORIO_PADRAO, ROTULO_REGRA } from "@/lib/financeiro/tipos";
-import { destinoDoAlerta, nomeDaLoja } from "./apresentar";
+import { TELA_NOTIFICACOES, abaDe, destinoDoAlerta, nomeDaLoja } from "./apresentar";
 import { CabecalhoAlertas } from "./cabecalho";
-import { CanalTelegram } from "./canal-telegram";
 import { EsqueletoAlertas } from "./esqueleto";
-import { SecaoRegras } from "./secao-regras";
 import { SecaoResolvidos } from "./secao-resolvidos";
 import { TelaAlertas, type AlertaNaTela } from "./tela-alertas";
 
 export const dynamic = "force-dynamic";
 
 /**
- * /alertas: o que esta quebrado agora, o que fechou em 7 dias, as regras que
- * o cron roda e o canal do Telegram. So le banco (alertas, config, lojas);
- * fica no Suspense para o cabecalho aparecer na hora.
+ * /alertas: o que esta quebrado agora e o que fechou em 7 dias. So le banco
+ * (alertas, config, lojas); fica no Suspense para o cabecalho aparecer na hora.
  *
  * A aba vem de ?aba= e e lida no cliente (tela-alertas.tsx): trocar de aba
- * nao volta ao servidor.
+ * nao volta ao servidor. Link antigo para ?aba=regras ou ?aba=canal vai para
+ * Notificacoes, onde as regras e o Telegram estao agora.
  */
 async function Conteudo() {
   const d = await lerAlertas();
@@ -42,9 +41,8 @@ async function Conteudo() {
     destino: destinoDoAlerta(a.regra, a.titulo),
   }));
 
-  const travado = !!d.erros.config;
   const telegramPronto =
-    !travado && !!d.config.telegram_chat_id && d.temToken && d.config.ativo;
+    !d.erros.config && !!d.config.telegram_chat_id && d.temToken && d.config.ativo;
 
   return (
     <div className="flex flex-col gap-4">
@@ -70,22 +68,18 @@ async function Conteudo() {
             erro={d.erros.resolvidos}
           />
         }
-        regras={<SecaoRegras config={d.config} travado={travado} />}
-        canal={
-          <CanalTelegram
-            config={d.config}
-            temToken={d.temToken}
-            tokenDaEnv={d.tokenDaEnv}
-            erroConfig={d.erros.config}
-            erroToken={d.erros.token}
-          />
-        }
       />
     </div>
   );
 }
 
-export default function AlertasPage() {
+export default async function AlertasPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [chave: string]: string | string[] | undefined }>;
+}) {
+  const aba = abaDe((await searchParams).aba);
+  if (aba === "regras" || aba === "canal") redirect(TELA_NOTIFICACOES);
   return (
     <>
       <CabecalhoAlertas />

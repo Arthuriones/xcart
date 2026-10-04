@@ -30,8 +30,16 @@ const HORA = 60 * MIN;
 // Abas
 // ---------------------------------------------------------------------------
 
+/**
+ * A tela mostra so "abertos" e "resolvidos" (Historico). "regras" e "canal"
+ * continuam sendo reconhecidas para o link antigo (?aba=canal) ir para
+ * Notificacoes, onde as regras e o Telegram estao agora.
+ */
 export const ABAS = ["abertos", "resolvidos", "regras", "canal"] as const;
 export type Aba = (typeof ABAS)[number];
+
+/** Onde as regras e o Telegram se configuram. */
+export const TELA_NOTIFICACOES = "/integracoes/notificacoes";
 
 /** ?aba= da URL; lixo cai em "abertos". */
 export function abaDe(valor: unknown): Aba {

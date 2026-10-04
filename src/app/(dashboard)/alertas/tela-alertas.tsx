@@ -1,21 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition, type MouseEvent, type ReactNode } from "react";
+import { useRef, useState, useTransition, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, Check, ChevronDown, OctagonAlert, TriangleAlert } from "lucide-react";
+import { ArrowRight, BellOff, Check, OctagonAlert, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { clsx } from "clsx";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { STATUS, StatusBadge } from "@/components/ui/status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -24,6 +16,7 @@ import { contextoDaRota } from "@/components/layout/navegacao";
 import { COOKIE_LOJA, ROTAS, TODAS, diaNoFuso, type SeveridadeAlerta } from "@/lib/financeiro/tipos";
 import {
   INTERVALO_VERIFICACAO_MIN,
+  TELA_NOTIFICACOES,
   abaDe,
   ateQuando,
   dataHoraCurta,
@@ -39,18 +32,17 @@ import {
 import { ErroAlertas } from "./erro-alertas";
 
 // ============================================================================
-// A parte interativa de /alertas: as abas (na URL, ?aba=) e a lista de
-// abertos com Resolver e Silenciar. Resolvidos, regras e canal chegam prontos
-// do servidor, como slots.
+// A parte interativa de /alertas: duas abas (na URL, ?aba=) -- Abertos, com
+// Resolver e Silenciar, e Historico, que chega pronto do servidor como slot.
+// Regras e Telegram ficam em Integracoes -> Notificacoes.
 //
-// Silenciar usa a rota que ja existe (PATCH /api/alertas/[id]). Ela aceita
-// 0 h, que tira o silencio: o "Desfazer" do toast manda 0 h pela mesma rota.
-// Os dois envios de um alerta vao em fila, para o 0 h nunca chegar antes
-// do 24 h.
+// Silenciar usa a rota que ja existe (PATCH /api/alertas/[id]), por 24 h. Ela
+// aceita 0 h, que tira o silencio: o "Desfazer" do toast manda 0 h pela mesma
+// rota. Os dois envios de um alerta vao em fila, para o 0 h nunca chegar
+// antes do 24 h.
 // ============================================================================
 
 const HORA = 3_600_000;
-const EVENTO_ABA = "xc:alertas-aba";
 
 /** O relogio, lido so dentro de handler (silenciar, voltar a avisar), nunca no render. */
 function instanteAgora(): number {
@@ -79,21 +71,6 @@ function irParaAba(aba: Aba) {
   if (aba === "abertos") url.searchParams.delete("aba");
   else url.searchParams.set("aba", aba);
   window.history.replaceState(null, "", url.pathname + url.search + url.hash);
-}
-
-/** Abre a aba do Telegram e leva o foco ate ela (de qualquer ponto da tela). */
-function abrirCanais() {
-  irParaAba("canal");
-  window.dispatchEvent(new Event(EVENTO_ABA));
-}
-
-/** Botao do cabecalho: o PageHeader e do servidor, entao o clique mora aqui. */
-export function BotaoCanais() {
-  return (
-    <Button variant="secondary" onClick={abrirCanais}>
-      Canais de aviso
-    </Button>
-  );
 }
 
 function Contador({ n, tom }: { n: number; tom: "err" | "warn" | "neutral" }) {
@@ -140,8 +117,6 @@ export function TelaAlertas({
   telegramPronto,
   nResolvidos,
   resolvidos,
-  regras,
-  canal,
 }: {
   abertos: AlertaNaTela[];
   /** A lista de abertos nao veio: a aba mostra o erro; as outras seguem. */
@@ -153,12 +128,11 @@ export function TelaAlertas({
   /** null = a leitura dos resolvidos falhou. */
   nResolvidos: number | null;
   resolvidos: ReactNode;
-  regras: ReactNode;
-  canal: ReactNode;
 }) {
   const router = useRouter();
   const params = useSearchParams();
-  const aba = abaDe(params.get("aba"));
+  // Regras e canal sairam desta tela (o servidor ja manda para Notificacoes).
+  const aba: Aba = abaDe(params.get("aba")) === "resolvidos" ? "resolvidos" : "abertos";
   const [, iniciar] = useTransition();
   // "Agora" anda com as acoes do lojista e com cada refresh do servidor.
   const [agoraLocal, setAgora] = useState(agoraServidor);
@@ -167,19 +141,6 @@ export function TelaAlertas({
   const [silencio, setSilencio] = useState<Record<string, string | null>>({});
   const fila = useRef(new Map<string, Promise<unknown>>());
   const listaRef = useRef<HTMLDivElement>(null);
-  const abasRef = useRef<HTMLDivElement>(null);
-
-  // "Canais de aviso": a URL ja mudou (e a aba com ela); aqui so o foco.
-  useEffect(() => {
-    const focar = () =>
-      setTimeout(() => {
-        const alvo = abasRef.current?.querySelector<HTMLElement>('[data-aba="canal"]');
-        alvo?.scrollIntoView({ block: "nearest" });
-        alvo?.focus();
-      }, 0);
-    window.addEventListener(EVENTO_ABA, focar);
-    return () => window.removeEventListener(EVENTO_ABA, focar);
-  }, []);
 
   const { ativos, silenciados } = separarAbertos(abertos, silencio, agora);
   const temCritico = ativos.some((a) => a.severidade === "critico");
@@ -291,25 +252,18 @@ export function TelaAlertas({
       onValueChange={(v) => irParaAba(abaDe(v))}
       className="gap-6"
     >
-      <div ref={abasRef} className="min-w-0">
+      <div className="min-w-0">
         <TabsList
           variant="line"
           aria-label="Alertas"
           className="w-full flex-nowrap justify-start overflow-x-auto [scrollbar-width:none]"
         >
-          <TabsTrigger value="abertos" data-aba="abertos">
+          <TabsTrigger value="abertos">
             Abertos{" "}
             {!erroAbertos && ativos.length > 0 && <Contador n={ativos.length} tom={temCritico ? "err" : "warn"} />}
           </TabsTrigger>
-          <TabsTrigger value="resolvidos" data-aba="resolvidos">
-            Resolvidos em 7 dias{" "}
-            {nResolvidos ? <Contador n={nResolvidos} tom="neutral" /> : null}
-          </TabsTrigger>
-          <TabsTrigger value="regras" data-aba="regras">
-            Regras
-          </TabsTrigger>
-          <TabsTrigger value="canal" data-aba="canal">
-            Canais de aviso
+          <TabsTrigger value="resolvidos">
+            Histórico {nResolvidos ? <Contador n={nResolvidos} tom="neutral" /> : null}
           </TabsTrigger>
         </TabsList>
       </div>
@@ -352,9 +306,9 @@ export function TelaAlertas({
                   }
                   acao={
                     !telegramPronto && silenciados.length === 0 ? (
-                      <Button variant="secondary" onClick={abrirCanais}>
+                      <Link href={TELA_NOTIFICACOES} className={buttonVariants({ variant: "secondary" })}>
                         Configurar o Telegram
-                      </Button>
+                      </Link>
                     ) : undefined
                   }
                   className="py-10"
@@ -409,22 +363,9 @@ export function TelaAlertas({
       </TabsContent>
 
       <TabsContent value="resolvidos">{resolvidos}</TabsContent>
-      <TabsContent value="regras" keepMounted>
-        {regras}
-      </TabsContent>
-      <TabsContent value="canal" keepMounted>
-        {canal}
-      </TabsContent>
     </Tabs>
   );
 }
-
-const OPCOES_SILENCIO: { rotulo: string; horas: number | null }[] = [
-  { rotulo: "Por 1 hora", horas: null },
-  { rotulo: "Até amanhã de manhã", horas: null },
-  { rotulo: "Por 24 horas", horas: 24 },
-  { rotulo: "Até resolver", horas: null },
-];
 
 function CartaoAlerta({
   alerta: a,
@@ -481,36 +422,10 @@ function CartaoAlerta({
           Resolver
           <ArrowRight aria-hidden />
         </Link>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            className={cn(
-              buttonVariants({ variant: "secondary" }),
-              "h-ctl-lg px-3 sm:h-ctl-md"
-            )}
-          >
-            Silenciar
-            <ChevronDown aria-hidden className="size-3.5" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-60">
-            <DropdownMenuGroup>
-              <DropdownMenuLabel>Sem aviso no Telegram</DropdownMenuLabel>
-              {OPCOES_SILENCIO.map((o) =>
-                o.horas ? (
-                  <DropdownMenuItem key={o.rotulo} onClick={onSilenciar}>
-                    {o.rotulo}
-                  </DropdownMenuItem>
-                ) : (
-                  <DropdownMenuItem key={o.rotulo} disabled className="justify-between">
-                    {o.rotulo}{" "}
-                    <span className="rounded-sm border border-border px-1 text-label text-t2">
-                      Em breve
-                    </span>
-                  </DropdownMenuItem>
-                )
-              )}
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Button variant="secondary" onClick={onSilenciar} className="h-ctl-lg px-3 sm:h-ctl-md">
+          <BellOff aria-hidden />
+          Silenciar 24 h<span className="sr-only">, sem aviso no Telegram</span>
+        </Button>
       </div>
     </li>
   );

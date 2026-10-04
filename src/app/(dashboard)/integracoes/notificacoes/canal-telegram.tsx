@@ -11,22 +11,25 @@ import { Section } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Switch } from "@/components/ui/switch";
 import { ROTAS, type AlertaConfigRow } from "@/lib/financeiro/tipos";
+import { erroDoTelegram, formatarLimite, lerNumero } from "../../alertas/apresentar";
 import { chamar } from "../api";
 
 // ============================================================================
-// O canal do Telegram, o mesmo que morava na tela de Alertas: mesma API
-// (POST /api/alertas/canal, com ?testar=1 para mandar a mensagem de teste),
-// mesmos campos. Mudou a apresentacao: interruptores no lugar das caixas,
-// erro no campo, e a tela diz quando ha alteracao ainda nao salva.
+// O canal do Telegram: o unico lugar onde ele se configura (a copia que
+// morava em /alertas saiu; as duas gravavam a mesma linha de alerta_config
+// pela mesma rota). POST /api/alertas/canal, com ?testar=1 para mandar a
+// mensagem de teste. A rota grava tudo junto: chat, ligado, avisos e o
+// limite do "gastou sem vender".
 // ============================================================================
 
 type Config = Omit<AlertaConfigRow, "updated_at">;
 
 const RE_CHAT = /^-?\d{1,20}$/;
 
+/** Mesmo intervalo da rota (0 a 100.000), com numero em pt-BR ("1.234,56"). */
 function lerMinimo(texto: string): number | null {
-  const n = Number(texto.trim().replace(",", "."));
-  return texto.trim() !== "" && Number.isFinite(n) && n >= 0 ? n : null;
+  const n = lerNumero(texto);
+  return n !== null && n >= 0 && n <= 100000 ? n : null;
 }
 
 const PASSOS = [
@@ -58,7 +61,7 @@ function Formulario({ config, temToken, tokenDaEnv }: { config: Config; temToken
   const [chatId, setChatId] = useState(config.telegram_chat_id ?? "");
   const [ativo, setAtivo] = useState(config.ativo);
   const [avisos, setAvisos] = useState(config.receber_avisos);
-  const [minimo, setMinimo] = useState(String(config.gasto_sem_venda_min ?? 30).replace(".", ","));
+  const [minimo, setMinimo] = useState(formatarLimite(config.gasto_sem_venda_min ?? 30));
   const [acao, setAcao] = useState<"salvar" | "testar" | null>(null);
   const [erros, setErros] = useState<{ chat?: string; minimo?: string }>({});
 
@@ -75,7 +78,7 @@ function Formulario({ config, temToken, tokenDaEnv }: { config: Config; temToken
     const novos: typeof erros = {};
     if (chatId.trim() && !RE_CHAT.test(chatId.trim())) novos.chat = "Use só o número do chat (de grupo começa com -).";
     if (testar && !chatId.trim()) novos.chat = "Cole o número do chat para testar.";
-    if (valorMinimo === null) novos.minimo = "Use um número igual ou maior que zero.";
+    if (valorMinimo === null) novos.minimo = "Use um valor de 0 a 100.000.";
     setErros(novos);
     if (novos.chat || novos.minimo) return;
 
@@ -95,7 +98,10 @@ function Formulario({ config, temToken, tokenDaEnv }: { config: Config; temToken
       // No teste a configuracao ja foi salva antes do envio: atualiza mesmo
       // quando o Telegram recusa a mensagem.
       if (testar && r.status === 200) startTransition(() => router.refresh());
-      toast.error(testar ? "O teste não chegou no Telegram" : "Não deu para salvar", { description: r.erro });
+      // Erro cru do Telegram ("Bad Request: chat not found") vira o que fazer.
+      toast.error(testar && r.status === 200 ? "Salvo, mas o teste não chegou" : "Não deu para salvar", {
+        description: erroDoTelegram(r.status, r.erro),
+      });
       return;
     }
     setToken("");
@@ -111,7 +117,6 @@ function Formulario({ config, temToken, tokenDaEnv }: { config: Config; temToken
     <Section
       titulo="Telegram"
       nivel={3}
-      descricao="Os alertas críticos chegam na hora e são reenviados a cada 6 h enquanto continuarem abertos."
       acoes={
         <StatusBadge tom={conectado ? "ok" : "neutral"}>{conectado ? "Conectado" : "Não configurado"}</StatusBadge>
       }

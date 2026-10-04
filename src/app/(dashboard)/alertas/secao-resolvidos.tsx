@@ -9,7 +9,7 @@ import type { AlertaRow, LojaDoSeletor } from "@/lib/financeiro/tipos";
 import { dataHoraCurta, duracaoMs, duracaoTexto, folgaDoFechamentoMin, nomeDaLoja } from "./apresentar";
 
 // ============================================================================
-// Aba Resolvidos: os alertas que fecharam nos ultimos 7 dias. Quem fecha e o
+// Aba Historico: os alertas que fecharam nos ultimos 7 dias. Quem fecha e o
 // cron, sozinho -- nao existe "resolver na mao" --, entao nao ha coluna
 // "como fechou": a descricao da secao diz a regra uma vez.
 // ============================================================================
@@ -65,15 +65,14 @@ export function SecaoResolvidos({
   return (
     <Section
       titulo="Resolvidos nos últimos 7 dias"
-      descricao={`Fecham sozinhos depois de duas verificações seguidas sem o problema.${
-        resolvidos.length >= LIMITE_RESOLVIDOS ? ` Mostrando os ${LIMITE_RESOLVIDOS} mais recentes.` : ""
-      }`}
-      acoes={
-        <span className="flex items-center gap-1 text-label text-t2">
-          Sobre a duração
-          <Dica rotulo="Como a duração é contada" lado="left">
-            Vai da abertura até a segunda verificação sem o problema. O problema pode ter
-            acabado até {folgaDoFechamentoMin()} min antes.
+      descricao={
+        <span className="inline-flex items-center gap-1">
+          {resolvidos.length >= LIMITE_RESOLVIDOS
+            ? `Fecham sozinhos. Mostrando os ${LIMITE_RESOLVIDOS} mais recentes.`
+            : "Fecham sozinhos."}
+          <Dica rotulo="Como um alerta fecha e como a duração é contada">
+            Depois de duas verificações seguidas sem o problema. A duração vai da abertura até essa segunda
+            verificação: o problema pode ter acabado até {folgaDoFechamentoMin()} min antes.
           </Dica>
         </span>
       }
