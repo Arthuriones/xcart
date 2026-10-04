@@ -28,9 +28,9 @@ import { formatarCustomerId, plural, type Estado, type GastoNaTela } from "../re
 
 // ============================================================================
 // Integracoes -> Google. O gasto chega EMPURRADO por um script colado em cada
-// conta (a API do Google ainda pede o nivel Explorer); a compra sai pelo AW-
-// do rastreamento. Cadastro e script novo usam as APIs de sempre
-// (/api/ads/google/contas e .../segredo).
+// conta (a API do Google ainda pede o nivel Explorer); as conversoes saem pela
+// Data Manager API (envio-data-manager.tsx), por destino. Cadastro e script
+// novo usam as APIs de sempre (/api/ads/google/contas e .../segredo).
 //
 // O script traz o segredo da conta e aparece UMA vez, na resposta do cadastro.
 // A tela avisa isso ANTES de gerar, e o texto copiado e o que a API devolveu,
@@ -233,6 +233,7 @@ export function TelaGoogle({
   lojas,
   estadoLeitura,
   envio,
+  dataManager,
   tabela,
 }: {
   contas: ContaAnuncioResumo[];
@@ -242,6 +243,8 @@ export function TelaGoogle({
   estadoLeitura: Estado;
   /** O cartao "Para enviar as compras" (server component). */
   envio: ReactNode;
+  /** "Conversões pela API do Google": ID do cliente e acoes por destino. */
+  dataManager?: ReactNode;
   tabela: {
     gastos: Record<string, GastoNaTela>;
     erroGasto: string | null;
@@ -293,6 +296,8 @@ export function TelaGoogle({
         </section>
         {envio}
       </div>
+
+      {dataManager}
 
       {mostrarForm ? (
         <section

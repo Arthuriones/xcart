@@ -1,15 +1,15 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
-import { Callout } from "@/components/ui/callout";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CabecalhoPlataforma } from "../cabecalho-plataforma";
 import type { DadosAnuncios } from "../dados-anuncios";
 import { EnvioCompras } from "../envio-compras";
 import { estadoScriptsGoogle, situacaoDaConta } from "../regras";
+import { EnvioDataManager, type DadosDataManager } from "./envio-data-manager";
 import { TelaGoogle } from "./tela-google";
 
 /** O conteudo de Google com os dados ja lidos (a page le; aqui so desenha). */
-export function ConteudoGoogle({ d }: { d: DadosAnuncios }) {
+export function ConteudoGoogle({ d, dm }: { d: DadosAnuncios; dm: DadosDataManager }) {
   const ligado = d.daPlataforma.length > 0;
   const estadoLeitura = estadoScriptsGoogle(d.daPlataforma.map((c) => situacaoDaConta(c, d.agoraMs, d.fuso)));
 
@@ -34,16 +34,13 @@ export function ConteudoGoogle({ d }: { d: DadosAnuncios }) {
         />
       ) : (
         <>
-          <Callout tom="info" titulo="São identificadores diferentes.">
-            O ID de cliente (123-456-7890) lê o gasto pelo script; o AW- recebe as compras. Um não substitui o
-            outro.
-          </Callout>
           <TelaGoogle
             contas={d.contas}
             todas={d.daPlataforma.length}
             lojas={d.lojas}
             estadoLeitura={estadoLeitura}
             envio={<EnvioCompras plataforma="google" destinos={d.destinos} lojas={d.lojas} erro={d.erroDestinos} />}
+            dataManager={<EnvioDataManager dados={dm} lojas={d.lojas} />}
             tabela={{
               gastos: d.gastos,
               erroGasto: d.erroGasto,

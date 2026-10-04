@@ -110,10 +110,16 @@ function redePadrao() {
   };
 }
 
+interface CorpoIngest {
+  destinations: Record<string, unknown>[];
+  events: Record<string, unknown>[];
+  validateOnly?: boolean;
+}
+
 const ingests = () =>
   chamadas
     .filter((c) => c.url.endsWith("/v1/events:ingest"))
-    .map((c) => JSON.parse(String(c.init?.body)) as Record<string, any>);
+    .map((c) => JSON.parse(String(c.init?.body)) as CorpoIngest);
 
 let chavePublica = "";
 function ligarCredencial(email = "xcart@projeto.iam.gserviceaccount.com") {

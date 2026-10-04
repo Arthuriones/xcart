@@ -175,6 +175,35 @@ export async function destinosParaTela(
 }
 
 /**
+ * A configuracao da Data Manager dos destinos pedidos, para a tela de
+ * Integracoes -> Google. Os ids ja vem filtrados pelas lojas do usuario.
+ *
+ * Erro de banco LANCA: devolver vazio mostraria o formulario em branco, e
+ * salvar em branco apagaria a configuracao gravada.
+ */
+export async function configDataManagerDe(
+  admin: Admin,
+  ids: string[]
+): Promise<Map<string, { customerId: string | null; loginCustomerId: string | null; acoes: AcoesDataManager }>> {
+  const mapa = new Map<
+    string,
+    { customerId: string | null; loginCustomerId: string | null; acoes: AcoesDataManager }
+  >();
+  if (ids.length === 0) return mapa;
+  const { data, error } = await admin.from("tracking_destinations").select(COLUNAS).in("id", ids);
+  if (error) throw new Error(`falha ao ler a configuração do Google: ${error.message}`);
+  for (const linha of data || []) {
+    const d = destinoDaLinha(linha);
+    mapa.set(d.id, {
+      customerId: d.customerId ?? null,
+      loginCustomerId: d.loginCustomerId ?? null,
+      acoes: d.acoes ?? {},
+    });
+  }
+  return mapa;
+}
+
+/**
  * O que a tag do tema precisa saber sobre o Google: as contas e o formato do id.
  *
  * As contas no PLURAL porque cada conta de anuncio monta a SUA lista de
