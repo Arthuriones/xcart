@@ -160,9 +160,10 @@ export function PorConta({
 
   return (
     <Section
-      titulo={
-        <span className="inline-flex items-center gap-1">
-          Por conta
+      titulo="Por conta"
+      descricao={
+        <span className="inline-flex flex-wrap items-center gap-x-1">
+          Em destaque, de anúncio · em cinza, o total enviado · últimos 7 dias
           <Dica rotulo="Por que não bate exatamente com o Gerenciador">
             De anúncio é o evento com clique de anúncio, sem testes: aproxima o Gerenciador, mas
             não iguala. O Google conta pela data do clique, e Carrinho e Checkout secundários só
@@ -172,7 +173,6 @@ export function PorConta({
           </Dica>
         </span>
       }
-      descricao="Em destaque, de anúncio · em cinza, o total enviado · últimos 7 dias"
       espaco="nenhum"
       acoes={
         testes > 0 || mostrarTestes ? (
