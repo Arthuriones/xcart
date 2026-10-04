@@ -74,6 +74,37 @@
   // continua funcionando enquanto a loja tiver uma linha so.
   var STORE_ID = SRC.searchParams.get("store") || null;
 
+  // Consentimento de marketing: o do inicio, trocado quando o comprador
+  // responde ao banner no meio do checkout. Sem leitura, fica sem valor --
+  // nunca "concedido" por padrao.
+  var privacidade = (ctx.init && ctx.init.customerPrivacy) || null;
+  try {
+    if (ctx.customerPrivacy && typeof ctx.customerPrivacy.subscribe === "function") {
+      ctx.customerPrivacy.subscribe("visitorConsentCollected", function (e) {
+        if (e && e.customerPrivacy) privacidade = e.customerPrivacy;
+      });
+    }
+  } catch (e) {
+    /* sem assinatura, vale o do inicio */
+  }
+
+  function consentimento() {
+    if (!privacidade || typeof privacidade.marketingAllowed !== "boolean") return null;
+    return privacidade.marketingAllowed ? "concedido" : "negado";
+  }
+
+  /**
+   * O dono testando: o tema grava `_xc_teste` no carrinho (?xcart_teste=1), e
+   * os atributos do carrinho chegam ate aqui. O sandbox nao le o cookie.
+   */
+  function deTeste(checkout) {
+    var lista = (checkout && checkout.attributes) || [];
+    for (var i = 0; i < lista.length; i++) {
+      if (lista[i] && lista[i].key === "_xc_teste") return lista[i].value === "1";
+    }
+    return false;
+  }
+
   /** O que o tema nao alcanca. Nome da Shopify -> nome do nosso catalogo. */
   var EVENTOS = [
     ["checkout_started", "begin_checkout"],
@@ -127,6 +158,10 @@
         // Valor NAO vai: este endpoint e publico, e valor forjado estraga o
         // lance automatico. O valor da venda vem do webhook do pedido.
         moeda: checkout.currencyCode || null,
+        // Ausentes, o JSON nem leva o campo. O coletor tambem marca teste pelo
+        // gclid TESTE_* que a identidade do tema trouxer.
+        teste: deTeste(checkout) || undefined,
+        consentimento: consentimento() || undefined,
       };
 
       var texto = JSON.stringify(corpo);

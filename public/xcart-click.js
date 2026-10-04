@@ -252,6 +252,52 @@
     }
   }
 
+  // ---- 1d. teste do dono e consentimento ---------------------------------
+  //
+  // ?xcart_teste=1 marca ESTE navegador como teste (?xcart_teste=0 desmarca).
+  // O evento continua indo ao coletor -- e la que o dono confere o teste --,
+  // mas marcado: o servidor nao manda ao Google, e ao Meta so com codigo de
+  // teste. Vai tambem ao carrinho, para o checkout e a compra saberem.
+  var pedidoTeste = daUrl("xcart_teste");
+  if (pedidoTeste === "1") gravarCookie(PREFIXO + "teste", "1");
+  else if (pedidoTeste === "0") apagarCookie(PREFIXO + "teste");
+  var TESTE =
+    pedidoTeste === "1" || (pedidoTeste !== "0" && lerCookie(PREFIXO + "teste") === "1");
+  if (TESTE) achados._xc_teste = "1";
+  // Fora de teste o atributo sai do carrinho, se estiver la: o carrinho do dono
+  // que voltou a ser de verdade nao pode marcar a compra como teste.
+  else limpar._xc_teste = true;
+
+  // Consentimento de marketing, da Customer Privacy API da Shopify. Lido na
+  // hora de mandar, porque o banner pode ser respondido no meio da visita. Sem
+  // a API, fica sem valor -- nunca "concedido" por padrao.
+  function consentimento() {
+    try {
+      var cp = window.Shopify && window.Shopify.customerPrivacy;
+      if (!cp || typeof cp.marketingAllowed !== "function") return null;
+      return cp.marketingAllowed() ? "concedido" : "negado";
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // A API so existe quando algum script da loja a pede. Loja sem banner nunca
+  // teria valor; pedir aqui e um script pequeno da propria Shopify, uma vez.
+  try {
+    if (
+      window.Shopify &&
+      !window.Shopify.customerPrivacy &&
+      typeof window.Shopify.loadFeatures === "function"
+    ) {
+      window.Shopify.loadFeatures(
+        [{ name: "consent-tracking-api", version: "0.1" }],
+        function () {}
+      );
+    }
+  } catch (e) {
+    /* sem a API, o evento sai sem consentimento, como antes */
+  }
+
   var vid = visitante();
   achados._xc_vid = vid;
 
@@ -315,6 +361,10 @@
    * sobra a marca da sessao.
    */
   function gravarNoCarrinho(carrinho) {
+    // A compra nasce no servidor da Shopify, sem navegador: o consentimento do
+    // visitante so chega ate ela por aqui.
+    var consent = consentimento();
+    if (consent) achados._xc_consent = consent;
     var anterior = jaGravado();
     var token = tokenDe(carrinho);
     var atributos =
@@ -804,6 +854,9 @@
       // fazia parecer que todo mundo entrava pela home -- eu cheguei a concluir
       // isso e estava errado.
       pageUrl: pagina,
+      // Ver 1d. Ausentes, o JSON nem leva o campo.
+      teste: TESTE || undefined,
+      consentimento: consentimento() || undefined,
     });
   }
 

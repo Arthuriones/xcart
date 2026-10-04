@@ -136,6 +136,10 @@ export async function POST(request: NextRequest) {
     estado?: string | null;
     cep?: string | null;
     pais?: string | null;
+    /** Visitante marcado pelo link ?xcart_teste=1. Ver teste.ts. */
+    teste?: boolean | null;
+    /** 'concedido' | 'negado', da Customer Privacy API da Shopify. */
+    consentimento?: string | null;
   };
   // Teto de tamanho ANTES do parse. O endpoint e publico, o payload vira
   // linha de banco, e linha 'falhou' fica 30 dias: um POST de MBs repetido
@@ -496,6 +500,17 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ---- teste e consentimento ---------------------------------------------
+  //
+  // Depois da identidade: no checkout o gclid vem dela, e um gclid TESTE_* que
+  // o dono usou no tema tem que marcar o checkout tambem. Ver teste.ts.
+  const { ehTeste, lerConsentimento, enviaAoDestino, payloadComMarcas, registrarSemEnviar } =
+    await import("@/lib/tracking/teste");
+  const marcas = {
+    teste: ehTeste(corpo.teste, [clique.gclid, clique.gbraid, clique.wbraid, fbclid, fbc]),
+    consentimento: lerConsentimento(corpo.consentimento),
+  };
+
   // ---- fila ---------------------------------------------------------------
   const { enfileirar, entregar } = await import("@/lib/tracking/fila");
 
@@ -686,6 +701,31 @@ export async function POST(request: NextRequest) {
         // chave "google" sozinha faria a segunda sobrescrever a primeira.
         const chave = `${alvo.destination}:${alvo.destinationId.slice(0, 8)}`;
 
+        // Evento de teste fica na fila para o dono conferir, mas so sai para o
+        // Meta com codigo de teste. Ver teste.ts.
+        const envia = enviaAoDestino(alvo.destino, marcas.teste);
+        const payload = payloadComMarcas(alvo.destination, alvo.payload as object, marcas, envia);
+        // Ficam na LINHA, nao no payload: o payload do Meta vai cru para a
+        // API deles, e campo desconhecido ali pode derrubar o evento inteiro.
+        const referrer = (corpo.referrer || "").trim().slice(0, 500) || null;
+
+        if (!envia) {
+          const { duplicado } = await registrarSemEnviar(admin, {
+            storeId: registro.id,
+            destination: alvo.destination,
+            destinationId: alvo.destinationId,
+            eventName: evento,
+            eventId,
+            orderId: eventId,
+            visitorId,
+            referrer,
+            checkoutToken,
+            payload,
+          });
+          saida[chave] = duplicado ? "duplicado" : "teste: nao enviado";
+          return;
+        }
+
         const { id, duplicado } = await enfileirar(admin, {
           storeId: registro.id,
           destination: alvo.destination,
@@ -693,13 +733,11 @@ export async function POST(request: NextRequest) {
           evento: { event_name: evento, event_id: eventId },
           orderId: eventId,
           visitorId,
-          // Ficam na LINHA, nao no payload: o payload do Meta vai cru para a
-          // API deles, e campo desconhecido ali pode derrubar o evento inteiro.
-          referrer: (corpo.referrer || "").trim().slice(0, 500) || null,
+          referrer,
           // Liga o evento de checkout ao pedido sem depender de cart attribute,
           // que se perde quando a sessao comeca no proprio checkout.
           checkoutToken,
-          payload: alvo.payload,
+          payload,
         });
 
         if (duplicado) {
@@ -720,7 +758,7 @@ export async function POST(request: NextRequest) {
             destination: alvo.destination,
             destination_id: alvo.destinationId,
             event_name: evento,
-            payload: alvo.payload,
+            payload,
             attempts: 0,
           },
           // O destino e o interruptor ja foram lidos la em cima. Sem isto, cada

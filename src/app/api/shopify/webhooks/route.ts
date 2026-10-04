@@ -281,13 +281,22 @@ async function tratarPedidoCriado(
     ? montarConversaoGoogle(pedido, { identidade, dominioLoja: loja.shop_domain })
     : null;
 
-  const destinos = querem.map((d) => ({
-    destination: d.plataforma,
-    destinationId: d.id,
-    destino: d,
-    payload:
+  // Compra de teste que o filtro do pedido nao pega: o dono pagando de verdade
+  // depois do ?xcart_teste=1 (atributo _xc_teste), ou com um gclid TESTE_*.
+  // Fica na fila para conferir e so sai para o Meta com codigo de teste.
+  // Ver teste.ts.
+  const { marcasDoPedido, enviaAoDestino, payloadComMarcas, registrarSemEnviar } =
+    await import("@/lib/tracking/teste");
+  const marcas = marcasDoPedido(pedido, [
+    sinais.gclid, sinais.gbraid, sinais.wbraid, sinais.fbclid, sinais.fbc,
+    identidade?.gclid, identidade?.gbraid, identidade?.wbraid, identidade?.fbclid, identidade?.fbc,
+  ]);
+
+  const destinos = querem.map((d) => {
+    const envia = enviaAoDestino(d, marcas.teste);
+    const base =
       d.plataforma === "google"
-        ? conversaoGoogle
+        ? conversaoGoogle!
         : // O id de produto e do DESTINO: dois pixels Meta na mesma loja podem
           // apontar para catalogos montados de formas diferentes. Sem template
           // configurado reusa o evento ja montado -- e o caso comum, e remontar
@@ -298,8 +307,15 @@ async function tratarPedidoCriado(
               dominioLoja: loja.shop_domain,
               idTemplate: d.idTemplate,
             }).evento
-          : evento,
-  }));
+          : evento;
+    return {
+      destination: d.plataforma,
+      destinationId: d.id,
+      destino: d,
+      envia,
+      payload: payloadComMarcas(d.plataforma, base, marcas, envia),
+    };
+  });
 
   try {
     const saida: Record<string, string> = {};
@@ -319,6 +335,20 @@ async function tratarPedidoCriado(
         // uma chave "google" sozinha faria a segunda sobrescrever a primeira e
         // o log mentiria sobre o que saiu.
         const chave = `${alvo.destination}:${alvo.destinationId.slice(0, 8)}`;
+
+        if (!alvo.envia) {
+          const { duplicado } = await registrarSemEnviar(admin, {
+            storeId: loja.id,
+            destination: alvo.destination,
+            destinationId: alvo.destinationId,
+            eventName: evento.event_name,
+            eventId: evento.event_id,
+            orderId: String(pedido.id ?? ""),
+            payload: alvo.payload,
+          });
+          saida[chave] = duplicado ? "duplicado" : "teste: nao enviado";
+          return;
+        }
 
         const { id, duplicado } = await enfileirar(admin, {
           storeId: loja.id,

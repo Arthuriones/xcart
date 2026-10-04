@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
+import { marcasDoPedido } from "../src/lib/tracking/teste";
 
 // ============================================================================
 // O snippet do tema e o carrinho.
@@ -61,10 +62,19 @@ interface Corpo {
   wbraid: string | null;
   fbp: string | null;
   fbc: string | null;
+  teste?: boolean;
+  consentimento?: string;
 }
 
-/** Abre uma pagina da loja neste navegador e roda o snippet nela. */
-function abrir(nav: Navegador, url = "https://loja.test/products/camisa") {
+/**
+ * Abre uma pagina da loja neste navegador e roda o snippet nela.
+ * `shopify` acrescenta ao `window.Shopify` (a Customer Privacy API, por exemplo).
+ */
+function abrir(
+  nav: Navegador,
+  url = "https://loja.test/products/camisa",
+  shopify: Record<string, unknown> = {}
+) {
   const u = new URL(url);
   const updates: Atributos[] = [];
   const beacons: Corpo[] = [];
@@ -186,7 +196,7 @@ function abrir(nav: Navegador, url = "https://loja.test/products/camisa") {
     addEventListener: (ev: string, fn: () => void) => {
       ouvintes[ev] = fn;
     },
-    Shopify: { shop: "loja.myshopify.com", routes: { root: "/" } },
+    Shopify: { shop: "loja.myshopify.com", routes: { root: "/" }, ...shopify },
   };
   ctx.window = ctx;
   vm.createContext(ctx);
@@ -515,5 +525,128 @@ describe("uma execucao por pagina", () => {
     // Uma leitura do add (2b), nao duas.
     expect(p.leituras()).toBe(2);
     expect(p.beacons.filter((b) => b.evento === "add_to_cart")).toHaveLength(1);
+  });
+});
+
+// ============================================================================
+// Teste do dono e consentimento.
+//
+// O dono testa a loja com ?xcart_teste=1 e o evento sai marcado: o servidor
+// nao manda ao Google, e ao Meta so com codigo de teste. O consentimento vem
+// da Customer Privacy API da Shopify e nunca e inventado. Os dois vao tambem
+// ao carrinho, que e o unico caminho ate a compra (webhook, sem navegador).
+// ============================================================================
+
+/** O carrinho como o webhook ve: note_attributes do pedido. */
+function comoPedido(nav: Navegador) {
+  const attrs = (nav.carrinho as Carrinho).attributes;
+  return { note_attributes: Object.entries(attrs).map(([name, value]) => ({ name, value })) };
+}
+
+describe("marca de teste do dono (?xcart_teste)", () => {
+  it("?xcart_teste=1 grava o cookie e marca o evento e o carrinho", async () => {
+    const nav = navegador();
+    const p = abrir(nav, "https://loja.test/products/camisa?xcart_teste=1");
+    await assentar();
+    expect(p.cookie("_xc_teste")).toBe("1");
+    expect(p.beacons[0].teste).toBe(true);
+    // O webhook le o mesmo atributo e marca a compra.
+    expect(marcasDoPedido(comoPedido(nav)).teste).toBe(true);
+
+    // Pagina seguinte, sem o parametro: continua teste pelo cookie.
+    const p2 = abrir(nav, "https://loja.test/products/outra");
+    await assentar();
+    expect(p2.beacons[0].teste).toBe(true);
+  });
+
+  it("?xcart_teste=0 limpa o cookie e tira o atributo do carrinho", async () => {
+    const nav = navegador({
+      cookies: new Map([["_xc_teste", "1"]]),
+      carrinho: { token: "c1", attributes: { _xc_teste: "1" } },
+    });
+    const p = abrir(nav, "https://loja.test/products/camisa?xcart_teste=0");
+    await assentar();
+    expect(p.cookie("_xc_teste")).toBeUndefined();
+    expect(p.beacons[0]).not.toHaveProperty("teste");
+    expect((nav.carrinho as Carrinho).attributes).not.toHaveProperty("_xc_teste");
+    expect(marcasDoPedido(comoPedido(nav)).teste).toBe(false);
+  });
+
+  it("cookie vencido (ITP) com o atributo no carrinho: o atributo sai", async () => {
+    const nav = navegador({ carrinho: { token: "c1", attributes: { _xc_teste: "1" } } });
+    abrir(nav);
+    await assentar();
+    expect((nav.carrinho as Carrinho).attributes).not.toHaveProperty("_xc_teste");
+  });
+
+  it("visitante comum: sem o campo e sem escrita a mais no carrinho", async () => {
+    const nav = navegador({ cookies: new Map([["_xc_gclid", "G1"]]) });
+    const p = abrir(nav);
+    await assentar();
+    expect(p.beacons[0]).not.toHaveProperty("teste");
+    expect(p.updates).toHaveLength(1);
+    expect((nav.carrinho as Carrinho).attributes).not.toHaveProperty("_xc_teste");
+
+    const p2 = abrir(nav, "https://loja.test/");
+    await assentar();
+    expect(p2.updates).toHaveLength(0);
+  });
+});
+
+describe("consentimento pela Customer Privacy API", () => {
+  const privacidade = (liberado: boolean) => ({
+    customerPrivacy: { marketingAllowed: () => liberado },
+  });
+
+  it("marketing liberado: concedido, no evento e no carrinho", async () => {
+    const nav = navegador();
+    const p = abrir(nav, undefined, privacidade(true));
+    await assentar();
+    expect(p.beacons[0].consentimento).toBe("concedido");
+    expect(marcasDoPedido(comoPedido(nav)).consentimento).toBe("concedido");
+  });
+
+  it("marketing nao liberado: negado", async () => {
+    const nav = navegador();
+    const p = abrir(nav, undefined, privacidade(false));
+    await assentar();
+    expect(p.beacons[0].consentimento).toBe("negado");
+    expect(marcasDoPedido(comoPedido(nav)).consentimento).toBe("negado");
+  });
+
+  it("sem a API: sem valor, e pede a API a Shopify uma vez", async () => {
+    const pedidos: unknown[] = [];
+    const nav = navegador();
+    const p = abrir(nav, undefined, {
+      loadFeatures: (f: unknown) => pedidos.push(JSON.parse(JSON.stringify(f))),
+    });
+    await assentar();
+    expect(p.beacons[0]).not.toHaveProperty("consentimento");
+    expect((nav.carrinho as Carrinho).attributes).not.toHaveProperty("_xc_consent");
+    expect(pedidos).toEqual([[{ name: "consent-tracking-api", version: "0.1" }]]);
+  });
+
+  it("API ja carregada: nao pede de novo", async () => {
+    let pedidos = 0;
+    abrir(navegador(), undefined, {
+      ...privacidade(true),
+      loadFeatures: () => pedidos++,
+    });
+    await assentar();
+    expect(pedidos).toBe(0);
+  });
+
+  it("API que estoura nao derruba o evento", async () => {
+    const nav = navegador();
+    const p = abrir(nav, undefined, {
+      customerPrivacy: {
+        marketingAllowed: () => {
+          throw new Error("api quebrada");
+        },
+      },
+    });
+    await assentar();
+    expect(p.beacons).toHaveLength(1);
+    expect(p.beacons[0]).not.toHaveProperty("consentimento");
   });
 });
