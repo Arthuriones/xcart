@@ -363,6 +363,7 @@ export function BarraContexto({
   if (!v || modo.tipo === "nenhum") return null;
 
   const completo = modo.tipo === "completo";
+  const comparar = modo.tipo === "completo" && !modo.semComparar;
   const nomeLoja = nomeDaLoja(dados.lojas, v.lojaId);
   const filtrada = !!nomeLoja;
   const pop = (qual: "loja" | "periodo" | "comparar") => ({
@@ -475,34 +476,36 @@ export function BarraContexto({
             </div>
           </Pop>
 
-          <Pop
-            rotulo="Comparar com"
-            {...pop("comparar")}
-            className="w-72 p-1"
-            gatilho={
-              <button type="button" className={clsx(GATILHO, "border-border-strong bg-surface text-t1")}>
-                <span className="text-t2">vs.</span>
-                <span className="whitespace-nowrap">
-                  {v.comparacao === "anterior" ? "período anterior" : "sem comparação"}
-                </span>
-              </button>
-            }
-          >
-            <div role="radiogroup" aria-label="Comparar com" className="flex flex-col">
-              {(["anterior", "nenhum"] as Comparacao[]).map((c) => (
-                <Radio
-                  key={c}
-                  marcado={c === v.comparacao}
-                  rotulo={ROTULO_COMPARACAO[c]}
-                  sub={c === "anterior" ? rotuloIntervalo(atual.anterior) : undefined}
-                  onEscolher={() => {
-                    ctx.gravar({ comparacao: c });
-                    setAberto(null);
-                  }}
-                />
-              ))}
-            </div>
-          </Pop>
+          {comparar && (
+            <Pop
+              rotulo="Comparar com"
+              {...pop("comparar")}
+              className="w-72 p-1"
+              gatilho={
+                <button type="button" className={clsx(GATILHO, "border-border-strong bg-surface text-t1")}>
+                  <span className="text-t2">vs.</span>
+                  <span className="whitespace-nowrap">
+                    {v.comparacao === "anterior" ? "período anterior" : "sem comparação"}
+                  </span>
+                </button>
+              }
+            >
+              <div role="radiogroup" aria-label="Comparar com" className="flex flex-col">
+                {(["anterior", "nenhum"] as Comparacao[]).map((c) => (
+                  <Radio
+                    key={c}
+                    marcado={c === v.comparacao}
+                    rotulo={ROTULO_COMPARACAO[c]}
+                    sub={c === "anterior" ? rotuloIntervalo(atual.anterior) : undefined}
+                    onEscolher={() => {
+                      ctx.gravar({ comparacao: c });
+                      setAberto(null);
+                    }}
+                  />
+                ))}
+              </div>
+            </Pop>
+          )}
         </>
       )}
 
@@ -612,6 +615,7 @@ export function ContextoCelular({
   if (!v || modo.tipo === "nenhum") return null;
 
   const completo = modo.tipo === "completo";
+  const comparar = modo.tipo === "completo" && !modo.semComparar;
   const r = rascunho ?? v;
   const nomeLoja = nomeDaLoja(dados.lojas, v.lojaId);
   const resumo = [nomeLoja ?? "Todas as lojas"];
@@ -703,23 +707,25 @@ export function ContextoCelular({
                   })}
                 </div>
               </div>
-              <div className={secao}>
-                <span className={rotulo} id="cel-comparar">
-                  Comparar com
-                </span>
-                <div role="radiogroup" aria-labelledby="cel-comparar">
-                  {(["anterior", "nenhum"] as Comparacao[]).map((c) => (
-                    <Radio
-                      key={c}
-                      grande
-                      marcado={c === r.comparacao}
-                      rotulo={ROTULO_COMPARACAO[c]}
-                      sub={c === "anterior" ? rotuloIntervalo(dados.intervalos[r.periodo].anterior) : undefined}
-                      onEscolher={() => setRascunho({ ...r, comparacao: c })}
-                    />
-                  ))}
+              {comparar && (
+                <div className={secao}>
+                  <span className={rotulo} id="cel-comparar">
+                    Comparar com
+                  </span>
+                  <div role="radiogroup" aria-labelledby="cel-comparar">
+                    {(["anterior", "nenhum"] as Comparacao[]).map((c) => (
+                      <Radio
+                        key={c}
+                        grande
+                        marcado={c === r.comparacao}
+                        rotulo={ROTULO_COMPARACAO[c]}
+                        sub={c === "anterior" ? rotuloIntervalo(dados.intervalos[r.periodo].anterior) : undefined}
+                        onEscolher={() => setRascunho({ ...r, comparacao: c })}
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
               <div className={secao}>
                 <span className={rotulo}>Moeda do relatório</span>
                 <Moedas valor={r.moeda} grande onEscolher={(m) => setRascunho({ ...r, moeda: m })} />

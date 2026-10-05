@@ -341,9 +341,9 @@ const CONTEXTOS: Record<string, ModoContexto> = {
   "/financeiro": { tipo: "completo" },
   "/financeiro/custos": { tipo: "loja" },
   "/financeiro/anuncios": { tipo: "nenhum" },
-  // Loja, periodo e moeda da barra, como o Dashboard. O "Comparar com" ainda
-  // aparece (nao ha modo sem ele) e nao muda nada nesta tela.
-  "/pedidos": { tipo: "completo" },
+  // Loja, periodo e moeda da barra, como o Dashboard. Sem "Comparar com": a
+  // lista nao compara periodos.
+  "/pedidos": { tipo: "completo", semComparar: true },
   "/tracking": { tipo: "fixo", texto: "Últimos 7 dias · período fixo desta tela" },
   "/tracking/eventos": { tipo: "loja" },
   "/alertas": { tipo: "loja" },

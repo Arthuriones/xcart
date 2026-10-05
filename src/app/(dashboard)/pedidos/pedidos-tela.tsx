@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import {
   Check,
   ChevronLeft,
@@ -29,8 +30,10 @@ import {
   POR_PAGINA,
   buscaCasa,
   corEnvio,
+  jornadaDoPedido,
   linhaCsv,
   passaNoFiltro,
+  textoCsv,
   textoEnvio,
   type FiltroId,
 } from "./filtros";
@@ -41,7 +44,9 @@ import {
 // pagina, o painel do pedido e o CSV.
 // ============================================================================
 
-const fmtPct = new Intl.NumberFormat("pt-BR", { style: "percent", maximumFractionDigits: 0 });
+const fmtPct = new Intl.NumberFormat("pt-BR", { style: "percent", maximumFractionDigits: 1 });
+/** Para baixo: 249 de 250 e "99,6%", nunca "100%" escondendo a falha. */
+const pctParaBaixo = (r: number) => fmtPct.format(Math.floor(r * 1000) / 1000);
 
 const COR_PONTO: Record<ReturnType<typeof corEnvio>, string> = {
   ok: "bg-ok",
@@ -75,7 +80,9 @@ export function PedidosTela({
   const [filtro, setFiltro] = useState<FiltroId>("todos");
   const [busca, setBusca] = useState("");
   const [pagina, setPagina] = useState(0);
+  // O painel fecha sem limpar `aberto`: o conteudo fica durante a saida.
   const [aberto, setAberto] = useState<string | null>(null);
+  const [painel, setPainel] = useState(false);
 
   const dinheiro = (v: number | null) => (v === null ? "—" : formatarDinheiro(v, moeda, 2));
 
@@ -95,6 +102,11 @@ export function PedidosTela({
   const selecionado = aberto ? (pedidos.find((p) => p.chave === aberto) ?? null) : null;
   const filtrado = filtro !== "todos" || busca.trim() !== "";
 
+  function abrir(chave: string) {
+    setAberto(chave);
+    setPainel(true);
+  }
+
   function escolher(f: FiltroId) {
     setFiltro(f);
     setPagina(0);
@@ -107,7 +119,7 @@ export function PedidosTela({
   }
 
   function exportar() {
-    const csv = montarCsv(contextoCsv, CABECALHO_CSV, lista.map(linhaCsv));
+    const csv = montarCsv(contextoCsv.map((c) => textoCsv(c) ?? ""), CABECALHO_CSV, lista.map(linhaCsv));
     // BOM: sem ele o Excel abre UTF-8 como Latin-1 e estraga o acento.
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -118,11 +130,28 @@ export function PedidosTela({
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast.success("CSV pronto", {
+      description: `${arquivoCsv}\n${lista.length} ${lista.length === 1 ? "pedido" : "pedidos"} em ${moeda}`,
+    });
   }
+
+  const avisoFaturamento = [
+    resumo.semCotacao
+      ? `${resumo.semCotacao} ${resumo.semCotacao === 1 ? "pedido" : "pedidos"} sem cotação fora da soma`
+      : null,
+    resumo.cambioAproximado ? "Câmbio aproximado" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const kpis: { rotulo: string; valor: string; icone: ReactNode; detalhe?: string }[] = [
     { rotulo: "Pedidos", valor: new Intl.NumberFormat("pt-BR").format(resumo.pedidos), icone: <Receipt /> },
-    { rotulo: "Faturamento", valor: dinheiro(resumo.faturamento), icone: <DollarSign /> },
+    {
+      rotulo: "Faturamento",
+      valor: dinheiro(resumo.faturamento),
+      icone: <DollarSign />,
+      detalhe: avisoFaturamento || undefined,
+    },
     {
       rotulo: "Lucro antes do anúncio",
       valor: dinheiro(resumo.lucro),
@@ -133,9 +162,9 @@ export function PedidosTela({
     },
     {
       rotulo: "Compras rastreadas",
-      valor: resumo.rastreadas === null ? "—" : fmtPct.format(resumo.rastreadas),
+      valor: resumo.rastreadas === null ? "—" : pctParaBaixo(resumo.rastreadas),
       icone: <Check />,
-      detalhe: resumo.rastreadas === null ? "Nenhuma loja com pixel do Meta" : "Chegaram ao Meta",
+      detalhe: resumo.rastreadas === null ? "Nenhuma compra do período para o Meta" : "Chegaram ao Meta",
     },
   ];
 
@@ -143,7 +172,7 @@ export function PedidosTela({
     <div data-largura="total" className="flex flex-col gap-3.5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h1 className="hidden text-page font-semibold text-ink md:block">Pedidos</h1>
-        <Button variant="secondary" onClick={exportar} disabled={!lista.length} aria-label="Exportar os pedidos filtrados em CSV">
+        <Button variant="secondary" onClick={exportar} disabled={!lista.length}>
           <Download aria-hidden />
           Exportar CSV
         </Button>
@@ -154,13 +183,15 @@ export function PedidosTela({
           <div key={k.rotulo} className="flex items-center gap-3.5 rounded-overlay border border-border bg-surface p-4.5">
             <span
               aria-hidden
-              className="grid size-10 shrink-0 place-items-center rounded-full bg-info-bg text-info [&_svg]:size-4.5"
+              className="grid size-9 shrink-0 place-items-center rounded-full bg-info-bg text-info [&_svg]:size-4.5"
             >
               {k.icone}
             </span>
             <span className="flex min-w-0 flex-col gap-0.5">
               <span className="text-dense text-t1">{k.rotulo}</span>
-              <span className="num text-[20px] font-bold leading-7 whitespace-nowrap text-ink">{k.valor}</span>
+              <span className="num whitespace-nowrap text-[clamp(16px,1.4vw,20px)] leading-7 font-bold text-ink">
+                {k.valor}
+              </span>
               {k.detalhe && <span className="text-label text-t2">{k.detalhe}</span>}
             </span>
           </div>
@@ -188,7 +219,7 @@ export function PedidosTela({
             />
           </div>
           <div
-            role="tablist"
+            role="group"
             aria-label="Filtrar"
             className="flex max-w-full gap-0.5 overflow-x-auto rounded-card border border-border bg-surface-2 p-0.75 [scrollbar-width:none]"
           >
@@ -198,8 +229,7 @@ export function PedidosTela({
                 <button
                   key={f.id}
                   type="button"
-                  role="tab"
-                  aria-selected={on}
+                  aria-pressed={on}
                   onClick={() => escolher(f.id)}
                   className={cn(
                     "h-7 whitespace-nowrap rounded-control px-2.5 text-label focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus",
@@ -244,7 +274,7 @@ export function PedidosTela({
                       ["Loja", "left"],
                       ["Itens", "left"],
                       ["Origem", "left"],
-                      ["Valor", "right"],
+                      ["Valor pago", "right"],
                       ["Lucro estimado", "right"],
                       ["Rastreamento", "left"],
                       ["Envio", "left"],
@@ -266,10 +296,10 @@ export function PedidosTela({
                   {visiveis.map((p) => (
                     <tr
                       key={p.chave}
-                      onClick={() => setAberto(p.chave)}
+                      onClick={() => abrir(p.chave)}
                       className={cn(
                         "cursor-pointer hover:bg-hover [&>td]:border-b [&>td]:border-border-subtle [&>td]:px-3.5",
-                        aberto === p.chave && "bg-hover"
+                        painel && aberto === p.chave && "bg-hover"
                       )}
                     >
                       <td className="h-14 whitespace-nowrap">
@@ -277,7 +307,7 @@ export function PedidosTela({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setAberto(p.chave);
+                            abrir(p.chave);
                           }}
                           aria-label={`Abrir pedido ${p.nome}`}
                           className="rounded-sm font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
@@ -298,7 +328,7 @@ export function PedidosTela({
                           {p.origem.rotulo}
                         </span>
                       </td>
-                      <td className="num whitespace-nowrap text-right">{dinheiro(p.valores?.faturamento ?? null)}</td>
+                      <td className="num whitespace-nowrap text-right">{dinheiro(p.valores?.valorPago ?? null)}</td>
                       <td
                         className={cn(
                           "num whitespace-nowrap text-right font-semibold",
@@ -327,7 +357,7 @@ export function PedidosTela({
                 <li key={p.chave}>
                   <button
                     type="button"
-                    onClick={() => setAberto(p.chave)}
+                    onClick={() => abrir(p.chave)}
                     className="flex w-full flex-col gap-2 rounded-card border border-border bg-surface p-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                   >
                     <span className="flex w-full justify-between gap-2">
@@ -342,7 +372,7 @@ export function PedidosTela({
                       <StatusBadge tom={p.status.tom}>{p.status.rotulo}</StatusBadge>
                     </span>
                     <span className="num flex w-full justify-between text-dense">
-                      <span className="text-t1">{dinheiro(p.valores?.faturamento ?? null)}</span>
+                      <span className="text-t1">{dinheiro(p.valores?.valorPago ?? null)}</span>
                       <strong
                         className={cn(
                           p.valores?.lucro == null ? "text-t2" : p.valores.lucro < 0 ? "text-err" : "text-ink"
@@ -386,7 +416,7 @@ export function PedidosTela({
         )}
       </section>
 
-      <Sheet open={!!selecionado} onOpenChange={(v) => !v && setAberto(null)}>
+      <Sheet open={painel && !!selecionado} onOpenChange={(v) => !v && setPainel(false)}>
         <SheetContent side="right" size="md">
           {selecionado && <DetalhePedido p={selecionado} dinheiro={dinheiro} />}
         </SheetContent>
@@ -436,6 +466,10 @@ function Linha({
 function DetalhePedido({ p, dinheiro }: { p: PedidoTela; dinheiro: (v: number | null) => string }) {
   const v = p.valores;
   const menos = (x: number) => (x > 0 ? `−${dinheiro(x)}` : dinheiro(0));
+  // Imposto incluso, gorjeta e alfandega: o que separa Produtos + Frete -
+  // Desconto do Valor pago. Sem esta linha a conta nao fecha.
+  const outros = v ? v.produtos + v.frete - v.desconto - v.valorPago : 0;
+  const jornada = jornadaDoPedido(p, (x) => dinheiro(x));
   return (
     <>
       <SheetHeader className="gap-1.5 pl-5">
@@ -470,7 +504,15 @@ function DetalhePedido({ p, dinheiro }: { p: PedidoTela; dinheiro: (v: number | 
                 <Linha rotulo="Produtos" valor={dinheiro(v.produtos)} />
                 <Linha rotulo="Frete cobrado" valor={dinheiro(v.frete)} />
                 <Linha rotulo="Desconto" valor={menos(v.desconto)} />
-                <Linha rotulo="Faturamento" valor={dinheiro(v.faturamento)} forte />
+                {Math.abs(outros) >= 0.005 && (
+                  <Linha
+                    rotulo="Impostos e gorjeta"
+                    valor={outros > 0 ? menos(outros) : `+${dinheiro(-outros)}`}
+                    cor="text-t1"
+                  />
+                )}
+                <Linha rotulo="Valor pago" valor={dinheiro(v.valorPago)} forte />
+                {v.reembolso > 0 && <Linha rotulo="Reembolso" valor={menos(v.reembolso)} cor="text-err" />}
                 <Linha rotulo="Produto + frete do fornecedor" valor={menos(v.cmv)} cor="text-t1" />
                 <Linha
                   rotulo={
@@ -481,7 +523,6 @@ function DetalhePedido({ p, dinheiro }: { p: PedidoTela; dinheiro: (v: number | 
                   valor={menos(v.taxa)}
                   cor="text-t1"
                 />
-                {v.reembolso > 0 && <Linha rotulo="Reembolso" valor={menos(v.reembolso)} cor="text-err" />}
                 <Linha
                   rotulo="Lucro estimado"
                   valor={v.lucro === null ? "— (SKU sem custo)" : dinheiro(v.lucro)}
@@ -527,7 +568,7 @@ function DetalhePedido({ p, dinheiro }: { p: PedidoTela; dinheiro: (v: number | 
                   <span className="text-label text-t2">
                     {item.custoTipo === "nenhuma_unidade"
                       ? "Sem custo (nada enviado)"
-                      : `${item.custoTipo === "estimado" ? "custo estimado" : "custo"} ${v ? dinheiro(item.custo) : "—"}`}
+                      : `${item.custoTipo === "estimado" ? "custo estimado" : "custo"}${item.qtd > 1 ? " total" : ""} ${v ? dinheiro(item.custo) : "—"}`}
                   </span>
                 )}
               </span>
@@ -540,7 +581,7 @@ function DetalhePedido({ p, dinheiro }: { p: PedidoTela; dinheiro: (v: number | 
             Jornada
           </h3>
           <ol className="flex flex-col">
-            {p.jornada.map((j, i) => (
+            {jornada.map((j, i) => (
               <li key={i} className="grid grid-cols-[18px_1fr_auto] items-start gap-3 pb-3.5">
                 <span aria-hidden className={cn("ml-1 mt-1 size-2.5 rounded-full", COR_TOM[j.tom])} />
                 <span className="flex min-w-0 flex-col gap-0.5">

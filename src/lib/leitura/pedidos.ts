@@ -3,7 +3,6 @@ import {
   chaveSku,
   custoVigente,
   diaNoFuso,
-  formatarDinheiro,
   paraNumero,
   pedidoConta,
   pedidoTemCusto,
@@ -38,11 +37,11 @@ import { motivoParaIgnorarPedido } from "@/lib/tracking/filtro-pedido";
 // Origem
 // ---------------------------------------------------------------------------
 
-export type OrigemId = "meta" | "google" | "email" | "outra" | "direto";
+export type OrigemId = "meta" | "google" | "email" | "outra" | "direto" | "sem_dado" | "reenvio";
 
 export interface Origem {
   id: OrigemId;
-  /** "Meta Ads", "Google Ads", "E-mail", "tiktok", "Direto". */
+  /** "Meta Ads", "Google Ads", "E-mail", "tiktok", "Direto", "Sem dado". */
   rotulo: string;
   /** utm_campaign, decodificado. */
   campanha: string | null;
@@ -81,11 +80,13 @@ function parametros(url: string | null | undefined): URLSearchParams {
 /**
  * De onde o pedido veio, do mais especifico para o mais generico: click id na
  * URL de chegada (e desta sessao), utm_source, e o cookie de clique do Meta
- * (fbc, que pode ser de um clique de dias antes). Sem sinal nenhum: Direto.
+ * (fbc, que pode ser de um clique de dias antes). Evento sem sinal: Direto.
+ * Sem evento nenhum (loja sem pixel do Meta, pedido de antes do pixel): Sem
+ * dado -- nao ha como saber, e "Direto" afirmaria que nao houve anuncio.
  */
 export function origemDoPedido(s: SinaisDeOrigem | null | undefined): Origem {
   if (!s) {
-    return { id: "direto", rotulo: "Direto", campanha: null, pista: "Sem evento de rastreamento deste pedido" };
+    return { id: "sem_dado", rotulo: "Sem dado", campanha: null, pista: "Sem evento de rastreamento deste pedido" };
   }
   const p = parametros(s.url);
   const campanha = decodificar(p.get("utm_campaign"));
@@ -122,6 +123,7 @@ export function origemDoPedido(s: SinaisDeOrigem | null | undefined): Origem {
  * - aguardando: o mesmo, mas o pedido tem menos de 15 minutos;
  * - sem_pixel: a loja nao tinha Meta ligado (ou o pixel nasceu depois);
  * - nao_se_aplica: pedido que nunca vira conversao (draft, valor zero...);
+ * - teste: compra de teste do dono, que nao sai para a plataforma;
  * - tag: Google. A compra sai pela tag no navegador e o servidor nao sabe
  *   se chegou -- nunca verde nem vermelho.
  */
@@ -133,6 +135,7 @@ export type EstadoEnvio =
   | "aguardando"
   | "sem_pixel"
   | "nao_se_aplica"
+  | "teste"
   | "tag";
 
 export type StatusFila = "enviado" | "falhou" | "pendente";
@@ -140,9 +143,28 @@ export type StatusFila = "enviado" | "falhou" | "pendente";
 /** Pedido mais novo que isto ainda pode estar a caminho da fila. */
 export const JANELA_AGUARDANDO_MS = 15 * 60 * 1000;
 
+/** O pedido e anterior ao instante (ISO)? Data torta nao conta como anterior. */
+function antesDe(processadoEm: string, desde: string): boolean {
+  const a = Date.parse(processadoEm);
+  const b = Date.parse(desde);
+  return Number.isFinite(a) && Number.isFinite(b) && a < b;
+}
+
+/**
+ * A compra de teste do dono (src/lib/tracking/teste.ts) fica na fila como
+ * 'enviado' SEM sent_at e nunca sai para o Meta. A regra de teste da migration
+ * 055 (tracking_evento_teste) marca tambem payload.teste, test_event_code e
+ * fbc com TEST.
+ */
+export function compraDeTeste(ev: Pick<EventoCompra, "status" | "sent_at" | "fbc" | "teste">): boolean {
+  return (ev.status === "enviado" && !ev.sent_at) || ev.teste === true || /TEST/.test(ev.fbc ?? "");
+}
+
 export function estadoMeta(e: {
-  /** Status de cada Purchase do pedido na fila (um por pixel Meta). */
+  /** Status de cada Purchase do pedido na fila (um por pixel Meta), sem os de teste. */
   eventos: readonly StatusFila[];
+  /** O pedido so tem Purchase de teste. */
+  teste?: boolean;
   /** O pedido vira conversao? (motivoParaIgnorarPedido) */
   aplica: boolean;
   /** created_at do primeiro pixel Meta ativo, com o rastreamento ligado. null = sem Meta. */
@@ -154,13 +176,31 @@ export function estadoMeta(e: {
     if (e.eventos.includes("falhou")) return "falhou";
     return e.eventos.every((s) => s === "enviado") ? "enviado" : "pendente";
   }
+  if (e.teste) return "teste";
   if (!e.metaDesde) return "sem_pixel";
   if (!e.aplica) return "nao_se_aplica";
+  if (antesDe(e.processadoEm, e.metaDesde)) return "sem_pixel";
   const pedidoMs = Date.parse(e.processadoEm);
-  const desdeMs = Date.parse(e.metaDesde);
-  if (Number.isFinite(pedidoMs) && Number.isFinite(desdeMs) && pedidoMs < desdeMs) return "sem_pixel";
   if (Number.isFinite(pedidoMs) && e.agoraMs - pedidoMs < JANELA_AGUARDANDO_MS) return "aguardando";
   return "faltou";
+}
+
+/**
+ * Google: so a tag do checkout, que o servidor nao confirma. Sem destino
+ * Google ativo na hora do pedido: sem pixel. Pedido que nao vira conversao e
+ * compra de teste ficam cinza, nunca "pela tag".
+ */
+export function estadoGoogle(e: {
+  /** created_at do primeiro destino Google ativo, com o rastreamento ligado. null = sem Google. */
+  googleDesde: string | null;
+  processadoEm: string;
+  aplica: boolean;
+  teste: boolean;
+}): EstadoEnvio {
+  if (!e.googleDesde || antesDe(e.processadoEm, e.googleDesde)) return "sem_pixel";
+  if (!e.aplica) return "nao_se_aplica";
+  if (e.teste) return "teste";
+  return "tag";
 }
 
 /** Para o filtro "Nao chegou na plataforma". */
@@ -223,9 +263,12 @@ export interface ValoresPedido {
   produtos: number;
   frete: number;
   desconto: number;
-  /** O que entrou antes do reembolso, sem imposto, alfandega e gorjeta. */
-  faturamento: number;
-  /** Receita do Dashboard: faturamento - reembolso. */
+  /**
+   * "Valor pago": o que entrou ANTES do reembolso, sem imposto, alfandega e
+   * gorjeta. Nao e o Faturamento do Dashboard, que e a receita abaixo.
+   */
+  valorPago: number;
+  /** Receita do Dashboard ("Faturamento"): valorPago - reembolso. */
   receita: number;
   cmv: number;
   taxa: number;
@@ -250,16 +293,18 @@ export interface ContextoValores {
 /**
  * Valores do pedido na moeda do relatorio, pela cotacao do dia do pedido.
  * null = moeda sem cotacao nenhuma (o Dashboard deixa o pedido de fora).
+ * `aproximado`: alguma conversao usou a tabela fixa (sem fx_rates do dia).
  * As regras sao as de calcularFinanceiro, chamadas na mesma ordem.
  */
 export function valoresDoPedido(
   p: FinOrderRow,
   ctx: ContextoValores
-): { valores: ValoresPedido | null; itens: ItemPedido[] } {
+): { valores: ValoresPedido | null; itens: ItemPedido[]; aproximado: boolean } {
   const dia = String(p.dia_local).slice(0, 10);
   const moedaPedido = String(p.moeda || "").toUpperCase();
   const fator = ctx.converter(1, moedaPedido, ctx.moeda, dia);
   const k = fator ? fator.valor : null;
+  let aproximado = Boolean(fator?.aproximado);
   const linhas = Array.isArray(p.linhas) ? p.linhas : [];
 
   const receita = receitaDoPedido(p);
@@ -294,6 +339,7 @@ export function valoresDoPedido(
       const bruto = (paraNumero(versao.custo_unitario) + paraNumero(versao.frete_unitario)) * q;
       const c = ctx.converter(bruto, versao.moeda, moedaPedido, dia);
       if (c) {
+        if (c.aproximado) aproximado = true;
         cmv += c.valor;
         item.custo = c.valor * (k ?? 0);
         item.custoTipo = "sku";
@@ -312,7 +358,7 @@ export function valoresDoPedido(
     return item;
   });
 
-  if (k === null) return { valores: null, itens };
+  if (k === null) return { valores: null, itens, aproximado: false };
 
   const reembolso = p.tipo === "venda" ? paraNumero(p.reembolsado) : 0;
   const lucro = receita - cmv - taxa;
@@ -321,7 +367,7 @@ export function valoresDoPedido(
       produtos: linhas.reduce((s, l) => s + paraNumero(l.preco) * paraNumero(l.qtd), 0) * k,
       frete: paraNumero(p.frete_cobrado) * k,
       desconto: paraNumero(p.descontos) * k,
-      faturamento: (receita + reembolso) * k,
+      valorPago: (receita + reembolso) * k,
       receita: receita * k,
       cmv: cmv * k,
       taxa: taxa * k,
@@ -332,6 +378,7 @@ export function valoresDoPedido(
       semCusto,
     },
     itens,
+    aproximado,
   };
 }
 
@@ -377,7 +424,7 @@ function hora(instante: Date, fuso: string): string {
   }
 }
 
-/** "Hoje, 14:22", "Ontem, 09:10" ou "02/10, 18:40", no fuso do relatorio. */
+/** "Hoje, 14:22", "Ontem, 09:10" ou "02/10, 18:40", no fuso dado (o da loja do pedido). */
 export function quandoCurto(iso: string | null | undefined, fuso: string, hoje: string): string {
   const ms = Date.parse(String(iso || ""));
   if (!Number.isFinite(ms)) return "—";
@@ -402,33 +449,47 @@ export function quandoLongo(iso: string, fuso: string): string {
 // Montagem da tela
 // ---------------------------------------------------------------------------
 
-export interface PassoJornada {
-  titulo: string;
-  detalhe: string;
+
+/**
+ * Um Purchase do pedido, curto: o texto da jornada e montado na tela
+ * (jornadaDoPedido, em pedidos/filtros.ts), para nao ir pronto e repetido em
+ * cada pedido do periodo.
+ */
+export interface EnvioTela {
+  status: StatusFila | "teste";
   hora: string;
-  tom: TomPedido;
-  marca?: "meta" | "google";
+  destino?: string;
+  /** So no recusado. */
+  tentativas?: number;
+  /** So no recusado, cortado. */
+  erro?: string;
+  /** Teste que saiu de fato (test_event_code): foi para a aba de teste. */
+  saiu?: boolean;
 }
 
 export interface PedidoTela {
   chave: string;
   id: string;
   nome: string;
-  storeId: string;
   loja: string;
+  /** Data e hora no fuso da loja do pedido. */
   quando: string;
   quandoLongo: string;
-  processadoEm: string;
   itensTexto: string;
-  skus: string[];
   origem: Origem;
   meta: EstadoEnvio;
   google: EstadoEnvio;
   status: StatusPedido;
   gateway: string | null;
+  /** Recebeu pagamento. */
+  pago: boolean;
+  /** Por que nao vira conversao (draft, PDV, valor zero). */
+  motivo: string | null;
+  /** Hora do cancelamento, no fuso da loja. */
+  cancelado: string | null;
+  envios: EnvioTela[];
   valores: ValoresPedido | null;
   itens: ItemPedido[];
-  jornada: PassoJornada[];
   urlShopify: string | null;
 }
 
@@ -444,6 +505,8 @@ export interface EventoCompra {
   sent_at: string | null;
   fbc: string | null;
   url: string | null;
+  /** payload.teste ou test_event_code (regra da migration 055). */
+  teste?: boolean;
 }
 
 export interface DestinoLoja {
@@ -468,11 +531,14 @@ export interface ResumoPedidos {
   rastreadas: number | null;
   /** Pedidos em moeda sem cotacao: fora dos valores. */
   semCotacao: number;
+  /** Alguma conversao usou a tabela fixa (sem cotacao do dia). */
+  cambioAproximado: boolean;
 }
 
 export interface EntradaPedidos {
   entrada: EntradaFinanceiro;
   lojas: LojaDoSeletor[];
+  /** Fuso do relatorio: so para loja sem fuso conhecido. */
   fuso: string;
   eventos: EventoCompra[];
   destinos: DestinoLoja[];
@@ -508,7 +574,25 @@ export function montarPedidos(e: EntradaPedidos): { pedidos: PedidoTela[]; resum
   const lojaPorId = new Map(e.lojas.map((l) => [l.id, l]));
   const configPorLoja = new Map(entrada.configs.map((c) => [c.store_id, c]));
   const ligadas = new Set(e.lojasLigadas);
-  const dinheiro = (v: number) => formatarDinheiro(v, moeda, 2);
+
+  // Hora no fuso da LOJA do pedido: o periodo e o Dashboard contam o dia pelo
+  // dia_local, que e o da loja. No fuso do relatorio, o pedido das 23h de
+  // Chicago apareceria com a data do dia seguinte.
+  const fusoPorLoja = new Map(entrada.lojas.map((l) => [l.id, l.fuso || fuso]));
+  const hojePorFuso = new Map<string, string>();
+  const relogio = (lojaId: string) => {
+    const f = fusoPorLoja.get(lojaId) || fuso;
+    let hoje = hojePorFuso.get(f);
+    if (!hoje) {
+      hoje = diaNoFuso(new Date(e.agoraMs), f);
+      hojePorFuso.set(f, hoje);
+    }
+    const dia = hoje;
+    return {
+      curto: (iso: string | null | undefined) => quandoCurto(iso, f, dia),
+      longo: (iso: string) => quandoLongo(iso, f),
+    };
+  };
 
   const custosPorLoja = new Map<string, Map<string, ProductCostRow[]>>();
   for (const c of entrada.custos) {
@@ -529,21 +613,29 @@ export function montarPedidos(e: EntradaPedidos): { pedidos: PedidoTela[]; resum
   }
 
   const nomeDestino = new Map(e.destinos.map((d) => [d.id, d.nome]));
-  const metaDesde = new Map<string, string | null>();
-  const temGoogle = new Set<string>();
-  for (const l of e.lojas) {
-    const ativos = e.destinos.filter((d) => d.store_id === l.id && d.ativo);
-    metaDesde.set(
-      l.id,
-      ligadas.has(l.id) ? primeiroCriado(ativos.filter((d) => d.plataforma === "meta").map((d) => d.created_at)) : null
-    );
-    if (ligadas.has(l.id) && ativos.some((d) => d.plataforma === "google")) temGoogle.add(l.id);
-  }
+  const desdeDe = (lojaId: string, plataforma: DestinoLoja["plataforma"]) =>
+    ligadas.has(lojaId)
+      ? primeiroCriado(
+          e.destinos
+            .filter((d) => d.store_id === lojaId && d.ativo && d.plataforma === plataforma)
+            .map((d) => d.created_at)
+        )
+      : null;
+  const metaDesde = new Map(e.lojas.map((l) => [l.id, desdeDe(l.id, "meta")]));
+  const googleDesde = new Map(e.lojas.map((l) => [l.id, desdeDe(l.id, "google")]));
 
-  const resumo: ResumoPedidos = { pedidos: 0, faturamento: 0, lucro: 0, semCusto: 0, rastreadas: null, semCotacao: 0 };
+  const resumo: ResumoPedidos = {
+    pedidos: 0,
+    faturamento: 0,
+    lucro: 0,
+    semCusto: 0,
+    rastreadas: null,
+    semCotacao: 0,
+    cambioAproximado: false,
+  };
   let deviamIr = 0;
   let foram = 0;
-  const pedidos: PedidoTela[] = [];
+  const linhas: { ms: number; p: PedidoTela }[] = [];
 
   for (const p of entrada.pedidos) {
     const loja = lojaPorId.get(p.store_id);
@@ -552,8 +644,9 @@ export function montarPedidos(e: EntradaPedidos): { pedidos: PedidoTela[]; resum
     if (p.tipo === "teste" || p.tipo === "pdv") continue;
     const dia = String(p.dia_local).slice(0, 10);
     if (dia < intervalo.desde || dia > intervalo.ate) continue;
+    const quando = relogio(p.store_id);
 
-    const { valores, itens } = valoresDoPedido(p, {
+    const { valores, itens, aproximado } = valoresDoPedido(p, {
       moeda,
       converter,
       cfg: configPorLoja.get(p.store_id),
@@ -564,12 +657,16 @@ export function montarPedidos(e: EntradaPedidos): { pedidos: PedidoTela[]; resum
       resumo.faturamento += valores.receita;
       resumo.lucro += valores.lucroComoDashboard;
       if (valores.semCusto) resumo.semCusto += 1;
+      if (aproximado) resumo.cambioAproximado = true;
     } else {
       resumo.semCotacao += 1;
     }
 
     const chave = `${p.store_id}:${p.shopify_order_id}`;
-    const eventos = eventosPorPedido.get(chave) ?? [];
+    const todos = eventosPorPedido.get(chave) ?? [];
+    // Compra de teste nao conta como enviada nem como devida (regra da 055).
+    const reais = todos.filter((ev) => !compraDeTeste(ev));
+    const teste = todos.length > 0 && reais.length === 0;
     // A mesma regra do webhook: draft, PDV e valor zero nao viram conversao.
     // Pedido de teste ja saiu acima.
     const motivo = motivoParaIgnorarPedido({
@@ -577,9 +674,11 @@ export function montarPedidos(e: EntradaPedidos): { pedidos: PedidoTela[]; resum
       source_name: p.origem,
       total_price: p.total_bruto,
     });
+    const aplica = !motivo && p.tipo === "venda";
     const meta = estadoMeta({
-      eventos: eventos.map((ev) => ev.status),
-      aplica: !motivo && p.tipo === "venda",
+      eventos: reais.map((ev) => ev.status),
+      teste,
+      aplica,
       metaDesde: metaDesde.get(p.store_id) ?? null,
       processadoEm: p.processado_em,
       agoraMs: e.agoraMs,
@@ -588,134 +687,62 @@ export function montarPedidos(e: EntradaPedidos): { pedidos: PedidoTela[]; resum
       deviamIr += 1;
       if (meta === "enviado") foram += 1;
     }
-    const google: EstadoEnvio = temGoogle.has(p.store_id) && !motivo ? "tag" : "sem_pixel";
-
-    const comSinal = eventos.find((ev) => ev.url || ev.fbc) ?? eventos[0];
-    const origem =
-      p.tipo === "reenvio"
-        ? { id: "outra" as const, rotulo: "Reenvio", campanha: null, pista: "Pedido de valor zero (reenvio ou troca)" }
-        : origemDoPedido(comSinal ? { fbc: comSinal.fbc, url: comSinal.url } : null);
-    const status = statusDoPedido(p);
-    const gateway = nomeGateway(p.gateways);
-
-    // --- Jornada: so o que o banco registrou deste pedido -------------------
-    const jornada: PassoJornada[] = [];
-    if (origem.id === "meta" || origem.id === "google") {
-      jornada.push({
-        titulo: `Clique no anúncio · ${origem.rotulo}`,
-        detalhe: origem.campanha ? `utm_campaign=${origem.campanha} · ${origem.pista}` : origem.pista,
-        hora: "",
-        tom: "info",
-        marca: origem.id,
-      });
-    } else if (origem.id === "email") {
-      jornada.push({ titulo: "Link de e-mail", detalhe: origem.pista, hora: "", tom: "neutral" });
-    } else if (origem.id === "outra" && p.tipo !== "reenvio") {
-      jornada.push({ titulo: `Veio de ${origem.rotulo}`, detalhe: origem.pista, hora: "", tom: "neutral" });
-    } else if (origem.id === "direto") {
-      jornada.push({ titulo: "Sem clique de anúncio", detalhe: origem.pista, hora: "", tom: "neutral" });
-    }
-    jornada.push({
-      titulo: paraNumero(p.recebido) > 0 ? "Compra paga" : "Pedido criado",
-      detalhe: paraNumero(p.recebido) > 0 ? (gateway ?? "Pagamento") : "Sem pagamento recebido",
-      hora: quandoCurto(p.processado_em, fuso, entrada.hoje),
-      tom: paraNumero(p.recebido) > 0 ? "ok" : "neutral",
-    });
-    for (const ev of eventos) {
-      const destino = ev.destination_id ? nomeDestino.get(ev.destination_id) : null;
-      const sufixo = destino ? ` · ${destino}` : "";
-      if (ev.status === "enviado") {
-        jornada.push({
-          titulo: "Compra enviada ao Meta",
-          detalhe: `Aceita pelo Meta${sufixo}`,
-          hora: quandoCurto(ev.sent_at || ev.created_at, fuso, entrada.hoje),
-          tom: "ok",
-          marca: "meta",
-        });
-      } else if (ev.status === "falhou") {
-        const n = paraNumero(ev.attempts);
-        const erro = (ev.last_error || "").trim().slice(0, 160);
-        jornada.push({
-          titulo: "Compra não chegou ao Meta",
-          detalhe: `Recusada depois de ${n === 1 ? "1 tentativa" : `${n} tentativas`}${sufixo}${erro ? `: ${erro}` : ""}`,
-          hora: quandoCurto(ev.created_at, fuso, entrada.hoje),
-          tom: "err",
-          marca: "meta",
-        });
-      } else {
-        jornada.push({
-          titulo: "Compra na fila do Meta",
-          detalhe: `O xcart tenta de novo sozinho${sufixo}`,
-          hora: quandoCurto(ev.created_at, fuso, entrada.hoje),
-          tom: "neutral",
-          marca: "meta",
-        });
-      }
-    }
-    if (meta === "faltou") {
-      jornada.push({
-        titulo: "Compra não foi enviada ao Meta",
-        detalhe: "A loja tem pixel do Meta, mas não há envio registrado deste pedido.",
-        hora: "",
-        tom: "err",
-        marca: "meta",
-      });
-    } else if (meta === "aguardando") {
-      jornada.push({
-        titulo: "Compra a caminho do Meta",
-        detalhe: "Pedido recente: o envio sai em instantes.",
-        hora: "",
-        tom: "neutral",
-        marca: "meta",
-      });
-    } else if (meta === "nao_se_aplica" && motivo) {
-      jornada.push({ titulo: "Não vai para o Meta", detalhe: `Motivo: ${motivo}`, hora: "", tom: "neutral", marca: "meta" });
-    }
-    if (google === "tag") {
-      jornada.push({
-        titulo: "Compra do Google pela tag do checkout",
-        detalhe: "Sai do navegador do comprador; o servidor não confirma a chegada.",
-        hora: "",
-        tom: "neutral",
-        marca: "google",
-      });
-    }
-    if (valores && valores.reembolso > 0) {
-      jornada.push({ titulo: "Reembolso", detalhe: dinheiro(valores.reembolso), hora: "", tom: "warn" });
-    }
-    if (p.cancelado_em) {
-      jornada.push({
-        titulo: "Pedido cancelado",
-        detalhe: "Cancelado na Shopify",
-        hora: quandoCurto(p.cancelado_em, fuso, entrada.hoje),
-        tom: "err",
-      });
-    }
-
-    pedidos.push({
-      chave,
-      id: p.shopify_order_id,
-      nome: p.nome || `#${p.shopify_order_id}`,
-      storeId: p.store_id,
-      loja: rotuloLoja(loja),
-      quando: quandoCurto(p.processado_em, fuso, entrada.hoje),
-      quandoLongo: quandoLongo(p.processado_em, fuso),
+    const google = estadoGoogle({
+      googleDesde: googleDesde.get(p.store_id) ?? null,
       processadoEm: p.processado_em,
-      itensTexto: textoDosItens(p),
-      skus: itens.map((i) => i.sku).filter(Boolean),
-      origem,
-      meta,
-      google,
-      status,
-      gateway,
-      valores,
-      itens,
-      jornada,
-      urlShopify: urlNaShopify(loja.dominio, p.shopify_order_id),
+      aplica,
+      teste,
+    });
+
+    const comSinal = todos.find((ev) => ev.url || ev.fbc) ?? todos[0];
+    const origem: Origem =
+      p.tipo === "reenvio"
+        ? { id: "reenvio", rotulo: "Reenvio", campanha: null, pista: "Pedido de valor zero (reenvio ou troca)" }
+        : origemDoPedido(comSinal ? { fbc: comSinal.fbc, url: comSinal.url } : null);
+
+    const envios = todos.map((ev) => {
+      const envio: EnvioTela = {
+        status: compraDeTeste(ev) ? "teste" : ev.status,
+        hora: quando.curto(ev.sent_at || ev.created_at),
+      };
+      const destino = ev.destination_id ? nomeDestino.get(ev.destination_id) : null;
+      if (destino) envio.destino = destino;
+      if (envio.status === "falhou") {
+        envio.tentativas = paraNumero(ev.attempts);
+        const erro = (ev.last_error || "").trim().slice(0, 160);
+        if (erro) envio.erro = erro;
+      }
+      if (envio.status === "teste" && ev.sent_at) envio.saiu = true;
+      return envio;
+    });
+
+    linhas.push({
+      ms: Date.parse(p.processado_em) || 0,
+      p: {
+        chave,
+        id: p.shopify_order_id,
+        nome: p.nome || `#${p.shopify_order_id}`,
+        loja: rotuloLoja(loja),
+        quando: quando.curto(p.processado_em),
+        quandoLongo: quando.longo(p.processado_em),
+        itensTexto: textoDosItens(p),
+        origem,
+        meta,
+        google,
+        status: statusDoPedido(p),
+        gateway: nomeGateway(p.gateways),
+        pago: paraNumero(p.recebido) > 0,
+        motivo,
+        cancelado: p.cancelado_em ? quando.curto(p.cancelado_em) : null,
+        envios,
+        valores,
+        itens,
+        urlShopify: urlNaShopify(loja.dominio, p.shopify_order_id),
+      },
     });
   }
 
-  pedidos.sort((a, b) => Date.parse(b.processadoEm) - Date.parse(a.processadoEm) || (a.chave < b.chave ? -1 : 1));
+  linhas.sort((a, b) => b.ms - a.ms || (a.p.chave < b.p.chave ? -1 : 1));
   resumo.rastreadas = deviamIr > 0 ? foram / deviamIr : null;
-  return { pedidos, resumo };
+  return { pedidos: linhas.map((l) => l.p), resumo };
 }

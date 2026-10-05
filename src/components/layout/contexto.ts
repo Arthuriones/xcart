@@ -30,13 +30,14 @@ export const COOKIE_MENU = "xc_menu";
  * O que a barra de contexto mostra em cada tela.
  * - nenhum: tela sem numero do periodo (Lojas, Importar, Assinatura...).
  * - loja: tela que so filtra por loja, e diz isso (Custos, Eventos, Alertas).
- * - completo: loja, periodo, comparacao e moeda (Lucro).
+ * - completo: loja, periodo, comparacao e moeda (Lucro). `semComparar`: a
+ *   tela nao compara periodos (Pedidos) e o "Comparar com" some.
  * - fixo: loja e um periodo que a tela nao deixa trocar, escrito na barra.
  */
 export type ModoContexto =
   | { tipo: "nenhum" }
   | { tipo: "loja" }
-  | { tipo: "completo" }
+  | { tipo: "completo"; semComparar?: true }
   | { tipo: "fixo"; texto: string };
 
 export const ROTULO_PERIODO: Record<PeriodoId, string> = {

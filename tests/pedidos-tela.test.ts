@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { calcularFinanceiro, criarConversor, type EntradaFinanceiro } from "@/lib/financeiro/calculo";
 import type { FinOrderRow, FinStoreSettingsRow, LinhaPedido, ProductCostRow } from "@/lib/financeiro/tipos";
 import {
+  compraDeTeste,
+  estadoGoogle,
   estadoMeta,
   montarPedidos,
   origemDoPedido,
@@ -11,7 +13,15 @@ import {
   valoresDoPedido,
   type EventoCompra,
 } from "@/lib/leitura/pedidos";
-import { buscaCasa, corEnvio, passaNoFiltro } from "../src/app/(dashboard)/pedidos/filtros";
+import {
+  CABECALHO_CSV,
+  buscaCasa,
+  corEnvio,
+  jornadaDoPedido,
+  linhaCsv,
+  passaNoFiltro,
+  textoCsv,
+} from "../src/app/(dashboard)/pedidos/filtros";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -118,8 +128,8 @@ const AGORA = Date.parse("2026-10-04T12:00:00Z");
 // ---------------------------------------------------------------------------
 
 describe("origemDoPedido", () => {
-  it("sem evento de rastreamento: Direto", () => {
-    expect(origemDoPedido(null)).toMatchObject({ id: "direto", rotulo: "Direto" });
+  it("sem evento de rastreamento: Sem dado, nunca Direto", () => {
+    expect(origemDoPedido(null)).toMatchObject({ id: "sem_dado", rotulo: "Sem dado" });
   });
 
   it("click id na URL de chegada vence tudo", () => {
@@ -226,7 +236,7 @@ describe("valoresDoPedido", () => {
 
   it("receita - produto e frete do fornecedor - taxa", () => {
     const { valores, itens } = valoresDoPedido(pedido(), ctx());
-    expect(valores).toMatchObject({ produtos: 100, frete: 10, desconto: 5, faturamento: 105, receita: 105, reembolso: 0 });
+    expect(valores).toMatchObject({ produtos: 100, frete: 10, desconto: 5, valorPago: 105, receita: 105, reembolso: 0 });
     expect(valores!.cmv).toBeCloseTo(40);
     expect(valores!.taxa).toBeCloseTo(4.5);
     expect(valores!.lucro).toBeCloseTo(60.5);
@@ -252,9 +262,9 @@ describe("valoresDoPedido", () => {
     expect(valores!.lucro).toBeCloseTo(105 - 30 - 4.5);
   });
 
-  it("reembolso total: faturamento - reembolso = receita, e o custo enviado fica", () => {
+  it("reembolso total: valor pago - reembolso = receita, e o custo enviado fica", () => {
     const { valores } = valoresDoPedido(pedido({ reembolsado: 105, liquido_pago: 0 }), ctx());
-    expect(valores).toMatchObject({ faturamento: 105, reembolso: 105, receita: 0, taxa: 0 });
+    expect(valores).toMatchObject({ valorPago: 105, reembolso: 105, receita: 0, taxa: 0 });
     expect(valores!.lucro).toBeCloseTo(-40);
   });
 
@@ -309,14 +319,18 @@ describe("montarPedidos", () => {
     expect(pedidos.map((p) => p.id)).toEqual([a.shopify_order_id, b.shopify_order_id, c.shopify_order_id]);
     const [pa, pb, pc] = pedidos;
     expect(pa.meta).toBe("faltou");
-    expect(pa.origem.id).toBe("direto");
+    expect(pa.origem.id).toBe("sem_dado");
     expect(pb.meta).toBe("enviado");
     expect(pb.origem).toMatchObject({ id: "meta", campanha: "abo" });
     expect(pc.meta).toBe("falhou");
     expect(pa.google).toBe("tag");
     expect(pb.urlShopify).toBe(`https://admin.shopify.com/store/qkgknv-w3/orders/${b.shopify_order_id}`);
-    expect(pb.jornada.some((j) => j.titulo === "Compra enviada ao Meta" && j.detalhe.includes("Pixel principal"))).toBe(true);
-    expect(pc.jornada.some((j) => j.tom === "err" && j.detalhe.includes("3 tentativas"))).toBe(true);
+    const din = (v: number) => `US$ ${v}`;
+    expect(
+      jornadaDoPedido(pb, din).some((j) => j.titulo === "Compra enviada ao Meta" && j.detalhe.includes("Pixel principal"))
+    ).toBe(true);
+    expect(jornadaDoPedido(pc, din).some((j) => j.tom === "err" && j.detalhe.includes("3 tentativas"))).toBe(true);
+    expect(jornadaDoPedido(pa, din).some((j) => j.titulo === "Sem clique de anúncio")).toBe(false);
     expect(resumo.rastreadas).toBeCloseTo(1 / 3);
     expect(passaNoFiltro(pa, "falha")).toBe(true);
     expect(passaNoFiltro(pb, "falha")).toBe(false);
@@ -341,6 +355,142 @@ describe("montarPedidos", () => {
   });
 });
 
+describe("compra de teste", () => {
+  const destinos = [
+    { id: "d-meta", store_id: LOJA, plataforma: "meta" as const, nome: null, ativo: true, created_at: "2026-09-01T00:00:00Z" },
+    { id: "d-google", store_id: LOJA, plataforma: "google" as const, nome: null, ativo: true, created_at: "2026-09-01T00:00:00Z" },
+  ];
+
+  it("enviado sem sent_at, payload teste ou fbc TEST e teste", () => {
+    expect(compraDeTeste(evento("1", { sent_at: null }))).toBe(true);
+    expect(compraDeTeste(evento("1", { teste: true }))).toBe(true);
+    expect(compraDeTeste(evento("1", { fbc: "fb.1.1.TESTE" }))).toBe(true);
+    expect(compraDeTeste(evento("1"))).toBe(false);
+    expect(compraDeTeste(evento("1", { status: "pendente", sent_at: null }))).toBe(false);
+  });
+
+  it("ponto cinza, fora de Compras rastreadas e jornada neutra", () => {
+    const t = pedido();
+    const real = pedido();
+    const e = entrada([t, real]);
+    const { pedidos, resumo } = montarPedidos({
+      entrada: e,
+      lojas: e.lojas,
+      fuso: "America/Sao_Paulo",
+      eventos: [evento(t.shopify_order_id, { sent_at: null }), evento(real.shopify_order_id)],
+      destinos,
+      lojasLigadas: [LOJA],
+      agoraMs: AGORA,
+    });
+    const pt = pedidos.find((p) => p.id === t.shopify_order_id)!;
+    expect(pt.meta).toBe("teste");
+    expect(pt.google).toBe("teste");
+    expect(corEnvio(pt.meta)).toBe("apagado");
+    expect(passaNoFiltro(pt, "falha")).toBe(false);
+    expect(resumo.rastreadas).toBe(1);
+    const j = jornadaDoPedido(pt, String);
+    expect(j.some((x) => x.titulo === "Compra de teste: não enviada" && x.tom === "neutral")).toBe(true);
+    expect(j.some((x) => x.titulo === "Compra enviada ao Meta")).toBe(false);
+  });
+});
+
+describe("estadoGoogle", () => {
+  const base = { googleDesde: "2026-10-01T00:00:00Z", processadoEm: "2026-10-03T15:00:00Z", aplica: true, teste: false };
+
+  it("pela tag so com destino ativo na hora do pedido", () => {
+    expect(estadoGoogle(base)).toBe("tag");
+    expect(estadoGoogle({ ...base, processadoEm: "2026-09-29T15:00:00Z" })).toBe("sem_pixel");
+    expect(estadoGoogle({ ...base, googleDesde: null })).toBe("sem_pixel");
+  });
+
+  it("pedido que nao vira conversao nao e 'sem pixel'", () => {
+    expect(estadoGoogle({ ...base, aplica: false })).toBe("nao_se_aplica");
+    expect(estadoGoogle({ ...base, teste: true })).toBe("teste");
+  });
+});
+
+describe("fuso da loja", () => {
+  it("hora e data no fuso da loja do pedido, nao no do relatorio", () => {
+    // 23h30 em Chicago do dia 03 = 04h30 UTC do dia 04 = 01h30 em Sao Paulo.
+    const p = pedido({ processado_em: "2026-10-04T04:30:00Z", dia_local: "2026-10-03" });
+    const e = entrada([p], {
+      lojas: [{ id: LOJA, nome: "Softnook", dominio: "kphigm-76.myshopify.com", fuso: "America/Chicago", moeda: "USD" }],
+    });
+    const { pedidos } = montarPedidos({
+      entrada: e,
+      lojas: e.lojas,
+      fuso: "America/Sao_Paulo",
+      eventos: [],
+      destinos: [],
+      lojasLigadas: [],
+      agoraMs: AGORA,
+    });
+    expect(pedidos[0].quando).toBe("Ontem, 23:30");
+    expect(pedidos[0].quandoLongo).toBe("03/10/2026 às 23:30");
+  });
+});
+
+describe("resumo e CSV", () => {
+  it("Valor pago - Reembolso = Faturamento, e a soma do Faturamento bate com o KPI", () => {
+    const pedidos = [pedido(), pedido({ reembolsado: 49, liquido_pago: 56 })];
+    const e = entrada(pedidos);
+    const { pedidos: lista, resumo } = montarPedidos({
+      entrada: e,
+      lojas: e.lojas,
+      fuso: "America/Sao_Paulo",
+      eventos: [],
+      destinos: [],
+      lojasLigadas: [],
+      agoraMs: AGORA,
+    });
+    const i = (nome: string) => CABECALHO_CSV.indexOf(nome);
+    const linhas = lista.map(linhaCsv);
+    const soma = linhas.reduce((s, l) => s + Number(l[i("Faturamento")]), 0);
+    expect(soma).toBeCloseTo(resumo.faturamento);
+    for (const l of linhas) {
+      expect(Number(l[i("Valor pago")]) - Number(l[i("Reembolso")])).toBeCloseTo(Number(l[i("Faturamento")]));
+    }
+  });
+
+  it("valores em centavos e texto do visitante sem formula", () => {
+    const p = pedido();
+    const e = entrada([p], { configs: [{ ...CFG, taxa_pct: 2.5111 }] });
+    const { pedidos } = montarPedidos({
+      entrada: e,
+      lojas: e.lojas,
+      fuso: "America/Sao_Paulo",
+      eventos: [evento(p.shopify_order_id, { url: "https://loja.com/?utm_source=%3DHYPERLINK(1)&utm_campaign=-2%2B3" })],
+      destinos: [],
+      lojasLigadas: [],
+      agoraMs: AGORA,
+    });
+    const l = linhaCsv(pedidos[0]);
+    const taxa = Number(l[CABECALHO_CSV.indexOf("Taxa de pagamento")]);
+    expect(taxa).toBe(Math.round(taxa * 100) / 100);
+    expect(l[CABECALHO_CSV.indexOf("Origem")]).toBe("'=HYPERLINK(1)");
+    expect(l[CABECALHO_CSV.indexOf("Campanha")]).toBe("'-2 3");
+    expect(textoCsv("@x")).toBe("'@x");
+    expect(textoCsv("normal")).toBe("normal");
+  });
+
+  it("cambio aproximado e pedido sem cotacao aparecem no resumo", () => {
+    const brl = pedido({ moeda: "BRL" });
+    const xyz = pedido({ moeda: "XYZ" });
+    const e = entrada([brl, xyz]);
+    const { resumo } = montarPedidos({
+      entrada: e,
+      lojas: e.lojas,
+      fuso: "America/Sao_Paulo",
+      eventos: [],
+      destinos: [],
+      lojasLigadas: [],
+      agoraMs: AGORA,
+    });
+    expect(resumo.cambioAproximado).toBe(true);
+    expect(resumo.semCotacao).toBe(1);
+  });
+});
+
 describe("pecas de tela", () => {
   it("link do pedido no admin", () => {
     expect(urlNaShopify("kphigm-76.myshopify.com", "123")).toBe("https://admin.shopify.com/store/kphigm-76/orders/123");
@@ -349,7 +499,7 @@ describe("pecas de tela", () => {
   });
 
   it("busca por numero do pedido ou SKU", () => {
-    const p = { nome: "#1480", id: "5551234", skus: ["CIL-01-BK"] };
+    const p = { nome: "#1480", id: "5551234", itens: [{ sku: "CIL-01-BK" }] };
     expect(buscaCasa(p, "#1480")).toBe(true);
     expect(buscaCasa(p, "148")).toBe(true);
     expect(buscaCasa(p, "cil-01")).toBe(true);

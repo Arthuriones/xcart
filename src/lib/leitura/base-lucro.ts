@@ -69,8 +69,14 @@ export interface BaseLucro {
   erroCampanha: string | null;
 }
 
-/** null = usuario sem loja (ou sem sessao). Memorizado por requisicao. */
-export const lerBaseLucro = cache(async (): Promise<BaseLucro | null> => {
+/**
+ * null = usuario sem loja (ou sem sessao). Memorizado por requisicao.
+ *
+ * `enxuta` (tela Pedidos): so os pedidos e o cambio do periodo ATUAL, sem
+ * contas nem gasto de anuncio. calcularFinanceiro sobre ela daria o periodo
+ * anterior e o anuncio zerados -- nao use no Dashboard.
+ */
+export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseLucro | null> => {
   const { filtro, lojas, lojaIds } = await filtroResolvido();
   if (lojas.length === 0 || lojaIds.length === 0) return null;
   const user = await getCurrentUser();
@@ -93,7 +99,7 @@ export const lerBaseLucro = cache(async (): Promise<BaseLucro | null> => {
       : FUSO_RELATORIO_PADRAO;
   const hoje = diaNoFuso(new Date(), fusoRef);
   const intervalos = intervaloDoPeriodo(filtro.periodo, hoje);
-  const desde = intervalos.anterior.desde;
+  const desde = enxuta ? intervalos.atual.desde : intervalos.anterior.desde;
   const ate = intervalos.atual.ate;
 
   const [pedidos, custos, configs, contas] = await Promise.all([
@@ -126,14 +132,16 @@ export const lerBaseLucro = cache(async (): Promise<BaseLucro | null> => {
         .order("store_id", { ascending: true })
         .range(de, a)
     ),
-    lerTudo<AdAccountRow>("as contas de anúncio", (de, a) =>
-      supabase
-        .from("ad_accounts")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("id", { ascending: true })
-        .range(de, a)
-    ),
+    enxuta
+      ? ([] as AdAccountRow[])
+      : lerTudo<AdAccountRow>("as contas de anúncio", (de, a) =>
+          supabase
+            .from("ad_accounts")
+            .select("*")
+            .eq("user_id", user.id)
+            .order("id", { ascending: true })
+            .range(de, a)
+        ),
   ]);
 
   const lojaSet = new Set(lojaIds);
