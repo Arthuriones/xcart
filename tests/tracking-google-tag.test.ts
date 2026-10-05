@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import { apenasNumeroDaConversao } from "../src/lib/tracking/normalizar";
+import { idDoCheckoutExpresso } from "../src/lib/tracking/eventos";
 import {
   contaDoGoogle,
   contasGoogleParaNavegador,
@@ -153,6 +154,26 @@ describe("contas Google para o navegador", () => {
     );
     // Quem ja existe so atualiza; identidade NOVA tem teto e, estourado, nao nasce.
     expect(coletor).toMatch(/\.update\(campos\)[\s\S]{0,200}\.select\("id"\)[\s\S]{0,700}>= TETO_IDENTIDADES_HORA\) return;/);
+  });
+
+  /**
+   * O checkout expresso (Shop Pay, Apple Pay...) pula a pagina onde o pixel
+   * roda. Suprimido como o clique comum, o InitiateCheckout dele sumia -- foi o
+   * buraco da Softnook. Comportamento: tests/tracking-checkout-expresso.test.ts.
+   */
+  it("coletor: o expresso fura a supressao do pixel, e a dedupe do pixel enxerga ele", () => {
+    const coletor = fonte("src", "app", "api", "tracking", "collect", "route.ts");
+    expect(coletor).toMatch(
+      /const expresso =\s+!doPixel && evento === "begin_checkout" && origemDoCheckout\(corpo\.origem\) === "expresso";/
+    );
+    expect(coletor).toContain("if (expresso) eventId = idDoCheckoutExpresso(visitorId, Date.now());");
+    expect(coletor).toContain('if (!doPixel && evento === "begin_checkout" && pixelCobrindo && !expresso)');
+    // A linha do expresso e `begin_checkout` do visitante do tema: a consulta
+    // da dedupe filtra so o nome, sem olhar origem nem id.
+    const dedupe = coletor.slice(coletor.indexOf('if (doPixel && evento === "begin_checkout" && visitanteDoTema)'));
+    const consulta = dedupe.slice(0, dedupe.indexOf("checkout ja contado pelo tema"));
+    expect(consulta).toContain('.eq("event_name", "begin_checkout")');
+    expect(consulta).not.toMatch(/origem|event_id|_xp_/);
   });
 });
 
@@ -609,6 +630,10 @@ function rodarSnippet(opcoes: {
   /** data-xcart-remarketing gravado no tema. */
   remarketing?: string;
   privacidade?: boolean;
+  /** Itens que /cart.js devolve. */
+  itens?: unknown[];
+  /** Itens que /cart/change.js devolve (o carrinho depois da mudanca). */
+  itensDepoisDeMudar?: unknown[];
 }) {
   const u = new URL(opcoes.url ?? "https://loja.test/products/camisa");
   const beacons: Record<string, unknown>[] = [];
@@ -619,18 +644,26 @@ function rodarSnippet(opcoes: {
     (opcoes.cookies ?? "").split("; ").filter(Boolean).map((p) => p.split("=") as [string, string])
   );
 
+  const resposta = (corpo: unknown, cabecalhos: Record<string, string> = {}): Record<string, unknown> => ({
+    ok: true,
+    headers: { get: (k: string) => cabecalhos[k.toLowerCase()] ?? null },
+    json: () => Promise.resolve(JSON.parse(JSON.stringify(corpo))),
+    clone: () => resposta(corpo, cabecalhos),
+  });
   const responder = (corpo: unknown, cabecalhos: Record<string, string> = {}) =>
-    Promise.resolve({
-      ok: true,
-      headers: { get: (k: string) => cabecalhos[k.toLowerCase()] ?? null },
-      json: () => Promise.resolve(JSON.parse(JSON.stringify(corpo))),
-    });
+    Promise.resolve(resposta(corpo, cabecalhos));
+  const JSON_ = { "content-type": "application/json; charset=utf-8" };
 
   function fetch(entrada: unknown) {
     const alvo = String(entrada);
     buscas.push(alvo);
-    if (alvo.endsWith("/cart.js")) return responder({ token: "c1", attributes: {} });
+    if (alvo.endsWith("/cart.js")) {
+      return responder({ token: "c1", attributes: {}, items: opcoes.itens ?? [] });
+    }
     if (alvo.endsWith("/cart/update.js")) return responder({ token: "c1", attributes: {} });
+    if (alvo.includes("/cart/change")) {
+      return responder({ token: "c1", attributes: {}, items: opcoes.itensDepoisDeMudar ?? [] }, JSON_);
+    }
     if (alvo.includes("/cart/add")) return responder({ id: 1 });
     if (alvo.includes("/api/tracking/google-config")) {
       return responder(opcoes.contas ?? [], { "x-xcart-pixel-checkout": opcoes.pixelCobre ?? "1" });
@@ -723,10 +756,49 @@ function rodarSnippet(opcoes: {
     buscas,
     camada,
     adicionar: () => (ctx.fetch as typeof fetch)("/cart/add.js"),
+    /** O tema mudando o carrinho (tirar item, quantidade) pelo fetch dele. */
+    mudarCarrinho: () => (ctx.fetch as typeof fetch)("/cart/change.js"),
     clicarCheckout: () =>
       ouvintes.click?.forEach((fn) =>
         fn({ target: { closest: (sel: string) => (sel === '[name="checkout"]' ? {} : null) } })
       ),
+    /**
+     * Clique visto do document: `composedPath` do elemento mais de dentro que
+     * o document enxerga ate o window. Com shadow fechado o primeiro e o
+     * hospedeiro; o resto e o DOM normal da pagina.
+     */
+    clicarExpresso: (caminho: ElementoFalso[]) =>
+      ouvintes.click?.forEach((fn) =>
+        fn({
+          target: caminho[0],
+          composedPath: () => [...caminho, { nodeType: 9 }, ctx],
+        })
+      ),
+  };
+}
+
+type ElementoFalso = {
+  nodeType: number;
+  matches: (seletor: string) => boolean;
+  querySelector: (seletor: string) => { value: string } | null;
+};
+
+/**
+ * Elemento de mentira que entende o pouco de seletor que o snippet usa: tag,
+ * `.classe` e `form[action*="..."]`.
+ */
+function el(tag: string, attrs: { classe?: string; action?: string; variante?: string } = {}): ElementoFalso {
+  return {
+    nodeType: 1,
+    matches: (seletor) =>
+      seletor.split(",").some((bruto) => {
+        const s = bruto.trim();
+        if (s.startsWith(".")) return (attrs.classe ?? "").split(" ").includes(s.slice(1));
+        const m = /^([a-z-]+)\[action\*="([^"]+)"\]$/.exec(s);
+        if (m) return m[1] === tag && (attrs.action ?? "").includes(m[2]);
+        return s === tag;
+      }),
+    querySelector: (s) => (s === '[name="id"]' && attrs.variante ? { value: attrs.variante } : null),
   };
 }
 
@@ -849,5 +921,133 @@ describe("snippet do tema: a tag do Google", () => {
         "pageUrl", "produto", "referrer", "shop", "storeId", "visitorId", "wbraid",
       ].sort()
     );
+  });
+});
+
+// ===========================================================================
+// 3c. O snippet do tema: checkout expresso (so o Meta)
+//
+// Shop Pay, Apple Pay e Google Pay no botao expresso pulam a pagina do
+// checkout, onde o Web Pixel roda: o clique e o unico InitiateCheckout que
+// existe. Medido na Softnook (04-05/10/2026): as 5 compras por carteira
+// expressa, de 8, chegaram sem nenhum.
+// ===========================================================================
+
+describe("snippet do tema: checkout expresso", () => {
+  const CONTAS = [{ conta: "AW-111111111", labels: { begin_checkout: "IC1" } }];
+
+  // Com shadow fechado, o document so ve o hospedeiro; dele para fora e o DOM
+  // normal do tema.
+  const naPaginaDoProduto = (variante = "11", primeiro = el("shopify-accelerated-checkout")) => [
+    primeiro,
+    el("div", { classe: "shopify-payment-button" }),
+    el("form", { action: "/cart/add", variante }),
+    el("body"),
+  ];
+  const noCarrinho = () => [
+    el("shopify-apple-pay-button"),
+    el("shopify-accelerated-checkout-cart"),
+    el("div", { classe: "cart__dynamic-checkout-buttons additional-checkout-buttons" }),
+    el("form", { action: "/cart" }),
+    el("body"),
+  ];
+  const expressos = (sn: ReturnType<typeof rodarSnippet>) =>
+    sn.beacons.filter((b) => b.origem === "expresso");
+
+  it("vai ao coletor marcado, com id por balde, e NAO vai ao Google", async () => {
+    // Pixel fora e conta com rotulo: e o caso em que o begin_checkout COMUM
+    // iria ao Google. O expresso nao vai nem assim.
+    const sn = rodarSnippet({ contas: CONTAS, pixelCobre: "0" });
+    await assentarMuito();
+    const antes = Date.now();
+    sn.clicarExpresso(naPaginaDoProduto());
+    await assentarMuito();
+    const depois = Date.now();
+
+    const ic = expressos(sn);
+    expect(ic).toHaveLength(1);
+    expect(ic[0]).toMatchObject({ evento: "begin_checkout", origem: "expresso" });
+    const vid = String(ic[0].visitorId);
+    expect([idDoCheckoutExpresso(vid, antes), idDoCheckoutExpresso(vid, depois)]).toContain(ic[0].eventId);
+    expect(JSON.stringify(ic[0])).not.toMatch(/"value"|"currency"/);
+    expect(sn.camada().filter((a) => a[1] === "begin_checkout")).toEqual([]);
+    // O mesmo clique nao virou tambem o begin_checkout comum.
+    expect(sn.beacons.filter((b) => b.evento === "begin_checkout")).toHaveLength(1);
+  });
+
+  it("na pagina de produto, so a variante do formulario -- o expresso pula o carrinho", async () => {
+    const sn = rodarSnippet({ itens: [{ id: 999, variant_id: 999, product_id: 9, sku: "X" }] });
+    await assentarMuito();
+    sn.clicarExpresso(naPaginaDoProduto("11", el("shop-pay-wallet-button")));
+    await assentarMuito();
+    expect(expressos(sn)[0].produtos).toEqual([{ variante: "11", produto: "7", sku: "S" }]);
+
+    // Formulario de outro produto (compra rapida): o produto da pagina nao e o dele.
+    const outro = rodarSnippet({});
+    await assentarMuito();
+    outro.clicarExpresso(naPaginaDoProduto("22"));
+    await assentarMuito();
+    expect(expressos(outro)[0].produtos).toEqual([{ variante: "22", produto: null, sku: null }]);
+  });
+
+  it("no carrinho, os itens do carrinho -- e a resposta de mudanca atualiza sem buscar de novo", async () => {
+    const A = { id: 101, variant_id: 101, product_id: 1, sku: "A" };
+    const B = { id: 202, variant_id: 202, product_id: 2, sku: "B" };
+    const sn = rodarSnippet({ url: "https://loja.test/cart", itens: [A, B] });
+    await assentarMuito();
+    sn.clicarExpresso(noCarrinho());
+    await assentarMuito();
+    expect(expressos(sn)[0].produtos).toEqual([
+      { variante: "101", produto: "1", sku: "A" },
+      { variante: "202", produto: "2", sku: "B" },
+    ]);
+
+    const tirou = rodarSnippet({ url: "https://loja.test/cart", itens: [A, B], itensDepoisDeMudar: [B] });
+    await assentarMuito();
+    tirou.mudarCarrinho();
+    await assentarMuito();
+    const leituras = tirou.buscas.filter((b) => b.endsWith("/cart.js")).length;
+    tirou.clicarExpresso(noCarrinho());
+    await assentarMuito();
+    expect(expressos(tirou)[0].produtos).toEqual([{ variante: "202", produto: "2", sku: "B" }]);
+    expect(tirou.buscas.filter((b) => b.endsWith("/cart.js"))).toHaveLength(leituras);
+  });
+
+  it("cliques repetidos no mesmo balde viram um so", async () => {
+    const sn = rodarSnippet({});
+    await assentarMuito();
+    sn.clicarExpresso(naPaginaDoProduto());
+    sn.clicarExpresso(naPaginaDoProduto());
+    sn.clicarExpresso(noCarrinho());
+    await assentarMuito();
+    expect(expressos(sn)).toHaveLength(1);
+  });
+
+  it("teste e consentimento vao marcados, como nos outros eventos", async () => {
+    const sn = rodarSnippet({
+      contas: CONTAS,
+      pixelCobre: "0",
+      url: "https://loja.test/products/camisa?xcart_teste=1",
+      privacidade: false,
+    });
+    await assentarMuito();
+    sn.clicarExpresso(naPaginaDoProduto());
+    await assentarMuito();
+    expect(expressos(sn)[0]).toMatchObject({ teste: true, consentimento: "negado" });
+    expect(sn.camada().filter((a) => a[0] === "event")).toEqual([]);
+  });
+
+  it("clique fora dos botoes expressos nao dispara; o checkout comum segue sem a marca", async () => {
+    const sn = rodarSnippet({});
+    await assentarMuito();
+    sn.clicarExpresso([el("button", { classe: "product-form__submit" }), el("form", { action: "/cart/add" })]);
+    await assentarMuito();
+    expect(sn.beacons.some((b) => b.evento === "begin_checkout")).toBe(false);
+
+    sn.clicarCheckout();
+    await assentarMuito();
+    const comum = sn.beacons.find((b) => b.evento === "begin_checkout")!;
+    expect(comum).not.toHaveProperty("origem");
+    expect(comum).not.toHaveProperty("produtos");
   });
 });

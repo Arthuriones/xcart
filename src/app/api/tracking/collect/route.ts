@@ -3,6 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   eventoValido,
   definicaoDoEvento,
+  idDoCheckoutExpresso,
+  origemDoCheckout,
   type ChaveEvento,
 } from "@/lib/tracking/eventos";
 import { montarFbc, montarUserData } from "@/lib/tracking/normalizar";
@@ -82,6 +84,27 @@ const TETO_IDENTIDADES_HORA = 20000;
 /** Pixel e tema no mesmo checkout: o do tema chegou antes, nesta janela. */
 const JANELA_CHECKOUT_DO_TEMA_MS = 10 * 60 * 1000;
 
+/** Itens do carrinho num evento. Carrinho de verdade nao chega perto disto. */
+const MAX_ITENS = 20;
+
+type ProdutoDoCorpo = {
+  variante?: string | null;
+  produto?: string | null;
+  sku?: string | null;
+};
+
+/** Cortado: o valor vai cru para o payload e para o catalogo. */
+function lerProduto(p: unknown) {
+  const o = (p && typeof p === "object" ? p : {}) as ProdutoDoCorpo;
+  const texto = (v: unknown, max: number) =>
+    (typeof v === "string" || typeof v === "number" ? String(v) : "").trim().slice(0, max) || null;
+  return {
+    variantId: texto(o.variante, 64),
+    productId: texto(o.produto, 64),
+    sku: texto(o.sku, 128),
+  };
+}
+
 function comCors(resposta: NextResponse, origem: string | null): NextResponse {
   // `*` de proposito, e sem Allow-Credentials: o dominio publico da loja nao
   // esta no nosso banco (guardamos o .myshopify.com), a resposta nao carrega
@@ -132,11 +155,14 @@ export async function POST(request: NextRequest) {
     /** A URL da pagina, mandada explicita pelo snippet. Ver abaixo. */
     pageUrl?: string | null;
     /** Produto em tela, nos eventos que tem um. Ver `custom_data` abaixo. */
-    produto?: {
-      variante?: string | null;
-      produto?: string | null;
-      sku?: string | null;
-    } | null;
+    produto?: ProdutoDoCorpo | null;
+    /**
+     * O que esta sendo comprado, quando e mais de um item: o checkout expresso
+     * do carrinho paga o carrinho inteiro. Vence `produto` quando vem.
+     */
+    produtos?: unknown;
+    /** De onde veio o begin_checkout do tema. Ver `origemDoCheckout`. */
+    origem?: string | null;
     /** 'pixel' quando vem do Web Pixel do checkout; ausente = snippet do tema. */
     fonte?: string | null;
     /** Identificador de visitante da Shopify. A unica chave que o pixel tem. */
@@ -298,6 +324,15 @@ export async function POST(request: NextRequest) {
     eventId = `${evento}_ck_${checkoutToken}`.slice(0, 200);
   }
 
+  // Clique num botao de checkout EXPRESSO (Shop Pay, Apple Pay, Google Pay...),
+  // que pula a pagina do checkout -- ver `idDoCheckoutExpresso`. So do tema e so
+  // no begin_checkout. O id e refeito aqui, com o nosso relogio, pelo mesmo
+  // motivo do pixel acima: a marca vem do navegador, e com o id do cliente cada
+  // POST com id novo seria um InitiateCheckout a mais furando a supressao abaixo.
+  const expresso =
+    !doPixel && evento === "begin_checkout" && origemDoCheckout(corpo.origem) === "expresso";
+  if (expresso) eventId = idDoCheckoutExpresso(visitorId, Date.now());
+
   // A ponte checkout -> clientId, gravada ANTES de qualquer saida antecipada.
   //
   // E o que o webhook usa para achar o clique quando o pedido chega sem cart
@@ -435,8 +470,15 @@ export async function POST(request: NextRequest) {
   // A janela (JANELA_PIXEL_CHECKOUT_MS, 7 dias, a mesma do Google) e o que faz
   // isto se curar: se o pixel parar de mandar, o tema volta a cobrir sozinho.
   // Era um dia, e loja com menos de um checkout por dia contava dois.
+  //
+  // O EXPRESSO nao entra: o Shop Pay roda em shop.app e a carteira na janela do
+  // sistema, e o pixel nao roda em nenhum dos dois -- o clique e o unico
+  // InitiateCheckout que existe. Quando o expresso cai no checkout normal
+  // (Shop Pay como convidado), o checkout_started do pixel e descartado pela
+  // checagem de 10 min mais abaixo: a linha do expresso e um begin_checkout do
+  // mesmo visitante.
   const pixelCobrindo = Date.now() - vistoEm < JANELA_PIXEL_CHECKOUT_MS;
-  if (!doPixel && evento === "begin_checkout" && pixelCobrindo) {
+  if (!doPixel && evento === "begin_checkout" && pixelCobrindo && !expresso) {
     return ok({ ignorado: "checkout coberto pelo Web Pixel" });
   }
 
@@ -541,6 +583,10 @@ export async function POST(request: NextRequest) {
   // manda o begin_checkout do clique; o pixel chega logo depois com o do
   // checkout_started, e o carimbo so se renova AGORA. Mesmo visitante, mesma
   // acao: o do tema ja contou.
+  //
+  // Cobre tambem o EXPRESSO que caiu no checkout normal: ele e gravado como
+  // `begin_checkout` do visitante do tema, e por isso a consulta abaixo filtra
+  // so o nome do evento, sem olhar a origem.
   if (doPixel && evento === "begin_checkout" && visitanteDoTema) {
     const { count: doTema } = await admin
       .from("tracking_events")
@@ -671,15 +717,13 @@ export async function POST(request: NextRequest) {
     // Por destino, e nao por loja: o catalogo do Meta e o feed do Google sao
     // dois catalogos, montados por caminhos diferentes na mesma loja.
     const { montarIdsDeProdutos } = await import("@/lib/tracking/id-produto");
-    const doProduto = {
-      // Cortados: o valor vai cru para o payload e para o catalogo.
-      variantId: (corpo.produto?.variante || "").trim().slice(0, 64) || null,
-      productId: (corpo.produto?.produto || "").trim().slice(0, 64) || null,
-      sku: (corpo.produto?.sku || "").trim().slice(0, 128) || null,
-    };
+    const itens =
+      Array.isArray(corpo.produtos) && corpo.produtos.length
+        ? corpo.produtos.slice(0, MAX_ITENS).map(lerProduto)
+        : [lerProduto(corpo.produto)];
 
     for (const d of querem.filter((x) => x.plataforma === "meta")) {
-      const conteudo = montarIdsDeProdutos(d.idTemplate, [doProduto]);
+      const conteudo = montarIdsDeProdutos(d.idTemplate, itens);
 
       destinos.push({
         destination: "meta",

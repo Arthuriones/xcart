@@ -2,14 +2,18 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
+  BALDE_CHECKOUT_EXPRESSO_MS,
   EVENTOS,
   EVENTOS_DO_NAVEGADOR,
+  ORIGENS_DO_CHECKOUT,
   chaveDoEvento,
   definicaoDoEvento,
   eventoValido,
+  idDoCheckoutExpresso,
   idDoEventoDeNavegador,
   lerRotulos,
   limparMapaDeRotulos,
+  origemDoCheckout,
   rotuloDoEvento,
   separarRotulo,
 } from "../src/lib/tracking/eventos";
@@ -192,6 +196,43 @@ describe("id do evento de navegador", () => {
 });
 
 /**
+ * Checkout expresso (Shop Pay, Apple Pay...): o clique e o unico
+ * InitiateCheckout que existe, porque o Web Pixel nao roda na tela do Shop Pay
+ * nem na janela da carteira. Abrir a folha, fechar e abrir de novo e a mesma
+ * tentativa -- o id e por balde de 30 min, nao por instante.
+ */
+describe("id do checkout expresso", () => {
+  const T = Date.parse("2026-10-05T12:00:00Z"); // inicio de um balde
+
+  it("balde de 30 minutos", () => {
+    expect(BALDE_CHECKOUT_EXPRESSO_MS).toBe(30 * 60 * 1000);
+  });
+
+  it("cliques no mesmo balde dao o mesmo id -- o indice unico junta", () => {
+    expect(idDoCheckoutExpresso("v1", T)).toBe(idDoCheckoutExpresso("v1", T + 29 * 60 * 1000));
+  });
+
+  it("balde seguinte e outra tentativa", () => {
+    expect(idDoCheckoutExpresso("v1", T)).not.toBe(idDoCheckoutExpresso("v1", T + 30 * 60 * 1000));
+  });
+
+  it("separa visitantes, e nao colide com o id do clique comum", () => {
+    expect(idDoCheckoutExpresso("a", T)).not.toBe(idDoCheckoutExpresso("b", T));
+    expect(idDoCheckoutExpresso("v1", T)).toMatch(/^begin_checkout_xp_v1_\d+$/);
+    expect(idDoCheckoutExpresso("v1", T)).not.toBe(idDoEventoDeNavegador("begin_checkout", "v1", T));
+  });
+
+  it("origem e lista fechada: so o valor conhecido conta", () => {
+    expect(ORIGENS_DO_CHECKOUT).toEqual(["expresso"]);
+    expect(origemDoCheckout("expresso")).toBe("expresso");
+    expect(origemDoCheckout(" expresso ")).toBe("expresso");
+    for (const lixo of ["Expresso", "normal", "", null, undefined, 1, { a: 1 }]) {
+      expect(origemDoCheckout(lixo)).toBeNull();
+    }
+  });
+});
+
+/**
  * O snippet roda no tema da loja e o catalogo roda no servidor: sao dois
  * arquivos que precisam concordar sobre o conjunto de eventos. Se o snippet
  * mandar um nome que o catalogo nao conhece, o coletor recusa e o evento
@@ -239,6 +280,58 @@ describe("o snippet do tema concorda com o catalogo", () => {
     const corpo = snippet.slice(snippet.indexOf("function mandar("));
     const enviado = corpo.slice(0, corpo.indexOf("JSON.stringify") + 600);
     expect(enviado).not.toMatch(/\bvalue\b|\bcurrency\b/);
+  });
+
+  describe("checkout expresso", () => {
+    const secao = snippet.slice(
+      snippet.indexOf("// ---- 3.4 checkout expresso"),
+      snippet.indexOf("// 4. REMARKETING DO GOOGLE")
+    );
+    const funcao = secao.slice(secao.indexOf("function checkoutExpresso("));
+
+    it("a secao existe e manda um evento do catalogo, com a origem da lista", () => {
+      expect(funcao.length).toBeGreaterThan(0);
+      const nomes = [...funcao.matchAll(/corpoDoEvento\(\s*"([a-z_]+)"/g)].map((m) => m[1]);
+      expect(nomes).toEqual(["begin_checkout"]);
+      const origens = [...funcao.matchAll(/origem:\s*"([a-z_]+)"/g)].map((m) => m[1]);
+      expect(origens.length).toBeGreaterThan(0);
+      for (const o of origens) expect(ORIGENS_DO_CHECKOUT).toContain(o);
+    });
+
+    it("id por balde, no mesmo formato e com o mesmo balde do servidor", () => {
+      expect(funcao).toContain('"begin_checkout_xp_" + vid + "_" + balde');
+      expect(funcao).toContain("Math.floor(Date.now() / BALDE_EXPRESSO_MS)");
+      const balde = /var BALDE_EXPRESSO_MS = ([\d\s*]+);/.exec(secao);
+      expect(balde).not.toBeNull();
+      const ms = balde![1].split("*").reduce((total, fator) => total * Number(fator.trim()), 1);
+      expect(ms).toBe(BALDE_CHECKOUT_EXPRESSO_MS);
+    });
+
+    /**
+     * No Google o begin_checkout sai do navegador e so deduplica por
+     * transaction_id; o clique e o checkout_started nao compartilham, e o
+     * expresso que cai no checkout normal contaria dois.
+     */
+    it("nao vai ao Google e nao manda valor", () => {
+      expect(funcao).not.toMatch(/converterNoGoogle\(|gtag\(/);
+      expect(secao).not.toMatch(/\bvalue\b|\bcurrency\b/);
+    });
+
+    it("escuta os elementos que a Shopify documenta, com o hospedeiro de reserva", () => {
+      for (const tag of [
+        "shop-pay-wallet-button",
+        "shopify-apple-pay-button",
+        "shopify-google-pay-button",
+        "shopify-paypal-button",
+        "shopify-amazon-pay-button",
+        "shopify-accelerated-checkout",
+        "shopify-accelerated-checkout-cart",
+        ".shopify-payment-button__button",
+      ]) {
+        expect(secao).toContain(`"${tag}"`);
+      }
+      expect(secao).toContain("composedPath");
+    });
   });
 });
 

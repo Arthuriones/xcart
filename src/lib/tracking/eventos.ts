@@ -264,3 +264,35 @@ export function idDoEventoDeNavegador(
 ): string {
   return `${evento}_${visitorId}_${quandoMs}`;
 }
+
+/**
+ * O begin_checkout do clique num botao de checkout EXPRESSO (Shop Pay, Apple
+ * Pay, Google Pay...). So o Meta recebe; o Google nao.
+ *
+ * Existe porque esses botoes pulam a pagina do checkout: o Shop Pay roda em
+ * shop.app e a carteira abre a janela do sistema, e o Web Pixel nao roda em
+ * nenhum dos dois. Medido na Softnook (04-05/10/2026): de 8 compras, as 5 pagas
+ * por carteira expressa nao tiveram InitiateCheckout nenhum.
+ *
+ * O id e por BALDE de tempo, nao por instante: abrir a folha do Apple Pay,
+ * fechar e abrir de novo e a mesma tentativa de compra, e o indice unico da
+ * fila junta os cliques do mesmo balde num evento so. O coletor refaz o id com
+ * o proprio relogio; o snippet monta no mesmo formato.
+ */
+export const BALDE_CHECKOUT_EXPRESSO_MS = 30 * 60 * 1000;
+
+export function idDoCheckoutExpresso(visitorId: string, quandoMs: number): string {
+  return `begin_checkout_xp_${visitorId}_${Math.floor(quandoMs / BALDE_CHECKOUT_EXPRESSO_MS)}`;
+}
+
+/**
+ * De onde veio o begin_checkout do tema. Lista fechada: o campo vem do
+ * navegador, e so o valor conhecido muda o tratamento no coletor.
+ */
+export const ORIGENS_DO_CHECKOUT = ["expresso"] as const;
+export type OrigemDoCheckout = (typeof ORIGENS_DO_CHECKOUT)[number];
+
+export function origemDoCheckout(valor: unknown): OrigemDoCheckout | null {
+  const texto = typeof valor === "string" ? valor.trim() : "";
+  return ORIGENS_DO_CHECKOUT.find((o) => o === texto) ?? null;
+}

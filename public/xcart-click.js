@@ -26,6 +26,9 @@
  * conta de /api/tracking/google-config. O begin_checkout do Google so sai do
  * tema quando o Web Pixel NAO esta cobrindo o checkout (ver 5).
  *
+ * O clique nos botoes de checkout EXPRESSO (Shop Pay, Apple Pay...) vira
+ * begin_checkout so para o Meta, pelo coletor (ver 3.4).
+ *
  * Nenhum valor monetario e enviado daqui. O coletor tambem ignora se vier --
  * valor vindo do navegador e numero que qualquer um pode inflar na conta de
  * anuncios do lojista. O valor da venda vem do webhook, que e a Shopify falando.
@@ -444,6 +447,30 @@
   // nao pode segurar o funil. Estourou, segue com o que tem.
   var LIMITE_CARRINHO_MS = 1500;
 
+  // Os itens do ultimo carrinho visto, em ids: e o que o checkout expresso do
+  // carrinho compra (3.4). Atualizado a cada leitura e a cada resposta de
+  // mudanca do carrinho -- nunca com uma requisicao so para isto.
+  var MAX_ITENS = 20;
+  var itensDoCarrinho = null;
+
+  function guardarItens(carrinho) {
+    var lista = carrinho && carrinho.items;
+    if (!lista || typeof lista.length !== "number") return;
+    var fora = [];
+    for (var i = 0; i < lista.length && fora.length < MAX_ITENS; i++) {
+      var it = lista[i];
+      if (!it) continue;
+      // Em /cart.js o `id` do item e o da variante.
+      var v = it.variant_id || it.id;
+      fora.push({
+        variante: v ? String(v) : null,
+        produto: it.product_id ? String(it.product_id) : null,
+        sku: it.sku ? String(it.sku) : null,
+      });
+    }
+    itensDoCarrinho = fora;
+  }
+
   /** Le `/cart.js`. Chama `pronto` UMA vez: com o carrinho, ou null. */
   function lerCarrinho(pronto) {
     var feito = false;
@@ -468,7 +495,9 @@
       if (feito) return;
       feito = true;
       clearTimeout(alarme);
-      pronto(carrinho && typeof carrinho === "object" ? carrinho : null);
+      var lido = carrinho && typeof carrinho === "object" ? carrinho : null;
+      if (lido) guardarItens(lido);
+      pronto(lido);
     }
 
     try {
@@ -737,16 +766,24 @@
    *
    * getAttribute, nao `.id`: formulario com <input name="id"> sombreia a
    * propriedade e devolve o elemento. Ja mordeu neste repo.
+   *
+   * `form`, quando vem, e o formulario do botao clicado (checkout expresso,
+   * 3.4) e vence tudo: e a variante dele que a Shopify compra.
    */
-  function produtoAtual() {
+  function produtoAtual(form) {
     var variante = null;
     var produto = null;
     var sku = null;
 
-    try {
-      variante = new URLSearchParams(location.search).get("variant");
-    } catch (e) {
-      variante = null;
+    var doForm = form && form.querySelector ? form.querySelector('[name="id"]') : null;
+    if (doForm && doForm.value) variante = doForm.value;
+
+    if (!variante) {
+      try {
+        variante = new URLSearchParams(location.search).get("variant");
+      } catch (e) {
+        variante = null;
+      }
     }
 
     if (!variante) {
@@ -770,13 +807,18 @@
       // variante: catalogo exportado por planilha costuma usar SKU, e sem este
       // campo o servidor nao teria como montar esse formato.
       if (meta.variants && meta.variants.length) {
+        var conhecida = false;
         for (var k = 0; k < meta.variants.length; k++) {
           if (String(meta.variants[k].id) === String(variante)) {
             sku = meta.variants[k].sku || null;
+            conhecida = true;
             break;
           }
         }
         if (!sku && !variante) sku = meta.variants[0].sku || null;
+        // Formulario de OUTRO produto na pagina (compra rapida, produto em
+        // destaque): o produto da pagina nao e o dele.
+        if (doForm && variante && !conhecida) produto = null;
       }
     }
 
@@ -792,7 +834,8 @@
    *
    * `begin_checkout` fica de fora de proposito: o carrinho pode ter varios
    * itens, e mandar so o ultimo produto visto descreveria uma compra que nao e
-   * aquela. Melhor sem do que errado.
+   * aquela. Melhor sem do que errado. O do checkout expresso (3.4) e a excecao:
+   * ali se sabe o que o botao compra, e os itens vao em `produtos`.
    */
   var COM_PRODUTO = { view_item: 1, add_to_cart: 1 };
 
@@ -817,7 +860,7 @@
     });
   }
 
-  function corpoDoEvento(evento, id, produto, pagina) {
+  function corpoDoEvento(evento, id, produto, pagina, extra) {
     return JSON.stringify({
       shop: LOJA,
       storeId: STORE_ID,
@@ -849,6 +892,10 @@
       // para anuncio de catalogo. Nao e dado que o visitante possa inflar:
       // valor continua de fora.
       produto: produto,
+      // So no checkout expresso (3.4): os itens que o botao compra e a marca de
+      // origem. Nos outros eventos ficam undefined e o JSON nem leva os campos.
+      produtos: (extra && extra.produtos) || undefined,
+      origem: (extra && extra.origem) || undefined,
       // A URL da pagina, EXPLICITA.
       //
       // O servidor nao pode deduzir do header Referer: o beacon vai para outro
@@ -1000,6 +1047,12 @@
     return texto.indexOf("/cart/add") !== -1;
   }
 
+  // Tirar item, trocar quantidade, limpar -- e o nosso /cart/update.js. A
+  // resposta da Shopify a esses ja e o carrinho inteiro.
+  function ehMudancaDoCarrinho(url) {
+    return /\/cart\/(change|update|clear)\b/.test(String(url || ""));
+  }
+
   function observarFetch() {
     if (typeof window.fetch !== "function") return;
     var original = window.fetch;
@@ -1017,6 +1070,17 @@
         promessa
           .then(function (r) {
             if (r && r.ok) adicionou();
+          })
+          .catch(function () {});
+      } else if (ehMudancaDoCarrinho(url)) {
+        // Le de uma COPIA, para o tema receber o corpo intacto. Este `then` e
+        // registrado antes do do tema, entao a copia sai antes de ele ler.
+        promessa
+          .then(function (r) {
+            if (!r || !r.ok || typeof r.clone !== "function" || !r.headers) return;
+            var tipo = String(r.headers.get("content-type") || "");
+            if (tipo.indexOf("json") === -1) return;
+            return r.clone().json().then(guardarItens);
           })
           .catch(function () {});
       }
@@ -1062,7 +1126,9 @@
     document.addEventListener(
       "click",
       function (e) {
-        if (ehBotaoDeCheckout(e.target)) mandar("begin_checkout");
+        // Expresso primeiro, e um OU outro: o mesmo clique nao vira dois.
+        if (noCaminho(e, SELETOR_EXPRESSO)) checkoutExpresso(e);
+        else if (ehBotaoDeCheckout(e.target)) mandar("begin_checkout");
       },
       true
     );
@@ -1084,6 +1150,123 @@
       },
       true
     );
+  }
+
+  // ---- 3.4 checkout expresso ---------------------------------------------
+  //
+  // Shop Pay, Apple Pay, Google Pay e Amazon Pay no botao expresso PULAM a
+  // pagina do checkout: o Shop Pay roda em shop.app, a carteira abre a janela
+  // do sistema, e o Web Pixel nao roda em nenhum dos dois. Medido na Softnook
+  // (04-05/10/2026): de 8 compras, as 5 pagas por carteira expressa chegaram
+  // sem InitiateCheckout. A compra vem do webhook; o IC so pode sair daqui.
+  //
+  // Os botoes moram em shadow DOM FECHADO. A Shopify manda escutar o elemento
+  // de fora de cada carteira: o clique e `composed` e atravessa a fronteira.
+  // O PayPal costuma ficar num iframe de outro dominio, de onde o clique nao
+  // sai -- mas ele volta ao checkout da Shopify, onde o pixel cobre.
+  //
+  // SO O META, pelo coletor. Nada de gtag aqui: no Google o begin_checkout sai
+  // do navegador e so deduplica por transaction_id, que o clique e o
+  // checkout_started nao compartilham -- o expresso que cai no checkout normal
+  // contaria dois.
+  var SELETOR_EXPRESSO = [
+    "shop-pay-wallet-button",
+    "shopify-apple-pay-button",
+    "shopify-google-pay-button",
+    "shopify-paypal-button",
+    "shopify-amazon-pay-button",
+    // Reserva: o hospedeiro, quando os de cima ficam dentro do shadow fechado.
+    "shopify-accelerated-checkout",
+    "shopify-accelerated-checkout-cart",
+    // O botao dinamico antigo, de antes do componente.
+    ".shopify-payment-button__button"
+  ].join(", ");
+
+  /** O mesmo de BALDE_CHECKOUT_EXPRESSO_MS em src/lib/tracking/eventos.ts. */
+  var BALDE_EXPRESSO_MS = 30 * 60 * 1000;
+  var baldeExpresso = null;
+
+  function casa(no, seletor) {
+    if (!no || no.nodeType !== 1) return false;
+    var f = no.matches || no.msMatchesSelector || no.webkitMatchesSelector;
+    try {
+      return !!(f && f.call(no, seletor));
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * O primeiro elemento do caminho do clique que casa com o seletor.
+   *
+   * composedPath, e nao so `closest` no alvo: com shadow ABERTO o alvo e o
+   * botao la de dentro, e `closest` para na fronteira -- nao chega ao
+   * hospedeiro nem ao formulario do produto. Sem composedPath (navegador
+   * antigo), fica o `closest`.
+   */
+  function noCaminho(e, seletor) {
+    var caminho = null;
+    try {
+      caminho = typeof e.composedPath === "function" ? e.composedPath() : null;
+    } catch (x) {
+      caminho = null;
+    }
+    if (caminho && caminho.length) {
+      for (var i = 0; i < caminho.length; i++) {
+        if (casa(caminho[i], seletor)) return caminho[i];
+      }
+      return null;
+    }
+    var alvo = e.target;
+    try {
+      return alvo && alvo.closest ? alvo.closest(seletor) : null;
+    } catch (x) {
+      return null;
+    }
+  }
+
+  /**
+   * O que o botao compra, em ids (valor fica de fora, como em todo evento).
+   *
+   * Na pagina de produto o expresso compra SO a variante do formulario e pula
+   * o carrinho. No carrinho (pagina ou gaveta) paga o carrinho inteiro: os
+   * itens da ultima leitura ou resposta do carrinho (2a). Sem isso, o produto
+   * da pagina.
+   */
+  function itensDoExpresso(e) {
+    if (!noCaminho(e, "shopify-accelerated-checkout-cart, .additional-checkout-buttons")) {
+      var form = noCaminho(e, 'form[action*="/cart/add"]');
+      if (form || noCaminho(e, "shopify-accelerated-checkout, .shopify-payment-button")) {
+        return [produtoAtual(form)];
+      }
+    }
+    if (itensDoCarrinho && itensDoCarrinho.length) return itensDoCarrinho.slice(0);
+    var atual = produtoAtual();
+    return atual.variante || atual.produto ? [atual] : null;
+  }
+
+  function checkoutExpresso(e) {
+    if (!COLETOR || !LOJA) return;
+    var balde = Math.floor(Date.now() / BALDE_EXPRESSO_MS);
+    // Abrir a carteira, fechar e abrir de novo e a mesma tentativa: um evento
+    // por balde. Entre paginas, o coletor junta pelo id, igual no balde.
+    if (baldeExpresso === balde) return;
+    baldeExpresso = balde;
+    // Lidos AGORA: o caminho do clique so existe durante o evento, e o Shop Pay
+    // pode sair da pagina logo em seguida.
+    var itens = itensDoExpresso(e);
+    var pagina = location.href.slice(0, 500);
+    quandoPronto(function () {
+      // `vid` so depois da leitura do carrinho, pelo mesmo motivo de `mandar`.
+      var id = "begin_checkout_xp_" + vid + "_" + balde;
+      entregar(
+        corpoDoEvento("begin_checkout", id, null, pagina, {
+          origem: "expresso",
+          produtos: itens,
+        })
+      );
+      // Sem converterNoGoogle, de proposito: ver o comeco desta secao.
+    });
   }
 
   // =========================================================================

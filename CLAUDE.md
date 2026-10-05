@@ -100,6 +100,7 @@ Every AI call receives `StoreContext` (name, niche, target_audience, brand_voice
   qualquer um infla na conta de anuncios do lojista, e valor de conversao
   inflado distorce o lance automatico. Nao "conferimos o Origin" -- e escolhido
   pelo cliente. O que limita e teto por visitante/loja e o indice unico da fila.
+- **Checkout expresso (Shop Pay, Apple/Google Pay) nao passa pelo Web Pixel**: o InitiateCheckout dele e o clique no tema (`origem: "expresso"`, so Meta, id por balde de 30 min refeito no coletor), que fura a supressao do pixel -- nao mande ao Google nem tire a excecao. Travado por `tests/tracking-checkout-expresso.test.ts`.
 - **Em rota vitrine -> checkout, o gclid NAO chega ao pedido.**
   `buildCartPermalink` nao leva `attributes` de proposito (a loja de checkout
   nao deve saber a origem), e o pedido nasce na loja de checkout. Logo a compra
