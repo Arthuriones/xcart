@@ -1100,22 +1100,34 @@ describe("snippet do tema: checkout expresso", () => {
     expect(expressos(sn)).toHaveLength(1);
   });
 
-  it("o clique comum logo depois do expresso (ou antes) e a mesma acao", async () => {
-    const sn = rodarSnippet({});
+  /**
+   * Chave propria na janela de 8 s. Com a compartilhada, tocar na carteira,
+   * fechar e clicar em "Finalizar compra" engolia o begin_checkout comum -- e,
+   * sem pixel cobrindo, ele e o unico que vai ao Google. Os dois juntos no Meta
+   * o coletor resolve (o comum cancela o expresso pendente; a janela deslizante
+   * barra o expresso que vem depois).
+   */
+  it("fechar a carteira e clicar em Finalizar compra ainda manda o begin_checkout comum, ao Google tambem", async () => {
+    const sn = rodarSnippet({ contas: CONTAS, pixelCobre: "0", url: "https://loja.test/cart" });
     await assentarMuito();
-    sn.clicarExpresso(naPaginaDoProduto());
+    sn.clicarExpresso(noCarrinho());
     sn.clicarCheckout();
     await assentarMuito();
-    expect(sn.beacons.filter((b) => b.evento === "begin_checkout")).toHaveLength(1);
+    const comuns = sn.beacons.filter((b) => b.evento === "begin_checkout" && b.origem !== "expresso");
+    expect(comuns).toHaveLength(1);
     expect(expressos(sn)).toHaveLength(1);
+    expect(sn.camada().filter((a) => a[1] === "begin_checkout")).toEqual([
+      ["event", "begin_checkout", { send_to: "AW-111111111/IC1", transaction_id: comuns[0].eventId }],
+    ]);
 
+    // O contrario tambem chega ao coletor, que barra o expresso pela janela.
     const outro = rodarSnippet({});
     await assentarMuito();
     outro.clicarCheckout();
     outro.clicarExpresso(noCarrinho());
     await assentarMuito();
-    expect(outro.beacons.filter((b) => b.evento === "begin_checkout")).toHaveLength(1);
-    expect(expressos(outro)).toEqual([]);
+    expect(outro.beacons.filter((b) => b.evento === "begin_checkout")).toHaveLength(2);
+    expect(expressos(outro)).toHaveLength(1);
   });
 
   it("leva o clientId da Shopify, que o pixel usa para cancelar o expresso", async () => {

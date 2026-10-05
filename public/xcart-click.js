@@ -1280,9 +1280,13 @@
 
   function checkoutExpresso(e) {
     if (!COLETOR || !LOJA) return;
-    // A mesma janela dos outros: o clique em "Finalizar compra" logo depois de
-    // fechar a carteira (ou o contrario) e a mesma acao.
-    if (repetido("begin_checkout")) return;
+    // A mesma janela dos outros, mas com chave PROPRIA. Com a do begin_checkout
+    // comum, tocar na carteira, fechar e clicar em "Finalizar compra" em menos
+    // de 8 s fazia o comum voltar cedo -- e sem pixel cobrindo, ele e o unico
+    // begin_checkout que vai ao Google (o expresso nao vai). Os dois juntos no
+    // Meta quem resolve e o coletor: o comum (ou o pixel) cancela o expresso
+    // pendente, e a janela deslizante barra o expresso que vem depois.
+    if (repetido("begin_checkout_xp")) return;
     var balde = Math.floor(Date.now() / BALDE_EXPRESSO_MS);
     // Abrir a carteira, fechar e abrir de novo e a mesma tentativa: um evento
     // por balde nesta pagina. A regra de verdade e a do coletor -- nenhum

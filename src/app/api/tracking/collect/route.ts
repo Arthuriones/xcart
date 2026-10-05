@@ -90,6 +90,13 @@ const JANELA_CHECKOUT_DO_TEMA_MS = 10 * 60 * 1000;
 /** Itens do carrinho num evento. Carrinho de verdade nao chega perto disto. */
 const MAX_ITENS = 20;
 
+/**
+ * O formato do `_xc_vid` que o snippet grava: base36 + "." + base36. O pixel le
+ * o cookie e manda como `vidDoTema`; fora disto e lixo, e nao vira filtro.
+ */
+const FORMATO_VID_DO_TEMA = /^[a-z0-9]+\.[a-z0-9]+$/;
+const MAX_VID_DO_TEMA = 64;
+
 type ProdutoDoCorpo = {
   variante?: string | null;
   produto?: string | null;
@@ -171,6 +178,12 @@ export async function POST(request: NextRequest) {
     fonte?: string | null;
     /** Identificador de visitante da Shopify. A unica chave que o pixel tem. */
     clientId?: string | null;
+    /**
+     * O cookie `_xc_vid` do tema, lido pelo pixel por `browser.cookie`. So do
+     * pixel, e so serve para cancelar o expresso pendente: e a ponte que sobra
+     * quando a Shopify zera o clientId (sem consentimento).
+     */
+    vidDoTema?: unknown;
     checkoutToken?: string | null;
     /** PII do checkout. So o Web Pixel ve -- o tema nao entra la. */
     email?: string | null;
@@ -313,6 +326,19 @@ export async function POST(request: NextRequest) {
   // de um visitante a outro.
   const clientIdBruto = (corpo.clientId || "").trim().slice(0, 100) || null;
   const clientId = ehClientIdSentinela(clientIdBruto) ? null : clientIdBruto;
+
+  // O visitante do tema que o pixel leu do cookie. Sem consentimento a Shopify
+  // zera o clientId, o pixel vira o checkout (visitorId = token) e nao ha
+  // identidade para achar quem clicou: sem isto, o expresso pendente do mesmo
+  // comprador ficava de pe e saia pelo cron, depois do IC do pixel. So do pixel
+  // -- o tema ja manda o proprio como visitorId -- e so no formato do snippet.
+  const vidDoTema =
+    doPixel &&
+    typeof corpo.vidDoTema === "string" &&
+    corpo.vidDoTema.length <= MAX_VID_DO_TEMA &&
+    FORMATO_VID_DO_TEMA.test(corpo.vidDoTema)
+      ? corpo.vidDoTema
+      : null;
 
   const checkoutToken = (corpo.checkoutToken || "").trim().slice(0, 120) || null;
 
@@ -557,23 +583,58 @@ export async function POST(request: NextRequest) {
   // Uma consulta por chave, com `.eq`: os dois valores vem do navegador, e
   // monta-los num filtro `or`/`in` do PostgREST seria deixar o cliente escrever
   // filtro.
-  if (expresso) {
+  //
+  // O clientId do comprador. Quando o clique chega sem ele (o trekkie ainda nao
+  // carregou nesta pagina), vem da identidade que o tema publicou para este
+  // visitante: a linha do pixel tem visitor_id = clientId, e sem esta chave o
+  // begin_checkout do checkout normal de minutos antes nao era achado.
+  let clienteDoExpresso = clientId;
+  if (expresso && !clienteDoExpresso) {
+    const { data: ident, error } = await admin
+      .from("tracking_identities")
+      .select("shopify_client_id")
+      .eq("store_id", registro.id)
+      .eq("visitor_id", visitorId)
+      .maybeSingle();
+    // Melhor esforco: sem a identidade a janela olha so o visitante do tema.
+    if (error) console.error("[tracking/collect] falha ao ler a identidade do expresso", error.message);
+    const resolvido = (ident?.shopify_client_id || "").trim() || null;
+    clienteDoExpresso = resolvido && !ehClientIdSentinela(resolvido) ? resolvido : null;
+  }
+
+  /**
+   * Um begin_checkout deste comprador nos ultimos 30 min, ou null. `soComum`
+   * deixa os expressos de fora: e a reconferencia depois de gravar, e la outro
+   * expresso concorrente nao pode fechar este (os dois se fechariam).
+   */
+  async function checkoutDoComprador(soComum: boolean): Promise<{ checkout_token: string | null } | null> {
     const desde = new Date(Date.now() - JANELA_CHECKOUT_EXPRESSO_MS).toISOString();
-    const chaves = [...new Set([visitorId, clientId].filter((v): v is string => Boolean(v)))];
-    const contagens = await Promise.all(
-      chaves.map((chave) =>
-        admin
+    const chaves = [
+      ...new Set([visitorId, clienteDoExpresso].filter((v): v is string => Boolean(v))),
+    ];
+    const achados = await Promise.all(
+      chaves.map((chave) => {
+        let q = admin
           .from("tracking_events")
-          .select("id", { count: "exact", head: true })
+          .select("checkout_token")
           .eq("store_id", registro.id)
           .eq("visitor_id", chave)
           .eq("event_name", "begin_checkout")
-          .gte("created_at", desde)
-      )
+          .gte("created_at", desde);
+        if (soComum) q = q.not("event_id", "like", `${PREFIXO_CHECKOUT_EXPRESSO}%`);
+        return q.limit(1);
+      })
     );
-    if (contagens.some((c) => (c.count ?? 0) > 0)) {
-      return ok({ ignorado: "checkout ja iniciado nos ultimos 30 min" });
+    for (const a of achados) {
+      if (a.error) console.error("[tracking/collect] falha ao conferir a janela do expresso", a.error.message);
+      const l = (a.data || [])[0] as { checkout_token: string | null } | undefined;
+      if (l) return l;
     }
+    return null;
+  }
+
+  if (expresso && (await checkoutDoComprador(false))) {
+    return ok({ ignorado: "checkout ja iniciado nos ultimos 30 min" });
   }
 
   // ---- identidade ----------------------------------------------------------
@@ -640,34 +701,42 @@ export async function POST(request: NextRequest) {
   }
 
   /**
-   * Fecha a linha do expresso sem enviar: 'enviado' sem sent_at, o mesmo
-   * "fechado sem sair" do teste (a tela mostra "Nao enviado"). Nao 'falhou':
-   * isso acenderia erro e alerta para o lojista sem nada a consertar.
+   * Como a linha do expresso fecha sem enviar: 'enviado' sem sent_at, o mesmo
+   * "fechado sem sair" do teste (a tela mostra "Nao enviado", e o painel nao
+   * conta -- migration 058). Nao 'falhou': isso acenderia erro e alerta para o
+   * lojista sem nada a consertar.
+   */
+  const fechamentoDoExpresso = (quem: "pixel" | "tema", motivo: string) => ({
+    status: "enviado",
+    sent_at: null,
+    last_error: `cancelado: o begin_checkout do ${quem} ${motivo}`,
+    response: { enviado: false, substituido_por: quem },
+  });
+
+  /**
+   * Fecha o expresso PENDENTE do mesmo comprador.
    *
-   * Pelo visitante do tema (o visitor_id da linha) e pelo clientId que a linha
+   * Pelos visitantes do tema (o visitor_id da linha: o resolvido pelo clientId
+   * e o do cookie `_xc_vid` que o pixel leu) e pelo clientId que a linha
    * guarda (migration 057). Uma atualizacao por chave, com `.eq`, pelo mesmo
    * motivo da janela deslizante: os valores vem do navegador.
    */
-  async function cancelarExpressoPendente(visitante: string | null, cliente: string | null) {
+  async function cancelarExpressoPendente(visitantes: (string | null)[], cliente: string | null) {
     const desde = new Date(Date.now() - JANELA_CHECKOUT_EXPRESSO_MS).toISOString();
     const quem = doPixel ? "pixel" : "tema";
     const cancelar = (coluna: "visitor_id" | "shopify_client_id", valor: string) =>
       admin
         .from("tracking_events")
-        .update({
-          status: "enviado",
-          sent_at: null,
-          last_error: `cancelado: o begin_checkout do ${quem} veio primeiro`,
-          response: { enviado: false, substituido_por: quem },
-        })
+        .update(fechamentoDoExpresso(quem, "veio primeiro"))
         .eq("store_id", registro.id)
         .eq("event_name", "begin_checkout")
         .eq("status", "pendente")
         .like("event_id", `${PREFIXO_CHECKOUT_EXPRESSO}%`)
         .gte("created_at", desde)
         .eq(coluna, valor);
+    const porVisitante = [...new Set(visitantes.filter((v): v is string => Boolean(v)))];
     const feitos = await Promise.all([
-      visitante ? cancelar("visitor_id", visitante) : null,
+      ...porVisitante.map((v) => cancelar("visitor_id", v)),
       cliente ? cancelar("shopify_client_id", cliente) : null,
     ]);
     // Melhor esforco: sem o cancelamento sai um IC a mais, nao some nenhum.
@@ -681,9 +750,24 @@ export async function POST(request: NextRequest) {
   // expresso PENDENTE do mesmo comprador: o "Comprar agora" que o tema tomou
   // por carteira no shadow fechado, ou o Shop Pay que caiu no checkout normal.
   // O expresso que ja saiu (passou do atraso) fica: nao ha como desmandar.
-  if (evento === "begin_checkout" && !expresso) {
-    await cancelarExpressoPendente(doPixel ? visitanteDoTema : visitorId, clientId);
-  }
+  //
+  // ESCREVE PRIMEIRO, CONFERE DEPOIS, nos dois lados. Este cancela DEPOIS de
+  // gravar a propria linha (e so se ela for nova: checkout reaproveitado
+  // termina `duplicado`, nao sai nada, e nao pode derrubar a reserva). O
+  // expresso grava e so depois reconfere se ha begin_checkout comum do mesmo
+  // comprador. Com os dois gravando antes de olhar, em qualquer ordem pelo menos
+  // um enxerga o outro -- conferir antes deixava os dois POSTs sobrepostos
+  // passarem um pelo outro, e saiam 2 IC.
+  const cancelaExpresso = evento === "begin_checkout" && !expresso;
+  let cancelamento: Promise<void> | null = null;
+  /** Uma vez por POST, na primeira linha nova que este evento gravar. */
+  const cancelarDepoisDeGravar = () =>
+    cancelaExpresso
+      ? (cancelamento ??= cancelarExpressoPendente(
+          doPixel ? [visitanteDoTema, vidDoTema] : [visitorId],
+          clientId
+        ))
+      : Promise.resolve();
 
   // ---- teste e consentimento ---------------------------------------------
   //
@@ -853,6 +937,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const saida: Record<string, string> = {};
+    /** Destinos em que a linha do expresso nasceu agora (nao duplicada). */
+    const expressoGravado: string[] = [];
 
     // EM PARALELO, nao em fila.
     //
@@ -889,6 +975,7 @@ export async function POST(request: NextRequest) {
             payload,
           });
           saida[chave] = duplicado ? "duplicado" : "teste: nao enviado";
+          if (!duplicado) await cancelarDepoisDeGravar();
           return;
         }
 
@@ -907,10 +994,12 @@ export async function POST(request: NextRequest) {
           // O expresso espera o pixel: o cron so manda depois do atraso, e o
           // begin_checkout do pixel cancela antes disso. O event_time do
           // payload continua o do clique.
+          // O clientId vai na linha (migration 057) para o pixel achar o
+          // comprador por ele -- o do corpo ou o resolvido pela identidade.
           ...(expresso
             ? {
                 proximaTentativaEm: new Date(Date.now() + ATRASO_CHECKOUT_EXPRESSO_MS),
-                shopifyClientId: clientId,
+                shopifyClientId: clienteDoExpresso,
               }
             : {}),
         });
@@ -920,9 +1009,12 @@ export async function POST(request: NextRequest) {
           return;
         }
         if (expresso) {
+          expressoGravado.push(chave);
           saida[chave] = "aguardando o pixel";
           return;
         }
+        // Gravou: agora sim cancela a reserva do mesmo comprador.
+        await cancelarDepoisDeGravar();
         if (!id) {
           saida[chave] = "na fila";
           return;
@@ -947,6 +1039,33 @@ export async function POST(request: NextRequest) {
         saida[chave] = r.ok ? "enviado" : "na fila";
       })
     );
+
+    // O outro lado do "escreve primeiro, confere depois": o expresso ja esta
+    // gravado, e so AGORA olha se ha begin_checkout comum do mesmo comprador --
+    // o do pixel (ou o clique comum) que gravou entre a janela la de cima e o
+    // INSERT daqui, e cujo cancelamento rodou antes desta linha existir. Achou,
+    // fecha a propria linha. So os comuns: outro expresso concorrente fecharia
+    // este, e este a ele, e nao sairia nenhum.
+    //
+    // Pelo event_id, que e um por comprador e balde: fecha as linhas de todos
+    // os destinos de uma vez. So 'pendente': nada que ja tenha saido.
+    if (expressoGravado.length) {
+      const outro = await checkoutDoComprador(true);
+      if (outro) {
+        const quem = outro.checkout_token ? "pixel" : "tema";
+        const { error } = await admin
+          .from("tracking_events")
+          .update(fechamentoDoExpresso(quem, "chegou junto"))
+          .eq("store_id", registro.id)
+          .eq("event_id", eventId)
+          .eq("status", "pendente");
+        if (error) {
+          console.error("[tracking/collect] falha ao fechar o expresso", error.message);
+        } else {
+          for (const chave of expressoGravado) saida[chave] = "cancelado: checkout ja iniciado";
+        }
+      }
+    }
 
     return ok({ destinos: saida });
   } catch (e) {

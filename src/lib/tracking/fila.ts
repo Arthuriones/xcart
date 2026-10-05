@@ -7,6 +7,7 @@ import {
   type EventoCapi,
 } from "@/lib/tracking/meta-capi";
 import type { Destino } from "@/lib/tracking/destinos";
+import { PREFIXO_CHECKOUT_EXPRESSO } from "@/lib/tracking/eventos";
 
 // ============================================================================
 // Fila de saida do rastreamento.
@@ -143,6 +144,8 @@ export async function entregar(
     destination: string;
     destination_id?: string | null;
     event_name: string;
+    /** O id do evento. So o drain manda; sem ele vale o do payload. */
+    event_id?: string | null;
     payload: unknown;
     attempts: number;
   },
@@ -166,11 +169,17 @@ export async function entregar(
 ): Promise<{ ok: boolean; motivo?: string }> {
   const tentativas = linha.attempts + 1;
 
+  // Todo desfecho grava SO sobre linha ainda 'pendente'. O coletor fecha o
+  // checkout expresso cancelado ('enviado' sem sent_at) a qualquer momento,
+  // inclusive enquanto esta linha esta no meio do envio; sem o filtro, o
+  // sucesso gravava por cima e a falha retentavel a devolvia a 'pendente' --
+  // e o cron a mandava na rodada seguinte.
   const desistir = async (motivo: string) => {
     await admin
       .from("tracking_events")
       .update({ status: "falhou", attempts: tentativas, last_error: motivo })
-      .eq("id", linha.id);
+      .eq("id", linha.id)
+      .eq("status", "pendente");
     return { ok: false, motivo };
   };
 
@@ -215,7 +224,8 @@ export async function entregar(
         last_error: aviso ?? null,
         response: resposta,
       })
-      .eq("id", linha.id);
+      .eq("id", linha.id)
+      .eq("status", "pendente");
     return { ok: true };
   };
 
@@ -234,9 +244,30 @@ export async function entregar(
         last_error: erro.slice(0, 500),
         response: resposta,
       })
-      .eq("id", linha.id);
+      .eq("id", linha.id)
+      .eq("status", "pendente");
     return { ok: false, motivo: erro };
   };
+
+  // O checkout expresso pode ter sido cancelado DEPOIS de o drain ler a fila: a
+  // rodada leva ate 50 linhas e 2 minutos, sem marcar o que pegou. Rele o
+  // status logo antes de mandar. So nele: e a unica linha que alguem fecha de
+  // fora, e reler toda linha seria uma ida ao banco a mais por evento.
+  const eventId =
+    linha.event_id ?? (linha.payload as { event_id?: unknown } | null)?.event_id;
+  if (typeof eventId === "string" && eventId.startsWith(PREFIXO_CHECKOUT_EXPRESSO)) {
+    const { data: atual, error } = await admin
+      .from("tracking_events")
+      .select("status")
+      .eq("id", linha.id)
+      .maybeSingle();
+    // Sem conseguir reler, nao manda: a linha segue pendente e volta na
+    // proxima rodada. Mandar no escuro era o IC dobrado que isto evita.
+    if (error) return { ok: false, motivo: `falha ao reler o expresso: ${error.message}` };
+    if (atual?.status !== "pendente") {
+      return { ok: false, motivo: "expresso cancelado antes do envio" };
+    }
+  }
 
   // ---- Meta ---------------------------------------------------------------
   const r = await enviarParaMeta(
@@ -279,7 +310,7 @@ export async function drenarFila(limite = 50): Promise<{
   const { data: linhas } = await admin
     .from("tracking_events")
     .select(
-      "id, store_id, destination, destination_id, event_name, payload, attempts"
+      "id, store_id, destination, destination_id, event_name, event_id, payload, attempts"
     )
     .eq("status", "pendente")
     .lte("next_attempt_at", new Date().toISOString())

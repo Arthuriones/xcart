@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 // queries.ts tem "server-only" e fala com o Supabase; aqui so interessa a regra
 // de contagem e QUAL cliente le a fila. Mesmo padrao de store-ownership.test.ts.
@@ -385,5 +387,64 @@ describe("getPainelTracking", () => {
       ["ligada", true],
       ["instalada", false],
     ]);
+  });
+});
+
+// ===========================================================================
+// O expresso cancelado nao conta como enviado (migration 058)
+//
+// O coletor fecha a reserva do checkout expresso como 'enviado' sem sent_at
+// quando o pixel (ou o clique comum) chega -- o mesmo "fechado sem sair" do
+// teste. A 055 contava `n` por status, e a aba da loja mostrava 2 enviados ao
+// Meta por checkout, que recebeu 1. Sem banco aqui: trava o SQL vigente.
+// ===========================================================================
+
+describe("tracking_painel_v2 sem o expresso cancelado (migration 058)", () => {
+  const dir = join(__dirname, "..", "supabase", "migrations");
+  const arquivos = readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();
+  const ler = (f: string) => readFileSync(join(dir, f), "utf8");
+  const definicoes = arquivos.filter((f) =>
+    /create or replace function public\.tracking_painel_v2\s*\(/i.test(ler(f))
+  );
+  const vigente = ler(definicoes[definicoes.length - 1]);
+  const da055 = ler("055_tracking_painel_de_anuncio.sql");
+  /** O SQL sem comentario e com espaco normalizado. */
+  const limpo = (sql: string) =>
+    sql
+      .split("\n")
+      .map((l) => l.replace(/--.*$/, ""))
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .toLowerCase();
+  const retorno = (sql: string) => /returns table \((.*?)\) language/.exec(limpo(sql))?.[1];
+
+  it("a 058 e a definicao vigente", () => {
+    expect(definicoes[definicoes.length - 1]).toBe("058_tracking_painel_sem_cancelado.sql");
+  });
+
+  it("tira do painel o 'enviado' sem sent_at que nao e teste", () => {
+    expect(limpo(vigente)).toMatch(
+      /where e\.store_id = any \(p_store_ids\) and e\.created_at >= p_desde and not \(e\.status = 'enviado' and e\.sent_at is null and not c\.teste\) group by/
+    );
+    // O teste fechado sem sair continua contando: a tela separa por n_teste.
+    expect(limpo(vigente)).toContain("public.tracking_evento_teste(e.destination, e.payload) as teste");
+  });
+
+  it("mesmas colunas da 055, na mesma ordem: create or replace sem drop", () => {
+    expect(retorno(vigente)).toBeDefined();
+    expect(retorno(vigente)).toBe(retorno(da055));
+    expect(limpo(vigente)).not.toMatch(/drop function/);
+  });
+
+  it("continua INVOKER, com os grants da 055: anon sem execute, authenticated com", () => {
+    expect(limpo(vigente)).toMatch(/language sql stable security invoker set search_path = public, pg_temp/);
+    expect(limpo(vigente)).not.toContain("security definer");
+    const grants = (sql: string) =>
+      limpo(sql).match(/(?:revoke|grant) [^;]*public\.tracking_painel_v2\(uuid\[\], timestamptz\)[^;]*;/g);
+    expect(grants(vigente)).toEqual([
+      "revoke all on function public.tracking_painel_v2(uuid[], timestamptz) from public, anon;",
+      "grant execute on function public.tracking_painel_v2(uuid[], timestamptz) to authenticated, service_role;",
+    ]);
+    expect(grants(vigente)).toEqual(grants(da055));
   });
 });

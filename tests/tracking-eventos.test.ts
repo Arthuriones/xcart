@@ -376,8 +376,14 @@ describe("o snippet do tema concorda com o catalogo", () => {
       );
     });
 
-    it("respeita a mesma janela anti-duplicata dos outros begin_checkout", () => {
-      expect(funcao).toMatch(/if \(repetido\("begin_checkout"\)\) return;[\s\S]*corpoDoEvento\(/);
+    /**
+     * Chave propria: com a do begin_checkout comum, "Finalizar compra" logo
+     * depois de fechar a carteira voltava cedo e o begin_checkout do Google
+     * (que o expresso nao manda) se perdia.
+     */
+    it("tem janela anti-duplicata com chave propria, separada do begin_checkout comum", () => {
+      expect(funcao).toMatch(/if \(repetido\("begin_checkout_xp"\)\) return;[\s\S]*corpoDoEvento\(/);
+      expect(funcao).not.toMatch(/repetido\("begin_checkout"\)/);
     });
   });
 });

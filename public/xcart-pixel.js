@@ -97,23 +97,36 @@
     return privacidade.marketingAllowed ? "concedido" : "negado";
   }
 
-  // O cookie de teste do tema (?xcart_teste=1). O sandbox nao le
-  // document.cookie; `browser.cookie.get` le o da loja e responde Promise.
-  // Lido UMA vez, no carregamento: os eventos esperam a resposta (comTeste)
-  // para nao sair uma conversao do dono antes de saber que era teste.
+  // Os cookies do tema que interessam aqui. O sandbox nao le document.cookie;
+  // `browser.cookie.get` le o da loja e responde Promise. Lidos UMA vez, no
+  // carregamento: os eventos esperam as respostas (comTeste).
+  //
+  //   _xc_teste (?xcart_teste=1): para nao sair uma conversao do dono antes de
+  //     saber que era teste.
+  //   _xc_vid: o visitante do tema. Sem consentimento a Shopify zera o
+  //     clientId, e sem ele o coletor nao acha quem clicou no tema -- e o
+  //     checkout expresso pendente desse comprador saia depois do IC daqui.
+  //     Vai como `vidDoTema`, so para o coletor cancelar a reserva.
   var testeDoCookie = false;
+  var vidDoCookie = null;
   var cookieLido = false;
   var esperandoCookie = [];
 
-  function cookieRespondeu(valor) {
-    if (cookieLido) {
-      // Resposta que chegou depois do tempo limite: a fila ja saiu, mas os
-      // eventos seguintes desta pagina ainda respeitam o teste.
-      if (valor === "1") testeDoCookie = true;
-      return;
-    }
+  /** O formato que o snippet grava: base36 + "." + base36. O resto e lixo. */
+  function vidValido(v) {
+    return typeof v === "string" && v.length <= 64 && /^[a-z0-9]+\.[a-z0-9]+$/.test(v);
+  }
+
+  function anotarCookie(nome, valor) {
+    if (nome === "_xc_teste" && valor === "1") testeDoCookie = true;
+    if (nome === "_xc_vid" && vidValido(valor)) vidDoCookie = valor;
+  }
+
+  // Solta os eventos que esperavam. Uma vez so: a resposta que chega depois do
+  // tempo limite ainda vale para os eventos seguintes desta pagina (anotarCookie).
+  function cookiesProntos() {
+    if (cookieLido) return;
     cookieLido = true;
-    testeDoCookie = valor === "1";
     var fila = esperandoCookie;
     esperandoCookie = [];
     for (var i = 0; i < fila.length; i++) {
@@ -128,20 +141,30 @@
   try {
     var apiCookie = ctx.browser && ctx.browser.cookie;
     if (apiCookie && typeof apiCookie.get === "function") {
-      Promise.resolve(apiCookie.get("_xc_teste")).then(cookieRespondeu, function () {
-        cookieRespondeu(null);
-      });
+      var nomes = ["_xc_teste", "_xc_vid"];
+      var faltam = nomes.length;
+      var respondeu = function () {
+        faltam -= 1;
+        if (faltam <= 0) cookiesProntos();
+      };
+      // Erro sincrono num `get` cai no catch de fora, que solta os eventos.
+      for (var c = 0; c < nomes.length; c++) {
+        (function (nome) {
+          Promise.resolve(apiCookie.get(nome)).then(function (valor) {
+            anotarCookie(nome, valor);
+            respondeu();
+          }, respondeu);
+        })(nomes[c]);
+      }
       // Sem resposta em 2 s, segue sem o cookie: o checkout nao pode esperar.
       if (typeof setTimeout === "function") {
-        setTimeout(function () {
-          cookieRespondeu(null);
-        }, 2000);
+        setTimeout(cookiesProntos, 2000);
       }
     } else {
-      cookieRespondeu(null);
+      cookiesProntos();
     }
   } catch (e) {
-    cookieRespondeu(null);
+    cookiesProntos();
   }
 
   /** Roda `fn` quando o cookie de teste tiver resposta (ou ja). */
@@ -458,6 +481,9 @@
         // clientId com os click ids, e o servidor recupera por ela.
         clientId: clientId,
         visitorId: clientId || checkout.token || null,
+        // O visitante do tema, do cookie: com o clientId zerado e a unica
+        // ponte para o coletor cancelar o expresso deste comprador.
+        vidDoTema: vidDoCookie || undefined,
         checkoutToken: checkout.token || null,
         pageUrl: (doc.location && doc.location.href) || null,
         referrer: doc.referrer || null,
