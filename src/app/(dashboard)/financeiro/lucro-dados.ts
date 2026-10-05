@@ -94,8 +94,6 @@ export interface DefinicaoMetrica {
   bom: BomQuando;
   formatoVariacao: FormatoVariacao;
   tipo: "dinheiro" | "vezes" | "numero" | "pct";
-  /** KPI em dinheiro compacto ("R$ 48,7 mil"). */
-  compacto?: boolean;
   definicao: string;
   /** Quando o valor e null: por que. */
   semDado: string;
@@ -107,7 +105,6 @@ export const METRICAS: Record<IdMetrica, DefinicaoMetrica> = {
     bom: "subir",
     formatoVariacao: "pct",
     tipo: "dinheiro",
-    compacto: true,
     definicao:
       "Soma dos pedidos pagos, com o frete cobrado e sem impostos. Na Shopify, compare com “Vendas totais menos impostos”.",
     semDado: "Sem pedidos no período",
@@ -117,7 +114,6 @@ export const METRICAS: Record<IdMetrica, DefinicaoMetrica> = {
     bom: "neutro",
     formatoVariacao: "pct",
     tipo: "dinheiro",
-    compacto: true,
     definicao:
       "Gasto do Meta e do Google nas contas ligadas a cada loja, convertido pela cotação do dia.",
     semDado: "Sem gasto no período",
@@ -127,7 +123,6 @@ export const METRICAS: Record<IdMetrica, DefinicaoMetrica> = {
     bom: "neutro",
     formatoVariacao: "pct",
     tipo: "dinheiro",
-    compacto: true,
     definicao:
       "Produto mais frete do fornecedor dos pedidos do período, pelo custo cadastrado em Custos.",
     semDado: "Sem pedidos no período",
@@ -137,7 +132,6 @@ export const METRICAS: Record<IdMetrica, DefinicaoMetrica> = {
     bom: "subir",
     formatoVariacao: "pct",
     tipo: "dinheiro",
-    compacto: true,
     definicao:
       "Faturamento menos produto, frete do fornecedor, taxa de pagamento e anúncios. Estimado, não contábil.",
     semDado: "Sem movimento no período",
@@ -185,9 +179,10 @@ export const METRICAS: Record<IdMetrica, DefinicaoMetrica> = {
   },
 };
 
-export function formatarMetrica(id: IdMetrica, v: number | null, moeda: string, kpi = false): string {
+/** Sempre o valor exato, com centavos: o lojista confere com a Shopify. */
+export function formatarMetrica(id: IdMetrica, v: number | null, moeda: string): string {
   const d = METRICAS[id];
-  if (d.tipo === "dinheiro") return dinheiro(v, moeda, kpi && !!d.compacto);
+  if (d.tipo === "dinheiro") return dinheiro(v, moeda);
   if (d.tipo === "vezes") return vezes(v);
   if (d.tipo === "pct") return porcento(v);
   return inteiro(v);

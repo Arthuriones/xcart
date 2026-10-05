@@ -70,7 +70,7 @@ function daMetrica(b: BaseIndicadores, id: IdMetrica, icone: LucideIcon, valor: 
     rotulo: d.rotulo,
     icone,
     valor: v,
-    texto: v === null ? "—" : formatarMetrica(id, v, b.moeda, true),
+    texto: v === null ? "—" : formatarMetrica(id, v, b.moeda),
     variacao: variacaoDe(b, v, valor(b.anterior), d.formatoVariacao),
     bom: d.bom,
     formato: d.formatoVariacao,
@@ -118,7 +118,7 @@ function CartaoKpi({ c, destaque }: { c: Cartao; destaque?: "ok" | "err" }) {
         </span>
         <span
           className={clsx(
-            "num whitespace-nowrap text-[20px] leading-7 font-bold tracking-[-0.01em]",
+            "num whitespace-nowrap text-[clamp(16px,1.4vw,20px)] leading-7 font-bold tracking-[-0.01em]",
             negativo && !destaque && "text-err"
           )}
         >
@@ -160,7 +160,7 @@ export function IndicadoresTopo(b: BaseIndicadores) {
       rotulo: "Custos totais",
       icone: ShoppingBasket,
       valor: custos,
-      texto: dinheiro(custos, b.moeda, true),
+      texto: dinheiro(custos, b.moeda),
       variacao: variacaoDe(b, custos, custosDe(b.anterior)),
       bom: "neutro",
       definicao: "Produto mais frete do fornecedor, taxas de pagamento e gasto em anúncios do período.",
@@ -170,7 +170,7 @@ export function IndicadoresTopo(b: BaseIndicadores) {
       rotulo: "Taxas",
       icone: Landmark,
       valor: b.atual.taxas,
-      texto: dinheiro(b.atual.taxas, b.moeda, true),
+      texto: dinheiro(b.atual.taxas, b.moeda),
       variacao: variacaoDe(b, b.atual.taxas, b.anterior.taxas),
       bom: "neutro",
       definicao: "Taxa de pagamento dos pedidos: o percentual mais o valor fixo configurados em Custos e taxas.",
@@ -199,7 +199,7 @@ export function IndicadoresKpi(b: BaseIndicadores) {
   const cartoes: Cartao[] = [
     daMetrica(b, "gasto", Megaphone, (x) => x.gasto, {
       rotulo: "Anúncios",
-      detalhe: `Meta ${dinheiro(t.gastoMeta, b.moeda, true)} · Google ${dinheiro(t.gastoGoogle, b.moeda, true)}`,
+      detalhe: `Meta ${dinheiro(t.gastoMeta, b.moeda)} · Google ${dinheiro(t.gastoGoogle, b.moeda)}`,
     }),
     daMetrica(b, "cpa", UserPlus, (x) => x.cpa),
     daMetrica(b, "roas", TrendingUp, (x) => x.roas),
