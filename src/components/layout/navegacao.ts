@@ -11,6 +11,7 @@ import {
   ListChecks,
   Plug,
   Radio,
+  Receipt,
   Route,
   Settings,
   Store,
@@ -36,6 +37,7 @@ const t = textos("nav");
 
 export type IdItem =
   | "lucro"
+  | "pedidos"
   | "saude"
   | "eventos"
   | "configuracoes"
@@ -82,6 +84,14 @@ export interface GrupoNav {
  */
 export const ITENS: Record<IdItem, ItemNav> = {
   lucro: { id: "lucro", href: "/financeiro", rotulo: t("profit"), icone: CircleDollarSign, atalho: "l" },
+  pedidos: {
+    id: "pedidos",
+    href: "/pedidos",
+    rotulo: t("orders"),
+    icone: Receipt,
+    atalho: "p",
+    busca: "vendas sku reembolso",
+  },
   saude: { id: "saude", href: "/tracking", rotulo: t("trackingHealth"), icone: Activity, atalho: "s" },
   eventos: { id: "eventos", href: "/tracking/eventos", rotulo: t("liveEvents"), icone: Radio, atalho: "e" },
   configuracoes: {
@@ -171,7 +181,7 @@ export function gruposNav(temRota: boolean): GrupoNav[] {
   // Menu completo de novo: o de 3 itens escondia Lojas, Custos, Alertas e
   // Integracoes atras de Configuracoes, e o dono nao achava as telas.
   const grupos: GrupoNav[] = [
-    { id: "lucro", rotulo: t("finance"), itens: [ITENS.lucro, ITENS.custos] },
+    { id: "lucro", rotulo: t("finance"), itens: [ITENS.lucro, ITENS.pedidos, ITENS.custos] },
     {
       id: "rastreamento",
       rotulo: t("trackingGroup"),
@@ -290,6 +300,7 @@ const TITULOS: Record<string, string> = {
   "/financeiro": t("profit"),
   "/financeiro/custos": t("costs"),
   "/financeiro/anuncios": t("adAccounts"),
+  "/pedidos": t("orders"),
   "/tracking": t("trackingHealth"),
   "/tracking/eventos": t("liveEvents"),
   "/alertas": t("alerts"),
@@ -330,6 +341,9 @@ const CONTEXTOS: Record<string, ModoContexto> = {
   "/financeiro": { tipo: "completo" },
   "/financeiro/custos": { tipo: "loja" },
   "/financeiro/anuncios": { tipo: "nenhum" },
+  // Loja, periodo e moeda da barra, como o Dashboard. O "Comparar com" ainda
+  // aparece (nao ha modo sem ele) e nao muda nada nesta tela.
+  "/pedidos": { tipo: "completo" },
   "/tracking": { tipo: "fixo", texto: "Últimos 7 dias · período fixo desta tela" },
   "/tracking/eventos": { tipo: "loja" },
   "/alertas": { tipo: "loja" },

@@ -61,6 +61,7 @@ describe("hrefAtivo", () => {
 describe("itemAtivo (todas as telas)", () => {
   it("cada tela acende o proprio item", () => {
     expect(itemAtivo("/financeiro")).toBe("lucro");
+    expect(itemAtivo("/pedidos")).toBe("pedidos");
     expect(itemAtivo("/financeiro/custos")).toBe("custos");
     expect(itemAtivo("/tracking")).toBe("saude");
     expect(itemAtivo("/tracking/eventos")).toBe("eventos");
@@ -101,7 +102,7 @@ describe("gruposNav (menu focado)", () => {
   it("menu completo: Financeiro, Rastreamento, Operacoes e Sistema; Roteamento so para quem tem rota", () => {
     expect(gruposNav(false).map((g) => g.id)).toEqual(["lucro", "rastreamento", "operacao", "configuracoes"]);
     expect(ids(false)).toEqual([
-      "lucro", "custos", "saude", "eventos", "alertas",
+      "lucro", "pedidos", "custos", "saude", "eventos", "alertas",
       "lojas", "importar", "atividade", "integracoes", "configuracoes", "assinatura",
     ]);
     expect(gruposNav(true).map((g) => g.id)).toEqual(["lucro", "rastreamento", "operacao", "roteamento", "configuracoes"]);
@@ -113,6 +114,15 @@ describe("gruposNav (menu focado)", () => {
 
   it("o Lucro abre o menu", () => {
     expect(gruposNav(false)[0].itens[0].href).toBe("/financeiro");
+  });
+
+  it("Pedidos vem logo depois do Dashboard, no grupo do financeiro", () => {
+    for (const temRota of [false, true]) {
+      const financeiro = gruposNav(temRota)[0];
+      expect(financeiro.itens.map((i) => i.id)).toEqual(["lucro", "pedidos", "custos"]);
+      expect(financeiro.itens[1].rotulo).toBe("Pedidos");
+      expect(financeiro.itens[1].href).toBe("/pedidos");
+    }
   });
 
   it("Assinatura continua no menu, com o saldo de creditos, no pe", () => {
@@ -196,6 +206,7 @@ describe("barra do celular e atalhos", () => {
       e: "/tracking/eventos",
       a: "/alertas",
       o: "/stores",
+      p: "/pedidos",
       m: "/clone",
       t: "/activity",
       r: "/clone/routed-checkout",
@@ -237,6 +248,8 @@ describe("contexto e titulo do topo", () => {
   it("so a tela que le o filtro global ganha a barra", () => {
     expect(contextoDaRota("/financeiro").tipo).toBe("completo");
     expect(contextoDaRota("/financeiro/custos").tipo).toBe("loja");
+    // Pedidos le loja, periodo e moeda, como o Dashboard.
+    expect(contextoDaRota("/pedidos").tipo).toBe("completo");
     expect(contextoDaRota("/financeiro/anuncios").tipo).toBe("nenhum");
     expect(contextoDaRota("/tracking/eventos").tipo).toBe("loja");
     expect(contextoDaRota("/alertas").tipo).toBe("loja");
@@ -261,6 +274,7 @@ describe("contexto e titulo do topo", () => {
     // O mesmo nome do item do menu.
     expect(tituloDaRota("/clone/routed-checkout/map")).toBe("Rotas");
     expect(tituloDaRota("/configuracoes")).toBe("Configurações");
+    expect(tituloDaRota("/pedidos")).toBe("Pedidos");
     expect(tituloDaRota("/nao-existe")).toBe("xcart");
   });
 });
@@ -273,6 +287,7 @@ describe("messages/pt.json", () => {
     const novas = [
       "finance",
       "profit",
+      "orders",
       "costs",
       "adAccounts",
       "trackingGroup",

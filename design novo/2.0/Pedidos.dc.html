@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <title>xcart · Pedidos</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Public+Sans:wght@400;500;600;700&amp;display=swap">
+  <link rel="stylesheet" href="xcart-tokens.css">
+</helmet>
+<div style="min-height:100vh; background:#e9e8e5; display:flex; flex-direction:column;">
+  <dc-import name="Revisao" tela="Pedidos" theme="{{ theme }}" width="{{ width }}" cenario="{{ cenario }}" cenarios="{{ cenarios }}" anot="{{ false }}" onTheme="{{ setTheme }}" onWidth="{{ setWidth }}" onCenario="{{ setCenario }}" hint-size="100%,48px"></dc-import>
+  <div style="flex:1; padding:24px 16px 48px; display:flex; justify-content:center;">
+    <div style="width:{{ wrapW }}; height:{{ wrapH }}; flex:none;">
+      <div data-theme="{{ theme }}" style="position:relative; width:{{ frameW }}; height:{{ frameH }}; transform:scale({{ escala }}); transform-origin:top left; overflow:hidden; border-radius:{{ frameRaio }}; box-shadow:0 0 0 1px rgba(0,0,0,.12), 0 24px 64px rgba(0,0,0,.16); background:var(--bg); display:flex; flex-direction:{{ frameDir }};">
+
+        <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}">
+          <aside aria-label="Menu principal" style="width:232px; flex:none; height:100%; display:flex; flex-direction:column; background:var(--surface-2); border-right:1px solid var(--border);">
+            <div style="height:56px; display:flex; align-items:center; padding:0 16px;"><span style="font-size:16px; font-weight:700; letter-spacing:-0.02em;">xcart</span></div>
+            <nav aria-label="Telas" style="flex:1; padding:4px 8px; display:flex; flex-direction:column;">
+              <sc-for list="{{ menu }}" as="g" hint-placeholder-count="3">
+                <div style="display:flex; flex-direction:column; gap:2px; padding:8px 0; border-bottom:1px solid var(--border-subtle);">
+                  <span style="padding:4px 8px 6px; font-size:var(--fs-label); color:var(--t2);">{{ g.t }}</span>
+                  <sc-for list="{{ g.itens }}" as="m" hint-placeholder-count="3">
+                    <a href="{{ m.href }}" aria-current="{{ m.atual }}" style="display:flex; align-items:center; gap:10px; height:32px; padding:0 8px; border-radius:var(--r-control); text-decoration:none; font-size:var(--fs-dense); background:{{ m.bg }}; color:var(--ink); font-weight:{{ m.fw }};" style-hover="background:var(--hover); color:var(--ink); text-decoration:none;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--t1);"><path d="{{ m.icon }}"></path></svg>{{ m.label }}</a>
+                  </sc-for>
+                </div>
+              </sc-for>
+            </nav>
+          </aside>
+        </sc-if>
+
+        <div style="flex:1; min-width:0; min-height:0; display:flex; flex-direction:column;">
+          <header style="flex:none; min-height:64px; display:flex; align-items:center; gap:10px; padding:{{ topoPad }}; border-bottom:1px solid var(--border); background:var(--surface); flex-wrap:wrap;">
+            <span style="display:flex; align-items:center; gap:10px;">
+              <span aria-hidden="true" style="width:34px; height:34px; border-radius:50%; background:var(--ok); color:var(--surface); display:grid; place-items:center; font-weight:700;">T</span>
+              <span style="display:flex; flex-direction:column;"><span style="font-size:var(--fs-label); color:var(--t2);">Loja</span><span style="font-size:var(--fs-section); font-weight:600; display:flex; align-items:center; gap:4px;">Todas as lojas<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color:var(--t2);"><path d="M6 9l6 6 6-6"></path></svg></span></span>
+            </span>
+            <span style="flex:1;"></span>
+            <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}"><span style="display:flex; align-items:center; gap:6px; font-size:var(--fs-label); color:var(--t2);"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:var(--ok);"></span>Atualizado há 4 min</span></sc-if>
+            <div role="radiogroup" aria-label="Período" style="display:flex; padding:3px; gap:2px; border:1px solid var(--border); border-radius:var(--r-card); background:var(--surface);">
+              <sc-for list="{{ perBtns }}" as="p" hint-placeholder-count="3"><button type="button" role="radio" aria-checked="{{ p.on }}" onClick="{{ p.pick }}" style="height:28px; padding:0 10px; border:0; border-radius:var(--r-control); font-size:var(--fs-label); font-weight:{{ p.fw }}; background:{{ p.bg }}; color:{{ p.fg }}; cursor:pointer; white-space:nowrap;">{{ p.l }}</button></sc-for>
+            </div>
+          </header>
+
+          <main style="flex:1; min-height:0; overflow-y:auto;">
+            <div style="padding:{{ pad }}; display:flex; flex-direction:column; gap:14px;">
+              <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                <h1 style="font-size:var(--fs-page); font-weight:600; letter-spacing:-0.01em;">Pedidos</h1>
+                <button type="button" style="display:flex; align-items:center; gap:6px; height:var(--h-md); padding:0 14px; border:1px solid var(--border); background:var(--surface); border-radius:var(--r-card); font-size:var(--fs-dense); font-weight:500; color:var(--ink); cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3"></path></svg>Exportar CSV</button>
+              </div>
+
+              <div style="display:grid; grid-template-columns:{{ cols4 }}; gap:14px;">
+                <sc-for list="{{ resumo }}" as="k" hint-placeholder-count="4">
+                  <div style="display:flex; align-items:center; gap:14px; padding:18px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-overlay);">
+                    <span aria-hidden="true" style="width:40px; height:40px; flex:none; border-radius:50%; display:grid; place-items:center; background:var(--info-bg); color:var(--info);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ k.icon }}"></path></svg></span>
+                    <span style="display:flex; flex-direction:column; gap:2px;"><span style="font-size:var(--fs-dense); color:var(--t1);">{{ k.l }}</span><span style="font-size:20px; font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap;">{{ k.v }}</span></span>
+                  </div>
+                </sc-for>
+              </div>
+
+              <section aria-label="Lista de pedidos" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-overlay); min-width:0;">
+                <div style="display:flex; align-items:center; gap:8px; padding:14px 16px; flex-wrap:wrap; border-bottom:1px solid var(--border-subtle);">
+                  <label style="display:flex; align-items:center; gap:8px; height:var(--h-md); padding:0 12px; border:1px solid var(--control-border); border-radius:var(--r-card); flex:1; min-width:200px; max-width:300px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true" style="color:var(--t2);"><path d="M11 3a8 8 0 1 0 0 16a8 8 0 1 0 0-16 M21 21l-4.3-4.3"></path></svg>
+                    <input value="{{ busca }}" onInput="{{ digitar }}" aria-label="Buscar pedido ou SKU" placeholder="Buscar #pedido ou SKU" style="flex:1; min-width:0; border:0; outline:0; background:transparent; font-size:var(--fs-dense);">
+                  </label>
+                  <div role="tablist" aria-label="Filtrar" style="display:flex; padding:3px; gap:2px; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-card); overflow-x:auto; scrollbar-width:none; max-width:100%;">
+                    <sc-for list="{{ filtros }}" as="f" hint-placeholder-count="5"><button type="button" role="tab" aria-selected="{{ f.on }}" onClick="{{ f.pick }}" style="height:28px; padding:0 10px; border:0; border-radius:var(--r-control); font-size:var(--fs-label); background:{{ f.bg }}; color:{{ f.fg }}; font-weight:{{ f.fw }}; box-shadow:{{ f.sh }}; cursor:pointer; white-space:nowrap;">{{ f.l }}</button></sc-for>
+                  </div>
+                </div>
+
+                <sc-if value="{{ carregando }}" hint-placeholder-val="{{ false }}">
+                  <div aria-busy="true" aria-label="Carregando pedidos" style="padding:8px 16px;"><sc-for list="{{ oito }}" as="x" hint-placeholder-count="8"><div style="display:grid; grid-template-columns:90px 1fr 1fr 100px 100px 100px 90px; gap:16px; height:52px; align-items:center;"><span style="height:12px; border-radius:4px; background:var(--skeleton);"></span><span style="height:12px; border-radius:4px; background:var(--skeleton);"></span><span style="height:12px; border-radius:4px; background:var(--skeleton);"></span><span style="height:12px; border-radius:4px; background:var(--skeleton);"></span><span style="height:12px; border-radius:4px; background:var(--skeleton);"></span><span style="height:12px; border-radius:4px; background:var(--skeleton);"></span><span style="height:20px; border-radius:10px; background:var(--skeleton);"></span></div></sc-for></div>
+                </sc-if>
+                <sc-if value="{{ vazio }}" hint-placeholder-val="{{ false }}">
+                  <div style="min-height:240px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding:24px; text-align:center;"><strong style="font-size:var(--fs-section);">{{ vazioT }}</strong><span style="font-size:var(--fs-dense); color:var(--t2);">{{ vazioD }}</span><sc-if value="{{ vazioLimpar }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ limpar }}" style="margin-top:6px; height:var(--h-md); padding:0 14px; border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-control); font-size:var(--fs-dense); font-weight:500; cursor:pointer;">Limpar filtros</button></sc-if></div>
+                </sc-if>
+
+                <sc-if value="{{ tabela }}" hint-placeholder-val="{{ true }}">
+                  <div style="overflow-x:auto;">
+                    <table style="width:100%; border-collapse:collapse; font-size:var(--fs-dense);">
+                      <caption style="position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);">Pedidos do período</caption>
+                      <thead><tr><sc-for list="{{ cab }}" as="h" hint-placeholder-count="9"><th scope="col" style="height:40px; padding:0 14px; text-align:{{ h.align }}; font-size:var(--fs-label); font-weight:500; color:var(--t2); border-bottom:1px solid var(--border); white-space:nowrap;">{{ h.l }}</th></sc-for></tr></thead>
+                      <tbody>
+                        <sc-for list="{{ linhas }}" as="r" hint-placeholder-count="10">
+                          <tr onClick="{{ r.abrir }}" style="cursor:pointer; background:{{ r.bg }};" style-hover="background:var(--hover);">
+                            <td style="height:56px; padding:0 14px; border-bottom:1px solid var(--border-subtle); white-space:nowrap;"><button type="button" onClick="{{ r.abrir }}" aria-label="{{ r.aria }}" style="border:0; background:transparent; padding:0; font:inherit; font-weight:600; color:var(--ink); cursor:pointer;">{{ r.nome }}</button></td>
+                            <td style="padding:0 14px; border-bottom:1px solid var(--border-subtle); white-space:nowrap; color:var(--t1); font-variant-numeric:tabular-nums;">{{ r.quando }}</td>
+                            <td style="padding:0 14px; border-bottom:1px solid var(--border-subtle); white-space:nowrap;">{{ r.loja }}</td>
+                            <td style="padding:0 14px; border-bottom:1px solid var(--border-subtle); color:var(--t1); max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ r.itens }}</td>
+                            <td style="padding:0 14px; border-bottom:1px solid var(--border-subtle); white-space:nowrap;"><span style="display:inline-flex; align-items:center; gap:6px; color:var(--t1);"><sc-if value="{{ r.origemLogo }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="width:14px; height:14px; background:url({{ r.origemLogo }}) center/contain no-repeat;"></span></sc-if>{{ r.origem }}</span></td>
+                            <td style="padding:0 14px; border-bottom:1px solid var(--border-subtle); text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums;">{{ r.valor }}</td>
+                            <td style="padding:0 14px; border-bottom:1px solid var(--border-subtle); text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; font-weight:600; color:{{ r.lucroFg }};">{{ r.lucro }}</td>
+                            <td style="padding:0 14px; border-bottom:1px solid var(--border-subtle); white-space:nowrap;"><span style="display:inline-flex; gap:10px;"><sc-for list="{{ r.envios }}" as="e" hint-placeholder-count="2"><span title="" aria-label="{{ e.aria }}" style="display:inline-flex; align-items:center; gap:4px;"><span aria-hidden="true" style="width:13px; height:13px; background:url({{ e.logo }}) center/contain no-repeat; opacity:{{ e.op }};"></span><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:{{ e.dot }};"></span></span></sc-for></span></td>
+                            <td style="padding:0 14px; border-bottom:1px solid var(--border-subtle); white-space:nowrap;"><span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ r.sBorda }}; background:{{ r.sBg }}; color:{{ r.sFg }}; font-size:var(--fs-label); font-weight:500;"><span aria-hidden="true" style="width:6px; height:6px; border-radius:50%; background:currentColor;"></span>{{ r.status }}</span></td>
+                          </tr>
+                        </sc-for>
+                      </tbody>
+                    </table>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ cartoes }}" hint-placeholder-val="{{ false }}">
+                  <ul style="list-style:none; margin:0; padding:12px; display:flex; flex-direction:column; gap:8px;">
+                    <sc-for list="{{ linhas }}" as="r" hint-placeholder-count="6">
+                      <li><button type="button" onClick="{{ r.abrir }}" style="width:100%; display:flex; flex-direction:column; gap:8px; padding:12px; border:1px solid var(--border); border-radius:var(--r-card); background:var(--surface); cursor:pointer; text-align:left;">
+                        <span style="display:flex; justify-content:space-between; gap:8px; width:100%;"><span style="display:flex; flex-direction:column;"><strong style="font-size:var(--fs-body);">{{ r.nome }} · {{ r.loja }}</strong><span style="font-size:var(--fs-label); color:var(--t2);">{{ r.quando }} · {{ r.origem }}</span></span><span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ r.sBorda }}; background:{{ r.sBg }}; color:{{ r.sFg }}; font-size:var(--fs-label); font-weight:500; flex:none;">{{ r.status }}</span></span>
+                        <span style="display:flex; justify-content:space-between; width:100%; font-size:var(--fs-dense); font-variant-numeric:tabular-nums;"><span style="color:var(--t1);">{{ r.valor }}</span><strong style="color:{{ r.lucroFg }};">{{ r.lucro }}</strong></span>
+                      </button></li>
+                    </sc-for>
+                  </ul>
+                </sc-if>
+                <sc-if value="{{ temLista }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; border-top:1px solid var(--border-subtle); flex-wrap:wrap; font-size:var(--fs-label); color:var(--t2);">
+                    <span>{{ rodape }}</span>
+                    <span style="display:flex; gap:6px;"><button type="button" disabled="true" aria-label="Página anterior" style="width:var(--h-sm); height:var(--h-sm); border:1px solid var(--border); background:var(--surface); border-radius:var(--r-control); color:var(--t3);">‹</button><button type="button" aria-label="Próxima página" style="width:var(--h-sm); height:var(--h-sm); border:1px solid var(--border); background:var(--surface); border-radius:var(--r-control); color:var(--ink); cursor:pointer;">›</button></span>
+                  </div>
+                </sc-if>
+              </section>
+            </div>
+          </main>
+        </div>
+
+        <sc-if value="{{ aberto }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute; inset:0; z-index:70; display:flex; justify-content:flex-end;">
+            <div onClick="{{ fechar }}" style="position:absolute; inset:0; background:var(--scrim);"></div>
+            <div role="dialog" aria-modal="true" aria-labelledby="pd-t" style="position:relative; width:{{ drawerW }}; height:100%; background:var(--surface); box-shadow:var(--shadow-panel); display:flex; flex-direction:column; animation:xc-left 180ms var(--ease);">
+              <div style="flex:none; display:flex; align-items:flex-start; gap:12px; padding:18px 16px 14px 20px; border-bottom:1px solid var(--border);">
+                <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
+                  <span style="display:flex; align-items:center; gap:10px;"><h2 id="pd-t" style="font-size:var(--fs-overlay); font-weight:600;">{{ p.nome }}</h2><span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:11px; border:1px solid {{ p.sBorda }}; background:{{ p.sBg }}; color:{{ p.sFg }}; font-size:var(--fs-label); font-weight:500;">{{ p.status }}</span></span>
+                  <span style="font-size:var(--fs-label); color:var(--t2);">{{ p.loja }} · {{ p.quandoLongo }}</span>
+                </div>
+                <a href="#" style="display:flex; align-items:center; height:var(--h-sm); padding:0 10px; border:1px solid var(--border); border-radius:var(--r-control); font-size:var(--fs-label); color:var(--ink); text-decoration:none; white-space:nowrap;">Abrir na Shopify ↗</a>
+                <button type="button" onClick="{{ fechar }}" aria-label="Fechar" style="width:var(--h-sm); height:var(--h-sm); display:grid; place-items:center; border:0; background:transparent; color:var(--t1); cursor:pointer;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18 M6 6l12 12"></path></svg></button>
+              </div>
+              <div style="flex:1; overflow-y:auto; padding:18px 20px 28px; display:flex; flex-direction:column; gap:20px;">
+                <section aria-labelledby="pd-v" style="display:flex; flex-direction:column; gap:8px;">
+                  <h3 id="pd-v" style="font-size:var(--fs-dense); font-weight:600;">Valores</h3>
+                  <div style="border:1px solid var(--border); border-radius:var(--r-card);">
+                    <sc-for list="{{ p.valores }}" as="v" hint-placeholder-count="7"><div style="display:flex; justify-content:space-between; gap:12px; padding:10px 14px; border-bottom:1px solid var(--border-subtle); font-size:var(--fs-dense); font-variant-numeric:tabular-nums; background:{{ v.bg }};"><span style="color:{{ v.rotFg }}; font-weight:{{ v.fw }};">{{ v.l }}</span><span style="font-weight:{{ v.fw }}; color:{{ v.fg }};">{{ v.v }}</span></div></sc-for>
+                  </div>
+                  <span style="font-size:var(--fs-label); color:var(--t2);">Lucro estimado antes de dividir o anúncio. O gasto entra no total do dia, não por pedido.</span>
+                </section>
+                <section aria-labelledby="pd-i" style="display:flex; flex-direction:column; gap:8px;">
+                  <h3 id="pd-i" style="font-size:var(--fs-dense); font-weight:600;">Itens</h3>
+                  <sc-for list="{{ p.linhas }}" as="l" hint-placeholder-count="2">
+                    <div style="display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--border-subtle);">
+                      <span aria-hidden="true" style="width:40px; height:40px; flex:none; border-radius:var(--r-control); border:1px solid var(--border); background:repeating-linear-gradient(45deg, var(--track) 0 4px, var(--surface-2) 4px 8px);"></span>
+                      <span style="flex:1; min-width:0; display:flex; flex-direction:column;"><span style="font-size:var(--fs-dense); font-weight:500;">{{ l.nome }}</span><span style="font-size:var(--fs-label); color:var(--t2); font-family:var(--font-mono);">{{ l.sku }}</span></span>
+                      <span style="display:flex; flex-direction:column; align-items:flex-end; font-variant-numeric:tabular-nums;"><span style="font-size:var(--fs-dense);">{{ l.qtd }} × {{ l.preco }}</span><span style="font-size:var(--fs-label); color:{{ l.custoFg }};">{{ l.custo }}</span></span>
+                    </div>
+                  </sc-for>
+                </section>
+                <section aria-labelledby="pd-j" style="display:flex; flex-direction:column; gap:8px;">
+                  <h3 id="pd-j" style="font-size:var(--fs-dense); font-weight:600;">Jornada</h3>
+                  <ol style="list-style:none; margin:0; padding:0; display:flex; flex-direction:column;">
+                    <sc-for list="{{ p.jornada }}" as="j" hint-placeholder-count="5">
+                      <li style="display:grid; grid-template-columns:18px 1fr auto; gap:12px; align-items:start; padding-bottom:14px; position:relative;">
+                        <span aria-hidden="true" style="width:10px; height:10px; margin:4px 0 0 4px; border-radius:50%; background:{{ j.dot }}; box-shadow:0 0 0 3px var(--surface);"></span>
+                        <span style="display:flex; flex-direction:column; gap:2px;"><span style="display:flex; align-items:center; gap:6px; font-size:var(--fs-dense); font-weight:500;"><sc-if value="{{ j.logo }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="width:13px; height:13px; background:url({{ j.logo }}) center/contain no-repeat;"></span></sc-if>{{ j.t }}</span><span style="font-size:var(--fs-label); color:{{ j.dFg }};">{{ j.d }}</span></span>
+                        <span style="font-size:var(--fs-label); color:var(--t2); font-variant-numeric:tabular-nums;">{{ j.h }}</span>
+                      </li>
+                    </sc-for>
+                  </ol>
+                  <a href="#" style="font-size:var(--fs-label);">Ver eventos deste pedido</a>
+                </section>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { theme: 'dark', width: 'desktop', vw: 1400, cenario: 'dados', periodo: '7d', filtro: 'todos', busca: '', aberto: null };
+  componentDidMount() {
+    try { const t = localStorage.getItem('xcart-mock-tema'); const w = localStorage.getItem('xcart-mock-largura'); const s = { vw: window.innerWidth }; if (t) s.theme = t; if (w) s.width = w; this.setState(s); } catch (e) { this.setState({ vw: window.innerWidth }); }
+    this._rs = () => this.setState({ vw: window.innerWidth }); window.addEventListener('resize', this._rs);
+    this._k = e => { if (e.key === 'Escape') this.setState({ aberto: null }); }; window.addEventListener('keydown', this._k);
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this._rs); window.removeEventListener('keydown', this._k); }
+  gerar() {
+    let s = 21; const r = () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
+    const LJ = [['Lumen Casa', 'LC'], ['Orla Wear', 'OW'], ['Kova Home', 'KH'], ['Alto Fit', 'AF']];
+    const PR = { LC: [['Luminária articulada · Preta', 'LC-LUM-01-BK', 59.9, 17.2], ['Kit organizador de gaveta', 'LC-ORG-06', 39.9, 11.8]], OW: [['Jaqueta corta-vento · M', 'OW-JCK-M-SD', 89, 31.5]], KH: [['Tapete antiderrapante 60×90', 'KH-TAP-6090', 49, 21.9], ['Capa de almofada linho', 'KH-ALM-45-CR', 29, 14.9]], AF: [['Garrafa térmica 1 L', 'AF-GAR-1L-GR', 34, 19.6], ['Faixa elástica · Kit 5', 'AF-FAI-K5', 24, null]] };
+    const out = []; let t = new Date(2026, 9, 4, 14, 22).getTime();
+    for (let i = 0; i < 48; i++) {
+      const [loja, pf] = LJ[Math.floor(r() * (r() < 0.5 ? 2 : 4))];
+      const prods = PR[pf]; const linhas = [];
+      const nl = r() < 0.75 ? 1 : 2;
+      for (let j = 0; j < nl; j++) { const p = prods[j % prods.length]; linhas.push({ nome: p[0], sku: p[1], qtd: r() < 0.8 ? 1 : 2, preco: p[2], custo: p[3] }); }
+      const sub = linhas.reduce((a, l) => a + l.qtd * l.preco, 0);
+      const frete = r() < 0.6 ? 0 : 6.9, desc = r() < 0.25 ? Math.round(sub * 0.1 * 100) / 100 : 0;
+      const ro = r(); const origem = ro < 0.58 ? 'meta' : ro < 0.85 ? 'google' : ro < 0.94 ? 'direto' : 'email';
+      const st = r(); const status = st < 0.08 ? 'reembolsado' : st < 0.13 ? 'cancelado' : st < 0.45 ? 'pendente' : 'enviado';
+      const metaOk = pf === 'OW' && i < 20 ? false : r() > 0.04, googleOk = pf === 'KH' ? null : r() > 0.12;
+      out.push({ id: i, nome: `#${1480 - i}`, t, loja, pf, linhas, sub, frete, desc, origem, status, metaOk, googleOk, gateway: r() < 0.7 ? 'Shopify Payments' : 'PayPal', utm: origem === 'meta' ? 'luminarias-abo' : origem === 'google' ? 'pesquisa-marca' : null });
+      t -= Math.round(8 + r() * 70) * 60000;
+    }
+    return out;
+  }
+  renderVals() {
+    const st = this.state; const mobile = st.width === 'mobile'; const set = o => this.setState(o);
+    this.P = this.P || this.gerar();
+    const LOGO = { meta: 'https://cdn.simpleicons.org/meta/0866FF', google: 'https://cdn.simpleicons.org/googleads/4285F4' };
+    const usd = v => v === null ? '—' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'USD' }).format(v);
+    const pad = n => String(n).padStart(2, '0');
+    const hojeIni = new Date(2026, 9, 4).getTime();
+    const quando = t => { const d = new Date(t); const h = `${pad(d.getHours())}:${pad(d.getMinutes())}`; return t >= hojeIni ? `Hoje, ${h}` : t >= hojeIni - 864e5 ? `Ontem, ${h}` : `${pad(d.getDate())}/${pad(d.getMonth() + 1)}, ${h}`; };
+    const calc = p => {
+      const fat = p.status === 'cancelado' ? 0 : p.sub + p.frete - p.desc;
+      const semCusto = p.linhas.some(l => l.custo === null);
+      const cmv = p.status === 'cancelado' ? 0 : p.linhas.reduce((a, l) => a + l.qtd * (l.custo || 0), 0) + 4.5 * p.linhas.length;
+      const tax = fat * 0.039 + (fat ? 0.3 : 0);
+      const reemb = p.status === 'reembolsado' ? fat : 0;
+      return { fat, cmv, tax, reemb, semCusto, lucro: semCusto ? null : fat - cmv - tax - reemb };
+    };
+    const ST = { enviado: ['Enviado', 'ok'], pendente: ['Não enviado', 'neutral'], reembolsado: ['Reembolsado', 'warn'], cancelado: ['Cancelado', 'err'] };
+    const ORIG = { meta: 'Meta Ads', google: 'Google Ads', direto: 'Direto', email: 'E-mail' };
+    const limite = st.periodo === 'hoje' ? hojeIni : st.periodo === '7d' ? hojeIni - 6 * 864e5 : 0;
+    const noPeriodo = this.P.filter(p => p.t >= limite);
+    const FIL = [['todos', 'Todos', () => true], ['meta', 'Meta Ads', p => p.origem === 'meta'], ['google', 'Google Ads', p => p.origem === 'google'], ['falha', 'Não chegou na plataforma', p => (p.origem === 'meta' && !p.metaOk) || (p.origem === 'google' && p.googleOk === false)], ['reemb', 'Reembolsos', p => p.status === 'reembolsado' || p.status === 'cancelado']];
+    const fn = FIL.find(f => f[0] === st.filtro)[2];
+    const q = st.busca.trim().toLowerCase();
+    let lista = st.cenario === 'vazio' ? [] : noPeriodo.filter(fn).filter(p => !q || p.nome.includes(q) || p.linhas.some(l => l.sku.toLowerCase().includes(q)));
+    const filtros = FIL.map(([id, l, f]) => { const on = st.filtro === id; return { l: `${l} ${noPeriodo.filter(f).length}`, on, pick: () => set({ filtro: id }), bg: on ? 'var(--surface)' : 'transparent', fg: on ? 'var(--ink)' : 'var(--t2)', fw: on ? 600 : 400, sh: on ? '0 0 0 1px var(--border)' : 'none' }; });
+    const env = (plat, ok, origem) => ({ logo: LOGO[plat], op: ok === null ? 0.35 : 1, dot: ok === null ? 'var(--border-strong)' : ok ? 'var(--ok)' : 'var(--err)', aria: `${plat === 'meta' ? 'Meta' : 'Google'}: ${ok === null ? 'sem pixel nesta loja' : ok ? 'compra enviada' : 'compra não chegou'}` });
+    const linhas = lista.slice(0, 15).map(p => { const c = calc(p); const [sl, tom] = ST[p.status]; return {
+      nome: p.nome, quando: quando(p.t), loja: p.loja, itens: p.linhas.map(l => `${l.qtd}× ${l.nome}`).join(', '),
+      origem: ORIG[p.origem], origemLogo: LOGO[p.origem] || null, valor: usd(c.fat), lucro: usd(c.lucro), lucroFg: c.lucro === null ? 'var(--t2)' : c.lucro < 0 ? 'var(--err)' : 'var(--ink)',
+      envios: [env('meta', p.metaOk), env('google', p.googleOk)], status: sl, sFg: `var(--${tom})`, sBg: `var(--${tom}-bg)`, sBorda: `var(--${tom}-border)`,
+      bg: st.aberto === p.id ? 'var(--hover)' : 'transparent', aria: `Abrir pedido ${p.nome}`, abrir: e => { e && e.stopPropagation && e.stopPropagation(); set({ aberto: p.id }); } }; });
+    const T = noPeriodo.map(calc);
+    const fatT = T.reduce((a, c) => a + c.fat - c.reemb, 0), lucT = T.reduce((a, c) => a + (c.lucro || 0), 0);
+    const nPed = noPeriodo.filter(p => p.status !== 'cancelado').length;
+    const rastreados = noPeriodo.filter(p => (p.origem === 'meta' && p.metaOk) || (p.origem === 'google' && p.googleOk) || p.origem === 'direto' || p.origem === 'email').length;
+    const vazio = st.cenario === 'carregando' ? false : lista.length === 0;
+    const sel = st.aberto !== null ? this.P.find(p => p.id === st.aberto) : null;
+    let p = {};
+    if (sel) {
+      const c = calc(sel); const [sl, tom] = ST[sel.status]; const d = new Date(sel.t);
+      const v = (l, val, o = {}) => ({ l, v: val, fw: 400, fg: 'var(--ink)', rotFg: 'var(--t1)', bg: 'transparent', ...o });
+      const jor = [];
+      if (sel.origem === 'meta' || sel.origem === 'google') jor.push({ t: `Clique no anúncio · ${ORIG[sel.origem]}`, d: `utm_campaign=${sel.utm}`, h: quando(sel.t - 26 * 60000), dot: 'var(--info)', logo: LOGO[sel.origem] });
+      else jor.push({ t: sel.origem === 'direto' ? 'Visita direta' : 'Link de e-mail', d: 'Sem clique de anúncio', h: quando(sel.t - 18 * 60000), dot: 'var(--t3)' });
+      jor.push({ t: 'Adicionou ao carrinho', d: 'Pelo script do tema', h: quando(sel.t - 9 * 60000), dot: 'var(--t3)' }, { t: 'Iniciou o checkout', d: 'Pelo pixel do checkout', h: quando(sel.t - 4 * 60000), dot: 'var(--t3)' }, { t: 'Compra paga', d: sel.gateway, h: quando(sel.t), dot: 'var(--ok)' });
+      jor.push({ t: 'Compra enviada ao Meta', d: sel.metaOk ? 'Recebida em 412 ms' : 'O Meta recusou o token de conversões', dFg: sel.metaOk ? 'var(--t2)' : 'var(--err)', h: quando(sel.t + 60000), dot: sel.metaOk ? 'var(--ok)' : 'var(--err)', logo: LOGO.meta });
+      if (sel.googleOk !== null) jor.push({ t: 'Compra enviada ao Google', d: sel.googleOk ? 'Recebida em 380 ms' : 'Chegou sem o clique do Google', dFg: sel.googleOk ? 'var(--t2)' : 'var(--warn)', h: quando(sel.t + 60000), dot: sel.googleOk ? 'var(--ok)' : 'var(--warn)', logo: LOGO.google });
+      p = { nome: sel.nome, loja: sel.loja, status: sl, sFg: `var(--${tom})`, sBg: `var(--${tom}-bg)`, sBorda: `var(--${tom}-border)`, quandoLongo: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/2026 às ${pad(d.getHours())}:${pad(d.getMinutes())}`,
+        valores: [v('Produtos', usd(sel.sub)), v('Frete cobrado', usd(sel.frete)), v('Desconto', sel.desc ? `−${usd(sel.desc)}` : usd(0)), v('Faturamento', usd(c.fat), { fw: 600 }), v('Produto + frete do fornecedor', `−${usd(c.cmv)}`, { fg: 'var(--t1)' }), v(`Taxa de pagamento · ${sel.gateway}`, `−${usd(c.tax)}`, { fg: 'var(--t1)' }), ...(c.reemb ? [v('Reembolso', `−${usd(c.reemb)}`, { fg: 'var(--err)' })] : []), v('Lucro estimado', c.semCusto ? '— (SKU sem custo)' : usd(c.lucro), { fw: 600, bg: 'var(--surface-2)', fg: c.lucro !== null && c.lucro < 0 ? 'var(--err)' : 'var(--ink)', rotFg: 'var(--ink)' })],
+        linhas: sel.linhas.map(l => ({ nome: l.nome, sku: l.sku, qtd: l.qtd, preco: usd(l.preco), custo: l.custo === null ? 'Sem custo cadastrado' : `custo ${usd(l.custo)}`, custoFg: l.custo === null ? 'var(--warn)' : 'var(--t2)' })),
+        jornada: jor.map(j => ({ dFg: 'var(--t2)', logo: null, ...j })) };
+    }
+    const I = { lojas: 'M3 9l1.5-5h15L21 9 M4 9v11h16V9 M3 9h18 M10 20v-5h4v5', ev: 'M16.2 7.8a6 6 0 0 1 0 8.4 M7.8 16.2a6 6 0 0 1 0-8.4 M12 10a2 2 0 1 0 0 4a2 2 0 1 0 0-4', al: 'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9 M10.3 21a1.94 1.94 0 0 0 3.4 0', lucro: 'M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20 M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8 M12 18V6', ped: 'M6 2h12v20l-3-2-3 2-3-2-3 2Z M9 7h6 M9 11h6', custos: 'M6 2h12v20H6Z M9 6h6 M9 11h.01 M12 11h.01 M15 11h.01', int: 'M12 22v-5 M9 8V2 M15 8V2 M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z', card: 'M2 5h20v14H2Z M2 10h20' };
+    const MENU = [['Rastreamento', [['Lojas', 'Rastreamento%20v3.dc.html', I.lojas], ['Eventos ao vivo', '#', I.ev], ['Alertas', '#', I.al]]], ['Financeiro', [['Lucro', 'Lucro%20v2.dc.html', I.lucro], ['Pedidos', '#', I.ped, true], ['Custos e taxas', '#', I.custos]]], ['Configurações', [['Integrações', '#', I.int], ['Assinatura', '#', I.card]]]];
+    const menu = MENU.map(([t, itens]) => ({ t, itens: itens.map(([label, href, icon, on]) => ({ label, href, icon, atual: on ? 'page' : undefined, bg: on ? 'var(--track)' : 'transparent', fw: on ? 500 : 400 })) }));
+    const PER = [['hoje', 'Hoje'], ['7d', '7 dias'], ['30d', '30 dias']];
+    const fw = mobile ? 375 : 1440, fh = mobile ? 812 : 920;
+    const escala = mobile ? 1 : Math.min(1, Math.max(0.4, (st.vw - 32) / fw));
+    const filtrado = st.filtro !== 'todos' || !!q;
+    return {
+      theme: st.theme, width: st.width, cenario: st.cenario, cenarios: [{ id: 'dados', label: 'Com pedidos' }, { id: 'vazio', label: 'Sem pedidos' }, { id: 'carregando', label: 'Carregando' }],
+      setTheme: v => { try { localStorage.setItem('xcart-mock-tema', v); } catch (e) {} set({ theme: v }); }, setWidth: v => { try { localStorage.setItem('xcart-mock-largura', v); } catch (e) {} set({ width: v }); }, setCenario: v => set({ cenario: v }),
+      desktop: !mobile, frameDir: 'row', frameW: `${fw}px`, frameH: `${fh}px`, escala, wrapW: `${fw * escala}px`, wrapH: `${fh * escala}px`, frameRaio: mobile ? '28px' : '10px',
+      pad: mobile ? '14px 12px 32px' : '20px 24px 40px', topoPad: mobile ? '10px 12px' : '0 24px', cols4: mobile ? '1fr 1fr' : 'repeat(4, minmax(0,1fr))', drawerW: mobile ? '100%' : '520px',
+      menu, perBtns: PER.map(([id, l]) => { const on = id === st.periodo; return { l, on, pick: () => set({ periodo: id }), bg: on ? 'var(--solid)' : 'transparent', fg: on ? 'var(--on-solid)' : 'var(--t1)', fw: on ? 600 : 400 }; }),
+      resumo: [['Pedidos', new Intl.NumberFormat('pt-BR').format(nPed), I.ped], ['Faturamento', usd(fatT), 'M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'], ['Lucro antes do anúncio', usd(lucT), 'M22 7l-8.5 8.5-5-5L2 17 M16 7h6v6'], ['Compras rastreadas', `${noPeriodo.length ? Math.round(rastreados / noPeriodo.length * 100) : 0}%`, 'M20 6L9 17l-5-5']].map(([l, v, icon]) => ({ l, v: st.cenario === 'vazio' ? '—' : v, icon })),
+      busca: st.busca, digitar: e => set({ busca: e.target.value }), filtros, limpar: () => set({ filtro: 'todos', busca: '' }),
+      carregando: st.cenario === 'carregando', oito: [1, 2, 3, 4, 5, 6, 7, 8], vazio, vazioLimpar: filtrado && st.cenario !== 'vazio',
+      vazioT: filtrado && st.cenario !== 'vazio' ? 'Nenhum pedido com esse filtro' : 'Nenhum pedido no período', vazioD: filtrado && st.cenario !== 'vazio' ? 'Mude a busca ou o filtro.' : 'Os pedidos aparecem até 15 minutos depois da venda.',
+      tabela: st.cenario !== 'carregando' && !vazio && !mobile, cartoes: st.cenario !== 'carregando' && !vazio && mobile, temLista: st.cenario !== 'carregando' && !vazio,
+      cab: [['Pedido', 'left'], ['Data', 'left'], ['Loja', 'left'], ['Itens', 'left'], ['Origem', 'left'], ['Valor', 'right'], ['Lucro estimado', 'right'], ['Rastreamento', 'left'], ['Envio', 'left']].map(([l, align]) => ({ l, align })),
+      linhas, rodape: `${Math.min(15, lista.length)} de ${lista.length} pedidos · valores em USD`,
+      aberto: !!sel, p, fechar: () => set({ aberto: null }),
+    };
+  }
+}
+</script>
+</body>
+</html>

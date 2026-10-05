@@ -10,7 +10,14 @@ import { Button } from "@/components/ui/button";
  * o texto tecnico fica recolhido para o suporte. Nunca vira zero: zero diria
  * ao lojista que ele nao vendeu.
  */
-export function ErroLucro({ detalhe }: { detalhe: string }) {
+export function ErroLucro({
+  detalhe,
+  titulo = "Não conseguimos calcular o lucro agora",
+}: {
+  detalhe: string;
+  /** A tela Pedidos usa o mesmo aviso com o proprio titulo. */
+  titulo?: string;
+}) {
   const router = useRouter();
   const [tentando, startTransition] = useTransition();
   return (
@@ -24,7 +31,7 @@ export function ErroLucro({ detalhe }: { detalhe: string }) {
       >
         <OctagonAlert className="size-5" strokeWidth={1.75} />
       </span>
-      <p className="text-section text-ink">Não conseguimos calcular o lucro agora</p>
+      <p className="text-section text-ink">{titulo}</p>
       <p className="max-w-110 text-body text-t1">Seus pedidos e custos continuam guardados.</p>
       <Button pending={tentando} onClick={() => startTransition(() => router.refresh())} className="min-w-35">
         {tentando ? "Tentando…" : "Tentar de novo"}
