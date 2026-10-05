@@ -183,7 +183,7 @@ export function PedidosTela({
           <div key={k.rotulo} className="flex items-center gap-3.5 rounded-overlay border border-border bg-surface p-4.5">
             <span
               aria-hidden
-              className="grid size-9 shrink-0 place-items-center rounded-full bg-info-bg text-info [&_svg]:size-4.5"
+              className="hidden size-9 shrink-0 place-items-center rounded-full bg-info-bg text-info sm:grid lg:hidden xl:grid [&_svg]:size-4.5"
             >
               {k.icone}
             </span>
@@ -468,7 +468,8 @@ function DetalhePedido({ p, dinheiro }: { p: PedidoTela; dinheiro: (v: number | 
   const menos = (x: number) => (x > 0 ? `−${dinheiro(x)}` : dinheiro(0));
   // Imposto incluso, gorjeta e alfandega: o que separa Produtos + Frete -
   // Desconto do Valor pago. Sem esta linha a conta nao fecha.
-  const outros = v ? v.produtos + v.frete - v.desconto - v.valorPago : 0;
+  // Pedido sem pagamento recebido: Valor pago 0 nao e "imposto" do pedido inteiro.
+  const outros = v && p.pago ? v.produtos + v.frete - v.desconto - v.valorPago : 0;
   const jornada = jornadaDoPedido(p, (x) => dinheiro(x));
   return (
     <>

@@ -96,7 +96,9 @@ function CartaoKpi({ c, destaque }: { c: Cartao; destaque?: "ok" | "err" }) {
       <span
         aria-hidden
         className={clsx(
-          "grid size-9 shrink-0 place-items-center rounded-full",
+          // Some onde o cartao fica estreito (celular; 4-5 colunas antes do xl):
+          // o valor exato, com centavos, precisa da largura.
+          "hidden size-9 shrink-0 place-items-center rounded-full sm:grid lg:hidden xl:grid",
           destaque ? "bg-white/20 text-surface" : "bg-info-bg text-info"
         )}
       >
