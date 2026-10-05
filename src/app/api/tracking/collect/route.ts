@@ -5,6 +5,9 @@ import {
   definicaoDoEvento,
   idDoCheckoutExpresso,
   origemDoCheckout,
+  ATRASO_CHECKOUT_EXPRESSO_MS,
+  JANELA_CHECKOUT_EXPRESSO_MS,
+  PREFIXO_CHECKOUT_EXPRESSO,
   type ChaveEvento,
 } from "@/lib/tracking/eventos";
 import { montarFbc, montarUserData } from "@/lib/tracking/normalizar";
@@ -158,7 +161,8 @@ export async function POST(request: NextRequest) {
     produto?: ProdutoDoCorpo | null;
     /**
      * O que esta sendo comprado, quando e mais de um item: o checkout expresso
-     * do carrinho paga o carrinho inteiro. Vence `produto` quando vem.
+     * do carrinho paga o carrinho inteiro. So vale no expresso, e ai vence
+     * `produto`; nos outros eventos e ignorada.
      */
     produtos?: unknown;
     /** De onde veio o begin_checkout do tema. Ver `origemDoCheckout`. */
@@ -329,6 +333,10 @@ export async function POST(request: NextRequest) {
   // no begin_checkout. O id e refeito aqui, com o nosso relogio, pelo mesmo
   // motivo do pixel acima: a marca vem do navegador, e com o id do cliente cada
   // POST com id novo seria um InitiateCheckout a mais furando a supressao abaixo.
+  //
+  // O PIXEL VENCE: o expresso so e reserva. Ele fica pendente na fila por
+  // ATRASO_CHECKOUT_EXPRESSO_MS, e o begin_checkout do pixel do mesmo
+  // comprador o cancela -- ver `cancelarExpressoPendente`.
   const expresso =
     !doPixel && evento === "begin_checkout" && origemDoCheckout(corpo.origem) === "expresso";
   if (expresso) eventId = idDoCheckoutExpresso(visitorId, Date.now());
@@ -473,10 +481,9 @@ export async function POST(request: NextRequest) {
   //
   // O EXPRESSO nao entra: o Shop Pay roda em shop.app e a carteira na janela do
   // sistema, e o pixel nao roda em nenhum dos dois -- o clique e o unico
-  // InitiateCheckout que existe. Quando o expresso cai no checkout normal
-  // (Shop Pay como convidado), o checkout_started do pixel e descartado pela
-  // checagem de 10 min mais abaixo: a linha do expresso e um begin_checkout do
-  // mesmo visitante.
+  // InitiateCheckout que existe. Quando o clique cai no checkout normal (Shop
+  // Pay como convidado, ou o "Comprar agora" que o tema nao separa da carteira
+  // no shadow fechado), o pixel manda o dele e cancela o expresso pendente.
   const pixelCobrindo = Date.now() - vistoEm < JANELA_PIXEL_CHECKOUT_MS;
   if (!doPixel && evento === "begin_checkout" && pixelCobrindo && !expresso) {
     return ok({ ignorado: "checkout coberto pelo Web Pixel" });
@@ -538,6 +545,37 @@ export async function POST(request: NextRequest) {
     return ok({ ignorado: "teto da loja" });
   }
 
+  // ---- expresso: janela deslizante ----------------------------------------
+  //
+  // Um InitiateCheckout por tentativa de compra. Qualquer begin_checkout do
+  // mesmo comprador nos ultimos 30 min barra o expresso: o clique comum do tema
+  // (visitor_id = o do tema), o do pixel (visitor_id = clientId da Shopify) e
+  // outro expresso. O balde do id sozinho nao bastava: 12:29:50 e 12:30:05 sao
+  // baldes diferentes, e o comprador que foi ao checkout normal e voltou para o
+  // Shop Pay contava dois.
+  //
+  // Uma consulta por chave, com `.eq`: os dois valores vem do navegador, e
+  // monta-los num filtro `or`/`in` do PostgREST seria deixar o cliente escrever
+  // filtro.
+  if (expresso) {
+    const desde = new Date(Date.now() - JANELA_CHECKOUT_EXPRESSO_MS).toISOString();
+    const chaves = [...new Set([visitorId, clientId].filter((v): v is string => Boolean(v)))];
+    const contagens = await Promise.all(
+      chaves.map((chave) =>
+        admin
+          .from("tracking_events")
+          .select("id", { count: "exact", head: true })
+          .eq("store_id", registro.id)
+          .eq("visitor_id", chave)
+          .eq("event_name", "begin_checkout")
+          .gte("created_at", desde)
+      )
+    );
+    if (contagens.some((c) => (c.count ?? 0) > 0)) {
+      return ok({ ignorado: "checkout ja iniciado nos ultimos 30 min" });
+    }
+  }
+
   // ---- identidade ----------------------------------------------------------
   //
   // O Web Pixel roda em sandbox e NAO le os cookies da loja: o evento do
@@ -584,9 +622,9 @@ export async function POST(request: NextRequest) {
   // checkout_started, e o carimbo so se renova AGORA. Mesmo visitante, mesma
   // acao: o do tema ja contou.
   //
-  // Cobre tambem o EXPRESSO que caiu no checkout normal: ele e gravado como
-  // `begin_checkout` do visitante do tema, e por isso a consulta abaixo filtra
-  // so o nome do evento, sem olhar a origem.
+  // O EXPRESSO fica de fora: contra ele e o pixel que vence (abaixo). O IC do
+  // pixel traz e-mail, telefone e endereco quando o checkout ja tem; descartar
+  // ele pelo clique trocaria o evento rico pelo pobre.
   if (doPixel && evento === "begin_checkout" && visitanteDoTema) {
     const { count: doTema } = await admin
       .from("tracking_events")
@@ -594,10 +632,57 @@ export async function POST(request: NextRequest) {
       .eq("store_id", registro.id)
       .eq("visitor_id", visitanteDoTema)
       .eq("event_name", "begin_checkout")
+      .not("event_id", "like", `${PREFIXO_CHECKOUT_EXPRESSO}%`)
       .gte("created_at", new Date(Date.now() - JANELA_CHECKOUT_DO_TEMA_MS).toISOString());
     if ((doTema ?? 0) > 0) {
       return ok({ ignorado: "checkout ja contado pelo tema" });
     }
+  }
+
+  /**
+   * Fecha a linha do expresso sem enviar: 'enviado' sem sent_at, o mesmo
+   * "fechado sem sair" do teste (a tela mostra "Nao enviado"). Nao 'falhou':
+   * isso acenderia erro e alerta para o lojista sem nada a consertar.
+   *
+   * Pelo visitante do tema (o visitor_id da linha) e pelo clientId que a linha
+   * guarda (migration 057). Uma atualizacao por chave, com `.eq`, pelo mesmo
+   * motivo da janela deslizante: os valores vem do navegador.
+   */
+  async function cancelarExpressoPendente(visitante: string | null, cliente: string | null) {
+    const desde = new Date(Date.now() - JANELA_CHECKOUT_EXPRESSO_MS).toISOString();
+    const quem = doPixel ? "pixel" : "tema";
+    const cancelar = (coluna: "visitor_id" | "shopify_client_id", valor: string) =>
+      admin
+        .from("tracking_events")
+        .update({
+          status: "enviado",
+          sent_at: null,
+          last_error: `cancelado: o begin_checkout do ${quem} veio primeiro`,
+          response: { enviado: false, substituido_por: quem },
+        })
+        .eq("store_id", registro.id)
+        .eq("event_name", "begin_checkout")
+        .eq("status", "pendente")
+        .like("event_id", `${PREFIXO_CHECKOUT_EXPRESSO}%`)
+        .gte("created_at", desde)
+        .eq(coluna, valor);
+    const feitos = await Promise.all([
+      visitante ? cancelar("visitor_id", visitante) : null,
+      cliente ? cancelar("shopify_client_id", cliente) : null,
+    ]);
+    // Melhor esforco: sem o cancelamento sai um IC a mais, nao some nenhum.
+    for (const f of feitos) {
+      if (f?.error) console.error("[tracking/collect] falha ao cancelar o expresso", f.error.message);
+    }
+  }
+
+  // O pixel vence o expresso. O begin_checkout que de fato vai para a fila --
+  // o do pixel, ou o clique comum do tema quando o pixel nao cobre -- cancela o
+  // expresso PENDENTE do mesmo comprador: o "Comprar agora" que o tema tomou
+  // por carteira no shadow fechado, ou o Shop Pay que caiu no checkout normal.
+  // O expresso que ja saiu (passou do atraso) fica: nao ha como desmandar.
+  if (evento === "begin_checkout" && !expresso) {
+    await cancelarExpressoPendente(doPixel ? visitanteDoTema : visitorId, clientId);
   }
 
   // ---- teste e consentimento ---------------------------------------------
@@ -717,8 +802,11 @@ export async function POST(request: NextRequest) {
     // Por destino, e nao por loja: o catalogo do Meta e o feed do Google sao
     // dois catalogos, montados por caminhos diferentes na mesma loja.
     const { montarIdsDeProdutos } = await import("@/lib/tracking/id-produto");
+    // A lista so no expresso: e o unico evento que paga um carrinho inteiro de
+    // uma vez. Nos outros, um POST qualquer anexaria 20 content_ids a um
+    // ViewContent e sujaria o publico dinamico.
     const itens =
-      Array.isArray(corpo.produtos) && corpo.produtos.length
+      expresso && Array.isArray(corpo.produtos) && corpo.produtos.length
         ? corpo.produtos.slice(0, MAX_ITENS).map(lerProduto)
         : [lerProduto(corpo.produto)];
 
@@ -816,10 +904,23 @@ export async function POST(request: NextRequest) {
           // que se perde quando a sessao comeca no proprio checkout.
           checkoutToken,
           payload,
+          // O expresso espera o pixel: o cron so manda depois do atraso, e o
+          // begin_checkout do pixel cancela antes disso. O event_time do
+          // payload continua o do clique.
+          ...(expresso
+            ? {
+                proximaTentativaEm: new Date(Date.now() + ATRASO_CHECKOUT_EXPRESSO_MS),
+                shopifyClientId: clientId,
+              }
+            : {}),
         });
 
         if (duplicado) {
           saida[chave] = "duplicado";
+          return;
+        }
+        if (expresso) {
+          saida[chave] = "aguardando o pixel";
           return;
         }
         if (!id) {

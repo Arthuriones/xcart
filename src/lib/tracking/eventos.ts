@@ -274,15 +274,36 @@ export function idDoEventoDeNavegador(
  * nenhum dos dois. Medido na Softnook (04-05/10/2026): de 8 compras, as 5 pagas
  * por carteira expressa nao tiveram InitiateCheckout nenhum.
  *
- * O id e por BALDE de tempo, nao por instante: abrir a folha do Apple Pay,
- * fechar e abrir de novo e a mesma tentativa de compra, e o indice unico da
- * fila junta os cliques do mesmo balde num evento so. O coletor refaz o id com
- * o proprio relogio; o snippet monta no mesmo formato.
+ * O PIXEL VENCE, o clique e so reserva. O tema nao distingue a carteira do
+ * "Comprar agora" quando o shadow DOM e fechado, e o "Comprar agora" leva ao
+ * checkout normal, onde o pixel manda o IC dele -- mais rico, com e-mail e
+ * endereco quando o checkout ja tem. Por isso o coletor grava o expresso
+ * PENDENTE por ATRASO_CHECKOUT_EXPRESSO_MS, e o begin_checkout do pixel do
+ * mesmo comprador cancela a linha antes de ela sair. O Meta aceita o
+ * event_time de minutos atras.
+ *
+ * O id e por BALDE de tempo, nao por instante: trava extra, para o indice
+ * unico juntar reenvio do mesmo clique. A regra de verdade e a janela
+ * deslizante do coletor (JANELA_CHECKOUT_EXPRESSO_MS) -- balde fixo deixava
+ * 12:29:50 e 12:30:05 virarem dois. O coletor refaz o id com o proprio
+ * relogio; o snippet monta no mesmo formato.
  */
 export const BALDE_CHECKOUT_EXPRESSO_MS = 30 * 60 * 1000;
 
+/** Quanto o expresso espera na fila: o tempo de o pixel chegar e cancelar. */
+export const ATRASO_CHECKOUT_EXPRESSO_MS = 5 * 60 * 1000;
+
+/**
+ * Um begin_checkout do mesmo comprador nesta janela barra o expresso; e o do
+ * pixel cancela o expresso pendente criado nela.
+ */
+export const JANELA_CHECKOUT_EXPRESSO_MS = 30 * 60 * 1000;
+
+/** Como o coletor reconhece a linha do expresso na fila. */
+export const PREFIXO_CHECKOUT_EXPRESSO = "begin_checkout_xp_";
+
 export function idDoCheckoutExpresso(visitorId: string, quandoMs: number): string {
-  return `begin_checkout_xp_${visitorId}_${Math.floor(quandoMs / BALDE_CHECKOUT_EXPRESSO_MS)}`;
+  return `${PREFIXO_CHECKOUT_EXPRESSO}${visitorId}_${Math.floor(quandoMs / BALDE_CHECKOUT_EXPRESSO_MS)}`;
 }
 
 /**

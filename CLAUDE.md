@@ -100,7 +100,7 @@ Every AI call receives `StoreContext` (name, niche, target_audience, brand_voice
   qualquer um infla na conta de anuncios do lojista, e valor de conversao
   inflado distorce o lance automatico. Nao "conferimos o Origin" -- e escolhido
   pelo cliente. O que limita e teto por visitante/loja e o indice unico da fila.
-- **Checkout expresso (Shop Pay, Apple/Google Pay) nao passa pelo Web Pixel**: o InitiateCheckout dele e o clique no tema (`origem: "expresso"`, so Meta, id por balde de 30 min refeito no coletor), que fura a supressao do pixel -- nao mande ao Google nem tire a excecao. Travado por `tests/tracking-checkout-expresso.test.ts`.
+- **Checkout expresso (Shop Pay, Apple/Google Pay) nao passa pelo Web Pixel**: o InitiateCheckout dele e o clique no tema (`origem: "expresso"`, so Meta), que fura a supressao do pixel -- nao mande ao Google nem tire a excecao. **O pixel vence, o clique e reserva**: o tema nao separa a carteira do "Comprar agora" no shadow fechado, e o "Comprar agora" cai no checkout normal. Entao o coletor grava o expresso `pendente` com `next_attempt_at` +5 min (sem `entregar` na hora), recusa se o mesmo comprador (visitor_id do tema ou clientId) ja teve begin_checkout em 30 min, e o begin_checkout do pixel -- ou o clique comum, sem pixel -- cancela o pendente (`enviado` sem `sent_at`). A dedupe de 10 min do pixel ignora `begin_checkout_xp_*`. clientId na linha: migration 057. Travado por `tests/tracking-checkout-expresso.test.ts`.
 - **Em rota vitrine -> checkout, o gclid NAO chega ao pedido.**
   `buildCartPermalink` nao leva `attributes` de proposito (a loja de checkout
   nao deve saber a origem), e o pedido nasce na loja de checkout. Logo a compra

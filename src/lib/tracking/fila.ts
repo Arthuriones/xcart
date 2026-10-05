@@ -80,6 +80,16 @@ export async function enfileirar(
     checkoutToken?: string | null;
     /** O que vai para a API do destino. Omitido = o proprio evento (Meta). */
     payload?: unknown;
+    /**
+     * Quando o cron pode mandar. Omitido = ja (o default da coluna). So o
+     * checkout expresso adia: ver ATRASO_CHECKOUT_EXPRESSO_MS.
+     */
+    proximaTentativaEm?: Date | null;
+    /**
+     * O clientId da Shopify, para o pixel achar a linha e cancelar. So na do
+     * checkout expresso (migration 057): fora dela a coluna nem vai no INSERT.
+     */
+    shopifyClientId?: string | null;
   }
 ): Promise<{ id: string | null; duplicado: boolean }> {
   const { data, error } = await admin
@@ -95,6 +105,10 @@ export async function enfileirar(
       referrer: entrada.referrer ?? null,
       checkout_token: entrada.checkoutToken ?? null,
       payload: (entrada.payload ?? entrada.evento) as Record<string, unknown>,
+      ...(entrada.proximaTentativaEm
+        ? { next_attempt_at: entrada.proximaTentativaEm.toISOString() }
+        : {}),
+      ...(entrada.shopifyClientId ? { shopify_client_id: entrada.shopifyClientId } : {}),
     })
     .select("id")
     .single();
@@ -249,7 +263,13 @@ export async function entregar(
       );
 }
 
-/** Uma passada da fila. Chamado pelo cron. */
+/**
+ * Uma passada da fila. Chamado pelo cron.
+ *
+ * So 'pendente' com next_attempt_at vencido. E o que segura o checkout
+ * expresso pelo atraso dele, e o que deixa de fora a linha que o pixel
+ * cancelou (fechada como 'enviado' sem sent_at -- ver o coletor).
+ */
 export async function drenarFila(limite = 50): Promise<{
   pegos: number;
   enviados: number;

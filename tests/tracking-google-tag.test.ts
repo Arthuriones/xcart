@@ -161,19 +161,24 @@ describe("contas Google para o navegador", () => {
    * roda. Suprimido como o clique comum, o InitiateCheckout dele sumia -- foi o
    * buraco da Softnook. Comportamento: tests/tracking-checkout-expresso.test.ts.
    */
-  it("coletor: o expresso fura a supressao do pixel, e a dedupe do pixel enxerga ele", () => {
+  it("coletor: o expresso fura a supressao do pixel, mas o pixel vence ele", () => {
     const coletor = fonte("src", "app", "api", "tracking", "collect", "route.ts");
     expect(coletor).toMatch(
       /const expresso =\s+!doPixel && evento === "begin_checkout" && origemDoCheckout\(corpo\.origem\) === "expresso";/
     );
     expect(coletor).toContain("if (expresso) eventId = idDoCheckoutExpresso(visitorId, Date.now());");
     expect(coletor).toContain('if (!doPixel && evento === "begin_checkout" && pixelCobrindo && !expresso)');
-    // A linha do expresso e `begin_checkout` do visitante do tema: a consulta
-    // da dedupe filtra so o nome, sem olhar origem nem id.
+    // A dedupe de 10 min do pixel NAO vale contra o expresso: o IC do pixel e
+    // o rico, e e ele que cancela o outro.
     const dedupe = coletor.slice(coletor.indexOf('if (doPixel && evento === "begin_checkout" && visitanteDoTema)'));
     const consulta = dedupe.slice(0, dedupe.indexOf("checkout ja contado pelo tema"));
     expect(consulta).toContain('.eq("event_name", "begin_checkout")');
-    expect(consulta).not.toMatch(/origem|event_id|_xp_/);
+    expect(consulta).toContain('.not("event_id", "like", `${PREFIXO_CHECKOUT_EXPRESSO}%`)');
+    // O expresso vai para a fila com atraso e NAO passa por `entregar` na hora.
+    const fila = coletor.slice(coletor.indexOf("const { id, duplicado } = await enfileirar("));
+    expect(fila).toMatch(/proximaTentativaEm: new Date\(Date\.now\(\) \+ ATRASO_CHECKOUT_EXPRESSO_MS\)/);
+    expect(fila.indexOf("if (expresso) {")).toBeGreaterThan(-1);
+    expect(fila.indexOf("if (expresso) {")).toBeLessThan(fila.indexOf("await entregar("));
   });
 });
 
@@ -634,6 +639,8 @@ function rodarSnippet(opcoes: {
   itens?: unknown[];
   /** Itens que /cart/change.js devolve (o carrinho depois da mudanca). */
   itensDepoisDeMudar?: unknown[];
+  /** O uniqToken do trekkie: o clientId da Shopify. */
+  clientId?: string;
 }) {
   const u = new URL(opcoes.url ?? "https://loja.test/products/camisa");
   const beacons: Record<string, unknown>[] = [];
@@ -711,6 +718,29 @@ function rodarSnippet(opcoes: {
     }
   }
 
+  /** O XHR de tema jQuery ($.post): so open, ouvinte de load e send. */
+  class XhrFalso {
+    url = "";
+    status = 0;
+    responseType = "";
+    responseText = "";
+    ouvintes: (() => void)[] = [];
+    open(_metodo: string, url: string) {
+      this.url = url;
+    }
+    addEventListener(ev: string, fn: () => void) {
+      if (ev === "load") this.ouvintes.push(fn);
+    }
+    send() {
+      buscas.push(`xhr:${this.url}`);
+      this.status = 200;
+      this.responseText = this.url.includes("/cart/change")
+        ? JSON.stringify({ token: "c1", items: opcoes.itensDepoisDeMudar ?? [] })
+        : JSON.stringify({ id: 1 });
+      for (const fn of this.ouvintes) fn.call(this);
+    }
+  }
+
   const ctx: Record<string, unknown> = {
     document: documento,
     location: {
@@ -728,6 +758,7 @@ function rodarSnippet(opcoes: {
       },
     },
     Blob: BlobFalso,
+    XMLHttpRequest: XhrFalso,
     URL,
     URLSearchParams,
     AbortController,
@@ -744,7 +775,12 @@ function rodarSnippet(opcoes: {
         ? {}
         : { customerPrivacy: { marketingAllowed: () => opcoes.privacidade } }),
     },
-    ShopifyAnalytics: { meta: { product: { id: 7, variants: [{ id: 11, sku: "S", price: 1000 }] } } },
+    ShopifyAnalytics: {
+      meta: { product: { id: 7, variants: [{ id: 11, sku: "S", price: 1000 }] } },
+      ...(opcoes.clientId
+        ? { lib: { user: () => ({ traits: () => ({ uniqToken: opcoes.clientId }) }) } }
+        : {}),
+    },
   };
   ctx.window = ctx;
   vm.createContext(ctx);
@@ -758,6 +794,12 @@ function rodarSnippet(opcoes: {
     adicionar: () => (ctx.fetch as typeof fetch)("/cart/add.js"),
     /** O tema mudando o carrinho (tirar item, quantidade) pelo fetch dele. */
     mudarCarrinho: () => (ctx.fetch as typeof fetch)("/cart/change.js"),
+    /** O mesmo, por XHR: tema jQuery com $.post('/cart/change.js'). */
+    mudarCarrinhoPorXhr: () => {
+      const x = new (ctx.XMLHttpRequest as typeof XhrFalso)();
+      x.open("POST", "/cart/change.js");
+      x.send();
+    },
     clicarCheckout: () =>
       ouvintes.click?.forEach((fn) =>
         fn({ target: { closest: (sel: string) => (sel === '[name="checkout"]' ? {} : null) } })
@@ -1021,6 +1063,94 @@ describe("snippet do tema: checkout expresso", () => {
     sn.clicarExpresso(noCarrinho());
     await assentarMuito();
     expect(expressos(sn)).toHaveLength(1);
+  });
+
+  /**
+   * O "Comprar agora" sem marca e o "Mais opcoes de pagamento" levam ao
+   * checkout NORMAL, onde o pixel manda o begin_checkout dele. Sairem daqui
+   * tambem seria um IC a mais.
+   */
+  it("Comprar agora sem marca e Mais opcoes nao disparam pelo seletor", async () => {
+    const sn = rodarSnippet({});
+    await assentarMuito();
+    const dinamico = el("div", { classe: "shopify-payment-button" });
+    const form = el("form", { action: "/cart/add", variante: "11" });
+    // Tema antigo, botao dinamico sem componente.
+    sn.clicarExpresso([
+      el("button", { classe: "shopify-payment-button__button shopify-payment-button__button--unbranded" }),
+      dinamico,
+      form,
+    ]);
+    sn.clicarExpresso([el("button", { classe: "shopify-payment-button__more-options" }), dinamico, form]);
+    // Componente novo com os filhos visiveis: o hospedeiro casa, mas o
+    // caminho passa pelo "Comprar agora" ou pelo link de mais opcoes.
+    const hospedeiro = el("shopify-accelerated-checkout");
+    sn.clicarExpresso([el("button"), el("shopify-buy-it-now-button"), hospedeiro, dinamico, form]);
+    sn.clicarExpresso([el("a"), el("more-payment-options-link"), hospedeiro, dinamico, form]);
+    await assentarMuito();
+    expect(sn.beacons.filter((b) => b.evento === "begin_checkout")).toEqual([]);
+
+    // O botao da CARTEIRA no tema antigo continua valendo.
+    sn.clicarExpresso([
+      el("button", { classe: "shopify-payment-button__button shopify-payment-button__button--branded" }),
+      dinamico,
+      form,
+    ]);
+    await assentarMuito();
+    expect(expressos(sn)).toHaveLength(1);
+  });
+
+  it("o clique comum logo depois do expresso (ou antes) e a mesma acao", async () => {
+    const sn = rodarSnippet({});
+    await assentarMuito();
+    sn.clicarExpresso(naPaginaDoProduto());
+    sn.clicarCheckout();
+    await assentarMuito();
+    expect(sn.beacons.filter((b) => b.evento === "begin_checkout")).toHaveLength(1);
+    expect(expressos(sn)).toHaveLength(1);
+
+    const outro = rodarSnippet({});
+    await assentarMuito();
+    outro.clicarCheckout();
+    outro.clicarExpresso(noCarrinho());
+    await assentarMuito();
+    expect(outro.beacons.filter((b) => b.evento === "begin_checkout")).toHaveLength(1);
+    expect(expressos(outro)).toEqual([]);
+  });
+
+  it("leva o clientId da Shopify, que o pixel usa para cancelar o expresso", async () => {
+    const sn = rodarSnippet({ clientId: "cli-abc" });
+    await assentarMuito();
+    sn.clicarExpresso(naPaginaDoProduto());
+    await assentarMuito();
+    expect(expressos(sn)[0]).toMatchObject({ clientId: "cli-abc" });
+  });
+
+  it("mudanca do carrinho por XHR (tema jQuery) tambem atualiza os itens", async () => {
+    const A = { id: 101, variant_id: 101, product_id: 1, sku: "A" };
+    const B = { id: 202, variant_id: 202, product_id: 2, sku: "B" };
+    const sn = rodarSnippet({ url: "https://loja.test/cart", itens: [A, B], itensDepoisDeMudar: [B] });
+    await assentarMuito();
+    sn.mudarCarrinhoPorXhr();
+    await assentarMuito();
+    const leituras = sn.buscas.filter((b) => b.endsWith("/cart.js")).length;
+    sn.clicarExpresso(noCarrinho());
+    await assentarMuito();
+    expect(expressos(sn)[0].produtos).toEqual([{ variante: "202", produto: "2", sku: "B" }]);
+    expect(sn.buscas.filter((b) => b.endsWith("/cart.js"))).toHaveLength(leituras);
+  });
+
+  /**
+   * Sem a leitura do carrinho, o primeiro formulario da pagina pode ser de
+   * upsell ou recomendacao: content_ids errado e pior que nenhum.
+   */
+  it("no carrinho sem itens conhecidos, vai sem produtos -- nunca o primeiro formulario da pagina", async () => {
+    const sn = rodarSnippet({ url: "https://loja.test/cart" });
+    await assentarMuito();
+    sn.clicarExpresso(noCarrinho());
+    await assentarMuito();
+    expect(expressos(sn)).toHaveLength(1);
+    expect(expressos(sn)[0]).not.toHaveProperty("produtos");
   });
 
   it("teste e consentimento vao marcados, como nos outros eventos", async () => {

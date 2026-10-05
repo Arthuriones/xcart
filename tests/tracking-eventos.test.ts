@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
+  ATRASO_CHECKOUT_EXPRESSO_MS,
   BALDE_CHECKOUT_EXPRESSO_MS,
+  JANELA_CHECKOUT_EXPRESSO_MS,
+  PREFIXO_CHECKOUT_EXPRESSO,
   EVENTOS,
   EVENTOS_DO_NAVEGADOR,
   ORIGENS_DO_CHECKOUT,
@@ -222,6 +225,23 @@ describe("id do checkout expresso", () => {
     expect(idDoCheckoutExpresso("v1", T)).not.toBe(idDoEventoDeNavegador("begin_checkout", "v1", T));
   });
 
+  /**
+   * O pixel vence: o expresso espera na fila o tempo de o checkout_started
+   * chegar e cancelar. A janela e deslizante, e cobre o balde inteiro.
+   */
+  it("atraso de 5 min, janela de 30, e o prefixo que o coletor procura", () => {
+    expect(ATRASO_CHECKOUT_EXPRESSO_MS).toBe(5 * 60 * 1000);
+    expect(JANELA_CHECKOUT_EXPRESSO_MS).toBe(30 * 60 * 1000);
+    expect(JANELA_CHECKOUT_EXPRESSO_MS).toBeGreaterThanOrEqual(BALDE_CHECKOUT_EXPRESSO_MS);
+    expect(idDoCheckoutExpresso("v1", T).startsWith(PREFIXO_CHECKOUT_EXPRESSO)).toBe(true);
+    // O clique comum e o do pixel nunca caem no prefixo -- senao o pixel
+    // cancelaria a si mesmo, ou a dedupe de 10 min deixaria de ver o tema. O
+    // _xc_vid do snippet e base36 + "." + base36: nunca comeca com "xp_".
+    const vid = "mg1abc0.k2j3h4x9";
+    expect(idDoEventoDeNavegador("begin_checkout", vid, T).startsWith(PREFIXO_CHECKOUT_EXPRESSO)).toBe(false);
+    expect("begin_checkout_ck_T1".startsWith(PREFIXO_CHECKOUT_EXPRESSO)).toBe(false);
+  });
+
   it("origem e lista fechada: so o valor conhecido conta", () => {
     expect(ORIGENS_DO_CHECKOUT).toEqual(["expresso"]);
     expect(origemDoCheckout("expresso")).toBe("expresso");
@@ -317,8 +337,15 @@ describe("o snippet do tema concorda com o catalogo", () => {
       expect(secao).not.toMatch(/\bvalue\b|\bcurrency\b/);
     });
 
+    const lista = (nome: string) => {
+      const m = new RegExp(`var ${nome} = \\[([\\s\\S]*?)\\]\\.join`).exec(secao);
+      // Sem os comentarios: texto entre aspas ali nao e seletor.
+      const codigo = m ? m[1].replace(/\/\/.*$/gm, "") : "";
+      return [...codigo.matchAll(/"([^"]+)"/g)].map((x) => x[1]);
+    };
+
     it("escuta os elementos que a Shopify documenta, com o hospedeiro de reserva", () => {
-      for (const tag of [
+      expect(lista("SELETOR_EXPRESSO")).toEqual([
         "shop-pay-wallet-button",
         "shopify-apple-pay-button",
         "shopify-google-pay-button",
@@ -326,11 +353,31 @@ describe("o snippet do tema concorda com o catalogo", () => {
         "shopify-amazon-pay-button",
         "shopify-accelerated-checkout",
         "shopify-accelerated-checkout-cart",
-        ".shopify-payment-button__button",
-      ]) {
-        expect(secao).toContain(`"${tag}"`);
-      }
+        // Do botao dinamico antigo, so o da carteira: o sem marca e o
+        // "Comprar agora", que leva ao checkout normal.
+        ".shopify-payment-button__button--branded",
+      ]);
       expect(secao).toContain("composedPath");
+    });
+
+    /**
+     * "Comprar agora" e "Mais opcoes de pagamento" levam ao checkout NORMAL,
+     * onde o pixel manda o IC dele. Pegos aqui, virariam um segundo.
+     */
+    it("recusa o que leva ao checkout normal, mesmo dentro do botao dinamico", () => {
+      expect(lista("SELETOR_NAO_EXPRESSO")).toEqual([
+        "shopify-buy-it-now-button",
+        "more-payment-options-link",
+        ".shopify-payment-button__button--unbranded",
+        ".shopify-payment-button__more-options",
+      ]);
+      expect(secao).toMatch(
+        /function ehExpresso\(e\) \{\s+return !!noCaminho\(e, SELETOR_EXPRESSO\) && !noCaminho\(e, SELETOR_NAO_EXPRESSO\);/
+      );
+    });
+
+    it("respeita a mesma janela anti-duplicata dos outros begin_checkout", () => {
+      expect(funcao).toMatch(/if \(repetido\("begin_checkout"\)\) return;[\s\S]*corpoDoEvento\(/);
     });
   });
 });

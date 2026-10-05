@@ -1096,6 +1096,20 @@
         this.addEventListener("load", function () {
           if (this.status >= 200 && this.status < 300) adicionou();
         });
+      } else if (ehMudancaDoCarrinho(url)) {
+        // Tema jQuery ($.post('/cart/change.js')): sem isto o checkout expresso
+        // do carrinho levaria item ja removido.
+        this.addEventListener("load", function () {
+          if (this.status < 200 || this.status >= 300) return;
+          // Num `then`, como no fetch: resposta que nao e o carrinho em JSON
+          // vira rejeicao e some no catch, e fica o que ja se sabia.
+          Promise.resolve(this)
+            .then(function (xhr) {
+              return xhr.responseType === "json" ? xhr.response : JSON.parse(xhr.responseText);
+            })
+            .then(guardarItens)
+            .catch(function () {});
+        });
       }
       return abrir.apply(this, arguments);
     };
@@ -1127,7 +1141,7 @@
       "click",
       function (e) {
         // Expresso primeiro, e um OU outro: o mesmo clique nao vira dois.
-        if (noCaminho(e, SELETOR_EXPRESSO)) checkoutExpresso(e);
+        if (ehExpresso(e)) checkoutExpresso(e);
         else if (ehBotaoDeCheckout(e.target)) mandar("begin_checkout");
       },
       true
@@ -1169,6 +1183,10 @@
   // do navegador e so deduplica por transaction_id, que o clique e o
   // checkout_started nao compartilham -- o expresso que cai no checkout normal
   // contaria dois.
+  //
+  // E O PIXEL VENCE. O coletor segura o expresso alguns minutos na fila, e o
+  // begin_checkout do pixel do mesmo comprador o cancela: o clique e so a
+  // reserva para quando o checkout nao passa pela pagina onde o pixel roda.
   var SELETOR_EXPRESSO = [
     "shop-pay-wallet-button",
     "shopify-apple-pay-button",
@@ -1176,11 +1194,27 @@
     "shopify-paypal-button",
     "shopify-amazon-pay-button",
     // Reserva: o hospedeiro, quando os de cima ficam dentro do shadow fechado.
+    // Ali dentro tambem mora o "Comprar agora", e daqui nao da para separar;
+    // pego por engano, ele cai no checkout normal e o pixel cancela.
     "shopify-accelerated-checkout",
     "shopify-accelerated-checkout-cart",
-    // O botao dinamico antigo, de antes do componente.
-    ".shopify-payment-button__button"
+    // O botao dinamico antigo, de antes do componente: so o da CARTEIRA.
+    ".shopify-payment-button__button--branded"
   ].join(", ");
+
+  // O que NAO e expresso, mesmo dentro do botao dinamico: o "Comprar agora"
+  // sem marca e o "Mais opcoes de pagamento" levam ao checkout NORMAL, onde o
+  // pixel ja manda o begin_checkout dele.
+  var SELETOR_NAO_EXPRESSO = [
+    "shopify-buy-it-now-button",
+    "more-payment-options-link",
+    ".shopify-payment-button__button--unbranded",
+    ".shopify-payment-button__more-options"
+  ].join(", ");
+
+  function ehExpresso(e) {
+    return !!noCaminho(e, SELETOR_EXPRESSO) && !noCaminho(e, SELETOR_NAO_EXPRESSO);
+  }
 
   /** O mesmo de BALDE_CHECKOUT_EXPRESSO_MS em src/lib/tracking/eventos.ts. */
   var BALDE_EXPRESSO_MS = 30 * 60 * 1000;
@@ -1230,8 +1264,9 @@
    *
    * Na pagina de produto o expresso compra SO a variante do formulario e pula
    * o carrinho. No carrinho (pagina ou gaveta) paga o carrinho inteiro: os
-   * itens da ultima leitura ou resposta do carrinho (2a). Sem isso, o produto
-   * da pagina.
+   * itens da ultima leitura ou resposta do carrinho (2a). Sem eles, NADA: o
+   * primeiro formulario da pagina pode ser de upsell ou recomendacao, e
+   * content_ids errado e pior que nenhum.
    */
   function itensDoExpresso(e) {
     if (!noCaminho(e, "shopify-accelerated-checkout-cart, .additional-checkout-buttons")) {
@@ -1240,16 +1275,19 @@
         return [produtoAtual(form)];
       }
     }
-    if (itensDoCarrinho && itensDoCarrinho.length) return itensDoCarrinho.slice(0);
-    var atual = produtoAtual();
-    return atual.variante || atual.produto ? [atual] : null;
+    return itensDoCarrinho && itensDoCarrinho.length ? itensDoCarrinho.slice(0) : null;
   }
 
   function checkoutExpresso(e) {
     if (!COLETOR || !LOJA) return;
+    // A mesma janela dos outros: o clique em "Finalizar compra" logo depois de
+    // fechar a carteira (ou o contrario) e a mesma acao.
+    if (repetido("begin_checkout")) return;
     var balde = Math.floor(Date.now() / BALDE_EXPRESSO_MS);
     // Abrir a carteira, fechar e abrir de novo e a mesma tentativa: um evento
-    // por balde. Entre paginas, o coletor junta pelo id, igual no balde.
+    // por balde nesta pagina. A regra de verdade e a do coletor -- nenhum
+    // begin_checkout do mesmo comprador nos 30 min anteriores, entre paginas e
+    // entre baldes; este e so o POST que nem precisa sair.
     if (baldeExpresso === balde) return;
     baldeExpresso = balde;
     // Lidos AGORA: o caminho do clique so existe durante o evento, e o Shop Pay
