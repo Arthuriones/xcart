@@ -411,7 +411,7 @@ describe("tracking_painel_v2 sem o expresso cancelado (migration 058)", () => {
   /** O SQL sem comentario e com espaco normalizado. */
   const limpo = (sql: string) =>
     sql
-      .split("\n")
+      .split(/\r?\n/)
       .map((l) => l.replace(/--.*$/, ""))
       .join(" ")
       .replace(/\s+/g, " ")
