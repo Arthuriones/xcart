@@ -19,7 +19,7 @@
  *
  * A Shopify nao tem webhook para essas tres acoes -- elas acontecem no
  * navegador. Entao aqui a gente AVISA o coletor do xcart, e e o servidor do
- * xcart que fala com o Meta (CAPI).
+ * xcart que fala com o Meta (CAPI) e com o TikTok (Events API).
  *
  * O GOOGLE ADS SAI DAQUI MESMO, pela tag do Google (gtag.js): ver produto e
  * adicionar ao carrinho viram conversao com send_to AW-x/rotulo, para cada
@@ -27,7 +27,7 @@
  * tema quando o Web Pixel NAO esta cobrindo o checkout (ver 5).
  *
  * O clique nos botoes de checkout EXPRESSO (Shop Pay, Apple Pay...) vira
- * begin_checkout so para o Meta, pelo coletor (ver 3.4).
+ * begin_checkout so para o Meta e o TikTok, pelo coletor (ver 3.4).
  *
  * Nenhum valor monetario e enviado daqui. O coletor tambem ignora se vier --
  * valor vindo do navegador e numero que qualquer um pode inflar na conta de
@@ -162,6 +162,13 @@
     gerados._fbp = true;
   }
   achados._fbp = fbp;
+
+  // _ttp e o id de navegador do pixel do TikTok, o equivalente ao _fbp. So
+  // LIDO: quem grava e o pixel dele (com "cookies primarios" ligado). Inventar
+  // um, como fazemos com o _fbp, daria ao TikTok um id que o pixel dele nunca
+  // viu. Vai ao carrinho e aos eventos; o servidor manda em `user.ttp`.
+  var ttp = lerCookie("_ttp");
+  if (ttp) achados._ttp = ttp;
 
   // _fbc representa um CLIQUE real em anuncio: inventar um sem fbclid na URL
   // seria afirmar uma origem que nao aconteceu. Entao so existe quando ha
@@ -521,10 +528,11 @@
 
   // Onde cada atributo mora como cookie. A ordem importa: o _fbc e conferido
   // contra o fbclid, que precisa ter sido restaurado antes.
-  var RESTAURAVEIS = CHAVES.concat(["_fbc", "_fbp", "_xc_vid"]);
+  var RESTAURAVEIS = CHAVES.concat(["_fbc", "_fbp", "_ttp", "_xc_vid"]);
 
   function cookieDoAtributo(k) {
     if (k === "_fbp") return "_fbp";
+    if (k === "_ttp") return "_ttp";
     if (k === "_fbc") return PREFIXO + "fbc";
     if (k === "_xc_vid") return PREFIXO + "vid";
     return PREFIXO + k;
@@ -879,6 +887,10 @@
       fbp: achados._fbp || null,
       fbc: achados._fbc || null,
       fbclid: achados.fbclid || null,
+      // O clique do TikTok e o _ttp. O ttclid ja ia ao carrinho (e ao pedido);
+      // sem ele aqui, o funil do TikTok saia sem ligacao com o anuncio.
+      ttclid: achados.ttclid || null,
+      ttp: achados._ttp || null,
       referrer: ORIGEM || null,
       // Quando este evento ja leva o clientId, o aviso separado nao e preciso:
       // o coletor grava a associacao a partir dele.
@@ -997,6 +1009,8 @@
       fbp: achados._fbp || null,
       fbc: achados._fbc || null,
       fbclid: achados.fbclid || null,
+      ttclid: achados.ttclid || null,
+      ttp: achados._ttp || null,
     });
   }
 

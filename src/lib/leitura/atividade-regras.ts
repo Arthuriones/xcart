@@ -567,7 +567,7 @@ function eventoAlertaResolvido(a: LinhaAlerta, ctx: Contexto): EventoAtividade |
 
 function eventoRastreamento(r: LinhaRastreamento, ctx: Contexto): EventoAtividade {
   const loja = nomeOuNull(ctx, r.store_id);
-  const plataforma = r.plataforma === "google" ? "Google Ads" : "Meta";
+  const plataforma = r.plataforma === "google" ? "Google Ads" : r.plataforma === "tiktok" ? "TikTok" : "Meta";
   const apelido = r.nome?.trim() ? ` (${r.nome.trim()})` : "";
   return {
     id: `rastreamento-${r.id}`,

@@ -5,8 +5,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { destinosParaTela } from "@/lib/tracking/destinos";
 import {
   chaveDoEvento,
+  vaiPeloServidor,
   type ChaveEvento,
   type MapaDeRotulos,
+  type PlataformaDestino,
 } from "@/lib/tracking/eventos";
 
 // ============================================================================
@@ -94,22 +96,25 @@ export interface ContagemDestino {
 /** Um destino como a tela o enxerga: configuracao + o que saiu por ele. */
 export interface DestinoNaTela {
   id: string;
-  plataforma: "google" | "meta";
+  plataforma: PlataformaDestino;
   /** Apelido do lojista. Com duas contas da mesma plataforma, o id nao basta. */
   nome: string | null;
-  /** AW-XXXXXXXXX no Google, id do pixel no Meta. */
+  /** AW-XXXXXXXXX no Google, id do pixel no Meta, Pixel Code no TikTok. */
   conta: string;
   /**
    * So Google: um rotulo por evento. Evento fora do mapa = o lojista nao quis.
    * E o que a tag do Google no navegador le (/api/tracking/google-config).
    */
   labels: MapaDeRotulos;
-  /** So Meta. */
+  /** So Meta e TikTok. */
   testEventCode: string | null;
   /** Formato do id de produto. null = {variant_id}. */
   idTemplate: string | null;
   ativo: boolean;
-  /** O token do CAPI esta gravado? So o booleano -- o valor nunca sai do servidor. */
+  /**
+   * O token (CAPI do Meta, Events API do TikTok) esta gravado? So o booleano --
+   * o valor nunca sai do servidor.
+   */
   temToken: boolean;
   /** Este destino consegue enviar algo, ou falta peca? */
   completo: boolean;
@@ -554,13 +559,12 @@ export async function getPainelTracking(): Promise<PainelTracking> {
           idTemplate: d.idTemplate,
           ativo: d.ativo,
           temToken: d.temToken,
-          // No Meta o pixel cobre tudo e o que falta e o token; no Google cada
-          // evento e uma action propria, e sem rotulo a tag nao tem o que
-          // disparar.
-          completo:
-            d.plataforma === "meta"
-              ? Boolean(d.conta && d.temToken)
-              : Boolean(d.conta) && Object.keys(d.labels).length > 0,
+          // No Meta e no TikTok o pixel cobre tudo e o que falta e o token; no
+          // Google cada evento e uma action propria, e sem rotulo a tag nao
+          // tem o que disparar.
+          completo: vaiPeloServidor(d.plataforma)
+            ? Boolean(d.conta && d.temToken)
+            : Boolean(d.conta) && Object.keys(d.labels).length > 0,
           criadoEm: criadoEm.get(d.id) ?? null,
           contagem: contagens.get(d.id) ?? contagemVazia(),
         })),

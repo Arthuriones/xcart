@@ -151,6 +151,27 @@ describe("catalogo", () => {
     }
   });
 
+  /**
+   * O TikTok tambem so otimiza pelos nomes padrao dele (e a caixa conta). A
+   * compra e "Purchase" desde 01/05/2025 -- "CompletePayment" e o nome velho,
+   * e "PlaceAnOrder" sai em 2027.
+   */
+  it("todo evento tem o nome que o TikTok reconhece", () => {
+    const esperado: Record<string, string> = {
+      view_item: "ViewContent",
+      add_to_cart: "AddToCart",
+      begin_checkout: "InitiateCheckout",
+      payment_info: "AddPaymentInfo",
+      purchase: "Purchase",
+    };
+    for (const e of EVENTOS) {
+      expect(e.nomeNoTiktok, e.chave).toBe(esperado[e.chave]);
+      expect(e.nomeNoTiktok).not.toBe(e.chave);
+    }
+    expect(EVENTOS.map((e) => e.nomeNoTiktok)).not.toContain("CompletePayment");
+    expect(EVENTOS.map((e) => e.nomeNoTiktok)).not.toContain("PlaceAnOrder");
+  });
+
   it("o nome do Meta nunca e igual a nossa chave", () => {
     // Se alguem "simplificar" reusando a chave, o evento deixa de ser padrao.
     for (const e of EVENTOS) expect(e.nomeNoMeta).not.toBe(e.chave);

@@ -22,15 +22,17 @@ function lerFonte(...partes: string[]) {
 }
 
 describe("toda saida de rastreamento tem teto de espera", () => {
-  it("o Meta passa timeoutMs no envio de evento", () => {
-    const fonte = lerFonte("src", "lib", "tracking", "meta-capi.ts");
-    expect(fonte).toContain("timeoutMs: TIMEOUT_MS");
-    // O teto tem que ser menor que o limite de funcao da Vercel, senao nao
-    // protege de nada.
-    const m = fonte.match(/const TIMEOUT_MS = (\d+);/);
-    expect(m).not.toBeNull();
-    expect(Number(m![1])).toBeGreaterThan(0);
-    expect(Number(m![1])).toBeLessThanOrEqual(10000);
+  it("o Meta e o TikTok passam timeoutMs no envio de evento", () => {
+    for (const arquivo of ["meta-capi.ts", "tiktok-api.ts"]) {
+      const fonte = lerFonte("src", "lib", "tracking", arquivo);
+      expect(fonte, arquivo).toContain("timeoutMs: TIMEOUT_MS");
+      // O teto tem que ser menor que o limite de funcao da Vercel, senao nao
+      // protege de nada.
+      const m = fonte.match(/const TIMEOUT_MS = (\d+);/);
+      expect(m, arquivo).not.toBeNull();
+      expect(Number(m![1])).toBeGreaterThan(0);
+      expect(Number(m![1])).toBeLessThanOrEqual(10000);
+    }
   });
 
   it("safeFetch aceita o teto sem impor um padrao", () => {
@@ -52,6 +54,7 @@ describe("toda saida de rastreamento tem teto de espera", () => {
     const entregadores: [string, string][] = [
       // O Google saiu do servidor: vai pela tag do navegador (google-tag.ts).
       ["meta-capi.ts", "export async function enviarParaMeta"],
+      ["tiktok-api.ts", "export async function enviarParaTiktok"],
     ];
 
     for (const [arquivo, assinatura] of entregadores) {

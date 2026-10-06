@@ -349,13 +349,14 @@ describe("fila do servidor sem o Google", () => {
   });
 
   it("o servidor nao tem mais saida para o Google", () => {
-    // O coletor e o webhook so pegam destino Meta; a fila nao importa nada do
-    // Google. Se alguem religar, este teste quebra antes do deploy.
+    // O coletor e o webhook so pegam destino do servidor (Meta e TikTok); a
+    // fila nao importa nada do Google. Se alguem religar, este teste quebra
+    // antes do deploy.
     const coletor = fonte("src", "app", "api", "tracking", "collect", "route.ts");
     const webhook = fonte("src", "app", "api", "shopify", "webhooks", "route.ts");
     const fila = fonte("src", "lib", "tracking", "fila.ts");
-    expect(coletor).toContain('d.plataforma === "meta" && destinoAceita(d)');
-    expect(webhook).toContain('d.plataforma === "meta" && destinoAceita(d)');
+    expect(coletor).toContain("vaiPeloServidor(d.plataforma) && destinoAceita(d)");
+    expect(webhook).toContain("vaiPeloServidor(d.plataforma) && destinoAceita(d)");
     for (const f of [coletor, webhook, fila]) {
       expect(f).not.toMatch(/destination: "google"/);
       expect(f).not.toMatch(/google-(ads|dm|url)/);
@@ -956,11 +957,12 @@ describe("snippet do tema: a tag do Google", () => {
     await assentarMuito();
     expect(sn.scripts).toEqual([]);
     expect(sn.camada()).toEqual([]);
-    // O corpo que o Meta usa: as mesmas chaves de sempre, nada do Google.
+    // O corpo que o Meta e o TikTok usam: as mesmas chaves de sempre (mais o
+    // ttclid e o _ttp do TikTok), nada do Google.
     expect(Object.keys(sn.beacons.find((b) => b.evento === "view_item")!).sort()).toEqual(
       [
         "auid", "clientId", "evento", "eventId", "fbc", "fbclid", "fbp", "gbraid", "gclid",
-        "pageUrl", "produto", "referrer", "shop", "storeId", "visitorId", "wbraid",
+        "pageUrl", "produto", "referrer", "shop", "storeId", "ttclid", "ttp", "visitorId", "wbraid",
       ].sort()
     );
   });

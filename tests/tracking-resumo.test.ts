@@ -446,7 +446,7 @@ describe("ordem e numeros do topo", () => {
   it("loja ligada sem destino recebendo entra nos pedidos e em nenhuma plataforma", () => {
     const r = resumoDaTela([linhaDaLoja(loja({ destinos: [] }), diag(), true)], { s1: diag() });
     expect(r.pedidosComparaveis).toBe(3);
-    expect(r.porPlataforma).toEqual({ meta: null, google: null });
+    expect(r.porPlataforma).toEqual({ meta: null, google: null, tiktok: null });
   });
 
   it("formata como o lojista le", () => {

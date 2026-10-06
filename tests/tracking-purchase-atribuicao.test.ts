@@ -51,6 +51,7 @@ describe("cliquesDaLanding", () => {
       gbraid: null,
       wbraid: null,
       fbclid: null,
+      ttclid: null,
     });
     expect(cliquesDaLanding(null).gclid).toBeNull();
   });

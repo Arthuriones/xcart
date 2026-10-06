@@ -21,7 +21,7 @@ import {
 //
 // A REGRA continua em saude.ts e nao muda aqui. Este arquivo so traduz o
 // resultado dela em numeros:
-//   - as duas colunas da linha (Meta: chegaram de esperados; Google: a tag);
+//   - as colunas da linha (Meta e TikTok: chegaram de esperados; Google: a tag);
 //   - a ordem das lojas e os numeros do topo.
 // O texto que a tela mostra mora em vista.ts.
 //
@@ -38,11 +38,11 @@ export const TOM_DA_SAUDE: Record<Saude, TomSaude> = {
   desligado: "neutral",
 };
 
-/** Ordem das colunas na linha: Meta, depois Google. */
-export const PLATAFORMAS: Plataforma[] = ["meta", "google"];
+/** Ordem das colunas na linha e dos blocos no detalhe: Meta, Google, TikTok. */
+export const PLATAFORMAS: Plataforma[] = ["meta", "google", "tiktok"];
 
 // ---------------------------------------------------------------------------
-// As colunas Meta e Google da linha.
+// As colunas da linha, uma por plataforma.
 // ---------------------------------------------------------------------------
 
 export type ColunaPlataforma =
@@ -155,6 +155,7 @@ export function linhaDaLoja(
     colunas: {
       meta: colunaDaPlataforma(loja, diag, "meta"),
       google: colunaDaPlataforma(loja, diag, "google"),
+      tiktok: colunaDaPlataforma(loja, diag, "tiktok"),
     },
   };
 }
@@ -219,6 +220,7 @@ export function resumoDaTela(
   const porPlataforma: Record<Plataforma, CoberturaPlataforma | null> = {
     meta: null,
     google: null,
+    tiktok: null,
   };
 
   for (const { loja, colunas } of ligadas) {

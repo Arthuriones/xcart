@@ -48,7 +48,8 @@ import { respostaJson } from "./resposta";
  * Google e Meta pedem coisas diferentes e o motivo nao e cosmetico: no Google
  * cada evento e uma conversion action propria, com rotulo proprio, e o rotulo
  * vazio e como dizer "nao quero este evento". No Meta um pixel cobre todos os
- * eventos, e o que separa funcionar de nao funcionar e o token.
+ * eventos, e o que separa funcionar de nao funcionar e o token. O TikTok e
+ * como o Meta: pixel + token da Events API.
  */
 export function FormularioDestino({
   storeId,
@@ -117,9 +118,10 @@ export function FormularioDestino({
           editando ? { ...corpo, id: destino!.id } : { ...corpo, storeId, plataforma }
         ),
       });
-      // Token recusado pelo Meta volta 400 com a mensagem DELE ("Invalid OAuth
-      // access token", "...does not have permission"): e o que diz ao lojista o
-      // que consertar no Events Manager, entao vai inteira para o aviso.
+      // Token recusado volta 400 com a mensagem DA PLATAFORMA ("Invalid OAuth
+      // access token", "40001: No permission to operate pixel code"): e o que
+      // diz ao lojista o que consertar no Gerenciador de eventos, entao vai
+      // inteira para o aviso.
       const j = await respostaJson(r, "Não deu para salvar o destino.");
 
       // Compras que tinham caido pelo token antigo voltaram para a fila. Dizer
@@ -181,7 +183,9 @@ export function FormularioDestino({
           <DialogDescription>
             {plataforma === "google"
               ? "O ID da conta mais o rótulo de cada evento que você quer medir."
-              : "O ID do pixel mais o token de conversões. Um pixel cobre todos os eventos."}
+              : plataforma === "tiktok"
+                ? "O Pixel ID mais o Access Token da Events API. Um pixel cobre todos os eventos."
+                : "O ID do pixel mais o token de conversões. Um pixel cobre todos os eventos."}
           </DialogDescription>
         </DialogHeader>
 
@@ -204,13 +208,19 @@ export function FormularioDestino({
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor={idCampo("conta")}>
-                {plataforma === "google" ? "ID de conversão" : "ID do pixel"}
+                {plataforma === "google" ? "ID de conversão" : plataforma === "tiktok" ? "Pixel ID" : "ID do pixel"}
               </Label>
               <Input
                 id={idCampo("conta")}
                 value={conta}
                 onChange={(e) => setConta(e.target.value)}
-                placeholder={plataforma === "google" ? "AW-123456789" : "1234567890123456"}
+                placeholder={
+                  plataforma === "google"
+                    ? "AW-123456789"
+                    : plataforma === "tiktok"
+                      ? "CUSG5HBC77UD11VVRQEG"
+                      : "1234567890123456"
+                }
                 className="font-mono"
                 autoComplete="off"
               />
@@ -277,7 +287,9 @@ export function FormularioDestino({
               Tem que ser <strong className="font-medium text-ink">idêntico</strong> ao ID do{" "}
               {plataforma === "google"
                 ? "seu feed no Merchant Center"
-                : "seu catálogo no Commerce Manager"}
+                : plataforma === "tiktok"
+                  ? "seu catálogo no TikTok"
+                  : "seu catálogo no Commerce Manager"}
               . Se não bater, o evento é aceito normalmente e o anúncio dinâmico simplesmente
               não mostra aquele produto, sem erro em lugar nenhum.
             </p>
@@ -337,23 +349,32 @@ export function FormularioDestino({
             )}
           </div>
 
-          {plataforma === "meta" && (
+          {plataforma !== "google" && (
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor={idCampo("token")}>Token de conversões</Label>
+                <Label htmlFor={idCampo("token")}>
+                  {plataforma === "tiktok" ? "Access Token" : "Token de conversões"}
+                </Label>
                 <Input
                   id={idCampo("token")}
                   type="password"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
-                  placeholder={destino?.temToken ? "gravado; vazio mantém" : "EAA…"}
+                  placeholder={
+                    destino?.temToken
+                      ? "gravado; vazio mantém"
+                      : plataforma === "tiktok"
+                        ? "token da Events API"
+                        : "EAA…"
+                  }
                   className="font-mono"
                   autoComplete="off"
                   aria-describedby={idCampo("token-dica")}
                 />
                 <p id={idCampo("token-dica")} className="text-label text-t2">
-                  No Gerenciador de Eventos do Meta: Configurações › API de Conversões › Gerar
-                  token.
+                  {plataforma === "tiktok"
+                    ? "No Gerenciador de eventos do TikTok: abra o pixel › Configurações › Gerar token de acesso."
+                    : "No Gerenciador de Eventos do Meta: Configurações › API de Conversões › Gerar token."}
                   {destino?.temToken
                     ? " Um token novo substitui o anterior; vazio mantém o que está gravado."
                     : ""}

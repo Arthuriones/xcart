@@ -293,6 +293,76 @@ export function montarUserData(
 }
 
 /**
+ * O bloco `user` da Events API do TikTok.
+ *
+ * Formato diferente do Meta, e nao so no nome dos campos: o telefone vai em
+ * E.164 COM o '+' antes do hash ("+12133734253"), entao o hash NAO e o mesmo
+ * do Meta. E-mail, telefone e external_id em SHA-256; ttclid, ttp, IP e user
+ * agent em claro (o TikTok le o ttclid inteiro, nunca cortado).
+ *
+ * Nome, cidade, CEP e pais ficam de fora de proposito: aparecem so na pagina
+ * de guia do TikTok, nao na referencia do endpoint, e campo que a API recusa
+ * derruba o evento inteiro (40002, permanente).
+ */
+export interface UserTiktok {
+  email?: string;
+  phone?: string;
+  external_id?: string[];
+  ttclid?: string;
+  ttp?: string;
+  ip?: string;
+  user_agent?: string;
+}
+
+/** Telefone em E.164 com o '+', o formato que o TikTok hasheia. */
+export function telefoneE164(
+  telefone: string | null | undefined,
+  pais?: string | null
+): string | null {
+  const digitos = normalizarTelefone(telefone, pais);
+  return digitos ? `+${digitos}` : null;
+}
+
+/**
+ * Monta o `user` do TikTok com os mesmos dados que viram o `user_data` do
+ * Meta. Os external_id sao os MESMOS ids (visitante, clientId, cliente da
+ * Shopify): e o que liga o funil a compra da mesma pessoa la tambem.
+ */
+export function montarUserTiktok(
+  dados: Pick<DadosPessoais, "email" | "telefone" | "paisDoTelefone" | "pais" | "externalIds">,
+  sinais: {
+    ttclid?: string | null;
+    ttp?: string | null;
+    clientIp?: string | null;
+    userAgent?: string | null;
+  } = {}
+): UserTiktok {
+  const saida: UserTiktok = {};
+
+  const email = normalizarEmail(dados.email);
+  if (email) saida.email = sha256(email);
+
+  const telefone = telefoneE164(dados.telefone, dados.paisDoTelefone || dados.pais);
+  if (telefone) saida.phone = sha256(telefone);
+
+  const exts: string[] = [];
+  for (const bruto of dados.externalIds || []) {
+    const h = hashOuNulo(bruto);
+    if (h && !exts.includes(h)) exts.push(h);
+  }
+  if (exts.length) saida.external_id = exts;
+
+  const ttclid = (sinais.ttclid || "").trim();
+  if (ttclid) saida.ttclid = ttclid;
+  const ttp = (sinais.ttp || "").trim();
+  if (ttp) saida.ttp = ttp;
+  if (sinais.clientIp) saida.ip = sinais.clientIp;
+  if (sinais.userAgent) saida.user_agent = sinais.userAgent;
+
+  return saida;
+}
+
+/**
  * Monta o `fbc` quando o cookie `_fbc` nao existe mas o `fbclid` esta na mao.
  *
  * Formato: fb.1.{timestamp_ms_do_clique}.{fbclid}

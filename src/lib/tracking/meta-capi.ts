@@ -234,18 +234,3 @@ export async function validarEscritaNoPixel(
     },
   ]);
 }
-
-/**
- * Espera antes da proxima tentativa.
- *
- * Backoff exponencial com teto de 6 h. O primeiro retry vem rapido porque a
- * maioria das falhas e soluco de rede; as seguintes afastam para nao martelar
- * o Meta durante um incidente longo.
- */
-export function proximaTentativaEm(tentativas: number): Date {
-  const minutos = Math.min(360, Math.pow(2, Math.max(0, tentativas)));
-  return new Date(Date.now() + minutos * 60 * 1000);
-}
-
-/** Depois disto o evento e dado como perdido e para de ocupar a fila. */
-export const MAX_TENTATIVAS = 8;

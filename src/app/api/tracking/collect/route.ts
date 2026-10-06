@@ -8,9 +8,12 @@ import {
   ATRASO_CHECKOUT_EXPRESSO_MS,
   JANELA_CHECKOUT_EXPRESSO_MS,
   PREFIXO_CHECKOUT_EXPRESSO,
+  vaiPeloServidor,
   type ChaveEvento,
+  type PlataformaServidor,
 } from "@/lib/tracking/eventos";
-import { montarFbc, montarUserData } from "@/lib/tracking/normalizar";
+import { montarFbc, montarUserData, montarUserTiktok } from "@/lib/tracking/normalizar";
+import { montarEventoDeFunilTiktok } from "@/lib/tracking/tiktok-evento";
 import { JANELA_PIXEL_CHECKOUT_MS } from "@/lib/tracking/google-tag";
 
 export const runtime = "nodejs";
@@ -20,7 +23,7 @@ export const runtime = "nodejs";
 //
 // A Shopify nao tem webhook para essas tres acoes -- carrinho e checkout
 // acontecem no navegador. Entao o snippet do tema avisa aqui, e daqui o NOSSO
-// servidor fala com o Meta (CAPI).
+// servidor fala com o Meta (CAPI) e com o TikTok (Events API).
 //
 // O GOOGLE NAO PASSA POR AQUI. O Google Ads sai do navegador, pela tag do
 // Google (gtag.js) que o proprio snippet e o Web Pixel carregam -- ver
@@ -89,6 +92,12 @@ const JANELA_CHECKOUT_DO_TEMA_MS = 10 * 60 * 1000;
 
 /** Itens do carrinho num evento. Carrinho de verdade nao chega perto disto. */
 const MAX_ITENS = 20;
+
+/**
+ * O ttclid vai INTEIRO ao TikTok ("ensure that you don't truncate it"), ate
+ * 1.000 caracteres. Cortado nao casa com clique nenhum: acima disso, fora.
+ */
+const MAX_TTCLID = 1000;
 
 /**
  * O formato do `_xc_vid` que o snippet grava: base36 + "." + base36. O pixel le
@@ -160,6 +169,9 @@ export async function POST(request: NextRequest) {
     fbp?: string | null;
     fbc?: string | null;
     fbclid?: string | null;
+    /** Clique do TikTok (?ttclid=) e o cookie `_ttp` do pixel dele. */
+    ttclid?: string | null;
+    ttp?: string | null;
     /** De onde a sessao veio, para diagnosticar trafego sem click id. */
     referrer?: string | null;
     /** A URL da pagina, mandada explicita pelo snippet. Ver abaixo. */
@@ -395,6 +407,9 @@ export async function POST(request: NextRequest) {
   let fbp = (corpo.fbp || "").trim().slice(0, 100) || null;
   let fbc = (corpo.fbc || "").trim().slice(0, 300) || null;
   const fbclid = (corpo.fbclid || "").trim().slice(0, 300) || null;
+  const ttclidBruto = typeof corpo.ttclid === "string" ? corpo.ttclid.trim() : "";
+  let ttclid = ttclidBruto && ttclidBruto.length <= MAX_TTCLID ? ttclidBruto : null;
+  let ttp = (typeof corpo.ttp === "string" ? corpo.ttp : "").trim().slice(0, 100) || null;
 
   /**
    * Grava a associacao visitante -> click ids.
@@ -404,7 +419,7 @@ export async function POST(request: NextRequest) {
    * inventado e uma linha nova -- por isso o teto de identidades NOVAS por
    * hora (TETO_IDENTIDADES_HORA). Estourado, so atualiza quem ja existe.
    */
-  async function publicarIdentidade() {
+  async function publicarIdentidade(semTtp = false): Promise<void> {
     const campos = {
       shopify_client_id: clientId,
       gclid: clique.gclid,
@@ -414,6 +429,10 @@ export async function POST(request: NextRequest) {
       fbp,
       fbc,
       fbclid,
+      ttclid,
+      // So quando existe: a coluna nasceu na 059. Sem o valor, a escrita nem
+      // cita a coluna.
+      ...(ttp && !semTtp ? { ttp } : {}),
       updated_at: new Date().toISOString(),
     };
 
@@ -439,10 +458,14 @@ export async function POST(request: NextRequest) {
     // um clique perdido.
     if (!erroConta && (count ?? 0) >= TETO_IDENTIDADES_HORA) return;
 
-    await admin.from("tracking_identities").upsert(
+    const { error: erroUpsert } = await admin.from("tracking_identities").upsert(
       { store_id: registro.id, visitor_id: visitorId, ...campos },
       { onConflict: "store_id,visitor_id" }
     );
+    // Sem a coluna `ttp` (059 ainda nao aplicada) o PostgREST recusa a escrita
+    // INTEIRA -- o update acima e este. De novo sem ela: o clique do Meta e do
+    // Google nao pode cair por causa do cookie do TikTok.
+    if (erroUpsert && "ttp" in campos) return publicarIdentidade(true);
   }
 
   // O aviso de identidade termina aqui: sem fila, sem destino, sem conversao.
@@ -516,17 +539,18 @@ export async function POST(request: NextRequest) {
   }
 
   // Os destinos sao LINHAS: a loja pode ter dois pixels Meta. Todo destino
-  // ativo que aceita este evento recebe uma copia. So o Meta: o Google vai pelo
-  // navegador, e `destinoAceita` recusa destino Google.
+  // ativo que aceita este evento recebe uma copia. So Meta e TikTok: o Google
+  // vai pelo navegador, e `destinoAceita` recusa destino Google.
   const { destinosDaLoja, destinoAceita } = await import("@/lib/tracking/destinos");
   const todos = await destinosDaLoja(admin, registro.id, { comToken: true });
-  const querem = todos.filter((d) => d.plataforma === "meta" && destinoAceita(d));
+  const querem = todos.filter((d) => vaiPeloServidor(d.plataforma) && destinoAceita(d));
 
   // Nenhum destino quer este evento. Silencio, nao erro: o snippet dispara
   // todos os que sabe e e aqui que se decide o que interessa.
   if (querem.length === 0) return ok({ ignorado: "evento nao configurado" });
 
   const temMeta = querem.some((d) => d.plataforma === "meta");
+  const temTiktok = querem.some((d) => d.plataforma === "tiktok");
 
   // ---- tetos ---------------------------------------------------------------
   const umDiaAtras = new Date(Date.now() - 864e5).toISOString();
@@ -674,6 +698,8 @@ export async function POST(request: NextRequest) {
       clique.auid = clique.auid || id.auid || null;
       fbp = fbp || id.fbp || null;
       fbc = fbc || id.fbc || null;
+      ttclid = ttclid || id.ttclid || null;
+      ttp = ttp || id.ttp || null;
       visitanteDoTema = id.visitorId || null;
     }
   }
@@ -776,7 +802,7 @@ export async function POST(request: NextRequest) {
   const { ehTeste, lerConsentimento, enviaAoDestino, payloadComMarcas, registrarSemEnviar } =
     await import("@/lib/tracking/teste");
   const marcas = {
-    teste: ehTeste(corpo.teste, [clique.gclid, clique.gbraid, clique.wbraid, fbclid, fbc]),
+    teste: ehTeste(corpo.teste, [clique.gclid, clique.gbraid, clique.wbraid, fbclid, fbc, ttclid]),
     consentimento: lerConsentimento(corpo.consentimento),
   };
 
@@ -784,24 +810,68 @@ export async function POST(request: NextRequest) {
   const { enfileirar, entregar } = await import("@/lib/tracking/fila");
 
   const destinos: {
-    destination: "meta";
+    destination: PlataformaServidor;
     destinationId: string;
     payload: unknown;
     /** Ja carregado aqui: evita `entregar` reler destino, token e config. */
     destino: (typeof querem)[number];
   }[] = [];
 
-  if (temMeta) {
-    // O Meta pontua pela quantidade de sinais que conferem, e num evento de
-    // funil nao existe cliente identificado -- nao ha e-mail nem telefone para
-    // mandar. O que da para oferecer e o que o pixel do navegador ofereceria:
-    // cookie, IP e user agent.
-    const ip =
-      (request.headers.get("x-forwarded-for") || "").split(",")[0].trim() ||
-      request.headers.get("x-real-ip") ||
-      null;
-    const userAgent = request.headers.get("user-agent");
+  // O que serve aos DOIS (Meta e TikTok): de onde veio a requisicao, a pagina
+  // e o produto. Uma vez, nao por destino.
+  //
+  // Num evento de funil nao existe cliente identificado -- nao ha e-mail nem
+  // telefone para mandar. O que da para oferecer e o que o pixel do navegador
+  // ofereceria: cookie, IP e user agent.
+  const ip =
+    (request.headers.get("x-forwarded-for") || "").split(",")[0].trim() ||
+    request.headers.get("x-real-ip") ||
+    null;
+  const userAgent = request.headers.get("user-agent");
 
+  // A URL da pagina vem do CORPO, nao do header Referer.
+  //
+  // O beacon vai para outro dominio, e a politica padrao do navegador
+  // (strict-origin-when-cross-origin) manda so a ORIGEM em requisicao
+  // cross-origin -- medido: pagina de produto chegava como
+  // "https://loja.shop/", sem caminho. `event_source_url` igual em todo evento
+  // piora o casamento no Meta e inutiliza regra por URL.
+  //
+  // O header fica como reserva, para snippet antigo que ainda nao manda o
+  // campo. Nos dois casos so http(s): o valor vem do cliente, e o Meta recusa
+  // o evento inteiro se nao for URL.
+  let origemDaPagina: string | undefined;
+  const doCorpo = (corpo.pageUrl || "").trim();
+  const doHeader = request.headers.get("referer") || "";
+  const candidata = /^https?:\/\//i.test(doCorpo) ? doCorpo : doHeader;
+  if (/^https?:\/\//i.test(candidata)) origemDaPagina = candidata.slice(0, 500);
+
+  // O id do produto sai do TEMPLATE do destino.
+  //
+  // Antes mandavamos variante e produto juntos, torcendo para um dos dois
+  // casar com o catalogo. Nao casava: o feed que a Shopify manda para o
+  // Merchant Center identifica o item como
+  // `shopify_<PAIS>_<idDoProduto>_<idDaVariante>`, que nao e nem um nem
+  // outro -- e a falha e silenciosa, o evento e aceito e o anuncio dinamico
+  // so nao serve aquele item.
+  //
+  // Por destino, e nao por loja: o catalogo do Meta e o feed do Google sao
+  // dois catalogos, montados por caminhos diferentes na mesma loja.
+  const { montarIdsDeProdutos } = await import("@/lib/tracking/id-produto");
+  // A lista so no expresso: e o unico evento que paga um carrinho inteiro de
+  // uma vez. Nos outros, um POST qualquer anexaria 20 content_ids a um
+  // ViewContent e sujaria o publico dinamico.
+  const itens =
+    expresso && Array.isArray(corpo.produtos) && corpo.produtos.length
+      ? corpo.produtos.slice(0, MAX_ITENS).map(lerProduto)
+      : [lerProduto(corpo.produto)];
+
+  // Os dois ids estaveis desta pessoa. O do nosso cookie costura o funil com a
+  // compra; o da Shopify e o unico que o checkout conhece, e sem ele o evento
+  // do pixel seria uma pessoa diferente das outras do mesmo funil.
+  const externalIds = [visitanteDoTema || visitorId, clientId];
+
+  if (temMeta) {
     // O pais, pela geolocalizacao do IP na borda.
     //
     // E o ULTIMO parametro de casamento que da para obter de visitante
@@ -841,10 +911,7 @@ export async function POST(request: NextRequest) {
         cep: corpo.cep,
         // O do checkout primeiro; a borda e so quando nao ha endereco.
         pais: corpo.pais || paisDaBorda,
-        // Os dois ids estaveis. O do nosso cookie costura o funil com a compra;
-        // o da Shopify e o unico que o checkout conhece, e sem ele o evento do
-        // pixel seria uma pessoa diferente das outras do mesmo funil.
-        externalIds: [visitanteDoTema || visitorId, clientId],
+        externalIds,
       },
       {
         fbp,
@@ -856,43 +923,6 @@ export async function POST(request: NextRequest) {
         userAgent,
       }
     );
-
-    // A URL da pagina vem do CORPO, nao do header Referer.
-    //
-    // O beacon vai para outro dominio, e a politica padrao do navegador
-    // (strict-origin-when-cross-origin) manda so a ORIGEM em requisicao
-    // cross-origin -- medido: pagina de produto chegava como
-    // "https://loja.shop/", sem caminho. `event_source_url` igual em todo evento
-    // piora o casamento no Meta e inutiliza regra por URL.
-    //
-    // O header fica como reserva, para snippet antigo que ainda nao manda o
-    // campo. Nos dois casos so http(s): o valor vem do cliente, e o Meta recusa
-    // o evento inteiro se nao for URL.
-    let origemDaPagina: string | undefined;
-    const doCorpo = (corpo.pageUrl || "").trim();
-    const doHeader = request.headers.get("referer") || "";
-    const candidata = /^https?:\/\//i.test(doCorpo) ? doCorpo : doHeader;
-    if (/^https?:\/\//i.test(candidata)) origemDaPagina = candidata.slice(0, 500);
-
-    // O id do produto sai do TEMPLATE do destino.
-    //
-    // Antes mandavamos variante e produto juntos, torcendo para um dos dois
-    // casar com o catalogo. Nao casava: o feed que a Shopify manda para o
-    // Merchant Center identifica o item como
-    // `shopify_<PAIS>_<idDoProduto>_<idDaVariante>`, que nao e nem um nem
-    // outro -- e a falha e silenciosa, o evento e aceito e o anuncio dinamico
-    // so nao serve aquele item.
-    //
-    // Por destino, e nao por loja: o catalogo do Meta e o feed do Google sao
-    // dois catalogos, montados por caminhos diferentes na mesma loja.
-    const { montarIdsDeProdutos } = await import("@/lib/tracking/id-produto");
-    // A lista so no expresso: e o unico evento que paga um carrinho inteiro de
-    // uma vez. Nos outros, um POST qualquer anexaria 20 content_ids a um
-    // ViewContent e sujaria o publico dinamico.
-    const itens =
-      expresso && Array.isArray(corpo.produtos) && corpo.produtos.length
-        ? corpo.produtos.slice(0, MAX_ITENS).map(lerProduto)
-        : [lerProduto(corpo.produto)];
 
     for (const d of querem.filter((x) => x.plataforma === "meta")) {
       const conteudo = montarIdsDeProdutos(d.idTemplate, itens);
@@ -935,6 +965,34 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  if (temTiktok) {
+    // O mesmo evento, no formato da Events API: o MESMO event_id (a dedupe do
+    // TikTok e por pixel + evento + event_id), o ttclid inteiro, o _ttp, e
+    // nada de valor -- a regra do item 1 do cabecalho vale igual.
+    const user = montarUserTiktok(
+      { email: corpo.email, telefone: corpo.telefone, pais: corpo.pais, externalIds },
+      { ttclid, ttp, clientIp: ip, userAgent }
+    );
+    // `page.url` e obrigatorio em evento web. Sem a URL da pagina (snippet
+    // muito antigo, sem Referer), a raiz da loja.
+    const url = origemDaPagina || `https://${loja}/`;
+    for (const d of querem.filter((x) => x.plataforma === "tiktok")) {
+      destinos.push({
+        destination: "tiktok",
+        destinationId: d.id,
+        destino: d,
+        payload: montarEventoDeFunilTiktok({
+          evento: evento as ChaveEvento,
+          eventId,
+          quandoMs: Date.now(),
+          user,
+          url,
+          contentIds: montarIdsDeProdutos(d.idTemplate, itens),
+        }),
+      });
+    }
+  }
+
   try {
     const saida: Record<string, string> = {};
     /** Destinos em que a linha do expresso nasceu agora (nao duplicada). */
@@ -954,7 +1012,7 @@ export async function POST(request: NextRequest) {
         const chave = `${alvo.destination}:${alvo.destinationId.slice(0, 8)}`;
 
         // Evento de teste fica na fila para o dono conferir, mas so sai para o
-        // Meta com codigo de teste. Ver teste.ts.
+        // Meta ou o TikTok com codigo de teste. Ver teste.ts.
         const envia = enviaAoDestino(alvo.destino, marcas.teste);
         const payload = payloadComMarcas(alvo.destination, alvo.payload as object, marcas, envia);
         // Ficam na LINHA, nao no payload: o payload do Meta vai cru para a

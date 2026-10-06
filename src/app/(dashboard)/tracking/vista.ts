@@ -2,7 +2,6 @@ import type { DestinoNaTela, LojaTracking } from "@/lib/tracking/queries";
 import type { DiagnosticoLoja } from "@/lib/tracking/diagnostico";
 import {
   aceitamCompra,
-  comprasSemTeste,
   emModoTeste,
   faltasDaLoja,
   pelaTag,
@@ -10,6 +9,7 @@ import {
   plural,
   quando,
   recebemCompra,
+  semCliqueDeAnuncio,
   tagComCompra,
   vereditoDoDestino,
   type Plataforma,
@@ -44,7 +44,7 @@ export interface PontoPlataforma {
   rotulo: string;
 }
 
-const NOME: Record<Plataforma, string> = { meta: "Meta", google: "Google Ads" };
+const NOME: Record<Plataforma, string> = { meta: "Meta", google: "Google Ads", tiktok: "TikTok" };
 
 /** Um ponto para cada plataforma com pixel na loja (so loja ligada). */
 export function pontosDaLinha(linha: LinhaLoja): PontoPlataforma[] {
@@ -59,7 +59,7 @@ export function pontosDaLinha(linha: LinhaLoja): PontoPlataforma[] {
         return ponto("neutral", "desativado");
       case "nao-recebe":
         if (p === "google") return ponto("warn", c.motivo);
-        return loja.destinos.some((d) => d.ativo && emModoTeste(d))
+        return loja.destinos.some((d) => d.plataforma === p && d.ativo && emModoTeste(d))
           ? ponto("warn", "em modo teste")
           : ponto("warn", "sem token");
       case "tag":
@@ -95,18 +95,6 @@ export interface EstadoPixel {
   tom: Tom;
   /** O que a plataforma respondeu, quando recusou. */
   erro: string | null;
-}
-
-/**
- * Nenhuma compra do Meta ligada a anuncio na loja. Mesmo teste de
- * `saudeDaLoja`: NENHUMA conta creditou, nao "a melhor".
- */
-function semCliqueNoMeta(loja: LojaTracking): boolean {
-  const contas = recebemCompra(loja)
-    .filter((d) => d.plataforma === "meta")
-    .map(comprasSemTeste);
-  const enviadas = contas.length ? Math.max(...contas.map((c) => c.enviadas)) : 0;
-  return enviadas > 0 && contas.every((c) => c.deAnuncio === 0);
 }
 
 export function estadoDoPixel(
@@ -145,15 +133,17 @@ export function estadoDoPixel(
   if (d.contagem.falharam > 0) {
     return e(plural(d.contagem.falharam, "envio falhou", "envios falharam"), "warn", erro);
   }
-  if (recebemCompra(loja).some((r) => r.id === d.id) && semCliqueNoMeta(loja)) {
+  // Por plataforma, o mesmo teste de `saudeDaLoja`: o clique do Meta nao
+  // credita o TikTok, nem o contrario.
+  if (recebemCompra(loja).some((r) => r.id === d.id) && semCliqueDeAnuncio(loja, d.plataforma)) {
     return e("Sem clique de anúncio", "warn");
   }
   return e(null, "ok");
 }
 
 /**
- * As compras do pixel em 7 dias: "178 de 182 compras" no Meta. O Google nao
- * tem numero do servidor: "pela tag".
+ * As compras do pixel em 7 dias: "178 de 182 compras" no Meta e no TikTok. O
+ * Google nao tem numero do servidor: "pela tag".
  */
 export function comprasDoPixel(
   d: DestinoNaTela,

@@ -1,13 +1,14 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  enviarParaMeta,
-  proximaTentativaEm,
-  MAX_TENTATIVAS,
-  type EventoCapi,
-} from "@/lib/tracking/meta-capi";
+import { enviarParaMeta, type EventoCapi } from "@/lib/tracking/meta-capi";
+import { enviarParaTiktok } from "@/lib/tracking/tiktok-api";
+import type { EventoTiktok } from "@/lib/tracking/tiktok-evento";
 import type { Destino } from "@/lib/tracking/destinos";
-import { PREFIXO_CHECKOUT_EXPRESSO } from "@/lib/tracking/eventos";
+import {
+  PREFIXO_CHECKOUT_EXPRESSO,
+  vaiPeloServidor,
+  type PlataformaServidor,
+} from "@/lib/tracking/eventos";
 
 // ============================================================================
 // Fila de saida do rastreamento.
@@ -17,10 +18,27 @@ import { PREFIXO_CHECKOUT_EXPRESSO } from "@/lib/tracking/eventos";
 // o cron tenta de novo. Enviar direto e so logar o erro perderia conversao
 // exatamente nos momentos em que mais se vende, que e quando o Meta limita.
 //
-// SO O META PASSA POR AQUI. O Google Ads sai do NAVEGADOR, pela tag do Google
-// (gtag.js), no snippet do tema e no Web Pixel do checkout -- ver
-// /api/tracking/google-config. Nada entra na fila para destination 'google'.
+// SO O SERVIDOR PASSA POR AQUI: o Meta (Conversions API) e o TikTok (Events
+// API). O Google Ads sai do NAVEGADOR, pela tag do Google (gtag.js), no snippet
+// do tema e no Web Pixel do checkout -- ver /api/tracking/google-config. Nada
+// entra na fila para destination 'google'.
 // ============================================================================
+
+/**
+ * Espera antes da proxima tentativa.
+ *
+ * Backoff exponencial com teto de 6 h. O primeiro retry vem rapido porque a
+ * maioria das falhas e soluco de rede; as seguintes afastam para nao martelar
+ * a plataforma durante um incidente longo. Mora aqui, e nao no envio de uma
+ * plataforma, porque vale para todas.
+ */
+export function proximaTentativaEm(tentativas: number): Date {
+  const minutos = Math.min(360, Math.pow(2, Math.max(0, tentativas)));
+  return new Date(Date.now() + minutos * 60 * 1000);
+}
+
+/** Depois disto o evento e dado como perdido e para de ocupar a fila. */
+export const MAX_TENTATIVAS = 8;
 
 /**
  * O interruptor da loja.
@@ -60,8 +78,8 @@ export async function enfileirar(
   admin: ReturnType<typeof createAdminClient>,
   entrada: {
     storeId: string;
-    /** So o Meta. O Google vai pelo navegador (gtag.js), fora da fila. */
-    destination: "meta";
+    /** Meta ou TikTok. O Google vai pelo navegador (gtag.js), fora da fila. */
+    destination: PlataformaServidor;
     /** Qual conta. Entra na chave de dedupe junto com store_id e event_id. */
     destinationId?: string | null;
     /**
@@ -79,7 +97,10 @@ export async function enfileirar(
     referrer?: string | null;
     /** Token do checkout da Shopify, nos eventos que o Web Pixel manda. */
     checkoutToken?: string | null;
-    /** O que vai para a API do destino. Omitido = o proprio evento (Meta). */
+    /**
+     * O que vai para a API do destino, no formato DELA (EventoCapi no Meta,
+     * EventoTiktok no TikTok). Omitido = o proprio evento (Meta).
+     */
     payload?: unknown;
     /**
      * Quando o cron pode mandar. Omitido = ja (o default da coluna). So o
@@ -123,14 +144,14 @@ export async function enfileirar(
 /**
  * Tenta entregar uma linha da fila e grava o desfecho.
  *
- * Dirigido por DESTINO. A loja pode ter dois pixels Meta, e cada linha da fila
- * sabe de qual deles e -- o `destination_id` tambem entra na chave de
- * deduplicacao, senao dois destinos colidiriam e o segundo sumiria como
- * "duplicado".
+ * Dirigido por DESTINO, e despachado pela plataforma da linha (Meta ou
+ * TikTok). A loja pode ter dois pixels Meta, e cada linha da fila sabe de qual
+ * deles e -- o `destination_id` tambem entra na chave de deduplicacao, senao
+ * dois destinos colidiriam e o segundo sumiria como "duplicado".
  *
  * Linha 'google' que ainda esteja na fila (de antes de o Google ir para o
  * navegador) fecha como 'falhou' com o motivo, sem sair: o alerta de compra
- * perdida (R3) so olha o Meta.
+ * perdida (R3) so olha o Meta e o TikTok.
  *
  * Erro permanente (token invalido, rotulo ausente) vai direto para 'falhou':
  * insistir so queima chamada e esconde o problema atras de uma fila que nunca
@@ -183,7 +204,7 @@ export async function entregar(
     return { ok: false, motivo };
   };
 
-  if (linha.destination !== "meta") {
+  if (!vaiPeloServidor(linha.destination)) {
     return desistir("o Google vai pelo navegador (tag do Google), não pelo servidor");
   }
 
@@ -209,6 +230,13 @@ export async function entregar(
 
   if (!destinoAceita(destino)) {
     return desistir(porQueRecusa(destino) || "destino nao aceita");
+  }
+
+  // O payload foi montado no formato da plataforma da LINHA. Um destino de
+  // outra plataforma recusaria o evento inteiro como invalido -- melhor fechar
+  // com o motivo do que gastar a chamada.
+  if (destino.plataforma !== linha.destination) {
+    return desistir(`linha de ${linha.destination} apontando para destino de ${destino.plataforma}`);
   }
 
   const gravarSucesso = async (
@@ -267,6 +295,29 @@ export async function entregar(
     if (atual?.status !== "pendente") {
       return { ok: false, motivo: "expresso cancelado antes do envio" };
     }
+  }
+
+  // ---- TikTok -------------------------------------------------------------
+  if (linha.destination === "tiktok") {
+    const r = await enviarParaTiktok(
+      destino.conta,
+      destino.token!,
+      [linha.payload as EventoTiktok],
+      { testEventCode: destino.testEventCode }
+    );
+    // Mesmo aviso do Meta, com o clique do TikTok. A tela conta o "de
+    // anuncio" pelo payload (migration 059), nao por esta frase.
+    const semTtclid = !(linha.payload as EventoTiktok)?.user?.ttclid;
+    return r.ok
+      ? gravarSucesso(
+          (r.corpo ?? null) as Record<string, unknown> | null,
+          semTtclid ? "sem ttclid: nao veio de clique em anuncio do TikTok" : null
+        )
+      : gravarFalha(
+          r.erro ?? "falha desconhecida",
+          r.podeTentarDeNovo,
+          (r.corpo ?? null) as Record<string, unknown> | null
+        );
   }
 
   // ---- Meta ---------------------------------------------------------------

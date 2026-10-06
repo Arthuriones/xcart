@@ -1,6 +1,7 @@
 import {
   montarFbc,
   montarUserData,
+  montarUserTiktok,
   type UserData,
 } from "@/lib/tracking/normalizar";
 import type { EventoCapi } from "@/lib/tracking/meta-capi";
@@ -8,9 +9,11 @@ import {
   montarIdDeProduto,
   montarIdsDeProdutos,
 } from "@/lib/tracking/id-produto";
+import { definicaoDoEvento } from "@/lib/tracking/eventos";
+import { MOEDAS_TIKTOK, type EventoTiktok } from "@/lib/tracking/tiktok-evento";
 
 // ============================================================================
-// Pedido da Shopify -> evento Purchase do CAPI.
+// Pedido da Shopify -> evento Purchase do CAPI (Meta) e da Events API (TikTok).
 //
 // Funcao pura de proposito: o webhook so entrega o payload e grava o
 // resultado. Assim da para testar contra um pedido de verdade sem rede.
@@ -108,6 +111,9 @@ export function sinaisDoPedido(pedido: PedidoShopify) {
     gbraid: atributo(pedido, "gbraid"),
     wbraid: atributo(pedido, "wbraid"),
     ttclid: atributo(pedido, "ttclid"),
+    // O cookie `_ttp` do pixel do TikTok, levado ao carrinho pelo snippet como
+    // o `_fbp`. Vai em `user.ttp`.
+    ttp: atributo(pedido, "_ttp"),
     visitorId: atributo(pedido, "_xc_vid") || atributo(pedido, "visitor_id"),
     // Do cookie `_gcl_au`, que a tag do Google escreve. Viaja ate o pedido
     // pelo mesmo caminho dos click ids. Ver google-ads.ts.
@@ -136,6 +142,9 @@ export interface IdentidadeGuardada {
   gbraid?: string | null;
   wbraid?: string | null;
   auid?: string | null;
+  /** O clique do TikTok e o cookie `_ttp` dele. */
+  ttclid?: string | null;
+  ttp?: string | null;
   /** O nosso id de visitante e o da Shopify: casam com o external_id do funil. */
   visitorId?: string | null;
   clientId?: string | null;
@@ -169,8 +178,9 @@ export function cliquesDaLanding(landingSite: string | null | undefined): {
   gbraid: string | null;
   wbraid: string | null;
   fbclid: string | null;
+  ttclid: string | null;
 } {
-  const vazio = { gclid: null, gbraid: null, wbraid: null, fbclid: null };
+  const vazio = { gclid: null, gbraid: null, wbraid: null, fbclid: null, ttclid: null };
   const bruto = (landingSite || "").trim();
   if (!bruto || !bruto.includes("?")) return vazio;
 
@@ -195,6 +205,7 @@ export function cliquesDaLanding(landingSite: string | null | undefined): {
     gbraid: ler("gbraid"),
     wbraid: ler("wbraid"),
     fbclid: ler("fbclid"),
+    ttclid: ler("ttclid"),
   };
 }
 
@@ -235,6 +246,45 @@ function origemPublica(url: string | null | undefined): string | null {
 }
 
 type LinhaDoPedido = NonNullable<PedidoShopify["line_items"]>[number];
+
+/**
+ * O telefone do comprador, com o pais de onde ele veio.
+ *
+ * O telefone pode estar em quatro lugares e faltar em tres deles. A entrega
+ * vai por ultimo, mas vai: com cobranca presente, `endereco` e a cobranca, e
+ * o telefone que so o endereco de entrega trazia se perdia.
+ *
+ * O numero anda com o PAIS do lugar de onde veio. Sem "+", o normalizador
+ * cola o DDI do pais recebido: o telefone espanhol da entrega com o pais da
+ * cobranca francesa virava um celular frances valido -- de outra pessoa.
+ */
+function telefoneDoPedido(
+  pedido: PedidoShopify,
+  pais: string | null
+): { numero: string | null | undefined; pais: string | null } | undefined {
+  return [
+    { numero: pedido.customer?.phone, pais },
+    { numero: pedido.phone, pais },
+    { numero: pedido.billing_address?.phone, pais: pedido.billing_address?.country_code || pais },
+    { numero: pedido.shipping_address?.phone, pais: pedido.shipping_address?.country_code || pais },
+  ].find((t) => t.numero);
+}
+
+/**
+ * A URL que acompanha a compra: a origem PUBLICA da loja mais o caminho de
+ * chegada da sessao. null = nem a URL de status nem o dominio cadastrado.
+ *
+ * No dominio publico, nao no .myshopify.com: o funil inteiro sai no dominio
+ * publico, e a compra em outro dominio quebra regra de dominio verificado e
+ * conversao personalizada por URL.
+ */
+function urlDaCompra(pedido: PedidoShopify, dominioLoja: string | null | undefined): string | null {
+  const origem =
+    origemPublica(pedido.order_status_url) || (dominioLoja ? `https://${dominioLoja}` : null);
+  if (!origem) return null;
+  const caminho = (pedido.landing_site || "/").startsWith("/") ? pedido.landing_site || "/" : "/";
+  return `${origem}${caminho}`;
+}
 
 /**
  * `contents` do Purchase: uma entrada por id, com o preco PAGO por unidade.
@@ -309,20 +359,7 @@ export function montarPurchase(
   const identidade = contexto.identidade || {};
 
   const pais = endereco?.country_code || null;
-
-  // O telefone pode estar em quatro lugares e faltar em tres deles. A entrega
-  // vai por ultimo, mas vai: com cobranca presente, `endereco` e a cobranca, e
-  // o telefone que so o endereco de entrega trazia se perdia.
-  //
-  // O numero anda com o PAIS do lugar de onde veio. Sem "+", o normalizador
-  // cola o DDI do pais recebido: o telefone espanhol da entrega com o pais da
-  // cobranca francesa virava um celular frances valido -- de outra pessoa.
-  const fonteDoTelefone = [
-    { numero: pedido.customer?.phone, pais },
-    { numero: pedido.phone, pais },
-    { numero: pedido.billing_address?.phone, pais: pedido.billing_address?.country_code || pais },
-    { numero: pedido.shipping_address?.phone, pais: pedido.shipping_address?.country_code || pais },
-  ].find((t) => t.numero);
+  const fonteDoTelefone = telefoneDoPedido(pedido, pais);
 
   // O fbc de verdade e o cookie. Sem ele, reconstruimos a partir do fbclid --
   // senao a venda perde a ligacao com o anuncio que a gerou.
@@ -424,20 +461,86 @@ export function montarPurchase(
     };
   }
 
-  const origem =
-    origemPublica(pedido.order_status_url) ||
-    (contexto.dominioLoja ? `https://${contexto.dominioLoja}` : null);
-  if (origem) {
-    // O caminho de chegada ajuda o Meta a casar com a sessao do navegador.
-    //
-    // No dominio PUBLICO, nao no .myshopify.com: o funil inteiro sai no
-    // dominio publico, e o Purchase em outro dominio quebra regra de dominio
-    // verificado e conversao personalizada por URL.
-    const caminho = (pedido.landing_site || "/").startsWith("/")
-      ? pedido.landing_site || "/"
-      : "/";
-    evento.event_source_url = `${origem}${caminho}`;
-  }
+  // O caminho de chegada ajuda o Meta a casar com a sessao do navegador.
+  const url = urlDaCompra(pedido, contexto.dominioLoja);
+  if (url) evento.event_source_url = url;
 
   return { evento, userData };
+}
+
+/**
+ * Monta a compra para a Events API do TikTok.
+ *
+ * Os mesmos dados do Purchase do Meta, no formato do TikTok:
+ *   - `event_id` IGUAL ao do Meta (purchase_<id do pedido>): a dedupe do
+ *     TikTok e por pixel + evento + event_id, e o reenvio da fila nao conta duas;
+ *   - telefone em E.164 COM '+' antes do hash (ver montarUserTiktok);
+ *   - ttclid em cascata, como o fbc: cart attribute -> identidade -> URL de
+ *     chegada;
+ *   - `value` e `currency` SO AQUI, que e a Shopify falando. Moeda fora da
+ *     lista do TikTok sai sem os dois (ver MOEDAS_TIKTOK);
+ *   - `contents[].price` e o preco PAGO por unidade; `value`, o total.
+ *
+ * `dominioLoja` e obrigatorio: `page.url` e exigido em evento web, e sem a URL
+ * de status do pedido e ele que vira a origem.
+ */
+export function montarPurchaseTiktok(
+  pedido: PedidoShopify,
+  contexto: ContextoPurchase & { dominioLoja: string }
+): EventoTiktok {
+  const idTemplate = contexto.idTemplate ?? null;
+  const endereco = pedido.billing_address || pedido.shipping_address || null;
+  const pais = endereco?.country_code || null;
+  const sinais = sinaisDoPedido(pedido);
+  const identidade = contexto.identidade || {};
+  const telefone = telefoneDoPedido(pedido, pais);
+  const quandoMs = pedido.created_at ? new Date(pedido.created_at).getTime() : Date.now();
+
+  const user = montarUserTiktok(
+    {
+      email: pedido.customer?.email || pedido.email,
+      telefone: telefone?.numero ?? null,
+      paisDoTelefone: telefone?.pais ?? null,
+      pais,
+      // Os mesmos ids do Meta, para a compra casar com o funil da pessoa.
+      externalIds: [
+        pedido.customer?.id ? String(pedido.customer.id) : null,
+        sinais.visitorId || identidade.visitorId,
+        identidade.clientId,
+      ],
+    },
+    {
+      ttclid:
+        sinais.ttclid || identidade.ttclid || cliquesDaLanding(pedido.landing_site).ttclid,
+      ttp: sinais.ttp || identidade.ttp,
+      clientIp:
+        pedido.client_details?.browser_ip || pedido.browser_ip || identidade.clientIp,
+      userAgent: pedido.client_details?.user_agent || identidade.userAgent,
+    }
+  );
+
+  const itens = pedido.line_items || [];
+  const moeda = (pedido.currency || "").trim().toUpperCase();
+  const valor = Number(pedido.total_price ?? 0);
+  const comValor = MOEDAS_TIKTOK.has(moeda) && Number.isFinite(valor);
+
+  return {
+    event: definicaoDoEvento("purchase").nomeNoTiktok,
+    // Em segundos, como no Meta.
+    event_time: Math.floor(quandoMs / 1000),
+    event_id: idDoEvento(pedido.id),
+    user,
+    page: { url: urlDaCompra(pedido, contexto.dominioLoja) || `https://${contexto.dominioLoja}/` },
+    properties: {
+      ...(comValor ? { currency: moeda, value: valor } : {}),
+      content_type: "product",
+      contents: conteudoDoPedido(idTemplate, itens).map((c) => ({
+        content_id: c.id,
+        quantity: c.quantity,
+        ...(c.item_price !== undefined ? { price: c.item_price } : {}),
+      })),
+      num_items: itens.reduce((s, i) => s + (Number(i.quantity) || 0), 0),
+      order_id: String(pedido.id ?? ""),
+    },
+  };
 }

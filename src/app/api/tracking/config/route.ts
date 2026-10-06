@@ -77,7 +77,8 @@ export async function POST(request: NextRequest) {
         {
           error:
             "Para ligar: cadastre um destino que receba a compra — no Google o ID da " +
-            "conta mais o rótulo da compra, no Meta o ID do pixel mais o token do CAPI.",
+            "conta mais o rótulo da compra, no Meta o ID do pixel mais o token do CAPI, " +
+            "no TikTok o Pixel ID mais o Access Token.",
         },
         { status: 400 }
       );

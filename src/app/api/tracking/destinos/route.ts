@@ -2,9 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { apenasNumeroDaConversao } from "@/lib/tracking/normalizar";
-import { chaveDoEvento, lerRotulos } from "@/lib/tracking/eventos";
+import {
+  chaveDoEvento,
+  lerRotulos,
+  vaiPeloServidor,
+  type PlataformaDestino,
+} from "@/lib/tracking/eventos";
 import { TEMPLATE_PADRAO, validarTemplate } from "@/lib/tracking/id-produto";
 import { validarEscritaNoPixel } from "@/lib/tracking/meta-capi";
+import {
+  CODIGOS_DE_CREDENCIAL_TIKTOK,
+  validarEscritaNoTiktok,
+} from "@/lib/tracking/tiktok-api";
 
 export const runtime = "nodejs";
 
@@ -28,6 +37,12 @@ export const runtime = "nodejs";
 // A conta AW- e os rotulos por evento sao lidos pela tag do Google no
 // navegador (/api/tracking/google-config); nada sai do servidor para o Google.
 // Aqui so se grava e valida.
+//
+// META E TIKTOK: PIXEL + TOKEN, CONFERIDO ANTES DE GRAVAR
+//
+// Os dois saem pelo servidor. O token mora em tracking_destination_secrets
+// (RLS sem policy: so o service_role le) e nunca volta para a tela. Token que a
+// plataforma recusa nao cria nem muda destino nenhum.
 //
 // TUDO PASSA PELO SERVICE ROLE
 //
@@ -64,7 +79,8 @@ interface CorpoDestino {
   idTemplate?: string | null;
   ativo?: boolean;
   /**
-   * Token do CAPI do Meta. Vazio/ausente na EDICAO = nao mexer no gravado.
+   * Token do CAPI do Meta ou da Events API do TikTok. Vazio/ausente na EDICAO =
+   * nao mexer no gravado.
    *
    * Nunca volta na leitura: a tela so recebe um booleano dizendo se existe.
    * Vazio nao apaga de proposito -- a tela manda o campo vazio em todo
@@ -189,6 +205,67 @@ function pixelNaoEncontrado(erro: string | undefined): boolean {
 }
 
 /**
+ * Confere o token do TikTok ANTES de gravar. Mesmo contrato do Meta: null =
+ * vale; senao a resposta de erro pronta.
+ *
+ * O TikTok nao tem endpoint de checagem: vai um evento CUSTOM
+ * (`XcartCredentialCheck`), nunca uma compra, e com o codigo de teste do
+ * lojista quando ele preencheu -- ai cai so na aba Test Events. Ver
+ * `validarEscritaNoTiktok`.
+ */
+async function conferirTokenNoTiktok(
+  pixelCode: string,
+  token: string,
+  testEventCode: string | null
+): Promise<NextResponse | null> {
+  const r = await validarEscritaNoTiktok(pixelCode, token, testEventCode);
+  if (r.ok) return null;
+
+  if (r.podeTentarDeNovo) {
+    // Rede, timeout, limite de taxa, 5xxxx: o TikTok nao disse que o token e
+    // ruim, so nao respondeu.
+    return NextResponse.json(
+      {
+        error:
+          `O TikTok não respondeu ao conferir o token (${r.erro ?? "sem resposta"}). ` +
+          "Nada foi gravado — tente de novo em instantes.",
+      },
+      { status: 503 }
+    );
+  }
+
+  // 40001: o token e de OUTRA conta de anuncio (ou de quem nao e Admin/
+  // Operator), ou o Pixel Code nao e desta conta. Dizer "token invalido"
+  // mandaria trocar o token certo.
+  if (r.codigo === 40001) {
+    return NextResponse.json(
+      {
+        error:
+          "O token não tem acesso a este pixel. Confira o Pixel ID e gere o token no próprio pixel, no Gerenciador de eventos do TikTok (pixel › Configurações).",
+      },
+      { status: 400 }
+    );
+  }
+
+  return NextResponse.json(
+    { error: `O TikTok recusou o token: ${r.erro ?? `HTTP ${r.status}`}` },
+    { status: 400 }
+  );
+}
+
+/** Confere o token da plataforma antes de gravar. null = vale. */
+function conferirToken(
+  plataforma: PlataformaDestino,
+  conta: string,
+  token: string,
+  testEventCode: string | null
+): Promise<NextResponse | null> {
+  return plataforma === "tiktok"
+    ? conferirTokenNoTiktok(conta, token, testEventCode)
+    : conferirTokenNoMeta(conta, token);
+}
+
+/**
  * Janela de reenvio, em dias.
  *
  * O Meta aceita `event_time` de ate 7 dias atras e recusa o resto. Seis deixa
@@ -198,7 +275,12 @@ function pixelNaoEncontrado(erro: string | undefined): boolean {
 const JANELA_REENVIO_DIAS = 6;
 
 /**
- * Erros do Meta que significam "a credencial e o problema", nao o evento.
+ * Erros que significam "a credencial e o problema", nao o evento.
+ *
+ * TIKTOK: o corpo que a fila grava e {code, message, request_id}, entao o
+ * codigo fica em `response.code` (ver CODIGOS_DE_CREDENCIAL_TIKTOK).
+ *
+ * META:
  *
  *   190      token invalido, expirado ou revogado
  *   200, 10  permissao negada
@@ -213,11 +295,15 @@ const JANELA_REENVIO_DIAS = 6;
  * seguro porque a escrita no mesmo pixel acabou de ser validada com o token
  * novo.
  *
- * Sintaxe conferida contra o PostgREST do projeto antes de entrar aqui.
+ * A sintaxe do Meta foi conferida contra o PostgREST do projeto; a do TikTok e
+ * a mesma forma (`->>` e `in`), um nivel acima no JSON.
  */
-const FILTRO_CREDENCIAL =
-  "response->error->>code.in.(190,200,10)," +
-  "and(response->error->>code.eq.100,response->error->>error_subcode.eq.33)";
+const FILTRO_CREDENCIAL: Record<"meta" | "tiktok", string> = {
+  meta:
+    "response->error->>code.in.(190,200,10)," +
+    "and(response->error->>code.eq.100,response->error->>error_subcode.eq.33)",
+  tiktok: `response->>code.in.(${CODIGOS_DE_CREDENCIAL_TIKTOK.join(",")})`,
+};
 
 /**
  * Devolve para a fila as compras que falharam por causa do token antigo.
@@ -237,7 +323,8 @@ const FILTRO_CREDENCIAL =
  */
 async function reenfileirarFalhasDeCredencial(
   admin: ReturnType<typeof createAdminClient>,
-  destinoId: string
+  destinoId: string,
+  plataforma: "meta" | "tiktok"
 ): Promise<{ total: number; compras: number }> {
   const desde = new Date(
     Date.now() - JANELA_REENVIO_DIAS * 24 * 60 * 60 * 1000
@@ -254,7 +341,7 @@ async function reenfileirarFalhasDeCredencial(
     .eq("destination_id", destinoId)
     .eq("status", "falhou")
     .gte("created_at", desde)
-    .or(FILTRO_CREDENCIAL)
+    .or(FILTRO_CREDENCIAL[plataforma])
     .select("event_name");
 
   // O token ja foi gravado; falhar aqui nao desfaz isso. As compras ficam em
@@ -280,7 +367,7 @@ async function reenfileirarFalhasDeCredencial(
  * esta gravado".
  */
 function validar(
-  plataforma: "google" | "meta",
+  plataforma: PlataformaDestino,
   corpo: CorpoDestino,
   opcoes: { exigirToken: boolean; jaTemToken?: boolean }
 ):
@@ -329,17 +416,33 @@ function validar(
     return { conta: `AW-${numero}`, labels, testEventCode: null, idTemplate, token: null };
   }
 
-  // So digitos: o Events Manager as vezes mostra o id com espaco, e o Meta
-  // recusa a URL do endpoint se vier qualquer outra coisa.
-  const pixel = (corpo.conta || "").replace(/\D/g, "");
-  if (!pixel) {
-    return { erro: "ID do pixel inválido. Esperado só dígitos." };
+  let pixel: string;
+  if (plataforma === "tiktok") {
+    // O Pixel Code do TikTok e alfanumerico (ex.: CUSG5HBC77UD11VVRQEG).
+    // Arrancar as letras, como no Meta, gravaria outro pixel. So o espaco do
+    // copiar-colar sai; o resto tem que ser letra e digito.
+    pixel = (corpo.conta || "").replace(/\s+/g, "");
+    if (!/^[A-Za-z0-9]{10,30}$/.test(pixel)) {
+      return { erro: "Pixel ID do TikTok inválido. Esperado algo como CUSG5HBC77UD11VVRQEG." };
+    }
+  } else {
+    // So digitos: o Events Manager as vezes mostra o id com espaco, e o Meta
+    // recusa a URL do endpoint se vier qualquer outra coisa.
+    pixel = (corpo.conta || "").replace(/\D/g, "");
+    if (!pixel) {
+      return { erro: "ID do pixel inválido. Esperado só dígitos." };
+    }
   }
 
   if (opcoes.exigirToken && !token && !opcoes.jaTemToken) {
     // Pixel sem token nao envia NADA: a linha existiria na tela como
-    // "configurado" e o Meta nunca receberia um evento.
-    return { erro: "O Meta precisa do token do CAPI — sem ele nenhum evento sai." };
+    // "configurado" e a plataforma nunca receberia um evento.
+    return {
+      erro:
+        plataforma === "tiktok"
+          ? "O TikTok precisa do Access Token da Events API — sem ele nenhum evento sai."
+          : "O Meta precisa do token do CAPI — sem ele nenhum evento sai.",
+    };
   }
 
   return {
@@ -375,7 +478,11 @@ export async function POST(request: NextRequest) {
   if (!corpo.storeId) {
     return NextResponse.json({ error: "storeId ausente." }, { status: 400 });
   }
-  if (corpo.plataforma !== "google" && corpo.plataforma !== "meta") {
+  if (
+    corpo.plataforma !== "google" &&
+    corpo.plataforma !== "meta" &&
+    corpo.plataforma !== "tiktok"
+  ) {
     return NextResponse.json({ error: "Plataforma invalida." }, { status: 400 });
   }
 
@@ -401,8 +508,8 @@ export async function POST(request: NextRequest) {
   if ("erro" in v) return NextResponse.json({ error: v.erro }, { status: 400 });
 
   // Antes do insert: token recusado nao cria destino nenhum.
-  if (corpo.plataforma === "meta" && v.token) {
-    const recusa = await conferirTokenNoMeta(v.conta, v.token);
+  if (vaiPeloServidor(corpo.plataforma) && v.token) {
+    const recusa = await conferirToken(corpo.plataforma, v.conta, v.token, v.testEventCode);
     if (recusa) return recusa;
   }
 
@@ -447,7 +554,7 @@ export async function POST(request: NextRequest) {
   // continua desligada.
   const recebeCompra =
     (corpo.ativo ?? true) &&
-    (corpo.plataforma === "meta" ? Boolean(v.token) : Boolean(v.labels.purchase));
+    (vaiPeloServidor(corpo.plataforma) ? Boolean(v.token) : Boolean(v.labels.purchase));
   await admin
     .from("tracking_configs")
     .upsert(
@@ -492,7 +599,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Destino nao encontrado." }, { status: 404 });
   }
 
-  const plataforma = atual.plataforma as "google" | "meta";
+  const plataforma = atual.plataforma as PlataformaDestino;
 
   // So desligar/ligar: nao exige reenviar conta nem rotulo, senao o toggle da
   // tela precisaria carregar o formulario inteiro.
@@ -533,9 +640,9 @@ export async function PATCH(request: NextRequest) {
 
   // Antes de qualquer escrita: token recusado nao muda nada, nem o resto do
   // formulario -- senao o lojista veria "erro" e acharia que nada foi salvo.
-  const tokenNovo = plataforma === "meta" ? v.token : null;
+  const tokenNovo = vaiPeloServidor(plataforma) ? v.token : null;
   if (tokenNovo) {
-    const recusa = await conferirTokenNoMeta(v.conta, tokenNovo);
+    const recusa = await conferirToken(plataforma, v.conta, tokenNovo, v.testEventCode);
     if (recusa) return recusa;
   }
 
@@ -579,14 +686,19 @@ export async function PATCH(request: NextRequest) {
   // linha de volta para 'falhou' com "destino desativado", e a tela teria dito
   // "vao ser reenviadas" sem nada sair.
   let reenviados = { total: 0, compras: 0 };
-  if (tokenNovo && v.conta === atual.conta && mudancas.ativo === true) {
+  if (
+    tokenNovo &&
+    vaiPeloServidor(plataforma) &&
+    v.conta === atual.conta &&
+    mudancas.ativo === true
+  ) {
     const { data: config } = await admin
       .from("tracking_configs")
       .select("enabled")
       .eq("store_id", atual.store_id)
       .maybeSingle();
     if (config?.enabled) {
-      reenviados = await reenfileirarFalhasDeCredencial(admin, atual.id);
+      reenviados = await reenfileirarFalhasDeCredencial(admin, atual.id, plataforma);
     }
   }
 

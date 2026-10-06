@@ -26,9 +26,13 @@ import type { IdentidadeGuardada } from "@/lib/tracking/purchase";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
-/** As colunas de tracking_identities que viram identidade. */
-const COLUNAS =
-  "visitor_id, shopify_client_id, gclid, gbraid, wbraid, auid, fbp, fbc, fbclid, updated_at";
+/**
+ * As colunas de tracking_identities. `*` e nao a lista, como em destinos.ts:
+ * coluna nova que chegue por migration (o `ttp` da 059) antes ou depois do
+ * deploy nao derruba a leitura -- e uma leitura que falha aqui vira 503 no
+ * webhook de TODA compra, de toda loja, ate a migration entrar.
+ */
+const COLUNAS = "*";
 
 export interface LinhaIdentidade {
   visitor_id?: string | null;
@@ -40,6 +44,8 @@ export interface LinhaIdentidade {
   fbp?: string | null;
   fbc?: string | null;
   fbclid?: string | null;
+  ttclid?: string | null;
+  ttp?: string | null;
   updated_at?: string | null;
 }
 
@@ -78,14 +84,23 @@ export function consolidarIdentidades(
     wbraid: comGoogle?.wbraid || null,
     fbc: comMeta?.fbc || null,
     fbclid: comMeta?.fbclid || null,
+    ttclid: primeiro("ttclid"),
     auid: primeiro("auid"),
     fbp: primeiro("fbp"),
+    ttp: primeiro("ttp"),
     visitorId: primeiro("visitor_id"),
     clientId: primeiro("shopify_client_id"),
   };
 }
 
-/** A identidade tem algum clique, de qualquer plataforma? */
+/**
+ * A identidade tem clique do Meta ou do Google?
+ *
+ * O ttclid NAO conta aqui de proposito: isto decide se a cascata para no
+ * visitante ou segue para o checkout, e contar o TikTok mudaria de onde vem o
+ * clique do Meta e do Google. O ttclid do visitante e carregado junto no passo
+ * do checkout (ver `recuperarIdentidadeDoPedido`).
+ */
 export function temClique(id: IdentidadeGuardada | null | undefined): boolean {
   return Boolean(id && (id.gclid || id.gbraid || id.wbraid || id.fbc || id.fbclid));
 }
@@ -188,6 +203,11 @@ export async function recuperarIdentidadeDoPedido(
             ...doCheckout,
             visitorId: doVisitante?.visitorId || doCheckout.visitorId,
             fbp: doVisitante?.fbp || doCheckout.fbp,
+            // O TikTok nao para a cascata no visitante (ver temClique): o
+            // clique dele, quando o carrinho trouxe, continua sendo o do
+            // carrinho.
+            ttclid: doVisitante?.ttclid || doCheckout.ttclid,
+            ttp: doVisitante?.ttp || doCheckout.ttp,
             clientId,
           },
           origem: "checkout",

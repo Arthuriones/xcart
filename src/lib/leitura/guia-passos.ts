@@ -59,11 +59,11 @@ export interface LojaGuia {
 
 export interface DestinoGuia {
   storeId: string;
-  plataforma: "meta" | "google";
+  plataforma: "meta" | "google" | "tiktok";
   ativo: boolean;
-  /** Meta com token gravado; Google com rotulo da compra. */
+  /** Meta e TikTok com token gravado; Google com rotulo da compra. */
   recebeCompra: boolean;
-  /** Meta com codigo de teste: a compra cai na aba de teste, nao conta. */
+  /** Meta ou TikTok com codigo de teste: a compra cai na aba de teste, nao conta. */
   modoTeste: boolean;
 }
 
@@ -94,8 +94,8 @@ export interface FotoGuia {
   contas: ContaGuia[] | null;
   /** Lojas com taxa de pagamento gravada e lojas com custo (por SKU ou padrao). */
   custos: { comTaxa: string[]; comCusto: string[] } | null;
-  /** Ultima compra entregue ao Meta ou ao Google. `em: null` = nenhuma. */
-  ultimaVenda: { em: string | null; plataforma: "meta" | "google" | null } | null;
+  /** Ultima compra entregue ao Meta, ao Google ou ao TikTok. `em: null` = nenhuma. */
+  ultimaVenda: { em: string | null; plataforma: "meta" | "google" | "tiktok" | null } | null;
   rotas: RotaGuia[] | null;
   /** Destinos de rota com produtos ligados por SKU (mapa nao vazio). */
   destinosComSku: number | null;
@@ -184,12 +184,12 @@ export function quandoNaFrase(iso: string | null | undefined, agora: Date): stri
   return q.startsWith("hoje") || q.startsWith("ontem") ? q : `em ${q}`;
 }
 
-const NOME_PLATAFORMA = { meta: "Meta", google: "Google" } as const;
+const NOME_PLATAFORMA = { meta: "Meta", google: "Google", tiktok: "TikTok" } as const;
 
-function plataformas(lista: ("meta" | "google")[]): string {
+function plataformas(lista: (keyof typeof NOME_PLATAFORMA)[]): string {
   const set = new Set(lista);
   return listarNomes(
-    (["meta", "google"] as const).filter((p) => set.has(p)).map((p) => NOME_PLATAFORMA[p])
+    (["meta", "google", "tiktok"] as const).filter((p) => set.has(p)).map((p) => NOME_PLATAFORMA[p])
   );
 }
 
@@ -289,7 +289,7 @@ function passoRastreamento(foto: FotoGuia, b: Base, caminho: CaminhoGuia): Passo
     return {
       ...passo,
       estado: "atencao",
-      detalhe: "O Meta está em modo teste: a compra cai na aba de teste e não conta como conversão.",
+      detalhe: `O ${plataformas(emTeste.map((d) => d.plataforma))} está em modo teste: a compra cai na aba de teste e não conta como conversão.`,
       cta: "Tirar do modo teste",
     };
   }

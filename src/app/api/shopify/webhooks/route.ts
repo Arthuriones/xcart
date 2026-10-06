@@ -197,7 +197,7 @@ async function executarComRetentativa(
 }
 
 /**
- * Pedido criado -> Purchase no CAPI.
+ * Pedido criado -> Purchase no CAPI do Meta e na Events API do TikTok.
  *
  * Este e o unico evento de conversao que nao depende do navegador do
  * comprador: bloqueador de anuncio derruba o pixel e o ITP do Safari apaga o
@@ -216,9 +216,10 @@ async function tratarPedidoCriado(
   const { rastreamentoLigado, enfileirar, entregar } = await import(
     "@/lib/tracking/fila"
   );
-  const { montarPurchase, sinaisDoPedido } = await import(
+  const { montarPurchase, montarPurchaseTiktok, sinaisDoPedido } = await import(
     "@/lib/tracking/purchase"
   );
+  const { vaiPeloServidor } = await import("@/lib/tracking/eventos");
   const { contarSinais } = await import("@/lib/tracking/normalizar");
 
   if (!(await rastreamentoLigado(admin, loja.id))) {
@@ -258,7 +259,7 @@ async function tratarPedidoCriado(
     dominioLoja: loja.shop_domain,
   });
 
-  // Uma linha de fila por DESTINO Meta ativo que aceita a compra.
+  // Uma linha de fila por DESTINO ativo que aceita a compra: Meta e TikTok.
   //
   // Destino e linha, nao coluna, desde a 043: a loja pode ter dois pixels
   // Meta, e uma linha falhar nao pode impedir a outra de sair.
@@ -267,7 +268,7 @@ async function tratarPedidoCriado(
   // checkout (checkout_completed), pela tag do Google no navegador.
   const { destinosDaLoja, destinoAceita } = await import("@/lib/tracking/destinos");
   const querem = (await destinosDaLoja(admin, loja.id, { comToken: true })).filter(
-    (d) => d.plataforma === "meta" && destinoAceita(d)
+    (d) => vaiPeloServidor(d.plataforma) && destinoAceita(d)
   );
 
   if (querem.length === 0) {
@@ -276,30 +277,42 @@ async function tratarPedidoCriado(
 
   // Compra de teste que o filtro do pedido nao pega: o dono pagando de verdade
   // depois do ?xcart_teste=1 (atributo _xc_teste), ou com um gclid TESTE_*.
-  // Fica na fila para conferir e so sai para o Meta com codigo de teste.
-  // Ver teste.ts.
+  // Fica na fila para conferir e so sai para o Meta ou o TikTok com codigo de
+  // teste. Ver teste.ts.
   const { marcasDoPedido, enviaAoDestino, payloadComMarcas, registrarSemEnviar } =
     await import("@/lib/tracking/teste");
   const marcas = marcasDoPedido(pedido, [
-    sinais.gclid, sinais.gbraid, sinais.wbraid, sinais.fbclid, sinais.fbc,
+    sinais.gclid, sinais.gbraid, sinais.wbraid, sinais.fbclid, sinais.fbc, sinais.ttclid,
     identidade?.gclid, identidade?.gbraid, identidade?.wbraid, identidade?.fbclid, identidade?.fbc,
+    identidade?.ttclid,
   ]);
 
   const destinos = querem.map((d) => {
     const envia = enviaAoDestino(d, marcas.teste);
+    // O payload e no formato da PLATAFORMA. O nome na fila continua
+    // "Purchase" e o event_id o mesmo (purchase_<id>) para os dois: a tela,
+    // os alertas e a dedupe do indice unico leem por eles.
+    //
     // O id de produto e do DESTINO: dois pixels Meta na mesma loja podem
     // apontar para catalogos montados de formas diferentes. Sem template
-    // configurado reusa o evento ja montado -- e o caso comum, e remontar so
-    // repetiria os hashes do user_data.
-    const base = d.idTemplate
-      ? montarPurchase(pedido, {
-          identidade,
-          dominioLoja: loja.shop_domain,
-          idTemplate: d.idTemplate,
-        }).evento
-      : evento;
+    // configurado o Meta reusa o evento ja montado -- e o caso comum, e
+    // remontar so repetiria os hashes do user_data.
+    const base =
+      d.plataforma === "tiktok"
+        ? montarPurchaseTiktok(pedido, {
+            identidade,
+            dominioLoja: loja.shop_domain,
+            idTemplate: d.idTemplate,
+          })
+        : d.idTemplate
+          ? montarPurchase(pedido, {
+              identidade,
+              dominioLoja: loja.shop_domain,
+              idTemplate: d.idTemplate,
+            }).evento
+          : evento;
     return {
-      destination: "meta" as const,
+      destination: d.plataforma === "tiktok" ? ("tiktok" as const) : ("meta" as const),
       destinationId: d.id,
       destino: d,
       envia,
@@ -344,7 +357,9 @@ async function tratarPedidoCriado(
           storeId: loja.id,
           destination: alvo.destination,
           destinationId: alvo.destinationId,
-          evento,
+          // So o nome ("Purchase") e o id: o payload de cada plataforma vai
+          // em `payload`.
+          evento: { event_name: evento.event_name, event_id: evento.event_id },
           orderId: String(pedido.id ?? ""),
           payload: alvo.payload,
         });

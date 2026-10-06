@@ -34,6 +34,24 @@ export type ChaveEvento =
   | "payment_info"
   | "purchase";
 
+/**
+ * As plataformas de destino. Um tipo so: a tela, a fila, o coletor e a rota de
+ * cadastro precisam concordar, e a uniao repetida em cada arquivo deixava o
+ * TikTok virar "Meta" em silencio onde alguem escreveu `=== "google" ? : `.
+ */
+export type PlataformaDestino = "google" | "meta" | "tiktok";
+
+/**
+ * As que saem PELO SERVIDOR, pela fila (Conversions API do Meta, Events API
+ * do TikTok). O Google vai pelo navegador, pela tag do Google.
+ */
+export const PLATAFORMAS_SERVIDOR = ["meta", "tiktok"] as const;
+export type PlataformaServidor = (typeof PLATAFORMAS_SERVIDOR)[number];
+
+export function vaiPeloServidor(p: unknown): p is PlataformaServidor {
+  return PLATAFORMAS_SERVIDOR.includes(p as PlataformaServidor);
+}
+
 export interface DefinicaoEvento {
   chave: ChaveEvento;
   /** Como aparece na tela, e o nome sugerido para a action no Google Ads. */
@@ -68,6 +86,21 @@ export interface DefinicaoEvento {
     | "AddPaymentInfo"
     | "Purchase";
   /**
+   * Nome do evento na Events API do TikTok. Mesma regra do Meta: nome fora da
+   * lista padrao vira evento custom, que chega e nao otimiza nada (e a caixa
+   * conta).
+   *
+   * A compra e "Purchase", e nao "CompletePayment": o TikTok renomeou em
+   * 01/05/2025. O nome velho ainda e aceito e convertido, mas configuracao nova
+   * usa o novo. "PlaceAnOrder" sai em 2027 -- nao usar.
+   */
+  nomeNoTiktok:
+    | "ViewContent"
+    | "AddToCart"
+    | "InitiateCheckout"
+    | "AddPaymentInfo"
+    | "Purchase";
+  /**
    * Manda valor e moeda junto?
    *
    * So a compra. Os eventos de navegador chegam por endpoint publico, e valor
@@ -84,6 +117,7 @@ export const EVENTOS: DefinicaoEvento[] = [
     descricao: "O visitante abriu uma página de produto.",
     origem: "navegador",
     nomeNoMeta: "ViewContent",
+    nomeNoTiktok: "ViewContent",
     temValor: false,
   },
   {
@@ -92,6 +126,7 @@ export const EVENTOS: DefinicaoEvento[] = [
     descricao: "O visitante colocou um produto no carrinho.",
     origem: "navegador",
     nomeNoMeta: "AddToCart",
+    nomeNoTiktok: "AddToCart",
     temValor: false,
   },
   {
@@ -100,6 +135,7 @@ export const EVENTOS: DefinicaoEvento[] = [
     descricao: "O visitante saiu do carrinho para o checkout.",
     origem: "navegador",
     nomeNoMeta: "InitiateCheckout",
+    nomeNoTiktok: "InitiateCheckout",
     temValor: false,
   },
   {
@@ -110,6 +146,7 @@ export const EVENTOS: DefinicaoEvento[] = [
     // So o Web Pixel alcanca o checkout. O snippet do tema nunca dispara este.
     origem: "pixel",
     nomeNoMeta: "AddPaymentInfo",
+    nomeNoTiktok: "AddPaymentInfo",
     temValor: false,
   },
   {
@@ -118,6 +155,7 @@ export const EVENTOS: DefinicaoEvento[] = [
     descricao: "O pedido entrou. Vem do webhook, não do navegador.",
     origem: "webhook",
     nomeNoMeta: "Purchase",
+    nomeNoTiktok: "Purchase",
     temValor: true,
   },
 ];
@@ -267,7 +305,7 @@ export function idDoEventoDeNavegador(
 
 /**
  * O begin_checkout do clique num botao de checkout EXPRESSO (Shop Pay, Apple
- * Pay, Google Pay...). So o Meta recebe; o Google nao.
+ * Pay, Google Pay...). O Meta e o TikTok recebem (pelo servidor); o Google nao.
  *
  * Existe porque esses botoes pulam a pagina do checkout: o Shop Pay roda em
  * shop.app e a carteira abre a janela do sistema, e o Web Pixel nao roda em

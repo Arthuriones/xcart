@@ -418,8 +418,12 @@ describe("tracking_painel_v2 sem o expresso cancelado (migration 058)", () => {
       .toLowerCase();
   const retorno = (sql: string) => /returns table \((.*?)\) language/.exec(limpo(sql))?.[1];
 
-  it("a 058 e a definicao vigente", () => {
-    expect(definicoes[definicoes.length - 1]).toBe("058_tracking_painel_sem_cancelado.sql");
+  it("a 059 (TikTok) e a definicao vigente, e mantem a regra da 058", () => {
+    expect(definicoes[definicoes.length - 1]).toBe("059_tracking_tiktok.sql");
+    // O clique do TikTok sai do payload que foi para ele, como o do Meta.
+    expect(limpo(vigente)).toContain(
+      "when 'tiktok' then nullif(e.payload -> 'user' ->> 'ttclid', '') is not null"
+    );
   });
 
   it("tira do painel o 'enviado' sem sent_at que nao e teste", () => {

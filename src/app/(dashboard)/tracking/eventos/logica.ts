@@ -58,6 +58,7 @@ export const ORDEM_FONTE: EventoFeed["fonte"][] = ["tema", "pixel", "webhook"];
 export function nomePlataforma(p: string): string {
   if (p === "meta") return "Meta";
   if (p === "google") return "Google";
+  if (p === "tiktok") return "TikTok";
   return p ? p.charAt(0).toUpperCase() + p.slice(1) : "—";
 }
 
@@ -227,6 +228,7 @@ export function detalheClique(e: Pick<EventoFeed, "com_clique" | "plataforma" | 
   if (e.com_clique) {
     if (e.plataforma === "meta") return "Sim: leva o identificador do clique do Meta (fbc)";
     if (e.plataforma === "google") return "Sim: leva o identificador do clique do Google (gclid, gbraid ou wbraid)";
+    if (e.plataforma === "tiktok") return "Sim: leva o identificador do clique do TikTok (ttclid)";
     return "Sim";
   }
   return ehCompra(e) ? "Não: a compra chega sem ligação com um anúncio" : "Não";
@@ -465,7 +467,7 @@ export function opcoesDe(dim: Dimensao, eventos: EventoFeed[], f: Filtro): Opcao
         return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
       });
     } else if (dim === "plataforma") {
-      const ordem = ["meta", "google"];
+      const ordem = ["meta", "google", "tiktok"];
       vistos.sort((a, b) => {
         const ia = ordem.indexOf(a);
         const ib = ordem.indexOf(b);

@@ -124,11 +124,13 @@ export const lerFotoGuia = cache(async (): Promise<FotoGuia> => {
 
   if (destinosRes.error) log("destinos de rastreamento", destinosRes.error);
   const destinosBrutos = destinosRes.error ? null : destinosRes.data ?? [];
-  const idsMeta = (destinosBrutos ?? []).filter((d) => d.plataforma === "meta").map((d) => String(d.id));
+  // Meta e TikTok recebem a compra pelo token; o Google, pelo rotulo.
+  const comToken = (p: unknown) => p === "meta" || p === "tiktok";
+  const idsComToken = (destinosBrutos ?? []).filter((d) => comToken(d.plataforma)).map((d) => String(d.id));
 
   // Segunda ida: o que depende das lojas, das rotas e dos destinos.
   const [segredos, custosPorLoja, alvos, comSku, script, roteado, venda] = await Promise.all([
-    idsMeta.length > 0 ? lerTokens(idsMeta) : Promise.resolve(new Set<string>()),
+    idsComToken.length > 0 ? lerTokens(idsComToken) : Promise.resolve(new Set<string>()),
     lerLojasComCusto(supabase, idsAtivas),
     idsRotas.length > 0
       ? supabase
@@ -168,18 +170,19 @@ export const lerFotoGuia = cache(async (): Promise<FotoGuia> => {
   const destinos: DestinoGuia[] | null =
     destinosBrutos && segredos
       ? destinosBrutos.map((d) => {
-          const plataforma = d.plataforma === "google" ? "google" : "meta";
+          const plataforma: DestinoGuia["plataforma"] =
+            d.plataforma === "google" ? "google" : d.plataforma === "tiktok" ? "tiktok" : "meta";
           const labels = (d.labels ?? {}) as Record<string, unknown>;
           return {
             storeId: String(d.store_id),
             plataforma,
             ativo: Boolean(d.ativo),
             recebeCompra:
-              plataforma === "meta"
+              plataforma !== "google"
                 ? segredos.has(String(d.id))
                 : // Google: a tag do navegador dispara a compra pelo rotulo.
                   typeof labels.purchase === "string" && labels.purchase.trim() !== "",
-            modoTeste: plataforma === "meta" && Boolean(String(d.test_event_code ?? "").trim()),
+            modoTeste: plataforma !== "google" && Boolean(String(d.test_event_code ?? "").trim()),
           };
         })
       : null;
@@ -263,7 +266,9 @@ export const lerFotoGuia = cache(async (): Promise<FotoGuia> => {
       : {
           em: vendaLinha ? vendaLinha.sent_at || vendaLinha.created_at : null,
           plataforma:
-            vendaLinha?.destination === "meta" || vendaLinha?.destination === "google"
+            vendaLinha?.destination === "meta" ||
+            vendaLinha?.destination === "google" ||
+            vendaLinha?.destination === "tiktok"
               ? vendaLinha.destination
               : null,
         },

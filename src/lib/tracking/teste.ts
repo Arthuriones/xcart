@@ -1,4 +1,5 @@
 import type { createAdminClient } from "@/lib/supabase/admin";
+import { vaiPeloServidor, type PlataformaServidor } from "@/lib/tracking/eventos";
 
 // ============================================================================
 // Evento de TESTE e CONSENTIMENTO do visitante.
@@ -15,10 +16,10 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 //   - click id com TEST/TESTE, que e o que o dono digita no lugar do gclid.
 //
 // Evento de teste e GRAVADO na fila, com payload.teste = true: e em Eventos ao
-// vivo que o dono confere o proprio teste. Ao Meta so vai com o codigo de teste
-// do destino (cai na aba Test Events, que nao conta como conversao). Sem
-// codigo, nao vai. O Google, que sai do navegador, nem dispara a tag em teste:
-// o snippet e o Web Pixel leem a mesma marca.
+// vivo que o dono confere o proprio teste. Ao Meta e ao TikTok so vai com o
+// codigo de teste do destino (cai na aba Test Events, que nao conta como
+// conversao). Sem codigo, nao vai. O Google, que sai do navegador, nem dispara
+// a tag em teste: o snippet e o Web Pixel leem a mesma marca.
 //
 // CONSENTIMENTO
 //
@@ -29,12 +30,12 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 // consentimento. A tag do Google, no navegador, le o consentimento direto da
 // Customer Privacy API.
 //
-// O PAYLOAD DO META QUE SAI NAO GANHA CAMPO
+// O PAYLOAD DO META (E DO TIKTOK) QUE SAI NAO GANHA CAMPO
 //
 // O payload do Meta e enviado CRU para a API deles, e chave desconhecida no
-// evento derruba o evento inteiro ("Unexpected key"). Entao as marcas so entram
-// na linha que nao sai. O Meta em modo teste (com codigo) ja e teste pelo
-// destino.
+// evento derruba o evento inteiro ("Unexpected key"). O do TikTok tambem vai
+// cru, com o mesmo risco (40002 e permanente). Entao as marcas so entram na
+// linha que nao sai. O destino em modo teste (com codigo) ja e teste por si.
 // ============================================================================
 
 export type Consentimento = "concedido" | "negado";
@@ -71,22 +72,22 @@ export function lerConsentimento(valor: unknown): Consentimento | null {
 /**
  * Este destino recebe o evento?
  *
- * Fora de teste, sempre. Em teste, so o Meta com codigo de teste: ali o evento
- * cai na aba Test Events e nao conta como conversao.
+ * Fora de teste, sempre. Em teste, so o Meta ou o TikTok com codigo de teste:
+ * ali o evento cai na aba Test Events e nao conta como conversao.
  */
 export function enviaAoDestino(
   destino: { plataforma: string; testEventCode?: string | null },
   teste: boolean
 ): boolean {
   if (!teste) return true;
-  return destino.plataforma === "meta" && Boolean(destino.testEventCode?.trim());
+  return vaiPeloServidor(destino.plataforma) && Boolean(destino.testEventCode?.trim());
 }
 
 /**
  * O payload que vai para a fila, com as marcas.
  *
- * Meta que sai: intocado (ver o cabecalho). O resto ganha `teste` quando e
- * teste e `consentimento` quando foi lido.
+ * Meta ou TikTok que sai: intocado (ver o cabecalho). O resto ganha `teste`
+ * quando e teste e `consentimento` quando foi lido.
  */
 export function payloadComMarcas<T extends object>(
   plataforma: string,
@@ -94,7 +95,7 @@ export function payloadComMarcas<T extends object>(
   marcas: Marcas,
   envia: boolean
 ): T {
-  if (plataforma === "meta" && envia) return payload;
+  if (vaiPeloServidor(plataforma) && envia) return payload;
   return {
     ...payload,
     ...(marcas.teste ? { teste: true } : {}),
@@ -145,7 +146,7 @@ export async function registrarSemEnviar(
   admin: ReturnType<typeof createAdminClient>,
   entrada: {
     storeId: string;
-    destination: "meta";
+    destination: PlataformaServidor;
     destinationId: string;
     eventName: string;
     eventId: string;

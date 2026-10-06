@@ -50,13 +50,20 @@ export async function conferirLoja(storeId: string): Promise<DiagnosticoLoja | n
 /** Um pixel novo na loja (POST /api/tracking/destinos). */
 export async function criarPixel(
   dados:
-    | { storeId: string; plataforma: "meta"; nome: string; conta: string; token: string; teste: string }
+    | {
+        storeId: string;
+        plataforma: "meta" | "tiktok";
+        nome: string;
+        conta: string;
+        token: string;
+        teste: string;
+      }
     | { storeId: string; plataforma: "google"; nome: string; conta: string; labels: MapaDeRotulos }
 ): Promise<void> {
   const corpo =
-    dados.plataforma === "meta"
-      ? { accessToken: dados.token, testEventCode: dados.teste }
-      : { labels: dados.labels };
+    dados.plataforma === "google"
+      ? { labels: dados.labels }
+      : { accessToken: dados.token, testEventCode: dados.teste };
   const r = await fetch("/api/tracking/destinos", {
     method: "POST",
     headers: JSON_HEADERS,

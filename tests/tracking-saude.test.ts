@@ -454,3 +454,47 @@ describe("Google pela tag", () => {
     );
   });
 });
+
+// O TikTok sai pelo servidor, como o Meta: conta como destino de compra, pede
+// o token da Events API, tem modo teste pelo codigo e o proprio alarme de
+// "sem clique" -- o fbc do Meta nao credita o TikTok, nem o contrario.
+describe("TikTok na saude", () => {
+  const tiktok = (p: Partial<DestinoNaTela> = {}) =>
+    destino({ id: "t1", plataforma: "tiktok", nome: "TT", conta: "CUSG5HBC77UD11VVRQEG", ...p });
+  const semClique = { porEvento: { purchase: 3 }, semAtribPorEvento: { purchase: 3 } } as never;
+
+  it("recebendo as compras, a loja fica ok", () => {
+    expect(saudeDaLoja(loja({ destinos: [tiktok()] }), true, diag(), true)).toEqual({
+      saude: "ok",
+      motivos: [],
+      faltas: [],
+    });
+  });
+
+  it("sem token: incompleto e ninguem recebendo a compra", () => {
+    const s = saudeDaLoja(
+      loja({ destinos: [tiktok({ temToken: false, completo: false })] }),
+      true,
+      diag(),
+      true
+    );
+    expect(s.motivos.map((m) => m.texto)).toEqual([
+      "Nenhum destino está recebendo a compra",
+      'TikTok "TT" incompleto',
+    ]);
+  });
+
+  it("com codigo de teste, e modo teste", () => {
+    const s = saudeDaLoja(loja({ destinos: [tiktok({ testEventCode: "TEST1" })] }), true, diag(), true);
+    expect(s.motivos.map((m) => m.texto)).toContain(
+      "Só em modo teste — compras ainda não contam como conversão"
+    );
+  });
+
+  it("o alarme de sem clique e por plataforma", () => {
+    const l = loja({ destinos: [destino(), tiktok({ contagem: semClique })] });
+    const textos = saudeDaLoja(l, true, diag(), true).motivos.map((m) => m.texto);
+    expect(textos).toContain("Nenhuma venda creditada a anúncio no TikTok");
+    expect(textos).not.toContain("Nenhuma venda creditada a anúncio no Meta");
+  });
+});

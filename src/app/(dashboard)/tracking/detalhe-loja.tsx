@@ -16,7 +16,7 @@ import { ativarPixel, instalarScript, lerCabecalho, removerPixel, type Cabecalho
 import { CodigoDoPixel } from "./codigo-pixel";
 import { FormularioDestino } from "./destinos-ui";
 import { CaixaLogo, Logo } from "./logos";
-import { formatarInteiro, type LinhaLoja } from "./resumo";
+import { PLATAFORMAS, formatarInteiro, type LinhaLoja } from "./resumo";
 import { NOME_DA_PLATAFORMA, type Plataforma } from "./saude";
 import {
   avisosDaLoja,
@@ -328,7 +328,7 @@ export function DetalheLoja({
         })}
       </Bloco>
 
-      {(["meta", "google"] as const).map((p) => {
+      {PLATAFORMAS.map((p) => {
         const pixels = loja.destinos.filter((d) => d.plataforma === p);
         const ligadaNaTela = plats[p] ?? pixels.some((d) => d.ativo);
         return (

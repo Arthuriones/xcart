@@ -18,14 +18,15 @@ import { lerRotulos, separarRotulo, type ChaveEvento } from "@/lib/tracking/even
 import type { DestinoNaTela, LojaTracking } from "@/lib/tracking/queries";
 import { criarPixel } from "./acoes";
 import { Logo } from "./logos";
+import { PLATAFORMAS } from "./resumo";
 import type { Plataforma } from "./saude";
 
 // ============================================================================
 // "Adicionar pixel": plataforma, como (novo ou de outra loja) e os campos.
 //
 // "Pixel de outra loja" so existe no Google: la o pixel e o ID mais os
-// rotulos, que a tela ja tem. No Meta e o ID mais o TOKEN, e o token nunca
-// sai do servidor -- copiar exigiria rota nova de escrita.
+// rotulos, que a tela ja tem. No Meta e no TikTok e o ID mais o TOKEN, e o
+// token nunca sai do servidor -- copiar exigiria rota nova de escrita.
 //
 // No celular sobe de baixo, como folha; no desktop, centrado.
 // ============================================================================
@@ -37,6 +38,13 @@ const EVENTOS_GOOGLE: { chave: ChaveEvento; nome: string }[] = [
   { chave: "add_to_cart", nome: "Carrinho" },
   { chave: "view_item", nome: "Ver produto" },
 ];
+
+/** O nome no botao da plataforma. */
+const ROTULO_PLATAFORMA: Record<Plataforma, string> = {
+  meta: "Meta",
+  google: "Google Ads",
+  tiktok: "TikTok",
+};
 
 const CAMPO = "h-10 text-body";
 const OPCAO =
@@ -111,7 +119,7 @@ export function AdicionarPixel({
   async function salvar() {
     const falta =
       modo === "novo" &&
-      (plat === "meta"
+      (plat !== "google"
         ? !v.pid.trim() || !v.tok.trim()
         : !lidos || "erro" in lidos || !lidos.conta || !lidos.labels.purchase);
     if (falta) {
@@ -120,10 +128,10 @@ export function AdicionarPixel({
     }
     setSalvando(true);
     try {
-      if (plat === "meta") {
+      if (plat !== "google") {
         await criarPixel({
           storeId: loja.storeId,
-          plataforma: "meta",
+          plataforma: plat,
           nome: v.nome.trim(),
           conta: v.pid.trim(),
           token: v.tok.trim(),
@@ -204,9 +212,9 @@ export function AdicionarPixel({
         <DialogHeader>
           <DialogTitle>Adicionar pixel</DialogTitle>
           <DialogDescription>
-            {plat === "meta"
-              ? `As compras de ${loja.dominio} passam a chegar nesse pixel pelo servidor.`
-              : `A tag do Google passa a contar as compras de ${loja.dominio} no navegador.`}
+            {plat === "google"
+              ? `A tag do Google passa a contar as compras de ${loja.dominio} no navegador.`
+              : `As compras de ${loja.dominio} passam a chegar nesse pixel pelo servidor.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -216,7 +224,7 @@ export function AdicionarPixel({
               Plataforma
             </span>
             <div className="flex flex-wrap gap-2">
-              {(["meta", "google"] as const).map((p) => (
+              {PLATAFORMAS.map((p) => (
                 <button
                   key={p}
                   type="button"
@@ -229,7 +237,7 @@ export function AdicionarPixel({
                   }}
                 >
                   <Logo marca={p} />
-                  {p === "meta" ? "Meta" : "Google Ads"}
+                  {ROTULO_PLATAFORMA[p]}
                 </button>
               ))}
             </div>
@@ -288,6 +296,37 @@ export function AdicionarPixel({
                   opc: true,
                   mono: true,
                 }
+              )}
+            </>
+          )}
+
+          {modo === "novo" && plat === "tiktok" && (
+            <>
+              {campo("nome", "Nome", "ex.: Loja principal", "Só aparece no xcart.", { opc: true })}
+              {campo(
+                "pid",
+                "Pixel ID",
+                "ex.: CUSG5HBC77UD11VVRQEG",
+                "No TikTok Ads Manager: Ferramentas › Eventos › Fontes de dados, abaixo do nome do pixel.",
+                { mono: true, erroTxt: "Cole o Pixel ID." }
+              )}
+              <p className="-mt-3 text-label text-warn">
+                Usa o app TikTok da Shopify com este pixel? Desligue o compartilhamento de dados
+                dele, senão a compra conta em dobro.
+              </p>
+              {campo(
+                "tok",
+                "Access Token",
+                "token da Events API",
+                "No Gerenciador de eventos: abra o pixel › Configurações › Gerar token de acesso.",
+                { mono: true, senha: true, erroTxt: "Cole o Access Token." }
+              )}
+              {campo(
+                "teste",
+                "Código de teste",
+                "ex.: TEST12345",
+                "Na aba Testar eventos do pixel. Preenchido, os eventos vão para lá e param de contar como conversão. Deixe vazio ou tire depois do teste.",
+                { opc: true, mono: true }
               )}
             </>
           )}

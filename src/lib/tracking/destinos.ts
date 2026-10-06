@@ -1,6 +1,11 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { rotuloDoEvento, type MapaDeRotulos } from "@/lib/tracking/eventos";
+import {
+  rotuloDoEvento,
+  vaiPeloServidor,
+  type MapaDeRotulos,
+  type PlataformaDestino,
+} from "@/lib/tracking/eventos";
 import { contasGoogleParaNavegador, type ContaGoogleNoNavegador } from "@/lib/tracking/google-tag";
 
 // ============================================================================
@@ -24,10 +29,10 @@ import { contasGoogleParaNavegador, type ContaGoogleNoNavegador } from "@/lib/tr
 export interface Destino {
   id: string;
   storeId: string;
-  plataforma: "google" | "meta";
+  plataforma: PlataformaDestino;
   /** Apelido do lojista. Com dois da mesma plataforma, o id nao basta na tela. */
   nome: string | null;
-  /** AW-XXXXXXXXX no Google, id do pixel no Meta. */
+  /** AW-XXXXXXXXX no Google, id do pixel no Meta, Pixel Code no TikTok. */
   conta: string;
   labels: MapaDeRotulos;
   testEventCode: string | null;
@@ -40,7 +45,10 @@ export interface Destino {
    */
   idTemplate: string | null;
   ativo: boolean;
-  /** So no Meta, e so quando o chamador pediu. Nunca sai para o cliente. */
+  /**
+   * Token do Meta (CAPI) ou do TikTok (Events API), e so quando o chamador
+   * pediu. Nunca sai para o cliente.
+   */
   token?: string | null;
 }
 
@@ -58,7 +66,7 @@ function destinoDaLinha(d: Record<string, unknown>): Destino {
   return {
     id: String(d.id),
     storeId: String(d.store_id),
-    plataforma: d.plataforma as "google" | "meta",
+    plataforma: d.plataforma as PlataformaDestino,
     nome: (d.nome as string | null) ?? null,
     conta: String(d.conta ?? ""),
     labels: (d.labels as MapaDeRotulos | null) ?? {},
@@ -239,12 +247,13 @@ export async function destinoPorId(
 /**
  * Este destino quer este evento NA FILA DO SERVIDOR?
  *
- * So o Meta: um pixel cobre todos os eventos, entao basta estar configurado.
- * O Google nunca -- vai pelo navegador (tag do Google), fora da fila.
+ * Meta e TikTok: um pixel cobre todos os eventos, entao basta estar
+ * configurado (pixel + token). O Google nunca -- vai pelo navegador (tag do
+ * Google), fora da fila.
  */
 export function destinoAceita(destino: Destino): boolean {
   if (!destino.ativo) return false;
-  if (destino.plataforma !== "meta") return false;
+  if (!vaiPeloServidor(destino.plataforma)) return false;
   return Boolean(destino.conta && destino.token);
 }
 
@@ -265,7 +274,10 @@ export function tagDoGoogleDispara(destino: Destino, nomeDoEvento: string): bool
 /** Para a mensagem de erro da fila dizer o que falta, e nao so "sem config". */
 export function porQueRecusa(destino: Destino): string {
   if (!destino.ativo) return "destino desativado";
-  if (destino.plataforma !== "meta") return "o Google vai pelo navegador (tag do Google), não pelo servidor";
+  if (!vaiPeloServidor(destino.plataforma)) return "o Google vai pelo navegador (tag do Google), não pelo servidor";
   if (!destino.conta) return "destino sem conta configurada";
-  return destino.token ? "" : "destino do Meta sem token do CAPI";
+  if (destino.token) return "";
+  return destino.plataforma === "tiktok"
+    ? "destino do TikTok sem token da Events API"
+    : "destino do Meta sem token do CAPI";
 }

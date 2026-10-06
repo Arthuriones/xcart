@@ -64,6 +64,7 @@ function plural(n: number, um: string, varios: string): string {
 function nomePlataforma(p: string | null | undefined): string {
   if (p === "google") return "Google";
   if (p === "ga4") return "GA4";
+  if (p === "tiktok") return "TikTok";
   return "Meta";
 }
 
@@ -190,15 +191,17 @@ export async function coletarCondicoesDetalhado(
   });
 
   // ---- R3: compra que falhou no envio -------------------------------------
-  // So o Meta: o Google sai do navegador (tag do Google), fora da fila, e
-  // linha 'google' antiga que a fila fecha como 'falhou' nao e compra perdida.
+  // So o servidor (Meta e TikTok): o Google sai do navegador (tag do Google),
+  // fora da fila, e linha 'google' antiga que a fila fecha como 'falhou' nao e
+  // compra perdida. O token recusado do TikTok cai aqui, com a mensagem dele
+  // ("40001: ...") -- o Meta tem a R2 propria.
   await rodar("envio_falhando", async () => {
     const colunas = "id, store_id, destination, destination_id, last_error, created_at";
     const recentes = await admin
       .from("tracking_events")
       .select(colunas)
       .eq("event_name", "Purchase")
-      .eq("destination", "meta")
+      .in("destination", ["meta", "tiktok"])
       .eq("status", "falhou")
       .gte("created_at", desdeUmaHora)
       .order("created_at", { ascending: false })
@@ -270,9 +273,9 @@ export async function coletarCondicoesDetalhado(
   // ---- R4b: rastreamento parado -------------------------------------------
   // O snippet do tema e o Web Pixel deixam linha na fila COM visitor_id (o
   // webhook de compra, nao). Loja que mandou evento na semana e nada em 24 h:
-  // tema trocado, snippet apagado ou loja sem visita. So loja com Meta ativo:
-  // o Google sai do navegador e nao deixa rastro no banco, entao loja so com
-  // Google nunca teria linha -- e alertaria por engano.
+  // tema trocado, snippet apagado ou loja sem visita. So loja com Meta ou
+  // TikTok ativo: o Google sai do navegador e nao deixa rastro no banco, entao
+  // loja so com Google nunca teria linha -- e alertaria por engano.
   await rodar("rastreamento_parado", async () => {
     const { data: cfgs, error } = await admin
       .from("tracking_configs")
@@ -285,15 +288,15 @@ export async function coletarCondicoesDetalhado(
       .filter((id) => lojas.has(id) && !lojas.get(id)!.uninstalled_at);
     if (ligadas.length === 0) return;
 
-    const { data: metas, error: erroMeta } = await admin
+    const { data: doServidor, error: erroDestinos } = await admin
       .from("tracking_destinations")
       .select("store_id")
       .in("store_id", ligadas)
-      .eq("plataforma", "meta")
+      .in("plataforma", ["meta", "tiktok"])
       .eq("ativo", true);
-    if (erroMeta) throw new Error(erroMeta.message);
-    const comMeta = [
-      ...new Set(((metas || []) as { store_id: string }[]).map((m) => String(m.store_id))),
+    if (erroDestinos) throw new Error(erroDestinos.message);
+    const comServidor = [
+      ...new Set(((doServidor || []) as { store_id: string }[]).map((m) => String(m.store_id))),
     ];
 
     // A semana so barra a ABERTURA (loja parada ha muito nao "parou agora").
@@ -310,9 +313,9 @@ export async function coletarCondicoesDetalhado(
     // Uma leitura por loja ligada, limit 1 no indice (store_id, created_at):
     // cresce com o numero de lojas, nao com o trafego. Em lotes de 10.
     const ultimos: { storeId: string; em: string | null }[] = [];
-    for (let i = 0; i < comMeta.length; i += 10) {
+    for (let i = 0; i < comServidor.length; i += 10) {
       const lote = await Promise.all(
-        comMeta.slice(i, i + 10).map(async (storeId) => {
+        comServidor.slice(i, i + 10).map(async (storeId) => {
           const { data, error: e } = await admin
             .from("tracking_events")
             .select("created_at")

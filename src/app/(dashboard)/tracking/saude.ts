@@ -1,6 +1,11 @@
 import type { DestinoNaTela, LojaTracking } from "@/lib/tracking/queries";
 import type { DiagnosticoLoja } from "@/lib/tracking/diagnostico";
-import type { ChaveEvento } from "@/lib/tracking/eventos";
+import {
+  PLATAFORMAS_SERVIDOR,
+  vaiPeloServidor,
+  type ChaveEvento,
+  type PlataformaDestino,
+} from "@/lib/tracking/eventos";
 
 // ============================================================================
 // A saude de uma loja, sem React.
@@ -10,30 +15,39 @@ import type { ChaveEvento } from "@/lib/tracking/eventos";
 // recalculasse do seu jeito, o topo diria "tudo certo" com um card vermelho
 // embaixo. E arquivo puro e o que o vitest consegue importar sem montar tela.
 //
-// Os imports sao so de TIPO: queries.ts e diagnostico.ts tem "server-only", e
-// um import de valor daqui levaria isso para o bundle do cliente.
+// Os imports de queries.ts e diagnostico.ts sao so de TIPO: eles tem
+// "server-only", e um import de valor daqui levaria isso para o bundle do
+// cliente. eventos.ts e puro e pode vir com valor.
 // ============================================================================
 
-export type Plataforma = "google" | "meta";
+export type Plataforma = PlataformaDestino;
 
 export const NOME_DA_PLATAFORMA: Record<Plataforma, string> = {
   google: "Google Ads",
   meta: "Meta Ads",
+  tiktok: "TikTok Ads",
+};
+
+/** O nome curto, para frase: "no Meta", "TikTok CUSG5HBC...". */
+export const NOME_CURTO: Record<Plataforma, string> = {
+  google: "Google",
+  meta: "Meta",
+  tiktok: "TikTok",
 };
 
 /** Como chamar um destino numa frase. */
 export function apelido(d: DestinoNaTela): string {
-  const plataforma = d.plataforma === "google" ? "Google" : "Meta";
+  const plataforma = NOME_CURTO[d.plataforma];
   return d.nome ? `${plataforma} "${d.nome}"` : `${plataforma} ${d.conta}`;
 }
 
 /**
- * Meta com test_event_code: o evento cai na aba de TESTE do Events Manager e
- * nao conta como conversao. Contar essas compras como "rastreadas" diria que a
- * campanha esta medindo quando nao esta.
+ * Meta ou TikTok com codigo de teste: o evento cai na aba de TESTE do
+ * Gerenciador de eventos e nao conta como conversao. Contar essas compras como
+ * "rastreadas" diria que a campanha esta medindo quando nao esta.
  */
 export function emModoTeste(d: DestinoNaTela): boolean {
-  return d.plataforma === "meta" && Boolean(d.testEventCode);
+  return vaiPeloServidor(d.plataforma) && Boolean(d.testEventCode);
 }
 
 /**
@@ -46,17 +60,18 @@ export function pelaTag(d: Pick<DestinoNaTela, "plataforma">): boolean {
 }
 
 /**
- * O destino manda este evento? No Meta o pixel cobre todos; no Google a tag so
- * dispara o evento que tem rotulo.
+ * O destino manda este evento? No Meta e no TikTok o pixel cobre todos; no
+ * Google a tag so dispara o evento que tem rotulo.
  */
 export function enviaEvento(d: DestinoNaTela, chave: ChaveEvento): boolean {
-  if (d.plataforma === "meta") return true;
+  if (vaiPeloServidor(d.plataforma)) return true;
   return Boolean(d.labels[chave]);
 }
 
 /**
- * Os destinos para onde a compra SAI PELO SERVIDOR -- inclusive o Meta em
- * modo teste. O Google fica fora: vai pela tag (ver `tagComCompra`).
+ * Os destinos para onde a compra SAI PELO SERVIDOR (Meta e TikTok) --
+ * inclusive em modo teste. O Google fica fora: vai pela tag (ver
+ * `tagComCompra`).
  */
 export function aceitamCompra(loja: LojaTracking): DestinoNaTela[] {
   return loja.destinos.filter(
@@ -90,6 +105,9 @@ export function recebemCompra(loja: LojaTracking): DestinoNaTela[] {
 export function oQueFalta(d: DestinoNaTela): string | null {
   if (d.plataforma === "meta") {
     return d.temToken ? null : "falta o token do CAPI — sem ele nenhum evento sai";
+  }
+  if (d.plataforma === "tiktok") {
+    return d.temToken ? null : "falta o token da Events API — sem ele nenhum evento sai";
   }
   return Object.keys(d.labels).length > 0
     ? null
@@ -218,6 +236,22 @@ export function comprasSemTeste(d: DestinoNaTela): { enviadas: number; deAnuncio
   const n = numerosDoEvento(d, "purchase", false);
   const comClique = Math.max(0, n.total - (d.contagem.semAtribPorEvento.purchase ?? 0));
   return { enviadas: n.total, deAnuncio: n.deAnuncio ?? comClique };
+}
+
+/**
+ * Nenhuma compra da plataforma ligada a anuncio na loja.
+ *
+ * O mesmo teste do "todas" da Atribuicao: so acusa quando NENHUMA venda foi
+ * creditada. Parte sem click id e trafego organico, normal. Teste do dono fica
+ * fora: uma compra com clique TESTE nao pode calar o alarme. Com 2 pixels,
+ * NENHUMA conta, e nao a "melhor".
+ */
+export function semCliqueDeAnuncio(loja: LojaTracking, p: Plataforma): boolean {
+  const contas = recebemCompra(loja)
+    .filter((d) => d.plataforma === p)
+    .map(comprasSemTeste);
+  const enviadas = contas.length ? Math.max(...contas.map((c) => c.enviadas)) : 0;
+  return enviadas > 0 && contas.every((c) => c.deAnuncio === 0);
 }
 
 /** O destino da plataforma que mais recebeu compra. */
@@ -376,16 +410,12 @@ export function saudeDaLoja(
     const n = pelaTag(d) ? 0 : d.contagem.falharam;
     if (n > 0) warn.push(`${apelido(d)}: ${n === 1 ? "1 envio falhou" : `${n} envios falharam`}`);
   }
-  {
-    // So o Meta: o Google pela tag nao tem contagem no servidor.
-    const contas = recebem.filter((d) => d.plataforma === "meta").map(comprasSemTeste);
-    // O mesmo teste do "todas" da Atribuicao: so acusa quando NENHUMA venda
-    // foi creditada. Parte sem click id e trafego organico, normal. Teste do
-    // dono fica fora: uma compra com fbc TESTE nao pode calar o alarme. Com 2
-    // pixels, NENHUMA conta, e nao a "melhor".
-    const enviadas = contas.length ? Math.max(...contas.map((c) => c.enviadas)) : 0;
-    if (enviadas > 0 && contas.every((c) => c.deAnuncio === 0)) {
-      warn.push("Nenhuma venda creditada a anúncio no Meta");
+  // Por plataforma do servidor: o Google pela tag nao tem contagem aqui, e o
+  // clique de uma plataforma nao credita a outra (fbc no Meta, ttclid no
+  // TikTok).
+  for (const p of PLATAFORMAS_SERVIDOR) {
+    if (semCliqueDeAnuncio(loja, p)) {
+      warn.push(`Nenhuma venda creditada a anúncio no ${NOME_CURTO[p]}`);
     }
   }
   if (temDiag && (diag === null || diag.pedidos7d === null)) {
