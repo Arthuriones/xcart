@@ -1,25 +1,31 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CabecalhoPlataforma } from "../cabecalho-plataforma";
 import type { DadosAnuncios } from "../dados-anuncios";
 import { EnvioCompras } from "../envio-compras";
-import { estadoScriptsGoogle, situacaoDaConta, type Estado } from "../regras";
+import { estadoScriptsGoogle, situacaoDaConta } from "../regras";
 import { TelaGoogle } from "./tela-google";
+import { CardPerfilGoogle } from "./card-perfil-google";
 
 /** O conteudo de Google com os dados ja lidos (a page le; aqui so desenha). */
 export function ConteudoGoogle({ d }: { d: DadosAnuncios }) {
+  const temConexaoOAuth = (d.conexoes?.length ?? 0) > 0;
+  const ligado = d.daPlataforma.length > 0 || temConexaoOAuth;
   const estadoLeitura = estadoScriptsGoogle(d.daPlataforma.map((c) => situacaoDaConta(c, d.agoraMs, d.fuso)));
-  // As conversoes saem do navegador, pela tag do Google: basta um AW- ativo.
-  const estado: Estado = d.destinos.some((x) => x.ativo)
-    ? { tom: "ok", texto: "Tag do Google ativa" }
-    : { tom: "neutral", texto: "Não ligado" };
+
+  const textoEstado = temConexaoOAuth
+    ? "Conectado · Login com Google"
+    : d.daPlataforma.length > 0
+      ? "Conectado · Modo manual"
+      : "Não conectado";
 
   return (
     <>
       <CabecalhoPlataforma
         titulo="Google Ads"
-        estado={estado}
+        estado={ligado ? { tom: "ok", texto: textoEstado } : { tom: "neutral", texto: "Não conectado" }}
         dica="As conversões saem do navegador do comprador, pela tag do Google, com o AW- e os rótulos de cada conta cadastrados no Rastreamento."
       />
 
@@ -35,6 +41,14 @@ export function ConteudoGoogle({ d }: { d: DadosAnuncios }) {
         />
       ) : (
         <>
+          {/* Card estilo UTMify: Conecte seus perfis por aqui / Conectar com Google */}
+          <CardPerfilGoogle conexoesIniciais={d.conexoes} />
+
+          <Callout tom="info" titulo="São identificadores diferentes.">
+            O ID de cliente (123-456-7890) lê o gasto pelo script ou API; o AW- recebe as compras. Um não substitui o
+            outro.
+          </Callout>
+
           <TelaGoogle
             contas={d.contas}
             todas={d.daPlataforma.length}

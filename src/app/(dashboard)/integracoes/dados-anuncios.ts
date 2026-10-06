@@ -45,8 +45,21 @@ export interface DadosAnuncios {
   erroGasto: string | null;
   destinos: DestinoDeCompra[];
   erroDestinos: string | null;
+  /** Perfis OAuth conectados (Meta/Google). */
+  conexoes?: ConexaoOAuthResumo[];
   /** Relogio do servidor: o mesmo no HTML e na hidratacao. */
   agoraMs: number;
+}
+
+export interface ConexaoOAuthResumo {
+  id: string;
+  plataforma: string;
+  external_user_id: string;
+  nome: string | null;
+  email: string | null;
+  foto_url: string | null;
+  token_expira_em: string | null;
+  created_at: string;
 }
 
 async function fusosDasLojas(ids: string[]): Promise<{ fusos: Record<string, string>; erro: string | null }> {
@@ -110,11 +123,31 @@ export async function carregarAnuncios(
   const gastos: Record<string, GastoNaTela> = {};
   for (const c of contas) gastos[c.id] = gastoNaTela(gasto.m.get(c.id), filtro.moeda);
 
+  let conexoes: ConexaoOAuthResumo[] = [];
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const { data: conRows } = await supabase
+        .from("ad_connections")
+        .select("id, plataforma, external_user_id, nome, email, foto_url, token_expira_em, created_at")
+        .eq("user_id", user.id)
+        .eq("plataforma", plataforma)
+        .order("created_at", { ascending: false });
+      conexoes = (conRows || []) as ConexaoOAuthResumo[];
+    }
+  } catch {
+    conexoes = [];
+  }
+
   return {
     ok: true,
     dados: {
       contas,
       daPlataforma,
+      conexoes,
       lojas,
       lojaFiltrada,
       fusosLoja: fusos,
