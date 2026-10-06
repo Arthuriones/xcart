@@ -219,7 +219,9 @@
       gtag("js", new Date());
       aplicarConsentimento();
       for (var j = 0; j < contas.length; j++) {
-        gtag("config", contas[j].conta, { allow_enhanced_conversions: true });
+        // Sem page_view: dentro do sandbox ele sairia com a URL do sandbox, e o
+        // remarketing ja sai pelo tema. A pagina real vai em cada conversao.
+        gtag("config", contas[j].conta, { allow_enhanced_conversions: true, send_page_view: false });
       }
     }
     var fila = esperandoGoogle;
@@ -390,15 +392,23 @@
     return m ? m[1] : id || null;
   }
 
+  /** A URL de verdade do checkout: no sandbox, a do documento e a do iframe. */
+  function paginaDoEvento(event) {
+    var c = (event && event.context) || {};
+    var loc = (c.document && c.document.location) || (c.window && c.window.location) || {};
+    return loc.href || undefined;
+  }
+
   function googleNoCheckout(nome, event) {
     var checkout = (event && event.data && event.data.checkout) || {};
+    var pagina = paginaDoEvento(event);
     // O dono testando (?xcart_teste=1): nada sai para o Google.
     if (deTeste(checkout)) return;
     if (nome === "begin_checkout") {
       if (!checkout.token) return;
       // O mesmo id do coletor: um begin_checkout POR CHECKOUT, e o Google
       // descarta o repetido pelo transaction_id.
-      converter("begin_checkout", { transaction_id: "begin_checkout_ck_" + checkout.token });
+      converter("begin_checkout", { transaction_id: "begin_checkout_ck_" + checkout.token, page_location: pagina });
       return;
     }
     if (nome === "purchase") {
@@ -412,6 +422,7 @@
         if (contasGoogle.length && dados) gtag("set", "user_data", dados);
       });
       var params = {
+        page_location: pagina,
         transaction_id: pedido,
         value: isFinite(valor) ? valor : 0,
         currency: total.currencyCode || checkout.currencyCode || undefined,

@@ -487,8 +487,8 @@ describe("Web Pixel: a tag do Google no checkout", () => {
     const l = px.camada();
     expect(l[0][0]).toBe("js");
     expect(l.filter((a) => a[0] === "config")).toEqual([
-      ["config", "AW-111111111", { allow_enhanced_conversions: true }],
-      ["config", "AW-222222222", { allow_enhanced_conversions: true }],
+      ["config", "AW-111111111", { allow_enhanced_conversions: true, send_page_view: false }],
+      ["config", "AW-222222222", { allow_enhanced_conversions: true, send_page_view: false }],
     ]);
   });
 
@@ -497,7 +497,7 @@ describe("Web Pixel: a tag do Google no checkout", () => {
     px.handlers.checkout_started(eventoCheckout({}));
     await assentar();
     expect(px.camada().filter((a) => a[0] === "event")).toEqual([
-      ["event", "begin_checkout", { send_to: "AW-111111111/IC1", transaction_id: "begin_checkout_ck_T1" }],
+      ["event", "begin_checkout", { page_location: "https://loja.test/checkouts/x", send_to: "AW-111111111/IC1", transaction_id: "begin_checkout_ck_T1" }],
     ]);
     // O evento do Meta continua indo ao coletor, igual.
     expect(px.beacons).toHaveLength(1);
@@ -531,8 +531,8 @@ describe("Web Pixel: a tag do Google no checkout", () => {
       },
     ]);
     expect(l.filter((a) => a[0] === "event")).toEqual([
-      ["event", "purchase", { send_to: "AW-111111111/P1", transaction_id: "5544332211", value: 197.9, currency: "BRL" }],
-      ["event", "purchase", { send_to: "AW-222222222/P2", transaction_id: "5544332211", value: 197.9, currency: "BRL" }],
+      ["event", "purchase", { page_location: "https://loja.test/checkouts/x", send_to: "AW-111111111/P1", transaction_id: "5544332211", value: 197.9, currency: "BRL" }],
+      ["event", "purchase", { page_location: "https://loja.test/checkouts/x", send_to: "AW-222222222/P2", transaction_id: "5544332211", value: 197.9, currency: "BRL" }],
     ]);
     // A compra do Meta vem do webhook: o pixel nao avisa o coletor.
     expect(px.beacons).toHaveLength(0);
@@ -589,7 +589,7 @@ describe("Web Pixel: a tag do Google no checkout", () => {
       px.handlers.checkout_started(eventoCheckout({}));
       await assentar();
       expect(px.camada().filter((a) => a[0] === "event")).toEqual([
-        ["event", "begin_checkout", { send_to: "AW-111111111/IC1", transaction_id: "begin_checkout_ck_T1" }],
+        ["event", "begin_checkout", { page_location: "https://loja.test/checkouts/x", send_to: "AW-111111111/IC1", transaction_id: "begin_checkout_ck_T1" }],
       ]);
       expect(px.beacons[0]).not.toHaveProperty("teste");
     }
