@@ -232,6 +232,8 @@ export function AdicionarPixel({
                   aria-checked={plat === p}
                   className={radio(plat === p)}
                   onClick={() => {
+                    // Credencial de uma plataforma nunca segue para a outra.
+                    if (p !== plat) setV((x) => ({ ...x, pid: "", tok: "", teste: "" }));
                     setPlat(p);
                     setErro(false);
                   }}
@@ -311,8 +313,8 @@ export function AdicionarPixel({
                 { mono: true, erroTxt: "Cole o Pixel ID." }
               )}
               <p className="-mt-3 text-label text-warn">
-                Usa o app TikTok da Shopify com este pixel? Desligue o compartilhamento de dados
-                dele, senão a compra conta em dobro.
+                Este pixel não pode rodar também no navegador (app TikTok da Shopify ou código no
+                tema), senão todos os eventos contam em dobro.
               </p>
               {campo(
                 "tok",

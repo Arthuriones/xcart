@@ -31,7 +31,7 @@ export interface EventoTiktok {
   /** Obrigatorio para web: sem `page.url` o TikTok recusa o evento. */
   page: { url: string };
   properties?: {
-    content_type?: "product";
+    content_type?: "product" | "product_group";
     contents?: ConteudoTiktok[];
     currency?: string;
     value?: number;
@@ -58,6 +58,34 @@ export const MOEDAS_TIKTOK: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * `product_group` quando o id e do PRODUTO (o item_group_id do catalogo do
+ * TikTok); `product` quando e da variante ou do SKU. Errado, o evento nao casa
+ * com o catalogo e nenhum erro aparece.
+ */
+export function tipoDeConteudoTiktok(idTemplate: string | null | undefined): "product" | "product_group" {
+  const t = (idTemplate || "").trim();
+  return t.includes("{product_id}") && !t.includes("{variant_id}") && !t.includes("{sku}")
+    ? "product_group"
+    : "product";
+}
+
+/**
+ * A `page.url` sem o ttclid. O TikTok tambem le o clique dali, e ali ele pode
+ * estar CORTADO (a Shopify corta o landing_site em 255, o coletor a URL em
+ * 500). Inteiro, ele ja vai em `user.ttclid`.
+ */
+export function urlSemTtclid(url: string): string {
+  try {
+    const u = new URL(url);
+    if (!u.searchParams.has("ttclid")) return url;
+    u.searchParams.delete("ttclid");
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
+/**
  * Um evento de funil (ver produto, carrinho, checkout, pagamento).
  *
  * SEM value e SEM currency: estes vem do coletor, que e publico -- valor dali
@@ -73,18 +101,18 @@ export function montarEventoDeFunilTiktok(entrada: {
   url: string;
   /** Ids ja no formato do catalogo do destino (template de id). */
   contentIds: string[];
+  idTemplate?: string | null;
 }): EventoTiktok {
   const evento: EventoTiktok = {
     event: definicaoDoEvento(entrada.evento).nomeNoTiktok,
     event_time: Math.floor(entrada.quandoMs / 1000),
     event_id: entrada.eventId,
     user: entrada.user,
-    page: { url: entrada.url },
+    page: { url: urlSemTtclid(entrada.url) },
   };
   if (entrada.contentIds.length) {
     evento.properties = {
-      // `product`: o id e da variante (ou do template dela), o item concreto.
-      content_type: "product",
+      content_type: tipoDeConteudoTiktok(entrada.idTemplate),
       contents: entrada.contentIds.map((id) => ({ content_id: id })),
     };
   }

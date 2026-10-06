@@ -254,8 +254,8 @@ function passoRastreamento(foto: FotoGuia, b: Base, caminho: CaminhoGuia): Passo
     titulo: "Ligue o rastreamento",
     texto:
       caminho === "vitrine"
-        ? "Envia cada compra ao Meta e ao Google pelo servidor. Ligue na loja de checkout: é nela que o pedido nasce."
-        : "Envia cada compra ao Meta e ao Google pelo servidor, sem depender do navegador do comprador.",
+        ? "Envia cada compra ao Meta, ao Google e ao TikTok pelo servidor. Ligue na loja de checkout: é nela que o pedido nasce."
+        : "Envia cada compra ao Meta, ao Google e ao TikTok pelo servidor, sem depender do navegador do comprador.",
     href: "/tracking",
     cta: "Configurar rastreamento",
   };
@@ -289,7 +289,7 @@ function passoRastreamento(foto: FotoGuia, b: Base, caminho: CaminhoGuia): Passo
     return {
       ...passo,
       estado: "atencao",
-      detalhe: `O ${plataformas(emTeste.map((d) => d.plataforma))} está em modo teste: a compra cai na aba de teste e não conta como conversão.`,
+      detalhe: `O ${plataformas(emTeste.map((d) => d.plataforma))} ${new Set(emTeste.map((d) => d.plataforma)).size > 1 ? "estão" : "está"} em modo teste: a compra cai na aba de teste e não conta como conversão.`,
       cta: "Tirar do modo teste",
     };
   }
@@ -308,7 +308,7 @@ function passoRastreamento(foto: FotoGuia, b: Base, caminho: CaminhoGuia): Passo
     return {
       ...passo,
       estado: "atencao",
-      detalhe: `Ligado em ${listarNomes([...ligadas].map(b.nomeDe))}, mas nenhum pixel do Meta ou conversão do Google está pronto para receber a compra.`,
+      detalhe: `Ligado em ${listarNomes([...ligadas].map(b.nomeDe))}, mas nenhum pixel do Meta/TikTok ou conversão do Google está pronto para receber a compra.`,
     };
   }
   const cadastrados = foto.destinos.filter((d) => d.ativo && ativas.has(d.storeId));
@@ -316,7 +316,7 @@ function passoRastreamento(foto: FotoGuia, b: Base, caminho: CaminhoGuia): Passo
     return {
       ...passo,
       estado: "atencao",
-      detalhe: "O Meta ou o Google já está cadastrado, mas o rastreamento está desligado na loja.",
+      detalhe: "Um pixel já está cadastrado, mas o rastreamento está desligado na loja.",
       cta: "Ligar o rastreamento",
     };
   }
@@ -427,8 +427,8 @@ function passoVenda(foto: FotoGuia, b: Base, caminho: CaminhoGuia, rastreamentoP
     titulo: "Primeira venda rastreada",
     texto:
       caminho === "vitrine"
-        ? "Marca sozinho quando a primeira compra chegar ao Meta ou ao Google. Com vitrine, a compra chega sem a origem do anúncio: o pedido nasce na loja de checkout."
-        : "Marca sozinho quando a primeira compra chegar ao Meta ou ao Google.",
+        ? "Marca sozinho quando a primeira compra chegar ao Meta, ao Google ou ao TikTok. Com vitrine, a compra chega sem a origem do anúncio: o pedido nasce na loja de checkout."
+        : "Marca sozinho quando a primeira compra chegar ao Meta, ao Google ou ao TikTok.",
     href: "/tracking/eventos",
     cta: "Ver eventos ao vivo",
   };

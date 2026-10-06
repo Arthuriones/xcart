@@ -10,7 +10,12 @@ import {
   montarIdsDeProdutos,
 } from "@/lib/tracking/id-produto";
 import { definicaoDoEvento } from "@/lib/tracking/eventos";
-import { MOEDAS_TIKTOK, type EventoTiktok } from "@/lib/tracking/tiktok-evento";
+import {
+  MOEDAS_TIKTOK,
+  tipoDeConteudoTiktok,
+  urlSemTtclid,
+  type EventoTiktok,
+} from "@/lib/tracking/tiktok-evento";
 
 // ============================================================================
 // Pedido da Shopify -> evento Purchase do CAPI (Meta) e da Events API (TikTok).
@@ -530,10 +535,10 @@ export function montarPurchaseTiktok(
     event_time: Math.floor(quandoMs / 1000),
     event_id: idDoEvento(pedido.id),
     user,
-    page: { url: urlDaCompra(pedido, contexto.dominioLoja) || `https://${contexto.dominioLoja}/` },
+    page: { url: urlSemTtclid(urlDaCompra(pedido, contexto.dominioLoja) || `https://${contexto.dominioLoja}/`) },
     properties: {
       ...(comValor ? { currency: moeda, value: valor } : {}),
-      content_type: "product",
+      content_type: tipoDeConteudoTiktok(idTemplate),
       contents: conteudoDoPedido(idTemplate, itens).map((c) => ({
         content_id: c.id,
         quantity: c.quantity,

@@ -108,7 +108,7 @@ export function Rastreamento({
   }
 
   function alternarEnvio(l: LinhaLoja, ligar: boolean) {
-    // Desligar para as compras de chegarem ao Meta e ao Google: confirma antes.
+    // Desligar para as compras de chegarem ao Meta, ao Google e ao TikTok: confirma antes.
     if (ligar) void trocarEnvio(l, true).catch(() => {});
     else setDesligar(l);
   }
@@ -145,7 +145,7 @@ export function Rastreamento({
       open={desligar !== null}
       onOpenChange={(v) => !v && setDesligar(null)}
       titulo={`Desligar o rastreamento de ${desligar?.loja.nome ?? ""}?`}
-      descricao="As compras param de chegar ao Meta e ao Google até você religar."
+      descricao="As compras param de chegar ao Meta, ao Google e ao TikTok até você religar."
       confirmar="Desligar"
       mensagemErro="Não deu para desligar agora. Tente de novo."
       onConfirmar={() => (desligar ? trocarEnvio(desligar, false) : undefined)}

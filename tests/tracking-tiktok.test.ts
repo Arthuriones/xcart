@@ -60,6 +60,10 @@ describe("user do TikTok", () => {
     expect(telefoneE164("11 98765-4321", "BR")).toBe("+5511987654321");
     expect(telefoneE164("+33 6 12 34 56 78")).toBe("+33612345678");
     expect(telefoneE164("", "BR")).toBeNull();
+    // Nacional de pais sem DDI na tabela nao vira E.164: fora, sem hash que nunca casa.
+    expect(telefoneE164("0612345678", "NL")).toBeNull();
+    expect(telefoneE164("0612345678")).toBeNull();
+    expect(telefoneE164("0031 6 12345678")).toBe("+31612345678");
     const u = montarUserTiktok({ telefone: "11 98765-4321", pais: "BR" });
     expect(u.phone).toBe(sha256("+5511987654321"));
     expect(u.phone).not.toBe(sha256("5511987654321"));
@@ -112,10 +116,24 @@ describe("evento de funil do TikTok", () => {
       event_time: 1759750000,
       event_id: "add_to_cart_vid-1_1759750000000",
       user: { ttclid: "E.C.P.abc" },
-      page: { url: "https://loja.shop/products/x?ttclid=E.C.P.abc" },
+      page: { url: "https://loja.shop/products/x" },
       properties: { content_type: "product", contents: [{ content_id: "111" }] },
     });
     expect(JSON.stringify(e)).not.toMatch(/"value"|"currency"/);
+  });
+
+  it("id do produto vira product_group; variante e SKU, product", () => {
+    const tipo = (idTemplate: string | null) =>
+      montarEventoDeFunilTiktok({ ...base, evento: "view_item", idTemplate }).properties?.content_type;
+    expect(tipo(null)).toBe("product");
+    expect(tipo("{product_id}")).toBe("product_group");
+    expect(tipo("shopify_US_{product_id}_{variant_id}")).toBe("product");
+    expect(tipo("{sku}")).toBe("product");
+  });
+
+  it("ttclid acima de 1.000 caracteres fica fora do user, sem corte", () => {
+    const u = montarUserTiktok({}, { ttclid: "E.C.P." + "x".repeat(1000) });
+    expect(u).not.toHaveProperty("ttclid");
   });
 
   it("sem produto, sem properties", () => {

@@ -12,7 +12,7 @@ import {
   type ChaveEvento,
   type PlataformaServidor,
 } from "@/lib/tracking/eventos";
-import { montarFbc, montarUserData, montarUserTiktok } from "@/lib/tracking/normalizar";
+import { MAX_TTCLID, montarFbc, montarUserData, montarUserTiktok } from "@/lib/tracking/normalizar";
 import { montarEventoDeFunilTiktok } from "@/lib/tracking/tiktok-evento";
 import { JANELA_PIXEL_CHECKOUT_MS } from "@/lib/tracking/google-tag";
 
@@ -92,12 +92,6 @@ const JANELA_CHECKOUT_DO_TEMA_MS = 10 * 60 * 1000;
 
 /** Itens do carrinho num evento. Carrinho de verdade nao chega perto disto. */
 const MAX_ITENS = 20;
-
-/**
- * O ttclid vai INTEIRO ao TikTok ("ensure that you don't truncate it"), ate
- * 1.000 caracteres. Cortado nao casa com clique nenhum: acima disso, fora.
- */
-const MAX_TTCLID = 1000;
 
 /**
  * O formato do `_xc_vid` que o snippet grava: base36 + "." + base36. O pixel le
@@ -444,6 +438,10 @@ export async function POST(request: NextRequest) {
       .eq("store_id", registro.id)
       .eq("visitor_id", visitorId)
       .select("id");
+    // Sem a coluna `ttp` (059 ainda nao aplicada) o PostgREST recusa a escrita
+    // INTEIRA. De novo sem ela, ja aqui: o clique do Meta e do Google nao pode
+    // cair por causa do cookie do TikTok, nem pagar contagem e upsert com erro.
+    if (erroUpdate && "ttp" in campos) return publicarIdentidade(true);
     if (!erroUpdate && existente && existente.length > 0) return;
 
     // Linha NOVA: conta as que nasceram na ultima hora. Indice
@@ -462,9 +460,7 @@ export async function POST(request: NextRequest) {
       { store_id: registro.id, visitor_id: visitorId, ...campos },
       { onConflict: "store_id,visitor_id" }
     );
-    // Sem a coluna `ttp` (059 ainda nao aplicada) o PostgREST recusa a escrita
-    // INTEIRA -- o update acima e este. De novo sem ela: o clique do Meta e do
-    // Google nao pode cair por causa do cookie do TikTok.
+    // Segunda rede do mesmo caso, se o update passou e o upsert nao.
     if (erroUpsert && "ttp" in campos) return publicarIdentidade(true);
   }
 
@@ -988,6 +984,7 @@ export async function POST(request: NextRequest) {
           user,
           url,
           contentIds: montarIdsDeProdutos(d.idTemplate, itens),
+          idTemplate: d.idTemplate,
         }),
       });
     }

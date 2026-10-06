@@ -314,13 +314,28 @@ export interface UserTiktok {
   user_agent?: string;
 }
 
-/** Telefone em E.164 com o '+', o formato que o TikTok hasheia. */
+/** Teto do ttclid na Events API. Acima dele o TikTok responde 40002 (permanente):
+ *  o campo sai, nunca cortado -- cortado ele nao casa com clique nenhum. */
+export const MAX_TTCLID = 1000;
+
+/**
+ * Telefone em E.164 com o '+', o formato que o TikTok hasheia.
+ *
+ * Numero nacional de pais fora da tabela de DDI nao vira E.164 ("0612345678"
+ * viraria "+0612345678"): sai null, em vez de um hash que nunca casa.
+ */
 export function telefoneE164(
   telefone: string | null | undefined,
   pais?: string | null
 ): string | null {
-  const digitos = normalizarTelefone(telefone, pais);
-  return digitos ? `+${digitos}` : null;
+  // "(+1) 213..." tambem e internacional: so digitos e o '+' contam.
+  const limpo = (telefone || "").replace(/[^\d+]/g, "");
+  let digitos: string | null;
+  if (limpo.startsWith("+")) digitos = limpo.replace(/\D/g, "");
+  else if (limpo.startsWith("00")) digitos = limpo.slice(2);
+  else if (pais && DDI[pais.trim().toUpperCase()]) digitos = normalizarTelefone(telefone, pais);
+  else return null;
+  return digitos && !digitos.startsWith("0") ? `+${digitos}` : null;
 }
 
 /**
@@ -353,7 +368,7 @@ export function montarUserTiktok(
   if (exts.length) saida.external_id = exts;
 
   const ttclid = (sinais.ttclid || "").trim();
-  if (ttclid) saida.ttclid = ttclid;
+  if (ttclid && ttclid.length <= MAX_TTCLID) saida.ttclid = ttclid;
   const ttp = (sinais.ttp || "").trim();
   if (ttp) saida.ttp = ttp;
   if (sinais.clientIp) saida.ip = sinais.clientIp;

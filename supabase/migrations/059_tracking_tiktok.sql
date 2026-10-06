@@ -42,11 +42,19 @@ alter table public.tracking_destinations
   check (plataforma in ('google', 'meta', 'tiktok'));
 
 -- A lista da 038, mais 'tiktok'. Nenhuma linha atual fica de fora.
+-- tracking_events e a tabela quente (coletor, webhook, drain): o CHECK nasce
+-- NOT VALID, sem varrer a tabela sob ACCESS EXCLUSIVE, e o VALIDATE depois so
+-- pega SHARE UPDATE EXCLUSIVE -- as escritas seguem. Drop e add na mesma
+-- transacao: se o add falhar, a tabela nao fica sem CHECK.
+begin;
 alter table public.tracking_events
   drop constraint if exists tracking_events_destination_check;
 alter table public.tracking_events
   add constraint tracking_events_destination_check
-  check (destination in ('meta', 'google', 'ga4', 'tiktok'));
+  check (destination in ('meta', 'google', 'ga4', 'tiktok')) not valid;
+commit;
+alter table public.tracking_events
+  validate constraint tracking_events_destination_check;
 
 
 -- ---------------------------------------------------------------------------

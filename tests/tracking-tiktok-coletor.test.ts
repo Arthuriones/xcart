@@ -220,7 +220,8 @@ describe("coletor com destino TikTok", () => {
         ip: "203.0.113.50",
         user_agent: "Mozilla/5.0 (iPhone)",
       },
-      page: { url: CARRINHO.pageUrl },
+      // O ttclid sai da URL: inteiro, ele ja vai em user.ttclid.
+      page: { url: "https://loja.shop/products/camisa" },
       properties: { content_type: "product", contents: [{ content_id: "11" }] },
     });
     expect(JSON.stringify(tt.payload)).not.toMatch(/"value"|"currency"|9999/);

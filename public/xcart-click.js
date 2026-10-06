@@ -532,7 +532,6 @@
 
   function cookieDoAtributo(k) {
     if (k === "_fbp") return "_fbp";
-    if (k === "_ttp") return "_ttp";
     if (k === "_fbc") return PREFIXO + "fbc";
     if (k === "_xc_vid") return PREFIXO + "vid";
     return PREFIXO + k;
@@ -557,7 +556,9 @@
       }
       achados[k] = guardado;
       delete gerados[k];
-      gravarCookie(cookieDoAtributo(k), guardado);
+      // _ttp e do pixel do TikTok, que grava no dominio dele: so volta para o
+      // envio, nunca vira cookie nosso (seriam dois _ttp com valores diferentes).
+      if (k !== "_ttp") gravarCookie(cookieDoAtributo(k), guardado);
     }
     vid = achados._xc_vid;
 
