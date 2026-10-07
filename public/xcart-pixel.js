@@ -465,7 +465,7 @@
    * pos no permalink e a UNICA ligacao do checkout com o anuncio.
    * "Comprar agora" pula o carrinho e chega sem atributo: cai na identidade.
    */
-  var DO_CARRINHO = ["fbclid", "gclid", "gbraid", "wbraid", "ttclid", "_fbp", "_fbc", "_ttp"];
+  var DO_CARRINHO = ["fbclid", "gclid", "gbraid", "wbraid", "ttclid", "_fbp", "_fbc", "_ttp", "_xc_vid"];
 
   function atributosDoCheckout(checkout) {
     var saida = {};
@@ -518,7 +518,8 @@
         visitorId: clientId || checkout.token || null,
         // O visitante do tema, do cookie: com o clientId zerado e a unica
         // ponte para o coletor cancelar o expresso deste comprador.
-        vidDoTema: vidDoCookie || undefined,
+        // Ou o da ponte (pagina externa), que veio como atributo do carrinho.
+        vidDoTema: vidDoCookie || atr._xc_vid || undefined,
         checkoutToken: checkout.token || null,
         // Do carrinho (ver DO_CARRINHO). Ausente, o JSON nem leva o campo e o
         // coletor recupera pela identidade do tema, como antes.

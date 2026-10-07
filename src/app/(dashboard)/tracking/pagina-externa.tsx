@@ -121,9 +121,8 @@ export function PaginaExterna({ storeId }: { storeId: string }) {
       <Passo n={1} titulo="Cole na página, antes de </body>">
         <Codigo rotulo="Script da página" texto={kit.tag} />
         <p className="text-label text-t2">
-          Leva o clique do anúncio (Meta, TikTok, Google) até o checkout. O pixel do Meta ou do TikTok no
-          navegador da página você instala como sempre, sem evento de InitiateCheckout no botão: esse o xcart
-          já manda pelo servidor.
+          Manda o PageView e o ViewContent da página pelo servidor e leva o clique do anúncio (Meta, TikTok,
+          Google) até o checkout. Não instale o pixel do Meta nem do TikTok na página: contaria em dobro.
         </p>
       </Passo>
 

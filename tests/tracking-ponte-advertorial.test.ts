@@ -138,7 +138,12 @@ describe("o snippet cuida do _fbp sem inventar _fbc", () => {
  * sai, nao o texto do arquivo.
  */
 describe("link direto para o checkout leva os click ids como atributo do carrinho", () => {
-  function rodar(opts: { url: string; cookies?: Record<string, string>; hrefs: string[] }) {
+  function rodar(opts: {
+    url: string;
+    cookies?: Record<string, string>;
+    hrefs: string[];
+    tag?: Record<string, string>;
+  }) {
     const jar: Record<string, string> = { ...(opts.cookies || {}) };
     const links = opts.hrefs.map((href) => {
       const attrs: Record<string, string> = { href };
@@ -149,10 +154,15 @@ describe("link direto para o checkout leva os click ids como atributo do carrinh
         },
       };
     });
+    const atributos: Record<string, string> = { "data-xcart-destinos": "loja.shop", ...(opts.tag || {}) };
+    const envios: { url: string; corpo: Record<string, unknown> }[] = [];
+    const storage = new Map<string, string>();
     const document: Record<string, unknown> = {
       currentScript: {
-        getAttribute: (n: string) => (n === "data-xcart-destinos" ? "loja.shop" : null),
+        src: "https://user.xcart.app/xcart-bridge.js",
+        getAttribute: (n: string) => atributos[n] ?? null,
       },
+      referrer: "https://l.facebook.com/",
       readyState: "complete",
       documentElement: {},
       getElementsByTagName: () => links,
@@ -175,16 +185,30 @@ describe("link direto para o checkout leva os click ids como atributo do carrinh
       location: { href: u.href, search: u.search, protocol: u.protocol },
       URL,
       URLSearchParams,
+      // Sem sendBeacon: a ponte cai no fetch, e o corpo chega como texto.
+      navigator: {},
+      fetch: (url: string, init: { body: string }) => {
+        envios.push({ url, corpo: JSON.parse(init.body) });
+        return Promise.resolve();
+      },
+      sessionStorage: {
+        getItem: (k: string) => storage.get(k) ?? null,
+        setItem: (k: string, v: string) => void storage.set(k, v),
+      },
     };
     sandbox.window = sandbox;
     vm.runInNewContext(ponte, sandbox);
-    return links.map((l) => l.getAttribute("href") as string);
+    return { links: links.map((l) => l.getAttribute("href") as string), envios, jar };
   }
+
+  const LOJA = { "data-xcart-store": "11111111-2222-3333-4444-555555555555", "data-xcart-shop": "loja-x.myshopify.com" };
 
   const url = "https://vsl.com/oferta?fbclid=ABC123&ttclid=E.C.P.TT1&utm_source=tiktok";
 
   it("no permalink /cart/ vai como attributes[...], junto do parametro solto", () => {
-    const [permalink] = rodar({
+    const {
+      links: [permalink],
+    } = rodar({
       url,
       cookies: { _fbp: "fb.1.1700000000000.42", _fbc: "fb.1.1700000000000.ABC123", _ttp: "UqBuLHl7" },
       hrefs: ["https://loja.shop/cart/4567:1"],
@@ -202,7 +226,9 @@ describe("link direto para o checkout leva os click ids como atributo do carrinh
   });
 
   it("pagina do tema (produto, /cart) nao recebe atributo: o snippet de la ja le o parametro", () => {
-    const [produto, carrinho] = rodar({
+    const {
+      links: [produto, carrinho],
+    } = rodar({
       url,
       cookies: { _fbp: "fb.1.1.2" },
       hrefs: ["https://loja.shop/products/x", "https://loja.shop/cart"],
@@ -213,15 +239,89 @@ describe("link direto para o checkout leva os click ids como atributo do carrinh
   });
 
   it("link de terceiro continua intocado", () => {
-    const [ig] = rodar({ url, hrefs: ["https://instagram.com/loja"] });
+    const {
+      links: [ig],
+    } = rodar({ url, hrefs: ["https://instagram.com/loja"] });
     expect(ig).toBe("https://instagram.com/loja");
   });
 
   it("_fbc e _fbp nunca sao inventados: sem cookie do pixel, sem atributo", () => {
-    const [permalink] = rodar({ url, hrefs: ["https://loja.shop/cart/4567:1"] });
+    const {
+      links: [permalink],
+    } = rodar({ url, hrefs: ["https://loja.shop/cart/4567:1"] });
     expect(permalink).not.toContain("_fbc");
     expect(permalink).not.toContain("_fbp");
   });
+
+/**
+ * Modo de rastreamento: com a loja identificada, a ponte avisa o coletor do
+ * PageView e do ViewContent da propria pagina -- e o servidor fala com o Meta e
+ * o TikTok. A pagina NAO tem pixel no navegador, entao e a ponte que gera o
+ * _fbp (uma vez por visitante) e NUNCA o _fbc.
+ */
+describe("a ponte rastreia a propria pagina quando sabe a loja", () => {
+  const url = "https://vsl.com/oferta?fbclid=ABC123";
+
+  it("manda page_view e view_item ao coletor, com o visitante e o fbp gerado", () => {
+    const { envios, links, jar } = rodar({ url, hrefs: ["https://loja.shop/cart/4567:1"], tag: LOJA });
+    expect(envios.map((e) => e.url)).toEqual([
+      "https://user.xcart.app/api/tracking/collect",
+      "https://user.xcart.app/api/tracking/collect",
+    ]);
+    const [pv, vc] = envios.map((e) => e.corpo);
+    expect(pv.evento).toBe("page_view");
+    expect(pv.fonte).toBe("ponte");
+    expect(pv.shop).toBe("loja-x.myshopify.com");
+    expect(pv.storeId).toBe(LOJA["data-xcart-store"]);
+    expect(pv.fbclid).toBe("ABC123");
+    expect(pv.referrer).toBe("https://l.facebook.com/");
+    expect(pv.pageUrl).toBe(url);
+    expect(pv.visitorId).toMatch(/^[a-z0-9]+\.[a-z0-9]+$/);
+    expect(pv.eventId).toBe(`page_view_${pv.visitorId}_${(pv.eventId as string).split("_").pop()}`);
+    // ViewContent da variante do botao de compra, mesma pessoa, mesmo fbp.
+    expect(vc.evento).toBe("view_item");
+    expect(vc.produto).toEqual({ variante: "4567" });
+    expect(vc.visitorId).toBe(pv.visitorId);
+    expect(pv.fbp).toMatch(/^fb\.1\.\d+\.\d+$/);
+    expect(vc.fbp).toBe(pv.fbp);
+    expect(jar._fbp).toBe(pv.fbp);
+    // _fbc nunca e inventado.
+    expect(pv.fbc).toBeNull();
+    expect(JSON.stringify(pv)).not.toContain('"value"');
+    // O visitante vai ao checkout como atributo, com o fbp.
+    const p = new URL(links[0]).searchParams;
+    expect(p.get("attributes[_xc_vid]")).toBe(pv.visitorId);
+    expect(p.get("attributes[_fbp]")).toBe(pv.fbp);
+  });
+
+  it("sem botao de compra na pagina so vai o page_view; visita organica tambem vai", () => {
+    const { envios } = rodar({ url: "https://vsl.com/oferta", hrefs: [], tag: LOJA });
+    expect(envios.map((e) => e.corpo.evento)).toEqual(["page_view"]);
+    expect(envios[0].corpo.fbclid).toBeNull();
+  });
+
+  it("sem data-xcart-shop, usa o .myshopify.com da lista de destinos -- tag antiga segue valendo", () => {
+    const { envios } = rodar({
+      url,
+      hrefs: ["https://kings.shop/cart/1:1"],
+      tag: { "data-xcart-destinos": "abc-12.myshopify.com,kings.shop" },
+    });
+    expect(envios.length).toBe(2);
+    expect(envios[0].corpo.shop).toBe("abc-12.myshopify.com");
+    expect(envios[0].corpo).not.toHaveProperty("storeId");
+  });
+
+  it("sem loja nenhuma, nao manda nada e nao gera fbp", () => {
+    const { envios, jar } = rodar({ url, hrefs: ["https://loja.shop/cart/4567:1"] });
+    expect(envios).toEqual([]);
+    expect(jar._fbp).toBeUndefined();
+  });
+
+  it("recarregar a pagina dentro de 30 min nao repete o evento", () => {
+    const { envios } = rodar({ url, hrefs: [], tag: LOJA });
+    expect(envios.length).toBe(1);
+  });
+});
 });
 
 describe("o que a ponte grava no carrinho, o pixel e o pedido leem pelo mesmo nome", () => {
@@ -234,7 +334,8 @@ describe("o que a ponte grava no carrinho, o pixel e o pedido leem pelo mesmo no
     path.resolve(__dirname, "..", "src", "lib", "tracking", "purchase.ts"),
     "utf8"
   );
-  const daPonte = [...listaDe(ponte, "CLICK_IDS"), ...listaDe(ponte, "COOKIES_DO_PIXEL")];
+  // Mais o visitante da ponte (_xc_vid), que o modo de rastreamento poe no permalink.
+  const daPonte = [...listaDe(ponte, "CLICK_IDS"), ...listaDe(ponte, "COOKIES_DO_PIXEL"), "_xc_vid"];
   const doPixel = listaDe(pixel, "DO_CARRINHO");
 
   it("o pixel le do checkout exatamente o que a ponte grava", () => {

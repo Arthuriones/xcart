@@ -116,7 +116,9 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     ok: true,
     dominio: permanente,
-    tag: `<script src="${getPublicAppUrl().replace(/\/+$/, "")}/xcart-bridge.js" data-xcart-destinos="${destinos.join(",")}" defer></script>`,
+    // Com a loja identificada a ponte tambem manda PageView e ViewContent da
+    // pagina ao coletor (o servidor fala com o Meta e o TikTok).
+    tag: `<script src="${getPublicAppUrl().replace(/\/+$/, "")}/xcart-bridge.js" data-xcart-destinos="${destinos.join(",")}" data-xcart-store="${loja.id}" data-xcart-shop="${permanente}" defer></script>`,
     produtos,
   });
 }

@@ -179,6 +179,7 @@ export function pedidosEsperados(
 
 /** Nome curto de cada evento nas grades de numeros. */
 export const ROTULO_EVENTO: Record<ChaveEvento, string> = {
+  page_view: "Página",
   view_item: "Ver produto",
   add_to_cart: "Carrinho",
   begin_checkout: "Checkout",

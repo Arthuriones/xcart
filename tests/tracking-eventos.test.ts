@@ -8,6 +8,7 @@ import {
   PREFIXO_CHECKOUT_EXPRESSO,
   EVENTOS,
   EVENTOS_DO_NAVEGADOR,
+  EVENTOS_DO_GOOGLE,
   ORIGENS_DO_CHECKOUT,
   chaveDoEvento,
   definicaoDoEvento,
@@ -124,6 +125,18 @@ describe("catalogo", () => {
   });
 
   /**
+   * O PageView e da pagina EXTERNA (VSL, advertorial), que so a ponte alcanca.
+   * Nao entra no snippet do tema nem ganha rotulo no Google: nao e conversao.
+   */
+  it("ver pagina so vem da ponte, e fica fora dos rotulos do Google", () => {
+    const daPonte = EVENTOS.filter((e) => e.origem === "ponte").map((e) => e.chave);
+    expect(daPonte).toEqual(["page_view"]);
+    expect(EVENTOS_DO_NAVEGADOR).not.toContain("page_view");
+    expect(EVENTOS_DO_GOOGLE.map((e) => e.chave)).not.toContain("page_view");
+    expect(EVENTOS_DO_GOOGLE.map((e) => e.chave)).toContain("purchase");
+  });
+
+  /**
    * Valor vindo do navegador e numero que qualquer um pode inflar chamando o
    * coletor, e valor de conversao inflado distorce o lance automatico. So a
    * compra leva valor, e ela vem da Shopify.
@@ -140,6 +153,7 @@ describe("catalogo", () => {
    */
   it("todo evento tem o nome que o Meta reconhece", () => {
     const esperado: Record<string, string> = {
+      page_view: "PageView",
       view_item: "ViewContent",
       add_to_cart: "AddToCart",
       begin_checkout: "InitiateCheckout",
@@ -158,6 +172,7 @@ describe("catalogo", () => {
    */
   it("todo evento tem o nome que o TikTok reconhece", () => {
     const esperado: Record<string, string> = {
+      page_view: "Pageview",
       view_item: "ViewContent",
       add_to_cart: "AddToCart",
       begin_checkout: "InitiateCheckout",

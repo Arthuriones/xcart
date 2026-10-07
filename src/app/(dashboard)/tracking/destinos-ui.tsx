@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { EVENTOS, lerRotulos, separarRotulo } from "@/lib/tracking/eventos";
+import { EVENTOS, EVENTOS_DO_GOOGLE, lerRotulos, separarRotulo } from "@/lib/tracking/eventos";
 import {
   TEMPLATE_PADRAO,
   TEMPLATES_SUGERIDOS,
@@ -74,7 +74,7 @@ export function FormularioDestino({
   const [conta, setConta] = useState(destino?.conta ?? "");
   const [rotulos, setRotulos] = useState<Record<string, string>>(() => {
     const inicial: Record<string, string> = {};
-    for (const e of EVENTOS) inicial[e.chave] = destino?.labels[e.chave] ?? "";
+    for (const e of EVENTOS_DO_GOOGLE) inicial[e.chave] = destino?.labels[e.chave] ?? "";
     return inicial;
   });
   // Comeca vazio SEMPRE, mesmo com token gravado: o valor nunca sai do servidor.
@@ -241,7 +241,7 @@ export function FormularioDestino({
                 </span>
               </legend>
 
-              {EVENTOS.map((ev) => (
+              {EVENTOS_DO_GOOGLE.map((ev) => (
                 <div
                   key={ev.chave}
                   className="grid gap-1.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,14rem)] sm:items-center sm:gap-3"

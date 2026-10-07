@@ -106,7 +106,7 @@ describe("evento de funil do TikTok", () => {
     const nomes = EVENTOS.filter((e) => e.origem !== "webhook").map(
       (e) => montarEventoDeFunilTiktok({ ...base, evento: e.chave }).event
     );
-    expect(nomes).toEqual(["ViewContent", "AddToCart", "InitiateCheckout", "AddPaymentInfo"]);
+    expect(nomes).toEqual(["Pageview", "ViewContent", "AddToCart", "InitiateCheckout", "AddPaymentInfo"]);
   });
 
   it("o mesmo event_id, em segundos, com page.url e o id do produto -- sem valor", () => {

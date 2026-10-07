@@ -28,6 +28,7 @@
 // ============================================================================
 
 export type ChaveEvento =
+  | "page_view"
   | "view_item"
   | "add_to_cart"
   | "begin_checkout"
@@ -66,8 +67,10 @@ export interface DefinicaoEvento {
    * 'navegador' = o snippet do tema avisa o nosso coletor.
    * 'pixel'     = o Web Pixel avisa. E o unico que entra no checkout da
    *               Shopify, que nao e tema e por isso o snippet nao alcanca.
+   * 'ponte'     = o xcart-bridge.js avisa, da pagina EXTERNA (VSL,
+   *               advertorial) com data-xcart-store. Nao e tema nem checkout.
    */
-  origem: "webhook" | "navegador" | "pixel";
+  origem: "webhook" | "navegador" | "pixel" | "ponte";
   /**
    * Nome do evento no Meta.
    *
@@ -80,6 +83,7 @@ export interface DefinicaoEvento {
    * rotulo da conversion action.
    */
   nomeNoMeta:
+    | "PageView"
     | "ViewContent"
     | "AddToCart"
     | "InitiateCheckout"
@@ -95,6 +99,7 @@ export interface DefinicaoEvento {
    * usa o novo. "PlaceAnOrder" sai em 2027 -- nao usar.
    */
   nomeNoTiktok:
+    | "Pageview"
     | "ViewContent"
     | "AddToCart"
     | "InitiateCheckout"
@@ -111,6 +116,18 @@ export interface DefinicaoEvento {
 }
 
 export const EVENTOS: DefinicaoEvento[] = [
+  {
+    chave: "page_view",
+    nome: "Ver página",
+    descricao: "O visitante abriu a página externa (VSL, advertorial). Vem da ponte, não do tema.",
+    // Pagina fora da Shopify, sem tema e sem Web Pixel: so a ponte alcanca. Na
+    // loja o tema nao manda PageView -- o ViewContent da pagina de produto
+    // cumpre o papel -- entao este nao entra no snippet nem pede rotulo.
+    origem: "ponte",
+    nomeNoMeta: "PageView",
+    nomeNoTiktok: "Pageview",
+    temValor: false,
+  },
   {
     chave: "view_item",
     nome: "Ver produto",
@@ -179,6 +196,13 @@ export function definicaoDoEvento(chave: ChaveEvento): DefinicaoEvento {
 export const EVENTOS_DO_NAVEGADOR = EVENTOS.filter(
   (e) => e.origem === "navegador"
 ).map((e) => e.chave);
+
+/**
+ * Os que viram conversion action no Google Ads (um rotulo cada). O PageView
+ * da pagina externa fica de fora: nao e conversao, e o Google ja recebe o
+ * page_view pela propria tag no navegador.
+ */
+export const EVENTOS_DO_GOOGLE = EVENTOS.filter((e) => e.origem !== "ponte");
 
 /**
  * Rotulos por evento, como ficam guardados em tracking_configs.google_labels.
