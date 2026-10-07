@@ -427,6 +427,13 @@
 
   // Resolucao inline: usa o mapa embutido no script tag, sem chamada de API.
   function resolveInlineUrl(lines) {
+    // Destino com teto de pedidos por dia: so o servidor sabe quantos pedidos
+    // a loja ja fez, entao o sorteio nao pode ser inline. Cai na API.
+    if (inlineConfig) {
+      for (var q = 0; q < inlineConfig.targets.length; q++) {
+        if (Number(inlineConfig.targets[q].dailyLimit) > 0) return null;
+      }
+    }
     var pick = pickInlineTarget(lines);
     if (!pick) return null;
 

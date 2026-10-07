@@ -222,10 +222,6 @@ async function tratarPedidoCriado(
   const { vaiPeloServidor } = await import("@/lib/tracking/eventos");
   const { contarSinais } = await import("@/lib/tracking/normalizar");
 
-  if (!(await rastreamentoLigado(admin, loja.id))) {
-    return ok({ ignorado: "rastreamento desligado", topic: "orders/create" });
-  }
-
   const pedido = payload as Parameters<typeof montarPurchase>[0];
 
   // Pedido de teste, valor zero, PDV e draft order nao viram conversao. O
@@ -233,6 +229,19 @@ async function tratarPedidoCriado(
   // uma segunda compra com valor. Ver filtro-pedido.ts.
   const { motivoParaIgnorarPedido } = await import("@/lib/tracking/filtro-pedido");
   const motivo = motivoParaIgnorarPedido(pedido);
+
+  // Teto de pedidos por dia do rodizio: conta todo pedido real da loja, com
+  // ou sem rastreamento -- o teto e da conta de pagamento, nao do pixel. Por
+  // isso vem ANTES da trava do rastreamento. Falha aqui nao segura a compra.
+  if (!motivo && pedido.id != null) {
+    const { registrarPedidoDoRodizio } = await import("@/lib/checkout-routes/pedidos-24h");
+    await registrarPedidoDoRodizio(admin, loja.id, String(pedido.id), pedido.created_at ?? null);
+  }
+
+  if (!(await rastreamentoLigado(admin, loja.id))) {
+    return ok({ ignorado: "rastreamento desligado", topic: "orders/create" });
+  }
+
   if (motivo) {
     return ok({ ignorado: motivo, topic: "orders/create", pedido: pedido.id ?? null });
   }

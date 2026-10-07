@@ -61,13 +61,63 @@ export function lojasRecebendo(r: Pick<GraphRoute, "enabled" | "targets">): numb
 /** Estado de uma loja de checkout dentro da rota, com a palavra para a tela. */
 export function estadoDaLoja(
   rotaLigada: boolean,
-  t: Pick<GraphTarget, "enabled" | "weight" | "mappedSkuCount">
+  t: Pick<GraphTarget, "enabled" | "weight" | "mappedSkuCount"> &
+    Partial<Pick<GraphTarget, "dailyLimit" | "orders24h">>
 ): { tom: TomStatus; texto: string } {
   if (!rotaLigada) return { tom: "neutral", texto: "Rota pausada" };
   if (t.enabled && t.mappedSkuCount === 0) return { tom: "warn", texto: "Sem produto ligado" };
   if (!t.enabled) return { tom: "neutral", texto: "Pausada" };
   if (t.weight <= 0) return { tom: "neutral", texto: "Fora da divisão" };
+  // Bateu o teto de pedidos das ultimas 24 h: os proximos vao para as outras.
+  if (t.dailyLimit != null && t.dailyLimit > 0 && (t.orders24h ?? 0) >= t.dailyLimit) {
+    return { tom: "warn", texto: "No limite de hoje" };
+  }
   return { tom: "ok", texto: "Recebendo" };
+}
+
+// ---------------------------------------------------------------- teto/dia
+
+export function textoDoLimite(limite: number | null | undefined): string {
+  return limite == null ? "" : String(limite);
+}
+
+/** Rascunho do teto por loja: "" = sem teto. */
+export function limitesIniciais(
+  alvos: Pick<GraphTarget, "id" | "legacy" | "dailyLimit">[]
+): Record<string, string> {
+  const r: Record<string, string> = {};
+  for (const a of alvos) if (!a.legacy) r[a.id] = textoDoLimite(a.dailyLimit);
+  return r;
+}
+
+/** Vazio (sem teto) ou inteiro de 1 a 100000. */
+export function limiteValido(texto: string): boolean {
+  const t = texto.trim();
+  if (t === "") return true;
+  if (!/^[0-9]{1,6}$/.test(t)) return false;
+  const n = Number(t);
+  return n >= 1 && n <= 100000;
+}
+
+/**
+ * Junta as mudancas de divisao com as de teto numa lista so para o PATCH:
+ * uma entrada por loja, com `weight` e/ou `dailyLimit` (null tira o teto).
+ */
+export function mudancasDaLista(
+  alvos: Pick<GraphTarget, "id" | "legacy" | "dailyLimit">[],
+  divisao: { id: string; weight: number }[],
+  limites: Record<string, string>
+): { id: string; weight?: number; dailyLimit?: number | null }[] {
+  const porId = new Map<string, { id: string; weight?: number; dailyLimit?: number | null }>();
+  for (const d of divisao) porId.set(d.id, { ...d });
+  for (const a of alvos) {
+    if (a.legacy || !(a.id in limites)) continue;
+    const texto = (limites[a.id] ?? "").trim();
+    const novo = texto === "" ? null : Number(texto);
+    if (novo === (a.dailyLimit ?? null)) continue;
+    porId.set(a.id, { ...(porId.get(a.id) || { id: a.id }), dailyLimit: novo });
+  }
+  return [...porId.values()];
 }
 
 // ---------------------------------------------------------------- filtro

@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 export const runtime = "nodejs";
 
 const SELECT =
-  "id, target_store_id, weight, enabled, position, last_healed_at, settings, sku_map, variant_map, store:target_store_id(id, name, shop_domain, target_language)";
+  "id, target_store_id, weight, enabled, daily_limit, position, last_healed_at, settings, sku_map, variant_map, store:target_store_id(id, name, shop_domain, target_language)";
 
 async function requireRoute(routeId: string) {
   const supabase = await createClient();
@@ -58,6 +58,7 @@ export async function GET(
       targetLanguage: store?.target_language || null,
       weight: row.weight ?? 1,
       enabled: row.enabled !== false,
+      dailyLimit: row.daily_limit ?? null,
       position: row.position ?? 0,
       lastHealedAt: row.last_healed_at,
       settings: row.settings || {},
@@ -117,6 +118,11 @@ export async function PATCH(
       patch.weight = Math.min(1000, Math.max(0, Math.floor(update.weight)));
     }
     if (typeof update.enabled === "boolean") patch.enabled = update.enabled;
+    // Teto de pedidos/dia: null tira o teto.
+    if (update.dailyLimit === null) patch.daily_limit = null;
+    else if (typeof update.dailyLimit === "number" && Number.isFinite(update.dailyLimit)) {
+      patch.daily_limit = Math.min(100000, Math.max(1, Math.floor(update.dailyLimit)));
+    }
     if (typeof update.position === "number") patch.position = Math.floor(update.position);
     if (Object.keys(patch).length === 0) continue;
 

@@ -28,8 +28,12 @@ import {
   conferirDivisao,
   dividirIgual,
   estadoDaLoja,
+  limiteValido,
+  limitesIniciais,
   mudancasDaDivisao,
+  mudancasDaLista,
   rascunhoInicial,
+  textoDoLimite,
   type Estrategia,
 } from "./logica";
 
@@ -48,6 +52,10 @@ export interface LojaNaRota {
   weight: number;
   sharePercent: number;
   mappedSkuCount: number;
+  /** Teto de pedidos nas ultimas 24 h; null = sem teto. */
+  dailyLimit: number | null;
+  /** Pedidos reais da loja nas ultimas 24 h. */
+  orders24h: number;
   /** Rota antiga sem linha de destino: nao da para pausar, tirar nem pesar. */
   legacy: boolean;
 }
@@ -85,7 +93,7 @@ export function AbaLojas(props: Props) {
   const [reenviar, setReenviar] = useState(false);
   // O editor remonta quando o servidor devolve outra divisao (depois de
   // salvar, pausar, tirar): o rascunho nasce do dado novo, sem efeito.
-  const chave = `${props.estrategia}|${props.lojas.map((l) => `${l.id}:${l.enabled}:${l.sharePercent}`).join(",")}`;
+  const chave = `${props.estrategia}|${props.lojas.map((l) => `${l.id}:${l.enabled}:${l.sharePercent}:${l.dailyLimit ?? ""}`).join(",")}`;
 
   return (
     <div className="flex flex-col gap-4">
@@ -126,6 +134,7 @@ function EditorLojas({
   const router = useRouter();
   const [atualizando, startTransition] = useTransition();
   const [rascunho, setRascunho] = useState(() => rascunhoInicial(lojas.filter((l) => !l.legacy)));
+  const [limites, setLimites] = useState(() => limitesIniciais(lojas));
   const [estrategia, setEstrategia] = useState<Estrategia>(estrategiaSalva);
   const [salvando, setSalvando] = useState(false);
   const [erroSalvar, setErroSalvar] = useState<string | null>(null);
@@ -139,9 +148,11 @@ function EditorLojas({
   const conferencia = conferirDivisao(rascunho);
   const mudouPercentual = lojas.some((l) => l.id in rascunho && rascunho[l.id] !== String(l.sharePercent));
   const mudouEstrategia = estrategia !== estrategiaSalva;
-  const sujo = mudouPercentual || mudouEstrategia;
+  const mudouLimite = lojas.some((l) => !l.legacy && (limites[l.id] ?? "") !== textoDoLimite(l.dailyLimit));
+  const limitesOk = Object.values(limites).every(limiteValido);
+  const sujo = mudouPercentual || mudouEstrategia || mudouLimite;
   // So a estrategia mudou: salva mesmo com a soma de hoje arredondada (33+33+33).
-  const podeSalvar = sujo && (!mudouPercentual || conferencia.ok);
+  const podeSalvar = sujo && (!mudouPercentual || conferencia.ok) && limitesOk;
   const erroSoma = mudouPercentual && !conferencia.ok;
   const estrategiaAtual = ESTRATEGIAS.find((e) => e.valor === estrategia) ?? ESTRATEGIAS[0];
 
@@ -151,7 +162,7 @@ function EditorLojas({
 
   async function salvar() {
     if (!podeSalvar) return;
-    const mudancas = mudouPercentual ? mudancasDaDivisao(lojas, rascunho) : [];
+    const mudancas = mudancasDaLista(lojas, mudouPercentual ? mudancasDaDivisao(lojas, rascunho) : [], limites);
     setSalvando(true);
     setErroSalvar(null);
     try {
@@ -197,7 +208,7 @@ function EditorLojas({
       titulo="Lojas de checkout"
       descricao={
         editavel
-          ? "Quanto dos compradores vai para cada loja. A soma precisa fechar 100%."
+          ? "Quanto vai para cada loja (a soma fecha 100%) e, se quiser, o teto de pedidos por dia: bateu, o resto vai para as outras. Serve para aquecer conta nova."
           : "As lojas que cobram o comprador desta rota."
       }
       acoes={
@@ -238,6 +249,7 @@ function EditorLojas({
                   <span className="truncate text-label text-t2">
                     <span className="font-mono">{l.dominio || "—"}</span> ·{" "}
                     {l.mappedSkuCount === 1 ? "1 SKU ligado" : `${l.mappedSkuCount.toLocaleString("pt-BR")} SKUs ligados`}
+                    {l.dailyLimit != null ? ` · ${l.orders24h}/${l.dailyLimit} pedidos hoje` : ""}
                   </span>
                 </div>
                 <StatusBadge tom={selo.tom} texto={selo.texto} />
@@ -259,6 +271,22 @@ function EditorLojas({
                 ) : (
                   <span className="num w-12 text-right text-dense font-semibold text-ink">{fatia}%</span>
                 )}
+                {campo ? (
+                  <span className="flex items-center gap-1">
+                    <Input
+                      inputMode="numeric"
+                      value={limites[l.id] ?? ""}
+                      onChange={(e) => setLimites((r) => ({ ...r, [l.id]: e.target.value }))}
+                      aria-label={`Teto de pedidos por dia para ${l.nome}`}
+                      aria-invalid={!limiteValido(limites[l.id] ?? "") || undefined}
+                      placeholder="sem"
+                      className="num h-ctl-sm w-16 text-right text-dense"
+                    />
+                    <span aria-hidden className="text-dense text-t2">
+                      /dia
+                    </span>
+                  </span>
+                ) : null}
                 <div className="flex items-center gap-1">
                   {!l.legacy ? (
                     <Button
@@ -330,6 +358,7 @@ function EditorLojas({
                 disabled={salvando}
                 onClick={() => {
                   setRascunho(rascunhoInicial(lojas.filter((l) => !l.legacy)));
+                  setLimites(limitesIniciais(lojas));
                   setEstrategia(estrategiaSalva);
                   setErroSalvar(null);
                 }}

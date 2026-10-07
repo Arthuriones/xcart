@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RouteTarget, RouteTargetSettings } from "@/lib/checkout-routes/rotation";
 
 export const ROUTE_TARGET_SELECT =
-  "id, target_store_id, weight, enabled, sku_map, variant_map, settings, position, last_healed_at, store:target_store_id(name, shop_domain, target_language)";
+  "id, target_store_id, weight, enabled, daily_limit, sku_map, variant_map, settings, position, last_healed_at, store:target_store_id(name, shop_domain, target_language)";
 
 interface RawTargetStore {
   name?: string | null;
@@ -15,6 +15,7 @@ export interface RawRouteTarget {
   target_store_id: string;
   weight: number | null;
   enabled: boolean | null;
+  daily_limit?: number | null;
   sku_map: Record<string, string | number> | null;
   variant_map: Record<string, string | number> | null;
   settings: RouteTargetSettings | null;
@@ -40,6 +41,7 @@ export function toRouteTarget(raw: RawRouteTarget): RouteTarget {
     storeName: store?.name || undefined,
     weight: Math.max(0, Math.floor(Number(raw.weight ?? 1))),
     enabled: raw.enabled !== false,
+    dailyLimit: raw.daily_limit ?? null,
     skuMap: raw.sku_map || {},
     variantMap: raw.variant_map || {},
     settings,
@@ -98,6 +100,7 @@ export function legacyTargetFromConfig(config: {
     storeName: store?.name || undefined,
     weight: 1,
     enabled: true,
+    dailyLimit: null,
     skuMap: config.sku_map || {},
     variantMap: config.variant_map || {},
     settings,

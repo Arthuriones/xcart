@@ -161,6 +161,8 @@ export function ConsoleView({
                   weight: t.weight,
                   sharePercent: t.sharePercent,
                   mappedSkuCount: t.mappedSkuCount,
+                  dailyLimit: t.dailyLimit,
+                  orders24h: t.orders24h,
                   legacy: t.legacy,
                 }))}
                 disponiveis={grafo.stores

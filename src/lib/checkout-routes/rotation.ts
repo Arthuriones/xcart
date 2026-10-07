@@ -28,6 +28,8 @@ export interface RouteTarget {
   variantMap: Record<string, string | number>;
   settings: RouteTargetSettings;
   targetLanguage?: string | null;
+  /** Teto de pedidos nas ultimas 24 h; null = sem teto. Ver pickTarget. */
+  dailyLimit?: number | null;
 }
 
 export interface TargetCoverage {
@@ -46,7 +48,7 @@ export interface RotationPick {
   eligible: TargetCoverage[];
   /** Cobertura de todos os destinos ligados, para telemetria e UI. */
   all: TargetCoverage[];
-  reason: "single" | "weighted" | "best_coverage_fallback";
+  reason: "single" | "weighted" | "best_coverage_fallback" | "all_full";
 }
 
 export function normalizeRotation(value: unknown): Required<RotationConfig> {
@@ -130,7 +132,12 @@ export function rotationOrderKey(target: { id?: string | null; domain?: string |
 export function pickTarget(
   targets: RouteTarget[],
   lines: CheckoutRouteLine[],
-  options: { rotationKey?: string; strategy?: RotationStrategy } = {}
+  options: {
+    rotationKey?: string;
+    strategy?: RotationStrategy;
+    /** Pedidos por loja de checkout nas ultimas 24 h (contarPedidos24h). */
+    pedidos24h?: Record<string, number>;
+  } = {}
 ): RotationPick | null {
   const active = targets.filter((t) => t.enabled && t.domain);
   if (active.length === 0) return null;
@@ -142,18 +149,34 @@ export function pickTarget(
   if (bestCoverage === 0) return null;
   const bestPool = all.filter((c) => c.resolvedCount === bestCoverage);
 
+  // Teto de pedidos por dia (ultimas 24 h), para aquecer conta de pagamento
+  // aos poucos: destino que ja bateu o teto sai do sorteio. Vem DEPOIS da
+  // cobertura de proposito -- teto nunca custa item de carrinho -- e e teto
+  // macio: com todos cheios o carrinho vai assim mesmo, porque vender e
+  // melhor que travar. So o servidor conhece a contagem, entao rota com teto
+  // nao sorteia inline (ver resolveInlineUrl no loader).
+  const cheio = (t: RouteTarget) =>
+    t.dailyLimit != null &&
+    t.dailyLimit > 0 &&
+    (options.pedidos24h?.[t.targetStoreId] ?? 0) >= t.dailyLimit;
+  const comVaga = bestPool.filter((c) => !cheio(c.target));
+  const todosCheios = comVaga.length === 0 && bestPool.some((c) => cheio(c.target));
+  const quotaPool = comVaga.length > 0 ? comVaga : bestPool;
+  const motivo = (r: RotationPick["reason"]): RotationPick["reason"] =>
+    todosCheios ? "all_full" : r;
+
   // Peso 0 = configurado mas fora do rodizio (conta em aquecimento, ou
   // pausada sem perder o mapa). So volta a valer se for o unico que cobre o
   // carrinho -- ai e ele ou checkout parcial.
-  const weighted = bestPool.filter((c) => c.target.weight > 0);
-  const pool = weighted.length > 0 ? weighted : bestPool;
+  const weighted = quotaPool.filter((c) => c.target.weight > 0);
+  const pool = weighted.length > 0 ? weighted : quotaPool;
 
   if (pool.length === 1) {
     return {
       chosen: pool[0],
       eligible: pool,
       all,
-      reason: weighted.length === 0 ? "best_coverage_fallback" : "single",
+      reason: motivo(weighted.length === 0 ? "best_coverage_fallback" : "single"),
     };
   }
 
@@ -181,9 +204,9 @@ export function pickTarget(
   for (const candidate of ordered) {
     cursor -= Math.max(1, candidate.target.weight);
     if (cursor < 0) {
-      return { chosen: candidate, eligible: pool, all, reason: "weighted" };
+      return { chosen: candidate, eligible: pool, all, reason: motivo("weighted") };
     }
   }
 
-  return { chosen: ordered[ordered.length - 1], eligible: pool, all, reason: "weighted" };
+  return { chosen: ordered[ordered.length - 1], eligible: pool, all, reason: motivo("weighted") };
 }

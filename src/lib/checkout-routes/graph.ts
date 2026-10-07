@@ -3,12 +3,14 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { deriveStoreRoles, type StoreRole } from "@/lib/checkout-routes/store-roles";
+import { contarPedidos24h } from "@/lib/checkout-routes/pedidos-24h";
 
 interface TargetRow {
   id: string;
   route_id: string;
   target_store_id: string;
   weight: number | null;
+  daily_limit?: number | null;
   enabled: boolean | null;
   position: number | null;
   last_healed_at: string | null;
@@ -34,6 +36,10 @@ export interface GraphTarget {
   mappedSkuCount: number;
   lastHealedAt: string | null;
   sharePercent: number;
+  /** Teto de pedidos nas ultimas 24 h; null = sem teto. */
+  dailyLimit: number | null;
+  /** Pedidos reais da loja nas ultimas 24 h (routed_checkout_orders). */
+  orders24h: number;
 }
 
 export interface GraphRoute {
@@ -95,12 +101,18 @@ export const getRouteGraph = cache(async (): Promise<RouteGraph> => {
   if (routeIds.length > 0) {
     const { data } = await supabase
       .from("routed_checkout_targets")
-      .select("id, route_id, target_store_id, weight, enabled, position, last_healed_at, sku_map")
+      .select("id, route_id, target_store_id, weight, enabled, daily_limit, position, last_healed_at, sku_map")
       .in("route_id", routeIds)
       .order("position", { ascending: true })
       .order("id", { ascending: true });
     targets = (data || []) as TargetRow[];
   }
+
+  // Pedidos das ultimas 24 h por loja de checkout, para o teto de pedidos/dia.
+  const pedidos24h = await contarPedidos24h(
+    supabase,
+    targets.map((t) => t.target_store_id)
+  );
 
   // Quantos carrinhos cada rota levou de verdade nos ultimos 30 dias.
   //
@@ -145,6 +157,7 @@ export const getRouteGraph = cache(async (): Promise<RouteGraph> => {
                 target_store_id: route.target_store_id,
                 weight: 1,
                 enabled: true,
+                daily_limit: null,
                 position: 0,
                 last_healed_at: route.last_healed_at,
                 sku_map: route.sku_map,
@@ -186,6 +199,8 @@ export const getRouteGraph = cache(async (): Promise<RouteGraph> => {
           legacy: String(target.id).startsWith("legacy:"),
           mappedSkuCount: Object.keys(target.sku_map || {}).length,
           lastHealedAt: target.last_healed_at,
+          dailyLimit: target.daily_limit ?? null,
+          orders24h: pedidos24h[target.target_store_id] || 0,
           sharePercent:
             active && totalWeight > 0 ? Math.round((weight / totalWeight) * 100) : 0,
         };

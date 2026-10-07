@@ -9,6 +9,8 @@ export interface EmbedTarget {
   id: string | null;
   domain: string;
   weight: number;
+  /** Teto de pedidos/dia. Presente, o loader nao sorteia inline: cai na API. */
+  dailyLimit?: number;
   skuMap: Record<string, string>;
   variantMap: Record<string, string>;
   country: string;
@@ -28,7 +30,7 @@ export interface EmbedConfig {
   locale: string;
 }
 
-function toEmbedTarget(target: RouteTarget): EmbedTarget {
+export function toEmbedTarget(target: RouteTarget): EmbedTarget {
   const skuMap: Record<string, string> = {};
   for (const [key, value] of Object.entries(target.skuMap || {})) {
     const lower = key.trim().toLowerCase();
@@ -52,6 +54,7 @@ function toEmbedTarget(target: RouteTarget): EmbedTarget {
     id: target.id.startsWith("legacy:") ? null : target.id,
     domain: target.domain,
     weight: target.weight,
+    ...(target.dailyLimit ? { dailyLimit: target.dailyLimit } : {}),
     skuMap,
     variantMap,
     country,

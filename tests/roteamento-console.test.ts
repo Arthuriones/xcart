@@ -32,6 +32,8 @@ function alvo(over: Partial<{ id: string; enabled: boolean; weight: number; shar
     sharePercent: 100,
     mappedSkuCount: 50,
     lastHealedAt: hAtras(1),
+    dailyLimit: null,
+    orders24h: 0,
     legacy: false,
     ...over,
   };

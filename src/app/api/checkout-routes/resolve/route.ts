@@ -17,6 +17,7 @@ import {
   loadRouteTargets,
 } from "@/lib/checkout-routes/targets";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { contarPedidos24h } from "@/lib/checkout-routes/pedidos-24h";
 
 export const runtime = "nodejs";
 
@@ -91,7 +92,12 @@ export async function POST(request: NextRequest) {
       targets.map(async (target) => hydrateTargetBySku(target, lines))
     );
 
-    const pick = pickTarget(enriched, lines, { rotationKey, strategy });
+    // Teto de pedidos por dia: a contagem so e lida quando algum destino tem.
+    const pedidos24h = enriched.some((t) => t.dailyLimit)
+      ? await contarPedidos24h(supabase, enriched.map((t) => t.targetStoreId))
+      : undefined;
+
+    const pick = pickTarget(enriched, lines, { rotationKey, strategy, pedidos24h });
 
     if (!pick) {
       return NextResponse.json(
