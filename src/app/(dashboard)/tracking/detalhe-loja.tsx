@@ -14,6 +14,7 @@ import type { DestinoNaTela } from "@/lib/tracking/queries";
 import type { DiagnosticoLoja } from "@/lib/tracking/diagnostico";
 import { ativarPixel, instalarScript, lerCabecalho, removerPixel, type CabecalhoLoja } from "./acoes";
 import { CodigoDoPixel } from "./codigo-pixel";
+import { PaginaExterna } from "./pagina-externa";
 import { FormularioDestino } from "./destinos-ui";
 import { CaixaLogo, Logo } from "./logos";
 import { PLATAFORMAS, formatarInteiro, type LinhaLoja } from "./resumo";
@@ -422,6 +423,17 @@ export function DetalheLoja({
           </p>
           <CodigoDoPixel storeId={id} />
         </div>
+      </Bloco>
+
+      <Bloco
+        cabeca={
+          <>
+            <CaixaLogo marca="shopify" />
+            <span className="flex-1 text-dense font-semibold text-ink">Página externa (VSL)</span>
+          </>
+        }
+      >
+        <PaginaExterna storeId={id} />
       </Bloco>
 
       <ConfirmDialog
