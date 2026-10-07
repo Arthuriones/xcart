@@ -27,6 +27,15 @@ export function ConteudoGoogle({ d }: { d: DadosAnuncios }) {
         titulo="Google Ads"
         estado={ligado ? { tom: "ok", texto: textoEstado } : { tom: "neutral", texto: "Não conectado" }}
         dica="As conversões saem do navegador do comprador, pela tag do Google, com o AW- e os rótulos de cada conta cadastrados no Rastreamento."
+        acao={
+          <Link
+            href="/campanhas"
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-t1 hover:bg-surface-elevated hover:text-white transition w-fit"
+          >
+            <span>Ver campanhas</span>
+            <span aria-hidden="true">&rarr;</span>
+          </Link>
+        }
       />
 
       {d.lojas.length === 0 ? (

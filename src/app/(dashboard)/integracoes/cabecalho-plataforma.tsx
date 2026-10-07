@@ -12,19 +12,24 @@ export function CabecalhoPlataforma({
   titulo,
   estado,
   dica,
+  acao,
 }: {
   titulo: string;
   estado: Estado;
   /** Explicacao curta que antes era um aviso fixo na tela. */
   dica?: ReactNode;
+  acao?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <span className="flex items-center gap-1">
-        <h2 className="text-overlay text-ink">{titulo}</h2>
-        {dica ? <Dica rotulo={`Sobre ${titulo}`}>{dica}</Dica> : null}
-      </span>
-      <StatusBadge tom={estado.tom}>{estado.texto}</StatusBadge>
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-1.5">
+        <span className="flex items-center gap-1">
+          <h2 className="text-overlay text-ink">{titulo}</h2>
+          {dica ? <Dica rotulo={`Sobre ${titulo}`}>{dica}</Dica> : null}
+        </span>
+        <StatusBadge tom={estado.tom}>{estado.texto}</StatusBadge>
+      </div>
+      {acao}
     </div>
   );
 }

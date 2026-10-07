@@ -31,6 +31,15 @@ export function ConteudoMeta({ d }: { d: DadosAnuncios }) {
             ? "São duas permissões diferentes: a de leitura só vê quanto você gastou; a de conversões só envia as compras ao pixel. Uma não substitui a outra."
             : undefined
         }
+        acao={
+          <Link
+            href="/campanhas"
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-t1 hover:bg-surface-elevated hover:text-white transition w-fit"
+          >
+            <span>Ver campanhas</span>
+            <span aria-hidden="true">&rarr;</span>
+          </Link>
+        }
       />
 
       {d.lojas.length === 0 ? (

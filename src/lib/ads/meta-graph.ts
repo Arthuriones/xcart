@@ -213,16 +213,24 @@ export async function buscarConta(
  * Insights diario. SEM action_attribution_windows de proposito: assim a API usa
  * a atribuicao configurada em cada conjunto e o numero bate com o Gerenciador.
  */
+export type NivelInsightMeta = "account" | "campaign" | "adset" | "ad";
+
 export async function buscarInsightsDetalhado(
   contaId: string,
   token: string,
   desde: string,
   ate: string,
-  nivel: "account" | "campaign"
+  nivel: NivelInsightMeta
 ): Promise<{ rows: InsightMeta[]; throttle: ThrottleMeta | null }> {
-  const fields =
-    "account_currency,date_start,spend,impressions,clicks,actions,action_values" +
-    (nivel === "campaign" ? ",campaign_id,campaign_name" : "");
+  let fields = "account_currency,date_start,spend,impressions,clicks,actions,action_values";
+  if (nivel === "campaign") {
+    fields += ",campaign_id,campaign_name";
+  } else if (nivel === "adset") {
+    fields += ",campaign_id,campaign_name,adset_id,adset_name";
+  } else if (nivel === "ad") {
+    fields += ",campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name";
+  }
+
   const r = await paginar(
     `act_${contaId.replace(/\D/g, "")}/insights`,
     {
@@ -243,7 +251,7 @@ export async function buscarInsights(
   token: string,
   desde: string,
   ate: string,
-  nivel: "account" | "campaign"
+  nivel: NivelInsightMeta
 ): Promise<InsightMeta[]> {
   return (await buscarInsightsDetalhado(contaId, token, desde, ate, nivel)).rows;
 }

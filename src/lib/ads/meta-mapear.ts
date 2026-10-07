@@ -33,6 +33,10 @@ export interface InsightMeta {
   action_values?: AcaoMeta[];
   campaign_id?: string | number;
   campaign_name?: string;
+  adset_id?: string | number;
+  adset_name?: string;
+  ad_id?: string | number;
+  ad_name?: string;
 }
 
 export interface ContextoLinhas {

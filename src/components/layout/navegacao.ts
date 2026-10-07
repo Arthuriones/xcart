@@ -9,6 +9,7 @@ import {
   History,
   LayoutGrid,
   ListChecks,
+  Megaphone,
   Plug,
   Radio,
   Receipt,
@@ -37,6 +38,7 @@ const t = textos("nav");
 
 export type IdItem =
   | "lucro"
+  | "campanhas"
   | "pedidos"
   | "saude"
   | "eventos"
@@ -84,6 +86,14 @@ export interface GrupoNav {
  */
 export const ITENS: Record<IdItem, ItemNav> = {
   lucro: { id: "lucro", href: "/financeiro", rotulo: t("profit"), icone: CircleDollarSign, atalho: "l" },
+  campanhas: {
+    id: "campanhas",
+    href: "/campanhas",
+    rotulo: t("campaigns"),
+    icone: Megaphone,
+    atalho: "k",
+    busca: "anúncios campanhas tráfego pago conjuntos criativos cpa roas meta google tiktok",
+  },
   pedidos: {
     id: "pedidos",
     href: "/pedidos",
@@ -178,10 +188,13 @@ export const ITENS: Record<IdItem, ItemNav> = {
  * abrir uma tela "em breve".
  */
 export function gruposNav(temRota: boolean): GrupoNav[] {
-  // Menu completo de novo: o de 3 itens escondia Lojas, Custos, Alertas e
-  // Integracoes atras de Configuracoes, e o dono nao achava as telas.
+  // Menu completo: o grupo lucro inclui Dashboard, Campanhas, Pedidos e Custos.
   const grupos: GrupoNav[] = [
-    { id: "lucro", rotulo: t("finance"), itens: [ITENS.lucro, ITENS.pedidos, ITENS.custos] },
+    {
+      id: "lucro",
+      rotulo: t("finance"),
+      itens: [ITENS.lucro, ITENS.campanhas, ITENS.pedidos, ITENS.custos],
+    },
     {
       id: "rastreamento",
       rotulo: t("trackingGroup"),
@@ -298,6 +311,7 @@ export const SECOES_CONFIGURACOES: { id: string; titulo: string; links: LinkConf
 
 const TITULOS: Record<string, string> = {
   "/financeiro": t("profit"),
+  "/campanhas": t("campaigns"),
   "/financeiro/custos": t("costs"),
   "/financeiro/anuncios": t("adAccounts"),
   "/pedidos": t("orders"),
