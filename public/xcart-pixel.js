@@ -455,6 +455,29 @@
     return false;
   }
 
+  /**
+   * Click ids e cookies de pixel que vieram como ATRIBUTO do carrinho.
+   *
+   * No fluxo normal e o que o tema gravou via /cart/update.js -- a mesma
+   * fonte da identidade que o coletor consulta. Em link direto para o checkout
+   * (VSL/advertorial com xcart-bridge.js e permalink /cart/VARIANTE:QTD)
+   * nenhuma pagina do tema roda: nao ha identidade, e o atributo que a ponte
+   * pos no permalink e a UNICA ligacao do checkout com o anuncio.
+   * "Comprar agora" pula o carrinho e chega sem atributo: cai na identidade.
+   */
+  var DO_CARRINHO = ["fbclid", "gclid", "gbraid", "wbraid", "ttclid", "_fbp", "_fbc", "_ttp"];
+
+  function atributosDoCheckout(checkout) {
+    var saida = {};
+    var lista = (checkout && checkout.attributes) || [];
+    for (var i = 0; i < lista.length; i++) {
+      var a = lista[i];
+      if (!a || typeof a.value !== "string" || !a.value || a.value.length > 500) continue;
+      if (DO_CARRINHO.indexOf(a.key) !== -1) saida[a.key] = a.value;
+    }
+    return saida;
+  }
+
   /** O que o tema nao alcanca. Nome da Shopify -> nome do nosso catalogo. */
   var EVENTOS = [
     ["checkout_started", "begin_checkout"],
@@ -467,6 +490,7 @@
       var doc = ectx.document || {};
       var checkout = (event.data && event.data.checkout) || {};
       var endereco = checkout.shippingAddress || checkout.billingAddress || {};
+      var atr = atributosDoCheckout(checkout);
 
       // O clientId zerado que a Shopify usa sem consentimento nao e identidade:
       // e o mesmo valor para pessoas diferentes. Sem ele, o checkout vira o
@@ -496,6 +520,16 @@
         // ponte para o coletor cancelar o expresso deste comprador.
         vidDoTema: vidDoCookie || undefined,
         checkoutToken: checkout.token || null,
+        // Do carrinho (ver DO_CARRINHO). Ausente, o JSON nem leva o campo e o
+        // coletor recupera pela identidade do tema, como antes.
+        fbclid: atr.fbclid,
+        gclid: atr.gclid,
+        gbraid: atr.gbraid,
+        wbraid: atr.wbraid,
+        ttclid: atr.ttclid,
+        fbp: atr._fbp,
+        fbc: atr._fbc,
+        ttp: atr._ttp,
         pageUrl: (doc.location && doc.location.href) || null,
         referrer: doc.referrer || null,
         // PII do checkout. Vai em claro por HTTPS e o servidor hasheia antes de

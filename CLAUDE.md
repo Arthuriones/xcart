@@ -94,7 +94,7 @@ Every AI call receives `StoreContext` (name, niche, target_audience, brand_voice
   `data-xcart-destinos` e obrigatorio e sem curinga: reescrever "todo link
   externo" entregaria o gclid para o Instagram e o WhatsApp da pagina. A lista de
   parametros dos dois arquivos e travada por
-  `tests/tracking-ponte-advertorial.test.ts`.
+  `tests/tracking-ponte-advertorial.test.ts`. **VSL com link DIRETO para o checkout** (permalink `/cart/VARIANTE:QTD`): nenhuma pagina do tema roda, entao ninguem leria o `?fbclid=`; a ponte grava os mesmos valores como `attributes[...]` no permalink (e os cookies `_fbp`/`_fbc`/`_ttp` dos pixels da propria VSL), o `xcart-pixel.js` le `checkout.attributes` (`DO_CARRINHO`) e manda ao coletor, e o pedido nasce com eles em note_attributes. So em `/cart/ALGO`; pagina do tema continua lendo o parametro solto.
 - **`/api/tracking/collect` e publico e NAO aceita valor monetario.** Quem
   dispara e o visitante: nao ha sessao. Valor vindo dali seria numero que
   qualquer um infla na conta de anuncios do lojista, e valor de conversao

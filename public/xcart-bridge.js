@@ -25,6 +25,16 @@
  *           data-xcart-destinos="linguo.shop"
  *           defer></script>
  *
+ * VSL / pagina de oferta com link DIRETO para o checkout (permalink
+ * https://loja/cart/VARIANTE:QTD): nenhuma pagina do tema roda no caminho,
+ * entao ninguem na loja leria o `?fbclid=`. Nesses links a ponte grava os
+ * mesmos valores como ATRIBUTO do carrinho (`attributes[fbclid]=...`, que a
+ * Shopify aceita no permalink) -- o Web Pixel do checkout le de
+ * `checkout.attributes` e o pedido nasce com eles em note_attributes, os
+ * mesmos nomes que o tema grava via /cart/update.js. Vao junto os cookies dos
+ * pixels de navegador DESTA pagina (_fbp, _fbc, _ttp): o Meta e o TikTok rodam
+ * aqui, e a compra sai com o mesmo id de navegador que eles usaram.
+ *
  * `data-xcart-destinos` e OBRIGATORIO e nao aceita curinga. Sem lista, este
  * arquivo nao faz nada. O motivo: reescrever "todo link externo" mandaria o
  * gclid junto para o Instagram, para o WhatsApp e para qualquer outro link da
@@ -39,6 +49,9 @@
   // Os mesmos que o snippet da loja entende. gbraid/wbraid substituem o gclid
   // no trafego de iOS; sem eles, essa parte da campanha chega sem atribuicao.
   var CLICK_IDS = ["gclid", "gbraid", "wbraid", "fbclid", "ttclid"];
+  // Cookies que os pixels de navegador gravam neste dominio. So lidos, nunca
+  // inventados: _fbc afirma um clique, e _fbp/_ttp sao do pixel.
+  var COOKIES_DO_PIXEL = ["_fbp", "_fbc", "_ttp"];
   var UTM = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"];
   var DIAS = 90;
   var PREFIXO = "_xcb_";
@@ -163,7 +176,26 @@
         u.searchParams.set(m, guardados[m]);
       }
     }
+    if (ehPermalink(u)) {
+      for (var a = 0; a < CLICK_IDS.length; a++) {
+        var id = CLICK_IDS[a];
+        if (guardados[id]) u.searchParams.set("attributes[" + id + "]", guardados[id]);
+      }
+      for (var b = 0; b < COOKIES_DO_PIXEL.length; b++) {
+        var nome = COOKIES_DO_PIXEL[b];
+        var valor = lerCookie(nome);
+        if (valor && valor.length <= 500) u.searchParams.set("attributes[" + nome + "]", valor);
+      }
+    }
     return u.toString();
+  }
+
+  /**
+   * Link direto para o checkout: /cart/VARIANTE:QTD, /cart/add... Tudo que
+   * esta em /cart/ALGO pula o tema. A pagina /cart do tema fica de fora.
+   */
+  function ehPermalink(u) {
+    return u.pathname.indexOf("/cart/") === 0 && u.pathname.length > "/cart/".length;
   }
 
   /** A URL de destino com os parametros, para redirecionamento feito em JS. */

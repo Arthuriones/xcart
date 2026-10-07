@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import vm from "node:vm";
 
 /**
  * A ponte roda no advertorial e o snippet roda na loja -- dois arquivos, dois
@@ -123,5 +124,131 @@ describe("o snippet cuida do _fbp sem inventar _fbc", () => {
     const ateOFim = trecho.slice(0, 400);
     expect(ateOFim).not.toMatch(/gravarCookie\("_fbc"/);
     expect(ateOFim).not.toMatch(/"fb\.1\.[^"]*" \+ Date\.now\(\)[\s\S]{0,60}_fbc/);
+  });
+});
+
+/**
+ * VSL / pagina de oferta com link DIRETO para o checkout (permalink
+ * /cart/VARIANTE:QTD). Nenhuma pagina do tema roda no caminho, entao o
+ * `?fbclid=` que a ponte poe no link nao e lido por ninguem na loja. A ponte
+ * grava os mesmos valores como atributo do carrinho, que o Web Pixel le em
+ * `checkout.attributes` e o pedido traz em note_attributes.
+ *
+ * A ponte roda de verdade aqui, num DOM minimo: o que se confere e a URL que
+ * sai, nao o texto do arquivo.
+ */
+describe("link direto para o checkout leva os click ids como atributo do carrinho", () => {
+  function rodar(opts: { url: string; cookies?: Record<string, string>; hrefs: string[] }) {
+    const jar: Record<string, string> = { ...(opts.cookies || {}) };
+    const links = opts.hrefs.map((href) => {
+      const attrs: Record<string, string> = { href };
+      return {
+        getAttribute: (n: string) => attrs[n] ?? null,
+        setAttribute: (n: string, v: string) => {
+          attrs[n] = v;
+        },
+      };
+    });
+    const document: Record<string, unknown> = {
+      currentScript: {
+        getAttribute: (n: string) => (n === "data-xcart-destinos" ? "loja.shop" : null),
+      },
+      readyState: "complete",
+      documentElement: {},
+      getElementsByTagName: () => links,
+      addEventListener: () => {},
+    };
+    Object.defineProperty(document, "cookie", {
+      get: () =>
+        Object.entries(jar)
+          .map(([k, v]) => `${k}=${v}`)
+          .join("; "),
+      set: (s: string) => {
+        const [kv] = s.split(";");
+        const i = kv.indexOf("=");
+        jar[kv.slice(0, i)] = kv.slice(i + 1);
+      },
+    });
+    const u = new URL(opts.url);
+    const sandbox: Record<string, unknown> = {
+      document,
+      location: { href: u.href, search: u.search, protocol: u.protocol },
+      URL,
+      URLSearchParams,
+    };
+    sandbox.window = sandbox;
+    vm.runInNewContext(ponte, sandbox);
+    return links.map((l) => l.getAttribute("href") as string);
+  }
+
+  const url = "https://vsl.com/oferta?fbclid=ABC123&ttclid=E.C.P.TT1&utm_source=tiktok";
+
+  it("no permalink /cart/ vai como attributes[...], junto do parametro solto", () => {
+    const [permalink] = rodar({
+      url,
+      cookies: { _fbp: "fb.1.1700000000000.42", _fbc: "fb.1.1700000000000.ABC123", _ttp: "UqBuLHl7" },
+      hrefs: ["https://loja.shop/cart/4567:1"],
+    });
+    const p = new URL(permalink).searchParams;
+    expect(p.get("fbclid")).toBe("ABC123");
+    expect(p.get("utm_source")).toBe("tiktok");
+    expect(p.get("attributes[fbclid]")).toBe("ABC123");
+    expect(p.get("attributes[ttclid]")).toBe("E.C.P.TT1");
+    expect(p.get("attributes[_fbp]")).toBe("fb.1.1700000000000.42");
+    expect(p.get("attributes[_fbc]")).toBe("fb.1.1700000000000.ABC123");
+    expect(p.get("attributes[_ttp]")).toBe("UqBuLHl7");
+    // Nao veio no anuncio: nao vai.
+    expect(p.has("attributes[gclid]")).toBe(false);
+  });
+
+  it("pagina do tema (produto, /cart) nao recebe atributo: o snippet de la ja le o parametro", () => {
+    const [produto, carrinho] = rodar({
+      url,
+      cookies: { _fbp: "fb.1.1.2" },
+      hrefs: ["https://loja.shop/products/x", "https://loja.shop/cart"],
+    });
+    expect(new URL(produto).searchParams.get("fbclid")).toBe("ABC123");
+    expect(produto).not.toContain("attributes");
+    expect(carrinho).not.toContain("attributes");
+  });
+
+  it("link de terceiro continua intocado", () => {
+    const [ig] = rodar({ url, hrefs: ["https://instagram.com/loja"] });
+    expect(ig).toBe("https://instagram.com/loja");
+  });
+
+  it("_fbc e _fbp nunca sao inventados: sem cookie do pixel, sem atributo", () => {
+    const [permalink] = rodar({ url, hrefs: ["https://loja.shop/cart/4567:1"] });
+    expect(permalink).not.toContain("_fbc");
+    expect(permalink).not.toContain("_fbp");
+  });
+});
+
+describe("o que a ponte grava no carrinho, o pixel e o pedido leem pelo mesmo nome", () => {
+  const pixel = readFileSync(path.join(raiz, "xcart-pixel.js"), "utf8");
+  const coletor = readFileSync(
+    path.resolve(__dirname, "..", "src", "app", "api", "tracking", "collect", "route.ts"),
+    "utf8"
+  );
+  const compra = readFileSync(
+    path.resolve(__dirname, "..", "src", "lib", "tracking", "purchase.ts"),
+    "utf8"
+  );
+  const daPonte = [...listaDe(ponte, "CLICK_IDS"), ...listaDe(ponte, "COOKIES_DO_PIXEL")];
+  const doPixel = listaDe(pixel, "DO_CARRINHO");
+
+  it("o pixel le do checkout exatamente o que a ponte grava", () => {
+    expect([...doPixel].sort()).toEqual([...daPonte].sort());
+  });
+
+  it("o pedido (webhook) le cada um desses atributos", () => {
+    for (const k of doPixel) expect(compra, k).toContain(`atributo(pedido, "${k}")`);
+  });
+
+  it("o coletor le cada campo que o pixel manda", () => {
+    for (const campo of ["fbclid", "gclid", "gbraid", "wbraid", "ttclid", "fbp", "fbc", "ttp"]) {
+      expect(pixel, campo).toContain(`        ${campo}: atr.`);
+      expect(coletor, campo).toContain(`corpo.${campo}`);
+    }
   });
 });
