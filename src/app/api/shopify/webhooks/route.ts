@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
   // Sem o client_secret da loja, a assinatura nao fecha.
   const { data: lojas, error: erroLojas } = await admin
     .from("stores")
-    .select("id, user_id, shop_domain, client_secret, uninstalled_at")
+    .select("id, user_id, name, shop_domain, client_secret, uninstalled_at")
     .eq("shop_domain", shopDomain);
 
   // Soluco do banco nao e "loja desconhecida": com 200 a Shopify desiste, e a
@@ -175,6 +175,27 @@ export async function POST(request: NextRequest) {
   }
 }
 
+async function notificarVenda(
+  admin: ReturnType<typeof createAdminClient>,
+  loja: { user_id?: string | null; name?: string | null; shop_domain: string },
+  pedido: Record<string, unknown>
+) {
+  try {
+    const { webhookDeVendaDoDono, enviarNotificacaoDeVenda, vendaDoPedido } = await import(
+      "@/lib/alertas/venda-webhook"
+    );
+    const url = await webhookDeVendaDoDono(admin, loja.user_id as string);
+    if (!url) return;
+    const r = await enviarNotificacaoDeVenda(
+      url,
+      vendaDoPedido(pedido as Parameters<typeof vendaDoPedido>[0], loja.name || loja.shop_domain)
+    );
+    if (!r.ok) console.warn("[shopify/webhook] notificacao de venda falhou", r.erro);
+  } catch (e) {
+    console.error("[shopify/webhook] notificacao de venda", e instanceof Error ? e.message : e);
+  }
+}
+
 /**
  * Excecao vira 503, nao 500 cru.
  *
@@ -210,7 +231,7 @@ async function executarComRetentativa(
  */
 async function tratarPedidoCriado(
   admin: ReturnType<typeof createAdminClient>,
-  loja: { id: string; shop_domain: string },
+  loja: { id: string; user_id?: string | null; name?: string | null; shop_domain: string },
   payload: Record<string, unknown>
 ) {
   const { rastreamentoLigado, enfileirar, entregar } = await import(
@@ -235,7 +256,11 @@ async function tratarPedidoCriado(
   // isso vem ANTES da trava do rastreamento. Falha aqui nao segura a compra.
   if (!motivo && pedido.id != null) {
     const { registrarPedidoDoRodizio } = await import("@/lib/checkout-routes/pedidos-24h");
-    await registrarPedidoDoRodizio(admin, loja.id, String(pedido.id), pedido.created_at ?? null);
+    const novo = await registrarPedidoDoRodizio(admin, loja.id, String(pedido.id), pedido.created_at ?? null);
+    // Notificacao de venda no celular (Pushcut, ntfy...). So na primeira vez
+    // que o pedido entra -- reentrega da Shopify nao toca de novo -- e nunca
+    // segura nem derruba a compra: falhou, so vai para o log.
+    if (novo && loja.user_id) await notificarVenda(admin, loja, payload);
   }
 
   if (!(await rastreamentoLigado(admin, loja.id))) {

@@ -2,6 +2,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { getAlertas } from "@/lib/alertas/queries";
 import { ErroLeitura } from "../erro-leitura";
 import { CanalTelegram } from "./canal-telegram";
+import { CanalVenda } from "./canal-venda";
 import { RegrasAlertas } from "./regras";
 
 export const dynamic = "force-dynamic";
@@ -16,12 +17,14 @@ export const dynamic = "force-dynamic";
 export default async function NotificacoesPage() {
   const dados = await getAlertas();
   const conectado = Boolean(dados.config.telegram_chat_id) && dados.temToken;
+  const vendaLigada = Boolean(dados.venda.host) && dados.venda.ativo;
+  const canais = [conectado ? "Telegram" : null, vendaLigada ? "Venda no celular" : null].filter(Boolean);
 
   return (
     <>
       <div className="flex flex-col gap-1.5">
         <h2 className="text-overlay text-ink">Notificações</h2>
-        <StatusBadge tom={conectado ? "ok" : "neutral"}>{conectado ? "Telegram" : "Nenhum canal"}</StatusBadge>
+        <StatusBadge tom={canais.length ? "ok" : "neutral"}>{canais.length ? canais.join(" · ") : "Nenhum canal"}</StatusBadge>
       </div>
 
       {dados.erro ? (
@@ -30,6 +33,7 @@ export default async function NotificacoesPage() {
         <ErroLeitura titulo="Não deu para ler a configuração das notificações." detalhe={dados.erro} />
       ) : (
         <>
+          <CanalVenda ativo={dados.venda.ativo} host={dados.venda.host} />
           <CanalTelegram config={dados.config} temToken={dados.temToken} tokenDaEnv={dados.tokenDaEnv} />
           <RegrasAlertas gastoMinimo={Number(dados.config.gasto_sem_venda_min ?? 30)} />
         </>

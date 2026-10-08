@@ -28,6 +28,8 @@ export interface AlertasDaTela {
   temToken: boolean;
   /** O token vem da env da instalacao, nao do usuario. */
   tokenDaEnv: boolean;
+  /** Notificacao de venda no celular: ligada e o HOST da URL (a URL e segredo). */
+  venda: { ativo: boolean; host: string | null };
   erro: string | null;
 }
 
@@ -58,6 +60,7 @@ export async function getAlertas(): Promise<AlertasDaTela> {
     config: configPadrao,
     temToken: false,
     tokenDaEnv: false,
+    venda: { ativo: true, host: null },
     erro: null,
   };
   if (!user) return vazio;
@@ -94,20 +97,27 @@ export async function getAlertas(): Promise<AlertasDaTela> {
     qResolvidos,
     supabase
       .from("alerta_config")
-      .select("user_id, telegram_chat_id, ativo, receber_avisos, gasto_sem_venda_min")
+      .select("user_id, telegram_chat_id, ativo, receber_avisos, gasto_sem_venda_min, notificar_vendas")
       .eq("user_id", user.id)
       .maybeSingle(),
   ]);
 
   let temTokenProprio = false;
+  let hostDaVenda: string | null = null;
   let erroToken: string | null = null;
   try {
     const { data, error } = await createAdminClient()
       .from("alerta_config_secrets")
-      .select("telegram_bot_token")
+      .select("telegram_bot_token, venda_webhook_url")
       .eq("user_id", user.id)
       .maybeSingle();
     if (error) erroToken = error.message;
+    const urlVenda = String((data as { venda_webhook_url?: string | null } | null)?.venda_webhook_url || "");
+    try {
+      hostDaVenda = urlVenda ? new URL(urlVenda).hostname : null;
+    } catch {
+      hostDaVenda = null;
+    }
     temTokenProprio = !!String(
       (data as { telegram_bot_token?: string | null } | null)?.telegram_bot_token || ""
     ).trim();
@@ -140,6 +150,10 @@ export async function getAlertas(): Promise<AlertasDaTela> {
       : configPadrao,
     temToken: temTokenProprio || tokenDaEnv,
     tokenDaEnv,
+    venda: {
+      ativo: (config.data as { notificar_vendas?: boolean } | null)?.notificar_vendas !== false,
+      host: hostDaVenda,
+    },
     erro: erro ? `Não foi possível ler os alertas: ${erro}` : null,
   };
 }
