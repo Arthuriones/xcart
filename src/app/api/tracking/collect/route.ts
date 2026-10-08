@@ -477,7 +477,16 @@ export async function POST(request: NextRequest) {
   // do checkout, do "nenhum destino" e dos tetos. Antes ficava depois deles, e
   // ai a identidade que o checkout e a compra iam consultar simplesmente nao
   // existia quando um desses retornos acontecia.
-  if (!doPixel && clientId) {
+  //
+  // O PIXEL tambem publica quando o evento dele TRAZ clique (atributo do
+  // carrinho ou a URL do checkout): anuncio direto para o permalink nao passa
+  // por tema nenhum, e sem esta linha a compra desse comprador nao acha o
+  // clique por lugar nenhum (identidade-do-pedido.ts, passo 2, resolve o
+  // clientId do checkout por aqui). Sem clique o pixel segue so consultando.
+  const trouxeClique = Boolean(
+    fbclid || fbc || ttclid || clique.gclid || clique.gbraid || clique.wbraid
+  );
+  if (clientId && (!doPixel || trouxeClique)) {
     await publicarIdentidade();
   }
 

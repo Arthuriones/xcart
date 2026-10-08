@@ -206,6 +206,33 @@ describe("coletor com destino TikTok", () => {
     expect(mundo.saiu).toEqual(["meta", "tiktok"]);
   });
 
+  /**
+   * Anuncio direto para o permalink (/cart/ID:1): nenhum tema roda, e o unico
+   * lugar onde o clique existe e o que o pixel trouxe (atributo ou URL do
+   * checkout). O pixel passa a PUBLICAR a identidade nesse caso, senao a compra
+   * desse comprador nao acha o clique por lugar nenhum. Sem clique, o pixel
+   * segue so consultando, como antes.
+   */
+  it("pixel com clique publica a identidade pelo clientId; sem clique, nao", async () => {
+    const doPixel = {
+      evento: "begin_checkout",
+      fonte: "pixel",
+      eventId: "begin_checkout_ck_tok-1",
+      visitorId: "cli-9",
+      clientId: "cli-9",
+      checkoutToken: "tok-1",
+      pageUrl: "https://loja.shop/checkouts/cn/abc/en-us?fbclid=IwZXh0CLIQUE",
+    };
+    await postar({ ...doPixel, fbclid: "IwZXh0CLIQUE" });
+    expect(mundo.identidades.length).toBe(1);
+    expect(mundo.identidades[0]).toMatchObject({ shopify_client_id: "cli-9", fbclid: "IwZXh0CLIQUE" });
+
+    mundo.identidades.length = 0;
+    mundo.fila.length = 0;
+    await postar({ ...doPixel, eventId: "begin_checkout_ck_tok-2", checkoutToken: "tok-2" });
+    expect(mundo.identidades).toEqual([]);
+  });
+
   it("payload do TikTok: nome padrao, ttclid e _ttp, IP e UA, page.url -- sem valor", async () => {
     await postar(CARRINHO);
     const [tt] = daPlataforma("tiktok");

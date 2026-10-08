@@ -346,6 +346,17 @@ describe("o que a ponte grava no carrinho, o pixel e o pedido leem pelo mesmo no
     for (const k of doPixel) expect(compra, k).toContain(`atributo(pedido, "${k}")`);
   });
 
+  it("sem atributo, o pixel le o clique da URL do checkout (anuncio direto para o permalink)", () => {
+    // O Meta anexa ?fbclid= ao link do anuncio; num link direto para
+    // /cart/ID:1 a Shopify leva a query ate a pagina do checkout, e e o unico
+    // lugar onde o clique existe. Atributo do carrinho vence a URL.
+    expect(pixel).toContain("cliquesDaUrl(paginaDoEvento(event))");
+    for (const campo of ["fbclid", "gclid", "gbraid", "wbraid", "ttclid"]) {
+      expect(pixel, campo).toContain(`${campo}: atr.${campo} || daUrl.${campo}`);
+    }
+    expect([...listaDe(pixel, "DA_URL")].sort()).toEqual([...listaDe(ponte, "CLICK_IDS")].sort());
+  });
+
   it("o coletor le cada campo que o pixel manda", () => {
     for (const campo of ["fbclid", "gclid", "gbraid", "wbraid", "ttclid", "fbp", "fbc", "ttp"]) {
       expect(pixel, campo).toContain(`        ${campo}: atr.`);

@@ -467,6 +467,30 @@
    */
   var DO_CARRINHO = ["fbclid", "gclid", "gbraid", "wbraid", "ttclid", "_fbp", "_fbc", "_ttp", "_xc_vid"];
 
+  /**
+   * Click ids na URL do checkout. Anuncio apontando DIRETO para o permalink
+   * (/cart/ID:1): a Shopify leva a query do permalink ate a pagina do
+   * checkout, e o ?fbclid= que o Meta anexa ao link chega aqui -- sem tema e
+   * sem ponte no caminho, e o unico lugar onde o clique existe. So vale o que
+   * o atributo do carrinho nao trouxe.
+   */
+  var DA_URL = ["fbclid", "gclid", "gbraid", "wbraid", "ttclid"];
+
+  function cliquesDaUrl(href) {
+    var saida = {};
+    if (!href) return saida;
+    try {
+      var q = new URL(href).searchParams;
+      for (var i = 0; i < DA_URL.length; i++) {
+        var v = q.get(DA_URL[i]);
+        if (v && v.length <= 500) saida[DA_URL[i]] = v;
+      }
+    } catch (e) {
+      /* URL estranha: sem clique */
+    }
+    return saida;
+  }
+
   function atributosDoCheckout(checkout) {
     var saida = {};
     var lista = (checkout && checkout.attributes) || [];
@@ -491,6 +515,7 @@
       var checkout = (event.data && event.data.checkout) || {};
       var endereco = checkout.shippingAddress || checkout.billingAddress || {};
       var atr = atributosDoCheckout(checkout);
+      var daUrl = cliquesDaUrl(paginaDoEvento(event));
 
       // O clientId zerado que a Shopify usa sem consentimento nao e identidade:
       // e o mesmo valor para pessoas diferentes. Sem ele, o checkout vira o
@@ -523,11 +548,11 @@
         checkoutToken: checkout.token || null,
         // Do carrinho (ver DO_CARRINHO). Ausente, o JSON nem leva o campo e o
         // coletor recupera pela identidade do tema, como antes.
-        fbclid: atr.fbclid,
-        gclid: atr.gclid,
-        gbraid: atr.gbraid,
-        wbraid: atr.wbraid,
-        ttclid: atr.ttclid,
+        fbclid: atr.fbclid || daUrl.fbclid,
+        gclid: atr.gclid || daUrl.gclid,
+        gbraid: atr.gbraid || daUrl.gbraid,
+        wbraid: atr.wbraid || daUrl.wbraid,
+        ttclid: atr.ttclid || daUrl.ttclid,
         fbp: atr._fbp,
         fbc: atr._fbc,
         ttp: atr._ttp,
