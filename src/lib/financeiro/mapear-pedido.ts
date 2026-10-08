@@ -29,6 +29,9 @@ interface MoneyBag {
 
 export interface NoLinhaPedidoShopify {
   sku?: string | null;
+  /** SKU ATUAL da variante. A linha guarda o SKU do dia da venda: produto
+   *  vendido sem SKU continua sem, mesmo depois de o lojista cadastrar. */
+  variant?: { sku?: string | null } | null;
   quantity: number;
   currentQuantity?: number | null;
   unfulfilledQuantity?: number | null;
@@ -98,7 +101,8 @@ export function mapearLinhas(no: NoPedidoShopify): LinhaPedido[] {
   return (no.lineItems?.nodes ?? []).map((n) => {
     const qtd = paraNumero(n.quantity);
     return {
-      sku: chaveSku(n.sku) || null,
+      // O da venda vence; sem ele, o SKU que a variante tem hoje.
+      sku: chaveSku(n.sku) || chaveSku(n.variant?.sku) || null,
       qtd,
       qtd_atual: n.currentQuantity == null ? qtd : paraNumero(n.currentQuantity),
       qtd_nao_enviada: nadaEnviado ? qtd : paraNumero(n.unfulfilledQuantity ?? 0),

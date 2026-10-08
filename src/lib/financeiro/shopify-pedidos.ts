@@ -59,6 +59,7 @@ const QUERY_PEDIDOS = `query FinPedidos($busca: String!, $cursor: String, $n: In
       lineItems(first: 25) {
         nodes {
           sku quantity currentQuantity unfulfilledQuantity
+          variant { sku }
           originalUnitPriceSet { shopMoney { amount } }
         }
       }
