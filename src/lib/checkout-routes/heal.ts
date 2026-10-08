@@ -10,6 +10,7 @@ import {
   type PublicShopifyProduct,
 } from "@/lib/shopify/public-store";
 import { normalizarSkus } from "@/lib/shopify/sku-stamp";
+import { produtoNoDestino } from "@/lib/checkout-routes/produto-no-destino";
 import { verificarParDaRota } from "@/lib/shopify/store-health";
 import { neutralizeProductForDestination } from "@/lib/ai/product-neutralizer";
 import {
@@ -478,17 +479,9 @@ async function executarConserto(
     const product = missingByHandle.get(handle);
     if (!product) continue;
 
-    const prefix = product.variants[0]?.sku?.split("-")[0] || "";
-    let existingTarget: TargetVariantInfo | null = null;
-    for (const sku of Object.keys(correctSkuMap)) {
-      if (sku.split("-")[0] === prefix) {
-        const info = targetIndex.get(sku.toLowerCase());
-        if (info) {
-          existingTarget = info;
-          break;
-        }
-      }
-    }
+    // Pela variante IRMA ja casada, nunca pelo prefixo do SKU (ver
+    // produto-no-destino.ts: o "xc-" do carimbo casava todo produto com todo).
+    const existingTarget: TargetVariantInfo | null = produtoNoDestino(product.variants, targetIndex);
 
     if (existingTarget) {
       // Produto ja existe no destino: so faltam variantes.

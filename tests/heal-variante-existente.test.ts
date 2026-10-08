@@ -114,3 +114,32 @@ describe("conserto nao tenta criar variante que ja existe no destino", () => {
     expect(criar).toHaveLength(1);
   });
 });
+
+/**
+ * Em qual produto do checkout entram as variantes que faltam: o da variante
+ * IRMA ja casada, nunca o primeiro SKU com o mesmo prefixo. O SKU carimbado
+ * pelo xcart e "xc-<aleatorio>", e o prefixo "xc" casava todo produto com
+ * todo -- na NORAH OUTLET, 5 bolsas viraram variantes de uma "Arque".
+ */
+import { produtoNoDestino } from "@/lib/checkout-routes/produto-no-destino";
+
+describe("produto do checkout para as variantes que faltam", () => {
+  const indice = new Map([
+    ["xc-arque-preta", { variantId: "1", productId: "ARQUE" }],
+    ["xc-lv-turtledove", { variantId: "2", productId: "LV" }],
+  ]);
+
+  it("usa o produto da variante irma ja casada", () => {
+    const lv = [{ sku: "xc-lv-black" }, { sku: "xc-lv-turtledove" }];
+    expect(produtoNoDestino(lv, indice)?.productId).toBe("LV");
+  });
+
+  it("nenhuma irma casada: produto novo, mesmo com SKU de mesmo prefixo no mapa", () => {
+    const coach = [{ sku: "xc-coach-23" }, { sku: "xc-coach-28" }];
+    expect(produtoNoDestino(coach, indice)).toBeNull();
+  });
+
+  it("ignora variante sem SKU e compara sem caixa", () => {
+    expect(produtoNoDestino([{ sku: null }, { sku: " XC-ARQUE-PRETA " }], indice)?.productId).toBe("ARQUE");
+  });
+});
