@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  completarVariantes,
   getProducts,
   shopifyRestGet,
   type ShopifyCredentials,
@@ -126,6 +127,9 @@ async function getAllVariants(creds: ShopifyCredentials): Promise<FlatVariant[]>
   for (let page = 0; page < 40; page += 1) {
     const data = await getProducts(creds, { first: 250, after });
     const nodes = data?.products?.nodes || [];
+    // Produto com mais de 50 variantes vinha cortado: o teste contava so as
+    // 50 primeiras e dava cobertura que a rota nao tinha.
+    await completarVariantes(creds, nodes);
     for (const product of nodes) {
       for (const variant of product.variants?.nodes || []) {
         flat.push({ id: variant.id, sku: variant.sku?.trim() || null });

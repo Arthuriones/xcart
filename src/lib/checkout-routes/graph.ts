@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { deriveStoreRoles, type StoreRole } from "@/lib/checkout-routes/store-roles";
 import { contarPedidos24h } from "@/lib/checkout-routes/pedidos-24h";
+import { lerConsertoDoDestino, type ConsertoDoDestino } from "@/lib/checkout-routes/loja-fora-do-ar";
 
 interface TargetRow {
   id: string;
@@ -15,6 +16,7 @@ interface TargetRow {
   position: number | null;
   last_healed_at: string | null;
   sku_map: Record<string, unknown> | null;
+  settings?: { last_heal?: unknown } | null;
 }
 
 export interface GraphStore {
@@ -40,6 +42,11 @@ export interface GraphTarget {
   dailyLimit: number | null;
   /** Pedidos reais da loja nas ultimas 24 h (routed_checkout_orders). */
   orders24h: number;
+  /**
+   * Ultima passada do conserto NESTA loja (settings.last_heal do destino):
+   * loja fora do ar, preco diferente da vitrine, variante que nao vende.
+   */
+  conserto: ConsertoDoDestino | null;
 }
 
 export interface GraphRoute {
@@ -48,7 +55,15 @@ export interface GraphRoute {
   enabled: boolean;
   mode: string | null;
   publicToken: string;
-  lastHeal: { at: string; ok: boolean; message?: string; mappedCount?: number } | null;
+  lastHeal: {
+    at: string;
+    ok: boolean;
+    message?: string;
+    mappedCount?: number;
+    /** Loja fora do ar (loja-fora-do-ar.ts): o motivo tipado e de qual lado. */
+    motivo?: string;
+    lado?: string;
+  } | null;
   /**
    * Ultimo reenvio do xcart-config.json ao tema da vitrine (settings.theme_sync,
    * gravado por src/lib/checkout-routes/tema-vitrine.ts).
@@ -106,7 +121,7 @@ export const getRouteGraph = cache(async (): Promise<RouteGraph> => {
   if (routeIds.length > 0) {
     const { data } = await supabase
       .from("routed_checkout_targets")
-      .select("id, route_id, target_store_id, weight, enabled, daily_limit, position, last_healed_at, sku_map")
+      .select("id, route_id, target_store_id, weight, enabled, daily_limit, position, last_healed_at, sku_map, settings")
       .in("route_id", routeIds)
       .order("position", { ascending: true })
       .order("id", { ascending: true });
@@ -166,6 +181,8 @@ export const getRouteGraph = cache(async (): Promise<RouteGraph> => {
                 position: 0,
                 last_healed_at: route.last_healed_at,
                 sku_map: route.sku_map,
+                // Sem linha de destino, o conserto guarda tudo na rota.
+                settings: { last_heal: (route.settings as { last_heal?: unknown } | null)?.last_heal },
               },
             ]
           : [];
@@ -177,7 +194,7 @@ export const getRouteGraph = cache(async (): Promise<RouteGraph> => {
     // Resultado da ultima passada do auto-conserto. E o unico sinal de saude
     // que existe sem o usuario pedir, entao o console mostra ele direto.
     const settings = (route.settings || {}) as {
-      last_heal?: { at: string; ok: boolean; message?: string; mappedCount?: number };
+      last_heal?: GraphRoute["lastHeal"];
       theme_sync?: { at: string; estado: string; mensagem?: string };
     };
 
@@ -214,6 +231,7 @@ export const getRouteGraph = cache(async (): Promise<RouteGraph> => {
           lastHealedAt: target.last_healed_at,
           dailyLimit: target.daily_limit ?? null,
           orders24h: pedidos24h[target.target_store_id] || 0,
+          conserto: lerConsertoDoDestino(target.settings?.last_heal),
           sharePercent:
             active && totalWeight > 0 ? Math.round((weight / totalWeight) * 100) : 0,
         };

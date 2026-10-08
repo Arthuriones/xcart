@@ -4,6 +4,27 @@ import { htmlSeguroDaIa } from "@/lib/ai/sanitize-html";
 
 const SHOPIFY_API_VERSION = "2024-10";
 
+/**
+ * Teto de variantes por produto na Shopify: 2048 para toda loja desde
+ * 15/10/2025 (era 100). Fonte: shopify.dev/changelog "the product variant
+ * limit is now 2048 for all merchants".
+ */
+export const MAX_VARIANTES_POR_PRODUTO = 2048;
+
+/**
+ * Argumento de lista aceita no maximo 250 itens "em toda API da Shopify"
+ * (shopify.dev/docs/api/usage/limits). productVariantsBulkCreate com 300
+ * variantes falha inteiro: vai em lotes.
+ */
+export const MAX_ITENS_POR_CHAMADA = 250;
+
+/** Corta uma lista em lotes de ate `tamanho`. */
+export function emLotes<T>(lista: readonly T[], tamanho = MAX_ITENS_POR_CHAMADA): T[][] {
+  const lotes: T[][] = [];
+  for (let i = 0; i < lista.length; i += tamanho) lotes.push(lista.slice(i, i + tamanho));
+  return lotes;
+}
+
 // Cache de tokens por loja (em memória — reseta no restart do server)
 const tokenCache = new Map<
   string,
@@ -538,10 +559,13 @@ async function getProductInventoryItems(
   creds: ShopifyCredentials,
   productId: string
 ) {
+  // Paginado: produto com mais de 100 variantes (teto de 2048 desde 2025)
+  // deixava as do fim sem vinculo com o local -- "esgotado" na loja.
   const query = `
-    query getProductInventoryItems($id: ID!) {
+    query getProductInventoryItems($id: ID!, $after: String) {
       product(id: $id) {
-        variants(first: 100) {
+        variants(first: 250, after: $after) {
+          pageInfo { hasNextPage endCursor }
           nodes {
             id
             inventoryItem {
@@ -553,12 +577,17 @@ async function getProductInventoryItems(
     }
   `;
 
-  const data = await shopifyGraphQL(creds, query, { id: productId });
-  return (
-    data?.product?.variants?.nodes as
-      | { id?: string; inventoryItem?: { id?: string } | null }[]
-      | undefined
-  ) || [];
+  type Item = { id?: string; inventoryItem?: { id?: string } | null };
+  const todas: Item[] = [];
+  let after: string | null = null;
+  for (let pagina = 0; pagina < MAX_VARIANTES_POR_PRODUTO / 250; pagina += 1) {
+    const data = await shopifyGraphQL(creds, query, { id: productId, after });
+    const conexao = data?.product?.variants;
+    todas.push(...((conexao?.nodes as Item[] | undefined) || []));
+    if (!conexao?.pageInfo?.hasNextPage || !conexao.pageInfo.endCursor) break;
+    after = conexao.pageInfo.endCursor;
+  }
+  return todas;
 }
 
 async function applyInitialInventoryQuantities(
@@ -1083,7 +1112,9 @@ export async function createProduct(
 
   const shouldPublishToStorefront = input.publishToStorefront !== false;
   const sourceVariants: CreateProductVariantInput[] =
-    input.variants.length > 0 ? input.variants : [{ price: "0.00" }];
+    input.variants.length > 0
+      ? input.variants.slice(0, MAX_VARIANTES_POR_PRODUTO)
+      : [{ price: "0.00" }];
   const normalizedVariants = sourceVariants.map((variant) => ({
     ...variant,
     price: normalizePrice(variant.price),
@@ -1218,19 +1249,20 @@ export async function createProduct(
       "Falha ao aplicar preco da primeira variante"
     );
 
-    // Criar variantes adicionais
-    if (variantsToCreate.length > 0) {
-      const createVariantsQuery = `
-        mutation productVariantsBulkCreate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
-          productVariantsBulkCreate(productId: $productId, variants: $variants) {
-            productVariants { id }
-            userErrors { field message }
-          }
+    // Criar variantes adicionais, em lotes de 250 (teto de lista da Shopify).
+    // O teto do produto (2048) ja foi aplicado em normalizedVariants.
+    const createVariantsQuery = `
+      mutation productVariantsBulkCreate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+        productVariantsBulkCreate(productId: $productId, variants: $variants) {
+          productVariants { id }
+          userErrors { field message }
         }
-      `;
+      }
+    `;
+    for (const lote of emLotes(variantsToCreate)) {
       const createVariantsResult = await shopifyGraphQL(creds, createVariantsQuery, {
         productId: product.id,
-        variants: variantsToCreate,
+        variants: lote,
       });
       assertNoUserErrors(
         createVariantsResult?.productVariantsBulkCreate?.userErrors,
@@ -1341,19 +1373,28 @@ export async function addProductVariants(
       .filter((value): value is { optionName: string; name: string } => Boolean(value)),
   }));
 
-  const data = await shopifyGraphQL(creds, mutation, { productId, variants: input });
-  const errors = data?.productVariantsBulkCreate?.userErrors as
-    | { field?: string[]; message: string }[]
-    | undefined;
-  if (errors?.length) {
-    throw new Error(
-      `Falha ao adicionar variantes: ${errors.map((error) => error.message).join(" | ")}`
+  // Em lotes de 250 (teto de lista da Shopify), na ordem de `variants`: quem
+  // chama casa o resultado pela posicao. Lote que falha para tudo -- o que ja
+  // entrou na loja tem o SKU da vitrine e o proximo conserto casa por ele.
+  const criadas: { id: string; sku: string | null }[] = [];
+  for (const lote of emLotes(input)) {
+    const data = await shopifyGraphQL(creds, mutation, { productId, variants: lote });
+    const errors = data?.productVariantsBulkCreate?.userErrors as
+      | { field?: string[]; message: string }[]
+      | undefined;
+    if (errors?.length) {
+      throw new Error(
+        `Falha ao adicionar variantes: ${errors.map((error) => error.message).join(" | ")}`
+      );
+    }
+    criadas.push(
+      ...((data?.productVariantsBulkCreate?.productVariants || []) as {
+        id: string;
+        sku: string | null;
+      }[])
     );
   }
-  return (data?.productVariantsBulkCreate?.productVariants || []) as {
-    id: string;
-    sku: string | null;
-  }[];
+  return criadas;
 }
 
 const POLICY_TYPE_MAP: Record<string, string> = {
@@ -1439,19 +1480,16 @@ export async function getProducts(
             }
           }
           seo { title description }
+          onlineStoreUrl
           images(first: 12) { nodes { url altText } }
           options {
             name
             values
           }
           variants(first: 50) {
+            pageInfo { hasNextPage endCursor }
             nodes {
-              id
-              title
-              sku
-              price
-              compareAtPrice
-              selectedOptions { name value }
+              ${CAMPOS_DA_VARIANTE}
             }
           }
         }
@@ -1463,6 +1501,80 @@ export async function getProducts(
     query: queryFilter || null,
     after: parsedOptions.after || null,
   });
+}
+
+// As mesmas colunas na primeira pagina (getProducts) e nas seguintes
+// (completarVariantes): quem le o produto nao sabe de qual pagina veio a
+// variante.
+//
+// availableForSale e falso na variante com estoque rastreado, zerado e sem
+// "vender sem estoque" -- o conserto conta isso na loja de checkout. Os dois
+// campos novos (este e onlineStoreUrl) so pedem read_products.
+const CAMPOS_DA_VARIANTE = `
+  id
+  title
+  sku
+  price
+  compareAtPrice
+  availableForSale
+  selectedOptions { name value }
+`;
+
+interface ConexaoDeVariantes {
+  pageInfo?: { hasNextPage?: boolean; endCursor?: string | null } | null;
+  nodes?: unknown[];
+}
+
+/**
+ * Le as variantes que faltam dos produtos que vieram cortados.
+ *
+ * A consulta de produtos traz 50 variantes por produto (o custo da consulta
+ * de 250 produtos nao comporta mais). Produto com mais que isso chegava pela
+ * metade: na rota Yarden Store -> pauments, o produto do checkout nasceu com
+ * 50 de 66 variantes e 16 ficaram sem par. Aqui as que faltam vem de 250 em
+ * 250, so para quem precisa, ate o teto de 2048 da Shopify.
+ *
+ * Mexe nos produtos recebidos (acrescenta em variants.nodes e zera o
+ * hasNextPage). Erro de rede propaga: quem chama decide se produto pela
+ * metade serve (indice) ou nao (criar produto).
+ */
+export async function completarVariantes(
+  creds: ShopifyCredentials,
+  produtos: readonly { id?: string; variants?: ConexaoDeVariantes | null }[]
+): Promise<void> {
+  const query = `
+    query variantesDoProduto($id: ID!, $after: String) {
+      product(id: $id) {
+        variants(first: 250, after: $after) {
+          pageInfo { hasNextPage endCursor }
+          nodes {
+            ${CAMPOS_DA_VARIANTE}
+          }
+        }
+      }
+    }
+  `;
+  for (const produto of produtos) {
+    const conexao = produto.variants;
+    if (!produto.id || !conexao?.pageInfo?.hasNextPage) continue;
+    const nodes = (conexao.nodes = conexao.nodes || []);
+    let after = conexao.pageInfo.endCursor || null;
+    // Teto de paginas tambem: pagina vazia com "tem mais" nao prende o laco.
+    for (
+      let pagina = 0;
+      after && nodes.length < MAX_VARIANTES_POR_PRODUTO && pagina < MAX_VARIANTES_POR_PRODUTO / 250 + 1;
+      pagina += 1
+    ) {
+      const data = await shopifyGraphQL(creds, query, { id: produto.id, after });
+      const pagina = data?.product?.variants as ConexaoDeVariantes | undefined;
+      nodes.push(...(pagina?.nodes || []));
+      after =
+        pagina?.pageInfo?.hasNextPage && pagina.pageInfo.endCursor
+          ? pagina.pageInfo.endCursor
+          : null;
+    }
+    conexao.pageInfo = { hasNextPage: false, endCursor: null };
+  }
 }
 
 // Conta os produtos de uma loja (para barra de progresso de import/clone).
@@ -1514,13 +1626,9 @@ export async function getProductById(creds: ShopifyCredentials, productId: strin
           values
         }
         variants(first: 100) {
+          pageInfo { hasNextPage endCursor }
           nodes {
-            id
-            title
-            sku
-            price
-            compareAtPrice
-            selectedOptions { name value }
+            ${CAMPOS_DA_VARIANTE}
           }
         }
       }
@@ -1528,7 +1636,11 @@ export async function getProductById(creds: ShopifyCredentials, productId: strin
   `;
 
   const data = await shopifyGraphQL(creds, query, { id: productId });
-  return data?.product || null;
+  const produto = data?.product || null;
+  // O conserto e o create-destination casam a vitrine pelas variantes que
+  // voltam daqui: produto recem-criado com 120 variantes ficava com 20 fora.
+  if (produto) await completarVariantes(creds, [produto]);
+  return produto;
 }
 
 export async function getProductsByIds(

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import {
+  completarVariantes,
   getProducts,
   updateVariantSkus,
   type ShopifyCredentials,
@@ -74,6 +75,9 @@ async function getAllProducts(
   for (let page = 0; page < 40; page += 1) {
     const data = await getProducts(creds, { first: 250, after });
     const nodes = (data?.products?.nodes || []) as ConnectedProduct[];
+    // A consulta traz 50 variantes por produto: o resto vem aqui. Sem isso a
+    // 51a variante em diante nunca casava (nem por SKU, nem por nome).
+    await completarVariantes(creds, nodes);
     all.push(...nodes);
     const pageInfo = data?.products?.pageInfo;
     if (!pageInfo?.hasNextPage || !pageInfo?.endCursor) break;

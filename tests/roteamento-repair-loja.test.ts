@@ -30,9 +30,20 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 const chamadas = vi.hoisted(() => [] as { targetId?: string; criarFaltantes?: boolean }[]);
+// Lojas que o heal recusa como fora do ar (pausada pela Shopify, sem app).
+const foraDoAr = vi.hoisted(() => new Set<string>());
 vi.mock("@/lib/checkout-routes/heal", () => ({
   healRoute: async (input: { targetId?: string; criarFaltantes?: boolean }) => {
     chamadas.push({ targetId: input.targetId, criarFaltantes: input.criarFaltantes });
+    if (input.targetId && foraDoAr.has(input.targetId)) {
+      const { HealRouteError } = await import("@/lib/checkout-routes/heal");
+      const erro = new HealRouteError(`A loja de checkout ${input.targetId} está pausada.`, 409, {
+        motivo: "loja_pausada",
+        lado: "checkout",
+        proximaTentativa: "2999-01-01T00:00:00.000Z",
+      });
+      throw erro;
+    }
     return {
       ok: true,
       routeId: "rota",
@@ -59,7 +70,13 @@ vi.mock("@/lib/checkout-routes/heal", () => ({
   },
   HealBusyError: class extends Error {},
   HealRouteError: class extends Error {
-    status = 500;
+    status: number;
+    foraDoAr?: unknown;
+    constructor(m: string, status = 500, fora?: unknown) {
+      super(m);
+      this.status = status;
+      if (fora) this.foraDoAr = fora;
+    }
   },
 }));
 
@@ -75,6 +92,7 @@ beforeEach(() => {
   banco.alvos = [{ id: "a" }, { id: "b" }];
   banco.erro = null;
   chamadas.length = 0;
+  foraDoAr.clear();
 });
 
 describe("repair: a confirmacao de criar vale para a loja confirmada", () => {
@@ -119,5 +137,35 @@ describe("repair: a confirmacao de criar vale para a loja confirmada", () => {
     const r = await POST(req({ id: "rota" }));
     expect(r.status).toBe(503);
     expect(chamadas).toHaveLength(0);
+  });
+});
+
+describe("repair: loja de checkout fora do ar nao trava as outras", () => {
+  it("a pausada pela Shopify: b e consertada e a resposta diz qual ficou de fora", async () => {
+    foraDoAr.add("a");
+    const r = await POST(req({ id: "rota" }));
+    expect(r.status).toBe(200);
+    expect(chamadas.map((c) => c.targetId)).toEqual(["a", "b"]);
+    const corpo = await r.json();
+    expect(corpo.targets.map((t: { targetId: string }) => t.targetId)).toEqual(["b"]);
+    expect(corpo.lojasForaDoAr).toEqual([
+      { targetId: "a", motivo: "loja_pausada", lado: "checkout", mensagem: "A loja de checkout a está pausada." },
+    ]);
+    expect(corpo.noop).toBe(false);
+  });
+
+  it("todas fora do ar: o erro da primeira, como antes", async () => {
+    foraDoAr.add("a");
+    foraDoAr.add("b");
+    const r = await POST(req({ id: "rota" }));
+    expect(r.status).toBe(409);
+    expect((await r.json()).error).toContain("a está pausada");
+  });
+
+  it("rota de uma loja so, fora do ar: 409 com a frase do motivo", async () => {
+    banco.alvos = [{ id: "a" }];
+    foraDoAr.add("a");
+    const r = await POST(req({ id: "rota" }));
+    expect(r.status).toBe(409);
   });
 });

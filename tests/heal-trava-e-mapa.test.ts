@@ -87,18 +87,30 @@ const shopify = vi.hoisted(() => ({
     id: string;
     title: string;
     options: { name: string }[];
-    variants: { nodes: { id: string; sku: string | null; selectedOptions: { name: string; value: string }[] }[] };
+    variants: {
+      nodes: { id: string; sku: string | null; selectedOptions: { name: string; value: string }[] }[];
+      pageInfo?: { hasNextPage: boolean; endCursor: string | null };
+    };
   }[],
   criados: [] as unknown[],
   estendidos: [] as unknown[],
   skusGravados: [] as { productId: string; updates: { variantId: string; sku: string }[] }[],
   recusarSku: false,
+  falharResto: false,
 }));
 
 vi.mock("@/lib/shopify/client", () => ({
+  MAX_VARIANTES_POR_PRODUTO: 2048,
   getProducts: async () => ({
     products: { nodes: shopify.checkout, pageInfo: { hasNextPage: false, endCursor: null } },
   }),
+  // As variantes depois da 50a: a leitura falha quando o teste pede.
+  completarVariantes: async (_c: unknown, produtos: { variants?: { pageInfo?: { hasNextPage?: boolean } } }[]) => {
+    if (produtos.some((p) => p.variants?.pageInfo?.hasNextPage) && shopify.falharResto) {
+      throw new Error("timeout");
+    }
+  },
+  shopifyRestGet: async () => ({ shop: { password_enabled: false } }),
   addProductVariants: async (_c: unknown, productId: string, _o: unknown, variantes: unknown[]) => {
     shopify.estendidos.push({ productId, variantes });
     return variantes.map((_v, i) => ({ id: `gid://shopify/ProductVariant/${8000 + i}` }));
@@ -128,6 +140,7 @@ const vitrine = vi.hoisted(() => ({ produtos: [] as unknown[] }));
 vi.mock("@/lib/shopify/public-store", () => ({
   fetchPublicShopifyProducts: async () => ({ products: vitrine.produtos }),
   toShopifyCreateProductInput: () => ({}),
+  LojaComSenhaError: class extends Error {},
 }));
 vi.mock("@/lib/shopify/store-health", () => ({ verificarParDaRota: async () => ({ ok: true }) }));
 vi.mock("@/lib/ai/product-neutralizer", () => ({ neutralizeProductForDestination: vi.fn() }));
@@ -239,6 +252,7 @@ beforeEach(() => {
   shopify.estendidos = [];
   shopify.skusGravados = [];
   shopify.recusarSku = false;
+  shopify.falharResto = false;
   vitrine.produtos = [];
   escritas.length = 0;
   tema.chamadas = 0;
@@ -545,19 +559,22 @@ describe("o mapa gravado nao guarda par morto nem par de outra variante", () => 
     expect(r.removedPairCount).toBe(0);
   });
 
-  it("indice do checkout incompleto (produto com 50 variantes): nao conclui que o alvo morreu", async () => {
+  it("indice do checkout incompleto (produto cortado e o resto nao veio): nao conclui que o alvo morreu", async () => {
     montar({ destino: { weight: 0 }, variantMap: { "1001": "7999" }, skuMap: { b: "7999" } });
     vitrine.produtos = [
       produtoVitrine(100, "bolsa-a", [{ id: 1000, sku: "a" }]),
       produtoVitrine(101, "bolsa-b", [{ id: 1001, sku: "b" }]),
     ];
-    // A consulta traz no maximo 50 variantes por produto: a 7999 pode ser a 51a.
+    // A consulta traz 50 variantes por produto: a 7999 pode ser a 51a, e a
+    // leitura do resto falhou.
+    const cortado = produtoCheckout(
+      9001,
+      Array.from({ length: 50 }, (_, i) => ({ id: 7001 + i, sku: i === 0 ? "a" : `t${i}`, cor: `c${i}` }))
+    );
     shopify.checkout = [
-      produtoCheckout(
-        9001,
-        Array.from({ length: 50 }, (_, i) => ({ id: 7001 + i, sku: i === 0 ? "a" : `t${i}`, cor: `c${i}` }))
-      ),
+      { ...cortado, variants: { ...cortado.variants, pageInfo: { hasNextPage: true, endCursor: "c50" } } },
     ];
+    shopify.falharResto = true;
     const r = await healRoute({ routeId: "rota", targetId: "destino" });
     expect(destinoGravado().variant_map["1001"]).toBe("7999");
     expect(destinoGravado().sku_map["b"]).toBe("7999");

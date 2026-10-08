@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
 import {
+  completarVariantes,
   createProduct,
   getProducts,
   getProductsCount,
+  MAX_VARIANTES_POR_PRODUTO,
   updateVariantSkus,
   type ShopifyCredentials,
 } from "@/lib/shopify/client";
@@ -118,7 +120,7 @@ function toCreateProductInput(product: ConnectedProduct): DestinationProductInpu
       })) || [],
     options: hasOptions ? optionNames : undefined,
     variants: variants.length
-      ? variants.slice(0, 100).map((variant) => ({
+      ? variants.slice(0, MAX_VARIANTES_POR_PRODUTO).map((variant) => ({
           price: String(variant.price || "0.00"),
           compareAtPrice: variant.compareAtPrice
             ? String(variant.compareAtPrice)
@@ -306,6 +308,9 @@ async function findExistingBySku(
     query: `sku:${sourceSkus[0]}`,
   });
   const candidates = (skuResult?.products?.nodes || []) as ConnectedProduct[];
+  // A variante com o SKU pode estar depois da 50a: sem o resto, o produto que
+  // ja existe parecia outro e era criado de novo.
+  await completarVariantes(creds, candidates);
   // A busca `sku:` da Shopify e tokenizada — confirmar match exato (ver
   // comentario em findExistingProduct).
   return (
@@ -338,6 +343,7 @@ async function findExistingProduct(
     const skuQuery = `sku:${sourceSkus[0]}`;
     const skuResult = await getProducts(creds, { first: 50, query: skuQuery });
     const candidates = (skuResult?.products?.nodes || []) as ConnectedProduct[];
+    await completarVariantes(creds, candidates);
     // A busca `sku:` da Shopify e tokenizada: ela quebra o SKU no "-" e casa
     // pelo tamanho (ex.: buscar "MODELO-035" tambem retorna "OUTRO-035"). Por
     // isso NAO basta pegar o primeiro resultado — precisamos confirmar que algum
@@ -362,6 +368,7 @@ async function findExistingProduct(
   const handleQuery = `handle:${sourceProduct.handle}`;
   const handleResult = await getProducts(creds, { first: 5, query: handleQuery });
   const byHandle = (handleResult?.products?.nodes || []) as ConnectedProduct[];
+  await completarVariantes(creds, byHandle);
   const exact = byHandle.find((product) => product.handle === sourceProduct.handle);
   if (!exact || !ehOMesmoProduto(vitrine, exact, { handleConfiavel })) return null;
   return exact;
@@ -500,6 +507,11 @@ export async function POST(request: NextRequest) {
     after: cursor,
   });
   const sourceProducts = (sourceData?.products?.nodes || []) as ConnectedProduct[];
+  // A consulta traz 50 variantes por produto. Sem ler o resto, o produto da
+  // loja de checkout nascia com 50 (rota Yarden Store -> pauments: 16 de 66
+  // variantes sem par). Falhou a leitura: o lote para, em vez de criar
+  // produto pela metade.
+  await completarVariantes(sourceCreds, sourceProducts);
   const pageInfo = (sourceData?.products?.pageInfo || {}) as {
     hasNextPage?: boolean;
     endCursor?: string | null;

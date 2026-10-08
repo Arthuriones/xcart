@@ -273,3 +273,155 @@ export function mensagemDeCriacaoPendente(
         : `${variantes} variantes da vitrine faltam ${onde} e não foram criadas sozinhas`;
   return `${oQue} (${motivo}). Confira e confirme em Diagnóstico.`;
 }
+
+// ---------------------------------------------------------------------------
+// Par casado que nao vende como a vitrine: preco diferente, produto inativo
+// ---------------------------------------------------------------------------
+
+/**
+ * Quantos exemplos de cada problema ficam guardados. O suficiente para o
+ * lojista achar o produto; a contagem diz o tamanho.
+ */
+export const EXEMPLOS_POR_CONFERENCIA = 3;
+
+export type MotivoIndisponivel = "inativo" | "fora_da_loja" | "sem_estoque";
+
+export interface ExemploDePreco {
+  produto: string;
+  variante: string;
+  sku: string;
+  vitrine: string;
+  checkout: string;
+}
+
+export interface ExemploIndisponivel {
+  /** Titulo do produto NA LOJA DE CHECKOUT: e la que o lojista corrige. */
+  produto: string;
+  variante: string;
+  sku: string;
+  motivo: MotivoIndisponivel;
+}
+
+export interface ConferenciaDosPares {
+  /** Pares conferidos (variante da vitrine com par existente no checkout). */
+  conferidas: number;
+  /**
+   * null = nao comparou: as duas lojas tem moedas diferentes, ou a moeda de
+   * uma delas nao veio. Preco em BRL contra preco em USD nao diz nada.
+   */
+  precoDiferente: { total: number; moeda: string; exemplos: ExemploDePreco[] } | null;
+  indisponiveis: {
+    total: number;
+    inativo: number;
+    foraDaLoja: number;
+    semEstoque: number;
+    exemplos: ExemploIndisponivel[];
+  };
+}
+
+export interface ParParaConferir {
+  /** Produto e variante da vitrine. */
+  produto: string;
+  variante: string;
+  sku: string;
+  precoVitrine: string | number | null | undefined;
+  checkout: {
+    produto: string;
+    preco?: string | number | null;
+    /** ACTIVE / DRAFT / ARCHIVED. Ausente = nao sabemos, nao conta. */
+    status?: string | null;
+    /** false = produto fora do canal Loja virtual. Ausente = nao sabemos. */
+    naLojaVirtual?: boolean | null;
+    /** false = estoque rastreado, zerado e sem vender sem estoque. */
+    disponivel?: boolean | null;
+  };
+}
+
+function centavos(valor: string | number | null | undefined): number | null {
+  const texto = String(valor ?? "").trim();
+  if (!texto) return null;
+  const n = Number(texto);
+  return Number.isFinite(n) ? Math.round(n * 100) : null;
+}
+
+function precoLegivel(valor: string | number | null | undefined): string {
+  const c = centavos(valor);
+  return c === null ? String(valor ?? "") : (c / 100).toFixed(2);
+}
+
+/**
+ * O que o conserto conta e NAO mexe nos pares casados.
+ *
+ * Preco: o conserto nao sincroniza -- o lojista pode ter mudado de proposito
+ * (frete embutido, cupom, teste de preco). So conta quantos divergem.
+ * Indisponivel: produto do checkout nao ACTIVE, fora do canal Loja virtual
+ * (o /cart/<id> da permalink nao abre) ou sem estoque com inventario
+ * rastreado. A rota leva o comprador ate la e o checkout recusa.
+ * Uma variante conta num motivo so, o primeiro que vale nessa ordem.
+ */
+export function conferirPares(
+  pares: readonly ParParaConferir[],
+  moedas: { vitrine?: string | null; checkout?: string | null }
+): ConferenciaDosPares {
+  const moeda =
+    moedas.vitrine && moedas.checkout && moedas.vitrine === moedas.checkout
+      ? moedas.vitrine
+      : null;
+  const precos: ExemploDePreco[] = [];
+  let precoTotal = 0;
+  const indisponiveis: ConferenciaDosPares["indisponiveis"] = {
+    total: 0,
+    inativo: 0,
+    foraDaLoja: 0,
+    semEstoque: 0,
+    exemplos: [],
+  };
+
+  for (const par of pares) {
+    if (moeda) {
+      const daVitrine = centavos(par.precoVitrine);
+      const doCheckout = centavos(par.checkout.preco);
+      if (daVitrine !== null && doCheckout !== null && daVitrine !== doCheckout) {
+        precoTotal += 1;
+        if (precos.length < EXEMPLOS_POR_CONFERENCIA) {
+          precos.push({
+            produto: par.produto,
+            variante: par.variante,
+            sku: par.sku,
+            vitrine: precoLegivel(par.precoVitrine),
+            checkout: precoLegivel(par.checkout.preco),
+          });
+        }
+      }
+    }
+
+    const status = (par.checkout.status || "").toUpperCase();
+    const motivo: MotivoIndisponivel | null =
+      status && status !== "ACTIVE"
+        ? "inativo"
+        : par.checkout.naLojaVirtual === false
+          ? "fora_da_loja"
+          : par.checkout.disponivel === false
+            ? "sem_estoque"
+            : null;
+    if (!motivo) continue;
+    indisponiveis.total += 1;
+    if (motivo === "inativo") indisponiveis.inativo += 1;
+    else if (motivo === "fora_da_loja") indisponiveis.foraDaLoja += 1;
+    else indisponiveis.semEstoque += 1;
+    if (indisponiveis.exemplos.length < EXEMPLOS_POR_CONFERENCIA) {
+      indisponiveis.exemplos.push({
+        produto: par.checkout.produto,
+        variante: par.variante,
+        sku: par.sku,
+        motivo,
+      });
+    }
+  }
+
+  return {
+    conferidas: pares.length,
+    precoDiferente: moeda ? { total: precoTotal, moeda, exemplos: precos } : null,
+    indisponiveis,
+  };
+}

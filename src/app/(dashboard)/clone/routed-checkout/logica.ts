@@ -1,6 +1,11 @@
 import { mapaVelho, targetState } from "@/components/routed-checkout/target-state";
 import type { TomStatus } from "@/components/ui/status-badge";
 import type { GraphRoute, GraphTarget } from "@/lib/checkout-routes/graph";
+import {
+  ROTULO_FORA_DO_AR,
+  type ConsertoDoDestino,
+  type MotivoForaDoAr,
+} from "@/lib/checkout-routes/loja-fora-do-ar";
 
 // ============================================================================
 // Regras da tela de Rotas, sem React e sem banco: estado de cada rota, filtro
@@ -24,7 +29,8 @@ export const SELO_ROTA: Record<EstadoRota, { tom: TomStatus; texto: string }> = 
 };
 
 type RotaParaEstado = Pick<GraphRoute, "enabled" | "lastHeal"> & {
-  targets: Pick<GraphTarget, "enabled" | "mappedSkuCount" | "lastHealedAt">[];
+  targets: (Pick<GraphTarget, "enabled" | "mappedSkuCount" | "lastHealedAt"> &
+    Partial<Pick<GraphTarget, "conserto">>)[];
 };
 
 /**
@@ -37,7 +43,10 @@ type RotaParaEstado = Pick<GraphRoute, "enabled" | "lastHeal"> & {
 export function estadoDaRota(r: RotaParaEstado, agora: number = Date.now()): EstadoRota {
   if (!r.enabled) return "pausada";
   const semMapa = r.targets.some((t) => t.enabled && t.mappedSkuCount === 0);
-  if (semMapa || mapaVelho(r.targets, agora) || (r.lastHeal && !r.lastHeal.ok)) return "atencao";
+  // Loja de checkout ligada que a Shopify nao atende (pausada, sem app): o
+  // aviso da rota pode ja ser de outra loja, o selo desta continua.
+  const foraDoAr = r.targets.some((t) => t.enabled && foraDoArDaLoja(t));
+  if (semMapa || foraDoAr || mapaVelho(r.targets, agora) || (r.lastHeal && !r.lastHeal.ok)) return "atencao";
   return "ativa";
 }
 
@@ -58,13 +67,28 @@ export function lojasRecebendo(r: Pick<GraphRoute, "enabled" | "targets">): numb
   ).length;
 }
 
+/**
+ * A loja de checkout esta fora do ar pelo ultimo conserto (pausada pela
+ * Shopify, sem o app)? So o lado do checkout: vitrine com problema vale para
+ * a rota inteira e aparece no aviso da rota.
+ */
+export function foraDoArDaLoja(
+  t: { conserto?: Pick<ConsertoDoDestino, "foraDoAr"> | null }
+): MotivoForaDoAr | null {
+  const f = t.conserto?.foraDoAr;
+  return f && f.lado === "checkout" ? f.motivo : null;
+}
+
 /** Estado de uma loja de checkout dentro da rota, com a palavra para a tela. */
 export function estadoDaLoja(
   rotaLigada: boolean,
   t: Pick<GraphTarget, "enabled" | "weight" | "mappedSkuCount"> &
-    Partial<Pick<GraphTarget, "dailyLimit" | "orders24h">>
+    Partial<Pick<GraphTarget, "dailyLimit" | "orders24h" | "conserto">>
 ): { tom: TomStatus; texto: string } {
   if (!rotaLigada) return { tom: "neutral", texto: "Rota pausada" };
+  // Ligada mas a Shopify nao atende: o comprador sorteado para ela nao paga.
+  const fora = t.enabled ? foraDoArDaLoja(t) : null;
+  if (fora) return { tom: "err", texto: ROTULO_FORA_DO_AR[fora] };
   if (t.enabled && t.mappedSkuCount === 0) return { tom: "warn", texto: "Sem produto ligado" };
   if (!t.enabled) return { tom: "neutral", texto: "Pausada" };
   if (t.weight <= 0) return { tom: "neutral", texto: "Fora da divisão" };
@@ -73,6 +97,70 @@ export function estadoDaLoja(
     return { tom: "warn", texto: "No limite de hoje" };
   }
   return { tom: "ok", texto: "Recebendo" };
+}
+
+// ---------------------------------------------------------- conferencia
+
+export interface AvisoDaConferencia {
+  texto: string;
+  exemplos: string[];
+}
+
+const MOTIVO_INDISPONIVEL: Record<"inativo" | "fora_da_loja" | "sem_estoque", string> = {
+  inativo: "produto inativo",
+  fora_da_loja: "fora da Loja virtual",
+  sem_estoque: "sem estoque",
+};
+
+function preco(valor: string, moeda: string): string {
+  const n = Number(valor);
+  if (!Number.isFinite(n)) return valor;
+  try {
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: moeda }).format(n);
+  } catch {
+    return `${moeda} ${valor}`;
+  }
+}
+
+function variantes(n: number): string {
+  return n === 1 ? "1 variante" : `${n.toLocaleString("pt-BR")} variantes`;
+}
+
+/**
+ * O que o conserto contou e nao mexeu nesta loja de checkout: preco diferente
+ * da vitrine (pode ser de proposito) e variante que o checkout nao vende.
+ * Vazio = nada a dizer.
+ */
+export function avisosDaConferencia(
+  c: Pick<ConsertoDoDestino, "precoDiferente" | "indisponiveis"> | null | undefined
+): AvisoDaConferencia[] {
+  if (!c) return [];
+  const avisos: AvisoDaConferencia[] = [];
+  const p = c.precoDiferente;
+  if (p && p.total > 0) {
+    avisos.push({
+      texto: `${variantes(p.total)} com preço diferente da vitrine`,
+      exemplos: p.exemplos.map(
+        (e) =>
+          `${[e.produto, e.variante].filter(Boolean).join(" / ")}: ${preco(e.vitrine, p.moeda)} na vitrine, ${preco(e.checkout, p.moeda)} aqui`
+      ),
+    });
+  }
+  const i = c.indisponiveis;
+  if (i && i.total > 0) {
+    const partes = [
+      i.inativo ? `${i.inativo} com ${MOTIVO_INDISPONIVEL.inativo}` : "",
+      i.foraDaLoja ? `${i.foraDaLoja} ${MOTIVO_INDISPONIVEL.fora_da_loja}` : "",
+      i.semEstoque ? `${i.semEstoque} ${MOTIVO_INDISPONIVEL.sem_estoque}` : "",
+    ].filter(Boolean);
+    avisos.push({
+      texto: `${variantes(i.total)} que o checkout não vende (${partes.join(", ")})`,
+      exemplos: i.exemplos.map(
+        (e) => `${[e.produto, e.variante].filter(Boolean).join(" / ")}: ${MOTIVO_INDISPONIVEL[e.motivo]}`
+      ),
+    });
+  }
+  return avisos;
 }
 
 // ---------------------------------------------------------------- teto/dia
@@ -378,6 +466,8 @@ export interface RespostaConserto {
   targetShopDomain?: string | null;
   /** Um resultado por loja de checkout consertada. */
   targets?: RespostaConserto[];
+  /** Lojas de checkout que o conserto pulou: pausadas pela Shopify, sem o app. */
+  lojasForaDoAr?: { targetId: string | null; mensagem: string }[];
 }
 
 export interface PendenciaDoConserto {
@@ -476,14 +566,17 @@ export function fraseDoConserto(d: RespostaConserto): string {
     );
   }
   const pendentes = pendenciasDoConserto(d);
+  const fora = (d.lojasForaDoAr || []).map((l) => ` ${l.mensagem}`).join("");
   const base =
     partes.length > 0
       ? `Corrigida: ${partes.join(", ")}.`
       : pendentes.length > 0
         ? "Os pares que já existiam foram ligados."
-        : "Corrigida.";
+        : fora
+          ? "As outras lojas de checkout já estavam certas."
+          : "Corrigida.";
   const falta = pendentes.map((p) => ` ${p.texto}`).join("");
-  return `${base}${mistura ? ` ${mistura}` : ""}${falta}`;
+  return `${base}${mistura ? ` ${mistura}` : ""}${falta}${fora}`;
 }
 
 /**

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { healRoute, HealBusyError, HealRouteError } from "@/lib/checkout-routes/heal";
+import { cronPodeTentar } from "@/lib/checkout-routes/loja-fora-do-ar";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -22,6 +23,13 @@ export const maxDuration = 300;
 // caber nos 300s da funcao — com o rodizio por last_healed_at, uma loja com 20
 // rotas fecha o ciclo em menos de um dia.
 const ROTAS_POR_EXECUCAO = 4;
+
+/**
+ * Quantos destinos a fila le de uma vez. O que esta esperando (loja fora do
+ * ar, ver loja-fora-do-ar.ts) sai depois da leitura; com folga, a vaga vai
+ * para o proximo da fila em vez de ficar vazia.
+ */
+const JANELA_DA_FILA = 100;
 
 function segredoDoCron() {
   return process.env.CRON_SECRET || process.env.BULK_IMPORT_CRON_SECRET || "";
@@ -65,41 +73,56 @@ async function executar(request: NextRequest) {
   // A unidade de conserto agora e o DESTINO, nao a rota: com rodizio, uma rota
   // tem varias lojas de checkout e cada uma tem o seu mapa para apodrecer. Uma
   // fila por rota consertaria sempre a mesma loja.
-  const query = admin
-    .from("routed_checkout_targets")
-    .select(
-      "id, route_id, last_healed_at, route:route_id(id, name, user_id, enabled)"
-    )
-    .eq("enabled", true)
-    // nullsFirst: destino nunca revisado tem prioridade sobre o revisado ontem.
-    .order("last_healed_at", { ascending: true, nullsFirst: true })
-    // Folga no limite porque a filtragem de rota desligada/de outro dono
-    // acontece abaixo, ja com as linhas em maos.
-    .limit(limite * 4);
+  //
+  // Primeiro as rotas LIGADAS, depois os destinos delas. A fila lia os
+  // destinos ligados e tirava a rota desligada depois, ja com o limite
+  // aplicado: destino de rota pausada nunca e consertado, entao o
+  // last_healed_at dele nunca anda e ele ficava para sempre na cabeca da
+  // fila, ocupando as vagas de quem precisava.
+  let rotasQuery = admin
+    .from("routed_checkout_configs")
+    .select("id, name, user_id")
+    .eq("enabled", true);
+  if (userId) rotasQuery = rotasQuery.eq("user_id", userId);
+  const { data: rotasLigadas, error: erroRotas } = await rotasQuery;
+  if (erroRotas) {
+    return NextResponse.json({ error: "Falha ao listar rotas." }, { status: 500 });
+  }
+  const rotaPorId = new Map(
+    ((rotasLigadas || []) as { id: string; name: string; user_id: string }[]).map((r) => [r.id, r])
+  );
 
-  const { data: linhas, error } = await query;
-  if (error) {
-    return NextResponse.json(
-      { error: "Falha ao listar destinos." },
-      { status: 500 }
-    );
+  let linhas: { id: string; route_id: string; settings?: unknown }[] = [];
+  if (rotaPorId.size > 0) {
+    const { data, error } = await admin
+      .from("routed_checkout_targets")
+      .select("id, route_id, last_healed_at, settings")
+      .eq("enabled", true)
+      .in("route_id", [...rotaPorId.keys()])
+      // nullsFirst: destino nunca revisado tem prioridade sobre o revisado ontem.
+      .order("last_healed_at", { ascending: true, nullsFirst: true })
+      // Folga porque o destino com loja fora do ar (pausada pela Shopify, sem
+      // o app, vitrine com senha) sai abaixo ate a espera dele vencer.
+      .limit(JANELA_DA_FILA);
+    if (error) {
+      return NextResponse.json(
+        { error: "Falha ao listar destinos." },
+        { status: 500 }
+      );
+    }
+    linhas = (data || []) as typeof linhas;
   }
 
-  interface LinhaDestino {
-    id: string;
-    route_id: string;
-    route?: { id: string; name: string; user_id: string; enabled: boolean } |
-      { id: string; name: string; user_id: string; enabled: boolean }[] | null;
-  }
-
-  const alvos = ((linhas || []) as LinhaDestino[])
+  const agora = Date.now();
+  const prontas = linhas.filter((linha) => cronPodeTentar(linha.settings, agora));
+  const esperando = linhas.length - prontas.length;
+  const alvos = prontas
     .map((linha) => {
-      const rota = Array.isArray(linha.route) ? linha.route[0] : linha.route;
+      const rota = rotaPorId.get(linha.route_id);
       return rota ? { targetId: linha.id, rota } : null;
     })
-    .filter(
-      (item): item is { targetId: string; rota: { id: string; name: string; user_id: string; enabled: boolean } } =>
-        Boolean(item && item.rota.enabled && (!userId || item.rota.user_id === userId))
+    .filter((item): item is { targetId: string; rota: { id: string; name: string; user_id: string } } =>
+      Boolean(item)
     )
     .slice(0, limite);
 
@@ -158,6 +181,11 @@ async function executar(request: NextRequest) {
         targetId: alvo.targetId,
         name: alvo.rota.name,
         error: msg,
+        // Loja pausada/sem app/vitrine com senha: o conserto gravou o motivo
+        // e a proxima tentativa no destino; a fila pula ele ate la.
+        ...(erro instanceof HealRouteError && erro.foraDoAr
+          ? { foraDoAr: erro.foraDoAr.motivo, lado: erro.foraDoAr.lado }
+          : {}),
       });
       // Marca a tentativa para o destino nao travar a fila para sempre.
       await admin
@@ -194,6 +222,8 @@ async function executar(request: NextRequest) {
   return NextResponse.json({
     checked: resultados.length,
     repaired: consertadas,
+    // Destinos pulados nesta passada: loja fora do ar, esperando a hora.
+    waiting: esperando,
     ...(purgados !== null ? { purgedEvents: purgados } : {}),
     results: resultados,
   });

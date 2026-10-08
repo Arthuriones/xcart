@@ -143,7 +143,10 @@ export function AbaDiagnostico({
         criarEm ? [...antes.filter((p) => p.targetId !== criarEm.targetId), ...falta] : falta
       );
       setConserto({
-        ok: falta.length === 0 && !(d.mixedBlockedVariantCount && d.mixedBlockedVariantCount > 0),
+        ok:
+          falta.length === 0 &&
+          !(d.mixedBlockedVariantCount && d.mixedBlockedVariantCount > 0) &&
+          !(d.lojasForaDoAr && d.lojasForaDoAr.length > 0),
         texto: fraseDoConserto(d),
       });
       setTeste(null);

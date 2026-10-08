@@ -165,6 +165,7 @@ export function ConsoleView({
                   dailyLimit: t.dailyLimit,
                   orders24h: t.orders24h,
                   legacy: t.legacy,
+                  conserto: t.conserto,
                 }))}
                 disponiveis={lojasCandidatasACheckout(grafo.stores, rota, grafo.routes).map((s) => ({
                   id: s.id,

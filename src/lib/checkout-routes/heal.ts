@@ -1,22 +1,37 @@
 import {
   addProductVariants,
+  completarVariantes,
   createProduct,
   getProducts,
+  MAX_VARIANTES_POR_PRODUTO,
+  shopifyRestGet,
   type ShopifyCredentials,
 } from "@/lib/shopify/client";
 import {
   fetchPublicShopifyProducts,
+  LojaComSenhaError,
   toShopifyCreateProductInput,
   type PublicShopifyProduct,
 } from "@/lib/shopify/public-store";
 import { normalizarSkus } from "@/lib/shopify/sku-stamp";
 import { produtoNoDestino } from "@/lib/checkout-routes/produto-no-destino";
 import {
+  conferirPares,
   decidirCriacao,
   mensagemDeCriacaoPendente,
   parPeloMapaAntigo,
   podarMapas,
+  type ConferenciaDosPares,
+  type ParParaConferir,
 } from "@/lib/checkout-routes/conserto-regras";
+import {
+  foraDoAr,
+  mensagemForaDoAr,
+  motivoDaSaude,
+  type ForaDoAr,
+  type LadoDaRota,
+  type MotivoForaDoAr,
+} from "@/lib/checkout-routes/loja-fora-do-ar";
 import {
   sincronizarTemaDaRota,
   type ResultadoTema,
@@ -52,6 +67,12 @@ interface TargetVariantInfo {
   productTitle: string;
   options: string[];
   sku: string;
+  /** Para a conferencia dos pares (conferirPares): o conserto nao mexe. */
+  price?: string | null;
+  productStatus?: string | null;
+  /** false = produto fora do canal Loja virtual. Ausente = nao veio. */
+  naLojaVirtual?: boolean;
+  disponivel?: boolean;
 }
 
 /**
@@ -69,12 +90,27 @@ function chaveDeOpcoes(productId: string, valores: (string | null | undefined)[]
   );
 }
 
-/** A consulta de produtos traz no maximo isto de variantes por produto. */
-const VARIANTES_POR_PRODUTO_NA_CONSULTA = 50;
+interface ProdutoDoIndice {
+  id: string;
+  title: string;
+  status?: string | null;
+  onlineStoreUrl?: string | null;
+  options?: { name: string }[];
+  variants?: {
+    pageInfo?: { hasNextPage?: boolean; endCursor?: string | null } | null;
+    nodes?: {
+      id: string;
+      sku?: string | null;
+      price?: string | null;
+      availableForSale?: boolean;
+      selectedOptions?: { name: string; value: string }[];
+    }[];
+  } | null;
+}
 
 async function getAllTargetVariants(creds: ShopifyCredentials) {
   // false = o indice pode nao ter toda variante do checkout (paginacao parou
-  // no teto, ou algum produto bateu nas 50 variantes da consulta). Ai "nao
+  // no teto, ou a leitura das variantes de um produto grande falhou). Ai "nao
   // achei pelo id" nao prova que a variante foi apagada, e o conserto nao
   // tira par do mapa por isso (ver podarMapas).
   let completo = true;
@@ -85,16 +121,33 @@ async function getAllTargetVariants(creds: ShopifyCredentials) {
   // Terceiro indice, pelo id: e por ele que o variant_map aponta. Sem este
   // indice o conserto nao sabia se o par antigo ainda existia no checkout.
   const byId = new Map<string, TargetVariantInfo>();
+  // Quantas variantes cada produto do checkout ja tem: o teto da Shopify e
+  // 2048 por produto, e estender passando dele falha o lote inteiro.
+  const variantesPorProduto = new Map<string, number>();
   let after: string | null = null;
   for (let page = 0; page < 60; page += 1) {
     const data = await getProducts(creds, { first: 250, after });
-    const nodes = data?.products?.nodes || [];
+    const nodes = (data?.products?.nodes || []) as ProdutoDoIndice[];
+    // A consulta traz 50 variantes por produto. Produto maior vinha cortado
+    // e as que faltavam pareciam "nao existe no checkout": o conserto tentava
+    // criar de novo (a Shopify recusa a combinacao repetida) ou deixava sem
+    // par -- as 16 da rota Yarden Store -> pauments.
+    try {
+      await completarVariantes(creds, nodes);
+    } catch (erro) {
+      console.warn(
+        "[heal] nao li as variantes de um produto grande:",
+        erro instanceof Error ? erro.message : erro
+      );
+    }
     for (const product of nodes) {
       const options = (product.options || []).map(
         (option: { name: string }) => option.name
       );
       const variantes = product.variants?.nodes || [];
-      if (variantes.length >= VARIANTES_POR_PRODUTO_NA_CONSULTA) completo = false;
+      // Sobrou pagina sem ler (a leitura acima falhou neste produto).
+      if (product.variants?.pageInfo?.hasNextPage) completo = false;
+      variantesPorProduto.set(product.id, variantes.length);
       for (const variant of variantes) {
         const info: TargetVariantInfo = {
           variantId: numericId(variant.id) as string,
@@ -102,6 +155,14 @@ async function getAllTargetVariants(creds: ShopifyCredentials) {
           productTitle: product.title,
           options,
           sku: (variant.sku || "").trim(),
+          price: variant.price ?? null,
+          productStatus: product.status ?? null,
+          ...("onlineStoreUrl" in product
+            ? { naLojaVirtual: Boolean(product.onlineStoreUrl) }
+            : {}),
+          ...(typeof variant.availableForSale === "boolean"
+            ? { disponivel: variant.availableForSale }
+            : {}),
         };
         if (info.variantId) byId.set(info.variantId, info);
 
@@ -124,12 +185,29 @@ async function getAllTargetVariants(creds: ShopifyCredentials) {
     }
     const pageInfo = data?.products?.pageInfo;
     if (!pageInfo?.hasNextPage || !pageInfo?.endCursor) {
-      return { bySku, byOpcoes, byId, completo };
+      return { bySku, byOpcoes, byId, variantesPorProduto, completo };
     }
     after = pageInfo.endCursor;
   }
   // Saiu pelo teto de paginas: sobrou produto sem ler.
-  return { bySku, byOpcoes, byId, completo: false };
+  return { bySku, byOpcoes, byId, variantesPorProduto, completo: false };
+}
+
+/**
+ * A vitrine esta com senha? Pergunta a Admin API (shop.json traz
+ * password_enabled). O products.json sozinho nao prova: HTML no lugar do
+ * JSON tambem pode ser pagina de bloqueio do proxy. Sem resposta = nao sei.
+ */
+async function vitrineComSenha(creds: ShopifyCredentials): Promise<boolean | null> {
+  try {
+    const r = await shopifyRestGet<{ shop?: { password_enabled?: boolean } }>(
+      creds,
+      "shop.json"
+    );
+    return typeof r?.shop?.password_enabled === "boolean" ? r.shop.password_enabled : null;
+  } catch {
+    return null;
+  }
 }
 
 export interface HealRouteResult {
@@ -175,6 +253,11 @@ export interface HealRouteResult {
   creationBlockedReason: string | null;
   /** O xcart-config.json do tema da vitrine depois deste conserto. */
   theme?: ResultadoTema;
+  /**
+   * Pares casados com preco diferente da vitrine, ou que o checkout nao
+   * vende (inativo, fora da Loja virtual, sem estoque). So contados.
+   */
+  conferencia?: ConferenciaDosPares;
   warnings: string[];
   /** true quando nada precisou mudar — o cron usa para nao poluir o log. */
   noop: boolean;
@@ -182,9 +265,12 @@ export interface HealRouteResult {
 
 export class HealRouteError extends Error {
   status: number;
-  constructor(message: string, status = 500) {
+  /** Loja que o conserto nao atende: o cron espera para tentar de novo. */
+  foraDoAr?: ForaDoAr;
+  constructor(message: string, status = 500, fora?: ForaDoAr) {
     super(message);
     this.status = status;
+    if (fora) this.foraDoAr = fora;
   }
 }
 
@@ -229,6 +315,22 @@ export interface UltimoConserto {
   /** Motivo curto quando ok=false, pronto para o card. */
   message?: string;
   mappedCount?: number;
+  /**
+   * Loja que o conserto nao atende (pausada, sem app, vitrine com senha):
+   * o motivo tipado para a tela, de qual lado e quando o cron volta a tentar.
+   */
+  motivo?: MotivoForaDoAr;
+  lado?: LadoDaRota;
+  proximaTentativa?: string;
+}
+
+/**
+ * O mesmo, por loja de checkout, em routed_checkout_targets.settings.last_heal.
+ * O da rota (routed_checkout_configs.settings.last_heal) e da ultima passada
+ * de QUALQUER destino; com rodizio, so este diz o estado de cada loja.
+ */
+export interface UltimoConsertoDoDestino extends UltimoConserto {
+  conferencia?: ConferenciaDosPares;
 }
 
 async function gravarStatus(
@@ -241,6 +343,41 @@ async function gravarStatus(
     .from("routed_checkout_configs")
     .update({ settings: { ...(settings || {}), last_heal: status } })
     .eq("id", routeId);
+}
+
+/**
+ * Loja fora do ar: grava o motivo na rota e no destino, com a espera do cron,
+ * e para. Erro de gravacao nao muda a resposta -- o conserto ja nao roda.
+ */
+async function pararComLojaForaDoAr(
+  admin: ReturnType<typeof createAdminClient>,
+  config: { id: string; settings: unknown },
+  targetRow: { id: string; settings?: unknown } | null,
+  motivo: MotivoForaDoAr,
+  lado: LadoDaRota,
+  dominio: string
+): Promise<never> {
+  const fora = foraDoAr(motivo, lado);
+  const status: UltimoConserto = {
+    at: new Date().toISOString(),
+    ok: false,
+    message: mensagemForaDoAr(motivo, lado, dominio),
+    ...fora,
+  };
+  await gravarStatus(admin, config.id, config.settings as Record<string, unknown> | null, status);
+  if (targetRow) {
+    const { error } = await admin
+      .from("routed_checkout_targets")
+      .update({
+        settings: {
+          ...((targetRow.settings as Record<string, unknown> | null) || {}),
+          last_heal: status,
+        },
+      })
+      .eq("id", targetRow.id);
+    if (error) console.warn("[heal] nao gravei o estado do destino:", error.message);
+  }
+  throw new HealRouteError(status.message as string, 409, fora);
 }
 
 /** Depois disto, um conserto travado e considerado abandonado. */
@@ -328,7 +465,7 @@ async function executarConserto(
   // Qual destino desta rota vai ser consertado.
   let targetQuery = admin
     .from("routed_checkout_targets")
-    .select("id, target_store_id, sku_map, variant_map, weight, enabled")
+    .select("id, target_store_id, sku_map, variant_map, weight, enabled, settings")
     .eq("route_id", config.id);
   if (input.targetId) targetQuery = targetQuery.eq("id", input.targetId);
   else targetQuery = targetQuery.eq("enabled", true);
@@ -387,13 +524,20 @@ async function executarConserto(
   // Loja com o app removido nao tem token valido. Sem esta parada, o cron
   // horario ficaria tentando para sempre e enchendo o log de 401 -- que era o
   // comportamento antes de existir o webhook app/uninstalled.
+  //
+  // Agora fica gravado como "sem_app", com a espera do cron: antes o 409
+  // saia sem deixar rastro e a tela nao dizia nada.
   const desinstalada = [sourceStore, targetStore].find(
     (l) => (l as { uninstalled_at?: string | null }).uninstalled_at
   );
   if (desinstalada) {
-    throw new HealRouteError(
-      `O app foi removido de ${desinstalada.shop_domain}. Reinstale para voltar a rotear.`,
-      409
+    await pararComLojaForaDoAr(
+      admin,
+      config,
+      targetRow,
+      "sem_app",
+      desinstalada === sourceStore ? "vitrine" : "checkout",
+      desinstalada.shop_domain
     );
   }
 
@@ -415,6 +559,21 @@ async function executarConserto(
   // hora. Devolve o motivo para o painel mostrar o que o lojista precisa fazer.
   const lojas = await verificarParDaRota(sourceCreds, targetCreds);
   if (!lojas.ok) {
+    // Pausada (402), sem app (401/credencial revogada) ou fechada: motivo
+    // tipado e o cron espera 12 h. Erro generico (rede, Shopify fora) segue
+    // como antes e o cron tenta na proxima hora.
+    const lado: LadoDaRota = lojas.source?.ok === false ? "vitrine" : "checkout";
+    const motivo = motivoDaSaude(lado === "vitrine" ? lojas.source?.motivo : lojas.target?.motivo);
+    if (motivo) {
+      await pararComLojaForaDoAr(
+        admin,
+        config,
+        targetRow,
+        motivo,
+        lado,
+        lado === "vitrine" ? sourceStore.shop_domain : targetStore.shop_domain
+      );
+    }
     const mensagem = lojas.mensagem || "Loja inalcancavel.";
     await gravarStatus(
       admin,
@@ -430,14 +589,54 @@ async function executarConserto(
       bySku: targetIndex,
       byOpcoes: targetPorOpcoes,
       byId: targetPorId,
+      variantesPorProduto,
       completo: checkoutCompleto,
     },
-    { products: sourceProducts },
+    leituraDaVitrine,
   ] =
     await Promise.all([
       getAllTargetVariants(targetCreds),
-      fetchPublicShopifyProducts(sourceStore.shop_domain, { limit: 5000 }),
+      fetchPublicShopifyProducts(sourceStore.shop_domain, { limit: 5000 }).then(
+        (r) => ({ products: r.products, erro: null as unknown }),
+        (erro: unknown) => ({ products: [] as PublicShopifyProduct[], erro })
+      ),
     ]);
+
+  // Vitrine com senha: o products.json nao abre (ou vem vazio) e o conserto
+  // morria calado -- caso Distrito Zapas, 208 de 208 variantes sem SKU porque
+  // o carimbo nunca via a vitrine. A Admin API confirma antes de chamar de
+  // senha: HTML no lugar do JSON tambem pode ser bloqueio do proxy.
+  if (leituraDaVitrine.erro || leituraDaVitrine.products.length === 0) {
+    const comSenha = await vitrineComSenha(sourceCreds);
+    if (comSenha === true) {
+      await pararComLojaForaDoAr(
+        admin,
+        config,
+        targetRow,
+        "vitrine_fechada",
+        "vitrine",
+        sourceStore.shop_domain
+      );
+    }
+    if (leituraDaVitrine.erro) {
+      const motivo =
+        leituraDaVitrine.erro instanceof LojaComSenhaError
+          ? "a vitrine não entregou a lista de produtos"
+          : leituraDaVitrine.erro instanceof Error
+            ? leituraDaVitrine.erro.message.slice(0, 160)
+            : "erro desconhecido";
+      const mensagem = `Não deu para ler os produtos da vitrine (${motivo}).`;
+      // Gravado: antes este erro so ia para o log do cron e a tela seguia
+      // mostrando a ultima passada boa.
+      await gravarStatus(admin, config.id, config.settings as Record<string, unknown> | null, {
+        at: new Date().toISOString(),
+        ok: false,
+        message: mensagem,
+      });
+      throw new HealRouteError(mensagem, 502);
+    }
+  }
+  const sourceProducts = leituraDaVitrine.products;
 
   // O catalogo das duas lojas acabou de ser paginado inteiro aqui. Guardar a
   // contagem agora sai de graca; buscar depois, so para a tela de lojas
@@ -744,6 +943,18 @@ async function executarConserto(
         continue;
       }
 
+      // Teto da Shopify: 2048 variantes por produto. Passar dele falha o lote
+      // inteiro; cria o que cabe e avisa do resto.
+      const jaTem = variantesPorProduto.get(existingTarget.productId) ?? 0;
+      const cabem = Math.max(0, MAX_VARIANTES_POR_PRODUTO - jaTem);
+      if (paraCriar.length > cabem) {
+        warnings.push(
+          `${handle}: o produto do checkout (${existingTarget.productTitle}) chegou ao teto de ${MAX_VARIANTES_POR_PRODUTO} variantes da Shopify; ${paraCriar.length - cabem} ficaram sem par.`
+        );
+        paraCriar.splice(cabem);
+        if (paraCriar.length === 0) continue;
+      }
+
       try {
         const created = await addProductVariants(
           targetCreds,
@@ -766,6 +977,7 @@ async function executarConserto(
           }
         }
         extendedCount += created.length;
+        variantesPorProduto.set(existingTarget.productId, jaTem + created.length);
       } catch (error) {
         warnings.push(
           `${handle}: falha ao estender produto existente - ${
@@ -831,6 +1043,11 @@ async function executarConserto(
       const baseInput = toShopifyCreateProductInput(product);
       const result = await createProduct(targetCreds, {
         ...baseInput,
+        // O vendor da vitrine e o nome dela ou a marca: na loja de checkout
+        // ele aparece na pagina e liga as duas lojas. Vai o nome atual da
+        // loja de checkout (o do banco pode ser velho); sem ele, vai sem
+        // vendor e a Shopify decide (no admin ela poe o nome da loja).
+        vendor: lojas.target?.nome || null,
         title,
         descriptionHtml,
         tags,
@@ -949,7 +1166,45 @@ async function executarConserto(
   const finalVariantMap = mapaFinal.variantMap;
   const removedPairCount = mapaFinal.removidos;
 
+  // Os pares que ja existiam no checkout, conferidos sem mexer: preco
+  // diferente da vitrine (o lojista pode ter mudado de proposito, entao nao
+  // sincroniza) e variante que o checkout nao vende. Variante criada nesta
+  // passada nao esta no indice e fica de fora -- nasceu com o preco da vitrine.
+  const paresParaConferir: ParParaConferir[] = [];
+  for (const product of sourceProducts) {
+    for (const variant of product.variants) {
+      const alvo = correctVariantMap[String(variant.id)];
+      const info = alvo ? targetPorId.get(alvo) : undefined;
+      if (!info || !variant.sku) continue;
+      paresParaConferir.push({
+        produto: product.title,
+        variante: variant.optionValues.filter(Boolean).join(" / ") || variant.title,
+        sku: variant.sku,
+        precoVitrine: variant.price,
+        checkout: {
+          produto: info.productTitle,
+          preco: info.price,
+          status: info.productStatus,
+          naLojaVirtual: info.naLojaVirtual,
+          disponivel: info.disponivel,
+        },
+      });
+    }
+  }
+  const conferencia = conferirPares(paresParaConferir, {
+    vitrine: lojas.source?.moeda,
+    checkout: lojas.target?.moeda,
+  });
+
   const agora = new Date().toISOString();
+  const statusDoConserto: UltimoConserto = {
+    at: agora,
+    // Aviso aqui e problema que o conserto NAO resolveu sozinho
+    // (produto que falhou ao criar, SKU que nao gravou).
+    ok: warnings.length === 0,
+    message: warnings[0],
+    mappedCount: Object.keys(finalSkuMap).length,
+  };
 
   // O mapa corrigido pertence ao DESTINO: e ele que o resolve le.
   if (targetRow) {
@@ -959,6 +1214,12 @@ async function executarConserto(
         sku_map: finalSkuMap,
         variant_map: finalVariantMap,
         last_healed_at: agora,
+        // O estado DESTA loja de checkout (o da rota e da ultima passada de
+        // qualquer uma). Sobrescreve o "fora do ar" de antes: a loja voltou.
+        settings: {
+          ...((targetRow.settings as Record<string, unknown> | null) || {}),
+          last_heal: { ...statusDoConserto, conferencia } satisfies UltimoConsertoDoDestino,
+        },
       })
       .eq("id", targetRow.id);
     if (targetError) {
@@ -982,14 +1243,9 @@ async function executarConserto(
       updated_at: agora,
       settings: {
         ...((config.settings as Record<string, unknown>) || {}),
-        last_heal: {
-          at: agora,
-          // Aviso aqui e problema que o conserto NAO resolveu sozinho
-          // (produto que falhou ao criar, SKU que nao gravou).
-          ok: warnings.length === 0,
-          message: warnings[0],
-          mappedCount: Object.keys(finalSkuMap).length,
-        } satisfies UltimoConserto,
+        // Rota antiga sem linha de destino: a conferencia so tem onde morar
+        // aqui (a tela le dali para o destino legado).
+        last_heal: targetRow ? statusDoConserto : { ...statusDoConserto, conferencia },
       },
     })
     .eq("id", config.id);
@@ -1035,6 +1291,7 @@ async function executarConserto(
     pendingVariantCount,
     creationBlockedReason,
     theme,
+    conferencia,
     warnings,
     noop: !mudou && !creationBlockedReason,
   };

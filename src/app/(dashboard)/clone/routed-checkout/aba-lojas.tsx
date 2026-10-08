@@ -22,6 +22,7 @@ import { Section } from "@/components/ui/section";
 import { Segmented } from "@/components/ui/segmented";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { BotaoConectar } from "@/app/(dashboard)/stores/conectar-loja";
+import type { GraphTarget } from "@/lib/checkout-routes/graph";
 import { Instalador } from "./instalar";
 import {
   ESTRATEGIAS,
@@ -59,6 +60,8 @@ export interface LojaNaRota {
   orders24h: number;
   /** Rota antiga sem linha de destino: nao da para pausar, tirar nem pesar. */
   legacy: boolean;
+  /** Ultimo conserto nesta loja: o selo mostra "Pausada pela Shopify" etc. */
+  conserto?: GraphTarget["conserto"];
 }
 
 type Props = {

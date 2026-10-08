@@ -458,6 +458,28 @@ export async function fetchPublicShopifyProductsByHandles(
   return { domain, products };
 }
 
+/**
+ * A loja nao mostra o catalogo ao publico: senha na Loja virtual (a Shopify
+ * responde 401 ou a pagina /password em HTML no lugar do JSON). E um palpite
+ * pela resposta -- HTML tambem pode ser pagina de bloqueio do proxy; quem
+ * precisa de certeza (o conserto) confirma pela Admin API.
+ */
+export class LojaComSenhaError extends Error {
+  readonly dominio: string;
+  constructor(dominio: string) {
+    super(`A loja ${dominio} esta com senha: o catalogo nao e publico.`);
+    this.name = "LojaComSenhaError";
+    this.dominio = dominio;
+  }
+}
+
+function pareceLojaComSenha(res: Response): boolean {
+  if (res.status === 401) return true;
+  if (/\/password(\?|$)/.test(res.url || "")) return true;
+  const tipo = res.headers.get("content-type") || "";
+  return res.ok && /text\/html/i.test(tipo);
+}
+
 export async function fetchPublicShopifyProducts(
   source: string,
   options?: {
@@ -511,6 +533,14 @@ export async function fetchPublicShopifyProducts(
       },
       { timeoutMs: options?.timeoutMs }
     );
+
+    // Loja com senha nao entrega o products.json: a Shopify manda para
+    // /password (HTML) ou responde 401. Antes isso estourava no res.json()
+    // com "Unexpected token <" e o conserto falhava calado (Distrito Zapas:
+    // 208 de 208 variantes sem SKU, porque o carimbo nunca via a vitrine).
+    if (page === 1 && pareceLojaComSenha(res)) {
+      throw new LojaComSenhaError(domain);
+    }
 
     if (!res.ok) {
       if (page === 1) {

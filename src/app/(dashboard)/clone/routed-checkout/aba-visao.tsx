@@ -7,8 +7,16 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { mapaVelho } from "@/components/routed-checkout/target-state";
 import { quandoFoi } from "@/lib/leitura/lojas-estado";
 import type { GraphRoute, GraphStore } from "@/lib/checkout-routes/graph";
+import { ROTULO_FORA_DO_AR, ehMotivoForaDoAr } from "@/lib/checkout-routes/loja-fora-do-ar";
 import { Instalador } from "./instalar";
-import { ESTRATEGIAS, estadoDaLoja, estadoInstalacao, hrefRota, lojasRecebendo } from "./logica";
+import {
+  ESTRATEGIAS,
+  avisosDaConferencia,
+  estadoDaLoja,
+  estadoInstalacao,
+  hrefRota,
+  lojasRecebendo,
+} from "./logica";
 
 const LINK_BASE =
   "rounded-sm font-medium text-brand underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
@@ -23,10 +31,13 @@ function idade(horas: number) {
 /** O aviso mais grave da rota, um so (o resto aparece no Diagnostico). */
 function AvisoDaRota({ rota, agora }: { rota: GraphRoute; agora: number }) {
   if (rota.lastHeal && !rota.lastHeal.ok) {
+    // Loja fora do ar: o titulo diz o que e ("Vitrine com senha") em vez do
+    // generico. A frase ja traz a loja e o que fazer.
+    const motivo = ehMotivoForaDoAr(rota.lastHeal.motivo) ? rota.lastHeal.motivo : null;
     return (
       <Callout
         tom="err"
-        titulo="A última checagem automática achou um problema"
+        titulo={motivo ? ROTULO_FORA_DO_AR[motivo] : "A última checagem automática achou um problema"}
         acao={
           <Link href={hrefRota(rota.id, "diagnostico")} scroll={false} className={buttonVariants({ variant: "secondary", size: "sm" })}>
             Ver diagnóstico
@@ -188,6 +199,24 @@ export function AbaVisao({
                       style={{ width: `${fatia}%` }}
                     />
                   </div>
+                  {/* Contado pelo conserto e NAO mexido: preco diferente pode
+                      ser de proposito; variante parada o lojista resolve la. */}
+                  {avisosDaConferencia(t.conserto).map((aviso) => (
+                    <details key={aviso.texto} className="text-label text-t1">
+                      <summary className="cursor-pointer rounded-sm text-warn focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+                        {aviso.texto}
+                      </summary>
+                      {aviso.exemplos.length > 0 ? (
+                        <ul className="mt-1 flex flex-col gap-0.5 pl-4 text-t2">
+                          {aviso.exemplos.map((e, i) => (
+                            <li key={`${i}-${e}`} className="break-words">
+                              {e}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </details>
+                  ))}
                 </li>
               );
             })}

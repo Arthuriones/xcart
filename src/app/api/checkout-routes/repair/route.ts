@@ -85,20 +85,39 @@ export async function POST(request: NextRequest) {
 
   try {
     const results: HealRouteResult[] = [];
+    // Loja de checkout pausada pela Shopify ou sem o app: com rodizio, ela
+    // nao impede o conserto das outras. Uma loja so (ou todas fora) = erro.
+    const lojasForaDoAr: { targetId: string | null; motivo: string; lado: string; mensagem: string }[] = [];
+    let primeiroErro: unknown = null;
     for (const targetId of targetIds) {
-      results.push(
-        await healRoute({
-          routeId,
-          targetId,
-          // Escopo do dono: healRoute filtra por user_id, entao rota de outro
-          // usuario devolve 404 em vez de ser consertada.
-          userId: user.id,
-          origin: request.nextUrl.origin,
-          cookie: request.headers.get("cookie") || "",
-          criarFaltantes,
-        })
-      );
+      try {
+        results.push(
+          await healRoute({
+            routeId,
+            targetId,
+            // Escopo do dono: healRoute filtra por user_id, entao rota de outro
+            // usuario devolve 404 em vez de ser consertada.
+            userId: user.id,
+            origin: request.nextUrl.origin,
+            cookie: request.headers.get("cookie") || "",
+            criarFaltantes,
+          })
+        );
+      } catch (erro) {
+        if (targetIds.length > 1 && erro instanceof HealRouteError && erro.foraDoAr) {
+          primeiroErro = primeiroErro || erro;
+          lojasForaDoAr.push({
+            targetId: targetId ?? null,
+            motivo: erro.foraDoAr.motivo,
+            lado: erro.foraDoAr.lado,
+            mensagem: erro.message,
+          });
+          continue;
+        }
+        throw erro;
+      }
     }
+    if (results.length === 0) throw primeiroErro;
 
     // O primeiro resultado continua no topo do payload para nao quebrar a UI
     // que le r.stampedSkuCount e companhia direto da raiz.
@@ -128,8 +147,9 @@ export async function POST(request: NextRequest) {
       // O ultimo reenvio ao tema e o que vale: cada passada compara o config
       // inteiro da rota.
       theme: results[results.length - 1]?.theme,
-      warnings: results.flatMap((r) => r.warnings),
-      noop: results.every((r) => r.noop),
+      warnings: [...lojasForaDoAr.map((l) => l.mensagem), ...results.flatMap((r) => r.warnings)],
+      lojasForaDoAr,
+      noop: results.every((r) => r.noop) && lojasForaDoAr.length === 0,
     });
   } catch (error) {
     // O cron pegou este destino primeiro. 409 e nao 500: nao houve falha, so
