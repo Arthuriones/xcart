@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import type { ConexaoOAuthResumo } from "../dados-anuncios";
 import { AssistenteMeta, CartaoTokenMeta } from "./token-meta";
 import type { Estado } from "../regras";
+import { ModalConectarMeta } from "./modal-conectar-meta";
 
 function IconeFacebook({ className = "size-4" }: { className?: string }) {
   return (
@@ -35,6 +36,7 @@ export function CardPerfilMeta({
   const [conexoes, setConexoes] = useState<ConexaoOAuthResumo[]>(conexoesIniciais);
   const [mostrarManual, setMostrarManual] = useState(false);
   const [desconectandoId, setDesconectandoId] = useState<string | null>(null);
+  const [modalConectarAberto, setModalConectarAberto] = useState(false);
 
   // Escuta o evento de sucesso enviado pelo popup OAuth
   useEffect(() => {
@@ -127,7 +129,7 @@ export function CardPerfilMeta({
 
           <Button
             type="button"
-            onClick={abrirPopupMeta}
+            onClick={() => setModalConectarAberto(true)}
             disabled={pendente}
             className="bg-[#1877F2] font-medium text-white hover:bg-[#166fe5] shadow-xs gap-2"
           >
@@ -215,6 +217,23 @@ export function CardPerfilMeta({
           </div>
         )}
       </div>
+
+      <ModalConectarMeta
+        aberto={modalConectarAberto}
+        aoFechar={() => setModalConectarAberto(false)}
+        aoContinuarNavegador={abrirPopupMeta}
+        aoConectadoComSucesso={(res) => {
+          const nome = res.nome || "Perfil";
+          toast.success(`Perfil ${nome} conectado!`, {
+            description: res.contas
+              ? `${res.contas} conta(s) de anúncio identificada(s). Vincule abaixo.`
+              : "Contas de anúncio prontas para serem vinculadas às lojas.",
+          });
+          startTransition(() => {
+            router.refresh();
+          });
+        }}
+      />
     </div>
   );
 }
