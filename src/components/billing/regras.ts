@@ -484,6 +484,7 @@ const MENSAGENS_NOSSAS = new Set([
   "Você já assina no cartão. Para mudar de plano, fale com o suporte.",
   "Seu pagamento anterior ainda está sendo processado. Tente de novo em alguns minutos.",
   "Escolha um plano.",
+  "A Pagou recusou a operação. Tente de novo em instantes.",
   "Token de cartão inválido.",
   "Esta assinatura foi criada no provedor anterior. Fale com o suporte para cancelar.",
   "Nenhuma assinatura ativa.",
