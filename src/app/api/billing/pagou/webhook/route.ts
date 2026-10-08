@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { timingSafeEqual } from "crypto";
+import { createHmac, timingSafeEqual } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   getSubscription,
@@ -15,17 +15,56 @@ export const runtime = "nodejs";
 /**
  * Webhook da Pagou.
  *
- * SEGURANCA — a Pagou nao documenta assinatura HMAC no webhook. Em vez de
- * confiar no corpo recebido, este handler o trata como simples AVISO:
+ * SEGURANCA — chegam aqui dois tipos de chamada, autorizadas por caminhos
+ * diferentes (https://developer.pagou.ai/webhooks/overview#verifying-signatures):
  *
- *   1. exige um token secreto na querystring (vai na notify_url);
- *   2. deduplica pelo id de topo do evento, como a doc pede;
- *   3. le apenas o id do recurso do corpo e busca o estado real via GET
+ *   a. webhook cadastrado no painel (Configuracoes -> Integracoes, onde chegam
+ *      os subscription.*): ASSINADO. Headers X-Pagou-Timestamp (unix em
+ *      segundos) e X-Pagou-Signature = "sha256=" + HMAC_SHA256 em hex, chave =
+ *      Security Token do webhook (PAGOU_WEBHOOK_SECRET), sobre
+ *      `${timestamp}.${corpoCru}`. Timestamp a mais de 5 min do relogio, em
+ *      qualquer direcao, e recusado (replay).
+ *   b. postback da notify_url: a Pagou NAO assina. Exige o token secreto que
+ *      nos mesmos pomos na querystring (?t=, PAGOU_WEBHOOK_TOKEN).
+ *
+ * Mesmo autorizado, o corpo e tratado como simples AVISO:
+ *
+ *   1. deduplica pelo id de topo do evento, como a doc pede;
+ *   2. le apenas o id do recurso do corpo e busca o estado real via GET
  *      autenticado na API antes de creditar ou mudar plano.
  *
  * Assim, mesmo que alguem descubra a URL e poste um "transaction.paid" forjado,
  * nada e creditado: a API da Pagou desmente.
  */
+
+// Janela da doc: "more than 5 minutes from your clock, in either direction".
+const TOLERANCIA_ASSINATURA_S = 5 * 60;
+
+function igualEmTempoConstante(a: string, b: string): boolean {
+  const ba = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ba.length === bb.length && timingSafeEqual(ba, bb);
+}
+
+/**
+ * Confere X-Pagou-Signature sobre o corpo CRU (antes de qualquer parse:
+ * reserializar o JSON muda bytes e a assinatura deixa de bater).
+ */
+function assinaturaValida(
+  segredo: string,
+  timestamp: string | null,
+  corpoCru: string,
+  assinatura: string
+): boolean {
+  if (!timestamp || !/^\d{1,12}$/.test(timestamp.trim())) return false;
+  const ts = timestamp.trim();
+  const agora = Math.floor(Date.now() / 1000);
+  if (Math.abs(agora - Number(ts)) > TOLERANCIA_ASSINATURA_S) return false;
+
+  const esperada =
+    "sha256=" + createHmac("sha256", segredo).update(`${ts}.${corpoCru}`, "utf8").digest("hex");
+  return igualEmTempoConstante(assinatura.trim(), esperada);
+}
 
 interface Envelope {
   id?: string;
@@ -41,36 +80,48 @@ interface Envelope {
 
 export async function POST(request: NextRequest) {
   const esperado = process.env.PAGOU_WEBHOOK_TOKEN;
-  if (!esperado) {
+  const segredo = process.env.PAGOU_WEBHOOK_SECRET;
+  if (!esperado && !segredo) {
     return NextResponse.json({ error: "Webhook não configurado." }, { status: 503 });
   }
 
-  // A Pagou envia o token cadastrado no painel, mas a doc nao diz em qual
-  // header. Aceitamos tanto pela querystring (?t=, que nos mesmos colocamos na
-  // notify_url) quanto pelos headers mais provaveis — assim funciona
-  // independente de como eles entregarem.
-  const candidatos = [
-    request.nextUrl.searchParams.get("t"),
-    request.headers.get("x-webhook-token"),
-    request.headers.get("x-pagou-token"),
-    request.headers.get("x-pagou-signature"),
-    request.headers.get("webhook-token"),
-    request.headers.get("authorization")?.replace(/^Bearer\s+/i, ""),
-  ].filter(Boolean) as string[];
+  // Corpo CRU primeiro: a assinatura e sobre os bytes exatos recebidos.
+  const corpoCru = await request.text();
 
-  const autorizado = candidatos.some(
-    (c) =>
-      c.length === esperado.length &&
-      timingSafeEqual(Buffer.from(c), Buffer.from(esperado))
-  );
+  // (a) Webhook do painel, assinado com o Security Token.
+  const assinatura = request.headers.get("x-pagou-signature");
+  let autorizado =
+    !!assinatura &&
+    !!segredo &&
+    assinaturaValida(segredo, request.headers.get("x-pagou-timestamp"), corpoCru, assinatura);
+
+  // (b) Postback da notify_url, sem assinatura: token cru. Aceitamos tanto
+  // pela querystring (?t=, que nos mesmos colocamos na notify_url) quanto pelos
+  // headers mais provaveis -- assim funciona independente de como entregarem.
+  if (!autorizado && esperado) {
+    const candidatos = [
+      request.nextUrl.searchParams.get("t"),
+      request.headers.get("x-webhook-token"),
+      request.headers.get("x-pagou-token"),
+      request.headers.get("x-pagou-signature"),
+      request.headers.get("webhook-token"),
+      request.headers.get("authorization")?.replace(/^Bearer\s+/i, ""),
+    ].filter(Boolean) as string[];
+    autorizado = candidatos.some((c) => igualEmTempoConstante(c, esperado));
+  }
+
   if (!autorizado) {
     return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
   }
 
   let corpo: Envelope;
   try {
-    corpo = (await request.json()) as Envelope;
+    corpo = JSON.parse(corpoCru) as Envelope;
   } catch {
+    return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
+  }
+  // JSON valido mas nao objeto ("null", "1") quebraria corpo.id abaixo.
+  if (!corpo || typeof corpo !== "object") {
     return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
   }
 

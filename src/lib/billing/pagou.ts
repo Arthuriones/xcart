@@ -39,8 +39,9 @@ export function appUrl(): string {
 }
 
 // URL que a Pagou chama ao mudar o estado de uma cobranca. Carrega um segredo
-// no path porque a Pagou nao documenta assinatura HMAC no webhook; ainda assim
-// o handler nunca confia no corpo — ver comentario no route do webhook.
+// na querystring porque o postback da notify_url nao e assinado (so o webhook
+// do painel leva X-Pagou-Signature); ainda assim o handler nunca confia no
+// corpo — ver comentario no route do webhook.
 export function notifyUrl(): string | undefined {
   const s = process.env.PAGOU_WEBHOOK_TOKEN;
   return s ? `${appUrl()}/api/billing/pagou/webhook?t=${encodeURIComponent(s)}` : undefined;
