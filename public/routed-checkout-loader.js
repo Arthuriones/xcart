@@ -35,12 +35,20 @@
   // Referer nulo; sem nada, recebe a origem da vitrine (o padrao dos
   // navegadores e strict-origin-when-cross-origin, e a Shopify nao manda
   // header Referrer-Policy nenhum).
+  //
+  // O link leva uma marca propria. O clique sintetico passa pelos MESMOS
+  // ouvintes de captura que barram todo clique de checkout -- e um destino
+  // com "checkout" no dominio (checkout.minhaloja.com.br) casa com eles. Sem
+  // a marca, o loader barrava o proprio redirect.
+  var MARCA_LINK_PROPRIO = "data-xcart-rota";
+
   function irParaCheckout(url) {
     try {
       var a = document.createElement("a");
       a.href = url;
       a.rel = "noreferrer noopener";
       a.style.display = "none";
+      a.setAttribute(MARCA_LINK_PROPRIO, "1");
       (document.body || document.documentElement).appendChild(a);
       a.click();
     } catch (e) {
@@ -227,6 +235,266 @@
   var yampiPatchAttempts = 0;
   var initialized = false;
 
+  // ==========================================================================
+  // Trava do roteamento: vale do primeiro toque ate a pagina SAIR.
+  //
+  // Antes o segundo toque no "Finalizar" escapava. `if (isRouting) return`
+  // saia SEM preventDefault, o submit nativo do tema seguia e o comprador caia
+  // no checkout da VITRINE, que nao cobra. E o segundo toque e o esperado: o
+  // loader segura o primeiro antes do tema (stopImmediatePropagation), entao o
+  // spinner do tema nao aparece e o botao parece morto enquanto o carrinho e a
+  // rota sao lidos. Visto na NORAH (tema Shrine, gaveta "Secure checkout"): no
+  // Safari a navegacao para a vitrine ainda abortava o fetch da rota e sobrava
+  // um "Load failed" na telemetria; no Chrome nao sobrava nada.
+  //
+  // Agora: clique de checkout e SEMPRE barrado, e durante a rota so e contado.
+  // A trava cai no erro, na volta pelo bfcache (pageshow persisted) e, como
+  // valvula, TRAVA_MAXIMA_MS depois do redirect -- se a navegacao nao vingou,
+  // o comprador nao pode ficar preso num botao morto. Tocar depois disso roteia
+  // de novo; nada mais leva ao checkout da vitrine.
+  // ==========================================================================
+  var TRAVA_MAXIMA_MS = 10000;
+  // Nenhuma tentativa pode ficar pendurada: com a trava valendo ate a pagina
+  // sair, um fetch que nunca volta deixaria o botao morto para sempre.
+  var PRAZO_REDE_MS = 15000;
+  var travaTimer = null;
+  var toquesDuranteRota = 0;
+  var botaoCarregando = null;
+
+  // Retorno no botao tocado. Imita o tema quando ele tem spinner no botao
+  // (Dawn e derivados, como o Shrine: classe "loading" + spinner visivel).
+  // Sem spinner, NAO poe "loading": no Dawn ela deixa o texto transparente e
+  // nao mostra nada no lugar. Ai fica so o botao meio apagado.
+  var SPINNER_DO_TEMA = ".loading-overlay__spinner, .loading__spinner";
+
+  function marcarCarregando(elemento) {
+    desmarcarCarregando();
+    try {
+      if (!elemento || !elemento.closest) return;
+      var botao = elemento.closest("button, a, input, [role='button']") || elemento;
+      if (!botao.setAttribute || /^(FORM|BODY|HTML)$/i.test(botao.tagName || "")) return;
+      var estado = {
+        el: botao,
+        spinner: null,
+        loading: false,
+        opacidade: botao.style ? botao.style.opacity : "",
+        cursor: botao.style ? botao.style.cursor : ""
+      };
+      botao.setAttribute("aria-busy", "true");
+      var spinner = botao.querySelector ? botao.querySelector(SPINNER_DO_TEMA) : null;
+      if (spinner && botao.classList) {
+        estado.loading = !botao.classList.contains("loading");
+        botao.classList.add("loading");
+        if (spinner.classList && spinner.classList.contains("hidden")) {
+          spinner.classList.remove("hidden");
+          estado.spinner = spinner;
+        }
+      } else if (botao.style) {
+        botao.style.opacity = "0.6";
+      }
+      if (botao.style) botao.style.cursor = "progress";
+      botaoCarregando = estado;
+    } catch (e) {}
+  }
+
+  function desmarcarCarregando() {
+    var estado = botaoCarregando;
+    botaoCarregando = null;
+    if (!estado) return;
+    try {
+      var botao = estado.el;
+      botao.removeAttribute("aria-busy");
+      if (estado.loading) botao.classList.remove("loading");
+      if (estado.spinner) estado.spinner.classList.add("hidden");
+      if (botao.style) {
+        botao.style.opacity = estado.opacidade;
+        botao.style.cursor = estado.cursor;
+      }
+    } catch (e) {}
+  }
+
+  function travarRoteamento(elemento) {
+    isRouting = true;
+    toquesDuranteRota = 0;
+    if (travaTimer) {
+      clearTimeout(travaTimer);
+      travaTimer = null;
+    }
+    marcarCarregando(elemento);
+  }
+
+  function liberarRoteamento() {
+    isRouting = false;
+    if (travaTimer) {
+      clearTimeout(travaTimer);
+      travaTimer = null;
+    }
+    desmarcarCarregando();
+  }
+
+  // A navegacao saiu: a trava fica ate a pagina ir embora. O timer e so a
+  // valvula para a navegacao que nao vingou.
+  function segurarAteSair() {
+    if (travaTimer) clearTimeout(travaTimer);
+    travaTimer = setTimeout(liberarRoteamento, TRAVA_MAXIMA_MS);
+  }
+
+  function barrarEvento(event) {
+    if (!event) return;
+    if (event.preventDefault) event.preventDefault();
+    if (event.stopPropagation) event.stopPropagation();
+    if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+  }
+
+  function ehLinkProprio(el) {
+    try {
+      return Boolean(el && el.closest && el.closest("a[" + MARCA_LINK_PROPRIO + "]"));
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // O detalhe do erro leva quantos toques o comprador deu enquanto esperava:
+  // e o numero que diz se o botao parado esta custando venda.
+  function detalheDoErro(error) {
+    var msg = error ? String(error && error.message ? error.message : error) : "";
+    if (toquesDuranteRota > 0) msg += " (+" + toquesDuranteRota + " toques durante a rota)";
+    return msg;
+  }
+
+  // fetch com prazo. Sem AbortController (navegador muito velho) fica sem
+  // prazo, como era antes.
+  function buscarComPrazo(url, opcoes) {
+    var controle = null;
+    try {
+      controle = typeof AbortController === "function" ? new AbortController() : null;
+    } catch (e) {
+      controle = null;
+    }
+    if (!controle) return fetch(url, opcoes);
+    var comSinal = {};
+    for (var chave in opcoes) {
+      if (Object.prototype.hasOwnProperty.call(opcoes, chave)) comSinal[chave] = opcoes[chave];
+    }
+    comSinal.signal = controle.signal;
+    var estourou = false;
+    var timer = setTimeout(function () {
+      estourou = true;
+      controle.abort();
+    }, PRAZO_REDE_MS);
+    return fetch(url, comSinal).then(
+      function (resposta) {
+        clearTimeout(timer);
+        return resposta;
+      },
+      function (erro) {
+        clearTimeout(timer);
+        throw estourou ? new Error("Prazo esgotado (" + PRAZO_REDE_MS + " ms)") : erro;
+      }
+    );
+  }
+
+  // ==========================================================================
+  // Carteiras (Shop Pay, Apple/Google Pay, PayPal, Amazon Pay) e o botao
+  // dinamico ("Comprar agora", "Mais opcoes de pagamento").
+  //
+  // Os de hoje moram em shadow DOM FECHADO dentro de
+  // shopify-accelerated-checkout(-cart). No ouvinte do window o alvo ja chega
+  // trocado pelo hospedeiro, sem texto e sem name, e isCheckoutTarget nao via
+  // nada: o clique seguia e a carteira cobrava NA VITRINE, com o nome da marca.
+  // O caminho do clique (composedPath) ainda passa pelo hospedeiro.
+  //
+  // Mesma lista de public/xcart-click.js (SELETOR_EXPRESSO), mais o que la
+  // fica de fora de proposito: para o rastreamento o "Comprar agora" e o "Mais
+  // opcoes de pagamento" sao checkout comum; para a rota, tudo isso e checkout
+  // da vitrine e tem que ser levado.
+  // ==========================================================================
+  var SELETOR_EXPRESSO_CARRINHO = [
+    "shopify-accelerated-checkout-cart",
+    ".additional-checkout-buttons",
+    "#dynamic-checkout-cart",
+    "[data-shopify='dynamic-checkout-cart']"
+  ].join(", ");
+
+  var SELETOR_EXPRESSO = [
+    "shop-pay-wallet-button",
+    "shopify-apple-pay-button",
+    "shopify-google-pay-button",
+    "shopify-paypal-button",
+    "shopify-amazon-pay-button",
+    "shopify-buy-it-now-button",
+    "more-payment-options-link",
+    "shopify-accelerated-checkout",
+    ".shopify-payment-button__button",
+    ".shopify-payment-button__more-options",
+    ".shopify-payment-button",
+    "[data-shopify='payment-button']",
+    SELETOR_EXPRESSO_CARRINHO
+  ].join(", ");
+
+  function casaSeletor(no, seletor) {
+    if (!no || no.nodeType !== 1) return false;
+    var f = no.matches || no.msMatchesSelector || no.webkitMatchesSelector;
+    try {
+      return Boolean(f && f.call(no, seletor));
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // O primeiro elemento do caminho do clique que casa com o seletor. Sem
+  // composedPath (navegador antigo), fica o `closest` no alvo.
+  function noCaminho(event, seletor) {
+    var caminho = null;
+    try {
+      caminho = typeof event.composedPath === "function" ? event.composedPath() : null;
+    } catch (e) {
+      caminho = null;
+    }
+    if (caminho && caminho.length) {
+      for (var i = 0; i < caminho.length; i++) {
+        if (casaSeletor(caminho[i], seletor)) return caminho[i];
+      }
+      return null;
+    }
+    try {
+      return event.target && event.target.closest ? event.target.closest(seletor) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // No carrinho (pagina ou gaveta) a carteira paga o carrinho inteiro; na
+  // pagina de produto, compra a variante do formulario.
+  function alvoExpresso(event) {
+    var el = noCaminho(event, SELETOR_EXPRESSO);
+    if (!el) return null;
+    return {
+      el: el,
+      modo: noCaminho(event, SELETOR_EXPRESSO_CARRINHO) ? "carrinho" : "produto"
+    };
+  }
+
+  // O que nao da para interceptar some. O PayPal desenha o botao num iframe
+  // de outro dominio, e clique dentro de iframe nao chega a esta pagina. Na
+  // vitrine carteira nenhuma deve aparecer -- quem cobra e a loja de checkout.
+  // As do CARRINHO somem inteiras (ali so ha carteira; o "Finalizar" do tema
+  // fica). Na pagina de produto o componente tambem traz o "Comprar agora",
+  // entao ele fica e o clique e levado pela rota; so some o botao antigo de
+  // carteira que e iframe. O :has vai em regra propria: navegador sem :has
+  // descarta a regra inteira, e nao pode levar a do carrinho junto.
+  function esconderCarteiras() {
+    try {
+      if (document.getElementById("xcart-rota-carteiras")) return;
+      var estilo = document.createElement("style");
+      estilo.id = "xcart-rota-carteiras";
+      estilo.textContent =
+        SELETOR_EXPRESSO_CARRINHO + "{display:none!important}\n" +
+        ".shopify-payment-button__button--branded:has(iframe){display:none!important}";
+      (document.head || document.documentElement).appendChild(estilo);
+    } catch (e) {}
+  }
+
   function rootPath() {
     return (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || "/";
   }
@@ -303,6 +571,19 @@
     );
   }
 
+  // Formulario cujo action E o checkout desta loja (/checkout, /en/checkout).
+  function postaNoCheckoutDaVitrine(form) {
+    try {
+      var acao = form && form.getAttribute && form.getAttribute("action");
+      if (!acao) return false;
+      var u = new URL(acao, window.location.href);
+      return u.origin === window.location.origin &&
+        /^\/([a-z]{2}(-[a-z]{2,4})?\/)?checkouts?(\/|$)/i.test(u.pathname);
+    } catch (e) {
+      return false;
+    }
+  }
+
   function isCheckoutForm(form) {
     if (!form || !form.matches) return false;
     var action = form.getAttribute("action") || "";
@@ -318,7 +599,7 @@
   }
 
   async function getCart() {
-    var response = await fetch(rootPath() + "cart.js", {
+    var response = await buscarComPrazo(rootPath() + "cart.js", {
       credentials: "same-origin",
       headers: { Accept: "application/json" },
     });
@@ -461,7 +742,7 @@
     if (inlineUrl) return inlineUrl;
 
     // 2. Fallback para API (cobre SKUs novos ainda nao embutidos no script)
-    var response = await fetch(appUrl.replace(/\/$/, "") + "/api/checkout-routes/resolve", {
+    var response = await buscarComPrazo(appUrl.replace(/\/$/, "") + "/api/checkout-routes/resolve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -572,13 +853,16 @@
     } catch (e) {}
   }
 
+  // skipGuard: quem chama ja travou (routeCheckout). Os outros (Yampi, redes
+  // de seguranca) travam aqui, e com a trava ligada nao fazem nada.
   async function routeCartCheckout(skipGuard) {
     if (isRouting && !skipGuard) return;
-    isRouting = true;
+    if (!isRouting) travarRoteamento(null);
 
     try {
       var cart = await getCart();
       if (!cart.items || cart.items.length === 0) {
+        segurarAteSair();
         window.location.href = rootPath() + "cart";
         return;
       }
@@ -589,31 +873,39 @@
         String(cart.item_count || "") + " itens -> " +
           ((lastRoutedTarget && lastRoutedTarget.domain) || "?")
       );
+      // A trava NAO cai aqui: o comprador ainda esta nesta pagina ate a loja
+      // de checkout responder, e um toque nesse meio cancelava a navegacao.
+      segurarAteSair();
       irParaCheckout(destino);
     } catch (error) {
       console.warn("[RoutedCheckout] erro ao rotear checkout", error);
-      trackFallback("cart_checkout_error", error);
+      trackFallback("cart_checkout_error", detalheDoErro(error));
       // Nao redireciona para checkout da vitrine — mostra erro e deixa cliente tentar de novo.
       showRoutingError();
-      isRouting = false;
-    } finally {
-      if (isRouting) {
-        setTimeout(function () { isRouting = false; }, 1500);
-      }
+      liberarRoteamento();
     }
   }
 
-  async function routeCheckout(event, targetOverride) {
+  // modo: "produto" (compra a variante do formulario e leva o carrinho),
+  // "carrinho" (leva o carrinho como esta) ou nada (decide pelo alvo, e so age
+  // se o alvo for de checkout).
+  async function routeCheckout(event, targetOverride, modo) {
     var target = targetOverride || event.target;
-    if (isRouting || !isCheckoutTarget(target)) return;
+    if (ehLinkProprio(event.target)) return;
+    if (!modo && !isCheckoutTarget(target)) return;
 
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.stopImmediatePropagation) event.stopImmediatePropagation();
-    isRouting = true;
+    // Primeiro barra, depois olha a trava. Na ordem antiga o toque durante a
+    // rota saia sem preventDefault e o tema mandava para a vitrine.
+    barrarEvento(event);
+    if (isRouting) {
+      toquesDuranteRota += 1;
+      return;
+    }
+    travarRoteamento(target);
 
     try {
-      if (isImmediatePurchaseTarget(target)) {
+      var compraImediata = modo ? modo === "produto" : isImmediatePurchaseTarget(target);
+      if (compraImediata) {
         var form = findProductForm(target);
         if (form) {
           try { await submitProductForm(form); } catch (e) {}
@@ -623,13 +915,9 @@
       await routeCartCheckout(true);
     } catch (error) {
       console.warn("[RoutedCheckout] erro ao rotear checkout", error);
-      trackFallback("direct_checkout_error", error);
+      trackFallback("direct_checkout_error", detalheDoErro(error));
       showRoutingError();
-      isRouting = false;
-    } finally {
-      if (isRouting) {
-        setTimeout(function () { isRouting = false; }, 1500);
-      }
+      liberarRoteamento();
     }
   }
 
@@ -654,7 +942,7 @@
       formData.set("sections_url", window.location.pathname);
     }
 
-    return fetch(rootPath() + "cart/add.js", {
+    return buscarComPrazo(rootPath() + "cart/add.js", {
       method: "POST",
       credentials: "same-origin",
       headers: {
@@ -667,7 +955,7 @@
         return new Promise(function (resolve) {
           setTimeout(resolve, 350);
         }).then(function () {
-          return fetch(rootPath() + "cart/add.js", {
+          return buscarComPrazo(rootPath() + "cart/add.js", {
             method: "POST",
             credentials: "same-origin",
             headers: {
@@ -802,6 +1090,12 @@
   }
 
   function handleDocumentClick(event) {
+    if (ehLinkProprio(event.target)) return;
+    var expresso = alvoExpresso(event);
+    if (expresso) {
+      routeCheckout(event, expresso.el, expresso.modo);
+      return;
+    }
     if (isCheckoutTarget(event.target)) {
       routeCheckout(event);
     }
@@ -860,8 +1154,12 @@
         var patched = function () {
           try {
             if (isCheckoutForm(this)) {
-              report("bypass_form_submit", this.getAttribute("action") || "");
-              routeCartCheckout(true);
+              // Com a rota em curso, este submit e o mesmo checkout que ja
+              // esta sendo levado: engole. Deixar passar era ir para a vitrine.
+              if (!isRouting) {
+                report("bypass_form_submit", this.getAttribute("action") || "");
+                routeCartCheckout();
+              }
               return;
             }
           } catch (e) {}
@@ -885,9 +1183,12 @@
         if (typeof original !== "function" || original.__routedCheckoutPatched) return;
         var novo = function (url) {
           try {
-            if (ehCheckoutLocal(url) && !isRouting) {
-              report("bypass_location_" + metodo, String(url).slice(0, 200));
-              routeCartCheckout(true);
+            if (ehCheckoutLocal(url)) {
+              // Mesma regra do submit: com a rota em curso, engole.
+              if (!isRouting) {
+                report("bypass_location_" + metodo, String(url).slice(0, 200));
+                routeCartCheckout();
+              }
               return;
             }
           } catch (e) {}
@@ -903,9 +1204,19 @@
     if (initialized || !document.body) return;
     initialized = true;
     instalarRedesDeSeguranca();
+    esconderCarteiras();
     reportarPresenca();
     window.addEventListener("click", handleDocumentClick, true);
     document.addEventListener("click", handleDocumentClick, true);
+    // Volta pelo bfcache (o "voltar" do checkout): a pagina volta congelada
+    // como saiu, com a trava ligada e o botao carregando. Sem isto o comprador
+    // voltava para um botao morto ate a valvula estourar.
+    window.addEventListener("pageshow", function (event) {
+      if (event && event.persisted) {
+        liberarRoteamento();
+        isAddingToCart = false;
+      }
+    });
     document.addEventListener(
       "submit",
       function (event) {
@@ -913,6 +1224,11 @@
         var form = event.target;
         if (submitter && isCheckoutTarget(submitter)) {
           routeCheckout(event, submitter);
+        } else if (postaNoCheckoutDaVitrine(form)) {
+          // Formulario que posta DIRETO no checkout da vitrine: qualquer
+          // submit dele vai para la, seja qual for o botao. Antes passava sem
+          // preventDefault quando o botao nao parecia de checkout.
+          routeCheckout(event, submitter || form, "carrinho");
         } else if (isCheckoutForm(form)) {
           routeCheckout(
             event,
