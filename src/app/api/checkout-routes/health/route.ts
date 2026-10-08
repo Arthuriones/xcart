@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after as depoisDaResposta } from "next/server";
 import {
   completarVariantes,
   getProducts,
@@ -7,6 +7,8 @@ import {
 } from "@/lib/shopify/client";
 import { verificarParDaRota } from "@/lib/shopify/store-health";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { conferirWebhooks } from "@/lib/checkout-routes/sensores";
 import { marketProfileFor } from "@/lib/gemini/market-profile";
 import { lerAjusteDeMercado } from "@/lib/checkout-routes/mercado";
 
@@ -173,6 +175,16 @@ export async function POST(request: NextRequest) {
   if (configError || !config) {
     return NextResponse.json({ error: "Rota nao encontrada." }, { status: 404 });
   }
+
+  // "Testar agora" e o que o lojista faz depois de dar read_orders ao app:
+  // reconfere ja os avisos da Shopify que estavam faltando nesta rota (os que
+  // ja estao ligados seguem a conferencia diaria). Depois da resposta.
+  depoisDaResposta(() =>
+    conferirWebhooks(createAdminClient(), { rotaId: routeId, reconferirPendentes: true }).then(
+      () => undefined,
+      (e) => console.warn("[health] webhooks do sensor:", e instanceof Error ? e.message : e)
+    )
+  );
 
   const { data: todosAlvos } = await supabase
     .from("routed_checkout_targets")

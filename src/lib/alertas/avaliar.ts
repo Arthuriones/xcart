@@ -16,6 +16,19 @@ import {
 } from "@/lib/alertas/regras";
 import { enviarTelegram, tokenDoBot } from "@/lib/alertas/telegram";
 import { RE_DESINSTALADO } from "@/lib/leitura/lojas-estado";
+import {
+  SCRIPT_JANELA_MS,
+  SCRIPT_SILENCIO_MS,
+  consertoFalhando,
+  credencialRevogada,
+  escapesDemais,
+  haQuanto,
+  rotaRecebendo,
+  scriptSumiu,
+  vitrineFora,
+} from "@/lib/alertas/roteamento";
+import { MOTIVO_ESCAPE } from "@/lib/checkout-routes/sensor";
+import { lerUltimoConserto, type UltimoConserto } from "@/lib/checkout-routes/ultimo-conserto";
 
 // ============================================================================
 // O cron de alertas: le o banco, decide e manda UMA mensagem por usuario.
@@ -26,8 +39,9 @@ import { RE_DESINSTALADO } from "@/lib/leitura/lojas-estado";
 // externa falharia justamente quando a API estivesse fora -- que e quando ele
 // mais importa.
 //
-// So LE tracking_events, tracking_configs, tracking_destinations e stores.
-// Escreve em `alertas`.
+// So LE tracking_events, tracking_configs, tracking_destinations, stores e,
+// para o roteamento, routed_checkout_configs/targets/fallbacks. Escreve em
+// `alertas`.
 // ============================================================================
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -574,6 +588,165 @@ export async function coletarCondicoesDetalhado(
         severidade: "critico",
         titulo: `Gastou ${valor} sem vender hoje`,
         detalhe: `Nenhuma venda paga hoje e o gasto em anúncio já passou de ${formatarDinheiro(minimo, acima.moeda)}. Confira o checkout, o pagamento e as campanhas.`,
+      });
+    }
+  });
+
+  // ---- R8-R10: roteamento vitrine -> loja de checkout -----------------------
+  // So rota ligada com loja de checkout recebendo (roteamento.ts). Lido uma
+  // vez para as tres regras; a leitura so fica guardada se deu certo.
+  type RotaAlerta = {
+    id: string;
+    user_id: string;
+    name: string | null;
+    source_store_id: string;
+    settings: unknown;
+    ultimoConserto: UltimoConserto | null;
+  };
+  let rotasLigadas: RotaAlerta[] | null = null;
+  const lerRotasLigadas = async (): Promise<RotaAlerta[]> => {
+    if (rotasLigadas) return rotasLigadas;
+    const { data, error } = await admin
+      .from("routed_checkout_configs")
+      .select("id, user_id, name, source_store_id, settings")
+      .eq("enabled", true);
+    if (error) throw new Error(error.message);
+    const rotas = ((data || []) as Omit<RotaAlerta, "ultimoConserto">[]).filter((r) =>
+      lojas.has(String(r.source_store_id))
+    );
+    if (rotas.length === 0) {
+      rotasLigadas = [];
+      return rotasLigadas;
+    }
+    const { data: destinos, error: erroDestinos } = await admin
+      .from("routed_checkout_targets")
+      .select("route_id, enabled, weight")
+      .in(
+        "route_id",
+        rotas.map((r) => r.id)
+      );
+    if (erroDestinos) throw new Error(erroDestinos.message);
+    const porRota = new Map<string, { enabled: boolean | null; weight: number | null }[]>();
+    for (const d of (destinos || []) as { route_id: string; enabled: boolean | null; weight: number | null }[]) {
+      porRota.set(String(d.route_id), [...(porRota.get(String(d.route_id)) || []), d]);
+    }
+    rotasLigadas = rotas
+      .filter((r) => rotaRecebendo(porRota.get(String(r.id)) || []))
+      .map((r) => ({ ...r, ultimoConserto: lerUltimoConserto(r.settings) }));
+    return rotasLigadas;
+  };
+  const nomeDaRota = (r: RotaAlerta) => cortar(r.name, 60) || "sem nome";
+
+  await rodar("roteamento_script_sumiu", async () => {
+    const rotas = (await lerRotasLigadas()).filter(
+      (r) =>
+        !vitrineFora({
+          desinstalada: Boolean(lojas.get(String(r.source_store_id))?.uninstalled_at),
+          ultimoConserto: r.ultimoConserto,
+        })
+    );
+    if (rotas.length === 0) return;
+    const { data: abertos, error } = await admin
+      .from("alertas")
+      .select("chave")
+      .eq("regra", "roteamento_script_sumiu")
+      .is("resolvido_em", null);
+    if (error) throw new Error(error.message);
+    const jaAberto = new Set(((abertos || []) as { chave: string }[]).map((a) => String(a.chave)));
+    const desde72 = new Date(agora.getTime() - SCRIPT_JANELA_MS).toISOString();
+
+    // Uma leitura (limit 1) por rota e, so quando o ultimo sinal passou de 6
+    // h, uma contagem das 72 h -- pelo indice (route_config_id, created_at).
+    for (let i = 0; i < rotas.length; i += 10) {
+      const lote = await Promise.all(
+        rotas.slice(i, i + 10).map(async (r) => {
+          const { data, error: e } = await admin
+            .from("routed_checkout_fallbacks")
+            .select("created_at")
+            .eq("route_config_id", r.id)
+            .eq("reason", "loader_ready")
+            .order("created_at", { ascending: false })
+            .limit(1);
+          if (e) throw new Error(e.message);
+          const ultimo = ((data || []) as { created_at: string | null }[])[0]?.created_at ?? null;
+          const t = ultimo ? Date.parse(ultimo) : NaN;
+          let sinais = 0;
+          if (Number.isFinite(t) && agora.getTime() - t >= SCRIPT_SILENCIO_MS && agora.getTime() - t < SCRIPT_JANELA_MS) {
+            const c = await admin
+              .from("routed_checkout_fallbacks")
+              .select("id", { count: "exact", head: true })
+              .eq("route_config_id", r.id)
+              .eq("reason", "loader_ready")
+              .gte("created_at", desde72);
+            if (c.error) throw new Error(c.error.message);
+            sinais = c.count ?? 0;
+          }
+          return { r, ultimo, sinais };
+        })
+      );
+      for (const { r, ultimo, sinais } of lote) {
+        if (!scriptSumiu({ ultimoSinal: ultimo, sinais72h: sinais, aberto: jaAberto.has(String(r.id)) }, agora.getTime())) {
+          continue;
+        }
+        condicoes.push({
+          user_id: r.user_id,
+          store_id: String(r.source_store_id),
+          regra: "roteamento_script_sumiu",
+          chave: String(r.id),
+          severidade: "critico",
+          titulo: "Script do roteamento sumiu da vitrine",
+          detalhe: `Rota ${nomeDaRota(r)}: último sinal há ${haQuanto(ultimo, agora.getTime())}. Sem o script, o comprador cai no checkout da vitrine, que não cobra. Reinstale na aba Instalação.`,
+        });
+      }
+    }
+  });
+
+  await rodar("roteamento_escape_vitrine", async () => {
+    const rotas = await lerRotasLigadas();
+    if (rotas.length === 0) return;
+    const desde24 = new Date(agora.getTime() - 24 * HORA).toISOString();
+    const { data, error } = await admin
+      .from("routed_checkout_fallbacks")
+      .select("route_config_id")
+      .in(
+        "route_config_id",
+        rotas.map((r) => r.id)
+      )
+      .eq("reason", MOTIVO_ESCAPE)
+      .gte("created_at", desde24)
+      .limit(5000);
+    if (error) throw new Error(error.message);
+    const porRota = new Map<string, number>();
+    for (const l of (data || []) as { route_config_id: string }[]) {
+      porRota.set(String(l.route_config_id), (porRota.get(String(l.route_config_id)) || 0) + 1);
+    }
+    for (const r of rotas) {
+      const n = porRota.get(String(r.id)) || 0;
+      if (!escapesDemais(n)) continue;
+      condicoes.push({
+        user_id: r.user_id,
+        store_id: String(r.source_store_id),
+        regra: "roteamento_escape_vitrine",
+        chave: String(r.id),
+        severidade: "critico",
+        titulo: `${plural(n, "carrinho caiu", "carrinhos caíram")} no checkout da vitrine`,
+        detalhe: `Rota ${nomeDaRota(r)}, nas últimas 24 h. O checkout da vitrine não cobra: confira o script no tema e os produtos sem par na loja de checkout.`,
+      });
+    }
+  });
+
+  await rodar("roteamento_conserto_falhando", async () => {
+    for (const r of await lerRotasLigadas()) {
+      if (!consertoFalhando(r.ultimoConserto)) continue;
+      const semAcesso = credencialRevogada(r.ultimoConserto);
+      condicoes.push({
+        user_id: r.user_id,
+        store_id: String(r.source_store_id),
+        regra: "roteamento_conserto_falhando",
+        chave: String(r.id),
+        severidade: "critico",
+        titulo: semAcesso ? "Rota sem acesso a uma das lojas" : "Conserto automático da rota falhando",
+        detalhe: `Rota ${nomeDaRota(r)}: ${cortar(r.ultimoConserto?.message, 200) || "a última checagem não terminou"}`,
       });
     }
   });

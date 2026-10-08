@@ -16,6 +16,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const JANELA_LIMITE_MS = 24 * 60 * 60 * 1000;
 
+/** Quanto routed_checkout_orders guarda: a janela do funil (7 dias) com folga. */
+export const RETENCAO_PEDIDOS_MS = 8 * JANELA_LIMITE_MS;
+
 /** Pedidos por loja nas ultimas 24 h. Loja sem pedido nao aparece no mapa. */
 export async function contarPedidos24h(
   supabase: SupabaseClient,
@@ -70,11 +73,13 @@ export async function registrarPedidoDoRodizio(
     return false;
   }
 
-  // Retencao: a janela e de 24 h; 3 dias de folga e a tabela nunca cresce.
+  // Retencao: o teto olha 24 h, mas o funil da rota conta os pedidos dos
+  // ultimos 7 dias (sensor.ts). 8 dias de folga e a tabela continua pequena --
+  // e uma linha por pedido, sem dado do comprador.
   await admin
     .from("routed_checkout_orders")
     .delete()
     .eq("store_id", storeId)
-    .lt("created_at", new Date(Date.now() - 3 * JANELA_LIMITE_MS).toISOString());
+    .lt("created_at", new Date(Date.now() - RETENCAO_PEDIDOS_MS).toISOString());
   return true;
 }

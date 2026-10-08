@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { healRoute, HealBusyError, HealRouteError } from "@/lib/checkout-routes/heal";
+import {
+  healRoute,
+  HealBusyError,
+  HealRouteError,
+  registrarFalhaDoConserto,
+} from "@/lib/checkout-routes/heal";
 import { cronPodeTentar } from "@/lib/checkout-routes/loja-fora-do-ar";
+import { conferirWebhooks } from "@/lib/checkout-routes/sensores";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -31,6 +37,14 @@ const ROTAS_POR_EXECUCAO = 4;
  */
 const JANELA_DA_FILA = 100;
 
+// Os webhooks do sensor (orders/create no checkout, checkouts/create na
+// vitrine) sao conferidos no fim da passada, no maximo 1x por dia por loja.
+// Poucas lojas por execucao e so se o conserto deixou folga nos 300 s: sao 1
+// a 3 chamadas por loja, e a fila por data da ultima conferencia fecha o
+// ciclo de todas as lojas em poucas horas.
+const LOJAS_DO_SENSOR_POR_EXECUCAO = 6;
+const FOLGA_PARA_O_SENSOR_MS = 200_000;
+
 function segredoDoCron() {
   return process.env.CRON_SECRET || process.env.BULK_IMPORT_CRON_SECRET || "";
 }
@@ -45,6 +59,7 @@ function cronAutorizado(request: NextRequest) {
 }
 
 async function executar(request: NextRequest) {
+  const inicio = Date.now();
   const isCron = cronAutorizado(request);
 
   // Sem segredo de cron: exige sessao e so mexe nas rotas do proprio usuario.
@@ -192,6 +207,25 @@ async function executar(request: NextRequest) {
         .from("routed_checkout_targets")
         .update({ last_healed_at: new Date().toISOString() })
         .eq("id", alvo.targetId);
+      // A falha entra no last_heal (e nas falhas seguidas que o alerta
+      // "Conserto da rota falhando" le), a nao ser que o conserto ja tenha
+      // gravado esta mesma passada antes de lancar.
+      if (!(erro instanceof HealRouteError && erro.registrado)) {
+        await registrarFalhaDoConserto(admin, alvo.rota.id, msg).catch((e) =>
+          console.warn("[heal] nao gravei a falha do conserto:", e instanceof Error ? e.message : e)
+        );
+      }
+    }
+  }
+
+  // Sensor: os avisos da Shopify que contam pedido e escape. So no cron, e so
+  // com folga -- o conserto e o que mantem a venda de pe e vem primeiro.
+  let webhooks: Awaited<ReturnType<typeof conferirWebhooks>> | null = null;
+  if (isCron && Date.now() - inicio < FOLGA_PARA_O_SENSOR_MS) {
+    try {
+      webhooks = await conferirWebhooks(admin, { limiteLojas: LOJAS_DO_SENSOR_POR_EXECUCAO });
+    } catch (e) {
+      console.warn("[heal] conferencia dos webhooks falhou:", e instanceof Error ? e.message : e);
     }
   }
 
@@ -225,6 +259,7 @@ async function executar(request: NextRequest) {
     // Destinos pulados nesta passada: loja fora do ar, esperando a hora.
     waiting: esperando,
     ...(purgados !== null ? { purgedEvents: purgados } : {}),
+    ...(webhooks ? { webhooks } : {}),
     results: resultados,
   });
 }

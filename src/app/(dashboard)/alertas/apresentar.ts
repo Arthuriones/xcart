@@ -224,6 +224,17 @@ const DESTINOS: Record<RegraAlerta, Destino> = {
   gastou_sem_vender: { href: "/financeiro", tela: "Dashboard" },
   // O detalhe da loja no Rastreamento mostra o tema e o ultimo evento.
   rastreamento_parado: { href: "/tracking", tela: "Rastreamento" },
+  // Roteamento: a chave do alerta e o id da rota (destinoDoAlerta abre ela).
+  roteamento_script_sumiu: { href: "/clone/routed-checkout", tela: "Rotas" },
+  roteamento_escape_vitrine: { href: "/clone/routed-checkout", tela: "Rotas" },
+  roteamento_conserto_falhando: { href: "/clone/routed-checkout", tela: "Rotas" },
+};
+
+/** Para qual aba da rota cada alerta de roteamento leva. */
+const ABA_DO_ROTEAMENTO: Partial<Record<RegraAlerta, string>> = {
+  roteamento_script_sumiu: "instalacao",
+  roteamento_escape_vitrine: "diagnostico",
+  roteamento_conserto_falhando: "diagnostico",
 };
 
 /**
@@ -232,12 +243,21 @@ const DESTINOS: Record<RegraAlerta, Destino> = {
  * aparece em Integracoes -> Google.
  *
  * `lojaId` (so loja do usuario) abre o rastreamento parado ja no detalhe dela.
+ * `chave` (o id da rota nos alertas de roteamento) abre a rota na aba certa.
  */
 export function destinoDoAlerta(
   regra: RegraAlerta,
   titulo?: string | null,
-  lojaId?: string | null
+  lojaId?: string | null,
+  chave?: string | null
 ): Destino {
+  const aba = ABA_DO_ROTEAMENTO[regra];
+  if (aba && chave) {
+    return {
+      href: `/clone/routed-checkout?rota=${encodeURIComponent(chave)}&aba=${aba}`,
+      tela: "Rotas",
+    };
+  }
   if (regra === "ads_sync_atrasado" && titulo?.startsWith("Gasto do Google")) {
     return { href: "/integracoes/google", tela: "Integrações · Google" };
   }
@@ -318,6 +338,28 @@ export function regrasNaTela(gastoMinimo: number): RegraNaTela[] {
       explicacao: "A loja mandava visitas, carrinhos e checkouts e parou: o código pode ter saído do tema.",
       severidade: "aviso",
       quando: "Depois de 24 h sem evento",
+    },
+    {
+      regra: "roteamento_script_sumiu",
+      titulo: "Script do roteamento sumiu",
+      explicacao:
+        "A vitrine dava sinal do script e parou: sem ele o comprador cai no checkout da vitrine, que não cobra.",
+      severidade: "critico",
+      quando: "Depois de 6 h sem sinal, se havia sinal nas 72 h",
+    },
+    {
+      regra: "roteamento_escape_vitrine",
+      titulo: "Carrinhos caindo no checkout da vitrine",
+      explicacao: "A Shopify avisou checkouts abertos na própria vitrine, que não cobra.",
+      severidade: "critico",
+      quando: "A partir de 3 em 24 h",
+    },
+    {
+      regra: "roteamento_conserto_falhando",
+      titulo: "Conserto da rota falhando",
+      explicacao: "A checagem automática da rota falhou seguidas vezes, ou perdeu o acesso a uma das lojas.",
+      severidade: "critico",
+      quando: "Na 3ª falha seguida, ou na hora sem acesso",
     },
     {
       regra: "pedidos_sync_erro",

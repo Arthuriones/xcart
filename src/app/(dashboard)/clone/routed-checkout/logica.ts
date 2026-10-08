@@ -6,6 +6,7 @@ import {
   type ConsertoDoDestino,
   type MotivoForaDoAr,
 } from "@/lib/checkout-routes/loja-fora-do-ar";
+import type { FunilDaRota } from "@/lib/checkout-routes/sensor";
 
 // ============================================================================
 // Regras da tela de Rotas, sem React e sem banco: estado de cada rota, filtro
@@ -642,4 +643,89 @@ export function estadoInstalacao(
  */
 export function codigoDoScript(origem: string, token: string): string {
   return `<script\n  src="${origem}/routed-checkout-loader.js"\n  data-token="${token}"\n  async>\n</script>`;
+}
+
+// ---------------------------------------------------------------- funil
+
+export interface BlocoDoFunil {
+  rotulo: string;
+  valor: string;
+  sub: string;
+}
+
+function numero(n: number | null | undefined): string {
+  return typeof n === "number" ? n.toLocaleString("pt-BR") : "—";
+}
+
+function diaCurto(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? ""
+    : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "UTC" });
+}
+
+/**
+ * Os quatro numeros do funil (ver montarFunil em sensor.ts). Loja sem o aviso
+ * da Shopify mostra "—" e o porque, nunca "0": zero pedido com o webhook
+ * desligado era exatamente a mentira que a tela contava.
+ */
+export function blocosDoFunil(f: FunilDaRota): BlocoDoFunil[] {
+  const escapes: BlocoDoFunil =
+    f.escapes.tipo === "contando"
+      ? {
+          rotulo: "Caíram na vitrine",
+          valor: numero(f.escapes.n),
+          sub: f.escapes.desde ? `desde ${diaCurto(f.escapes.desde)}` : "checkout que não cobra",
+        }
+      : {
+          rotulo: "Caíram na vitrine",
+          valor: "—",
+          sub: f.escapes.tipo === "sem_aviso" ? "vitrine sem sensor" : "conferindo o sensor",
+        };
+
+  const erro = f.erros[0];
+  const desdePedidos = f.pedidos.tipo === "contando" && f.pedidos.desde ? ` desde ${diaCurto(f.pedidos.desde)}` : "";
+  const pedidos: BlocoDoFunil =
+    f.pedidos.tipo === "contando"
+      ? {
+          rotulo: "Pedidos",
+          valor: numero(f.pedidos.n),
+          sub:
+            typeof f.pedidos.conversao === "number"
+              ? `${f.pedidos.conversao.toLocaleString("pt-BR")}% dos carrinhos${desdePedidos}`
+              : desdePedidos
+                ? desdePedidos.trim()
+                : "na loja de checkout",
+        }
+      : {
+          rotulo: "Pedidos",
+          valor: "—",
+          sub: f.pedidos.tipo === "sem_aviso" ? "loja sem aviso de pedidos" : "conferindo o aviso",
+        };
+
+  return [
+    { rotulo: "Carrinhos levados", valor: numero(f.roteados), sub: "ao checkout" },
+    escapes,
+    {
+      rotulo: "Erros do script",
+      valor: numero(f.totalErros),
+      sub: erro ? `${numero(erro.n)} ${erro.rotulo}` : f.totalErros === null ? "sem leitura agora" : "nenhum",
+    },
+    pedidos,
+  ];
+}
+
+/** As lojas sem o aviso da Shopify, uma vez cada, com o motivo. */
+export function lojasSemAviso(f: FunilDaRota): { nome: string; motivo: string }[] {
+  const lista = [
+    ...(f.escapes.tipo === "sem_aviso" ? f.escapes.lojas : []),
+    ...(f.pedidos.tipo === "sem_aviso" ? f.pedidos.lojas : []),
+  ];
+  const vistas = new Set<string>();
+  return lista.filter((l) => {
+    const k = `${l.nome}|${l.motivo}`;
+    if (vistas.has(k)) return false;
+    vistas.add(k);
+    return true;
+  });
 }

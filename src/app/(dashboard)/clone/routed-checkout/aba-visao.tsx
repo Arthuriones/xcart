@@ -8,6 +8,8 @@ import { mapaVelho } from "@/components/routed-checkout/target-state";
 import { quandoFoi } from "@/lib/leitura/lojas-estado";
 import type { GraphRoute, GraphStore } from "@/lib/checkout-routes/graph";
 import { ROTULO_FORA_DO_AR, ehMotivoForaDoAr } from "@/lib/checkout-routes/loja-fora-do-ar";
+import type { FunilDaRota } from "@/lib/checkout-routes/sensor";
+import { FunilDaRotaView } from "./funil";
 import { Instalador } from "./instalar";
 import {
   ESTRATEGIAS,
@@ -116,12 +118,15 @@ export function AbaVisao({
   sinal,
   origem,
   agora,
+  funil,
 }: {
   rota: GraphRoute;
   lojas: Map<string, GraphStore>;
   sinal: { em: string | null; erro: boolean };
   origem: string;
   agora: number;
+  /** Funil dos ultimos 7 dias (leitura/funil-rota.ts); ausente = nao mostra. */
+  funil?: { dado: FunilDaRota | null; erro: boolean };
 }) {
   const vitrine = lojas.get(rota.sourceStoreId);
   const ligados = rota.targets.reduce((maior, t) => Math.max(maior, t.mappedSkuCount), 0);
@@ -151,6 +156,8 @@ export function AbaVisao({
           sub="levados ao checkout em 30 dias"
         />
       </dl>
+
+      {funil ? <FunilDaRotaView funil={funil.dado} erro={funil.erro} /> : null}
 
       <Section
         titulo="Para onde vai o comprador"

@@ -38,9 +38,8 @@ vi.mock("@/lib/checkout-routes/heal", () => ({
     if (input.targetId && foraDoAr.has(input.targetId)) {
       const { HealRouteError } = await import("@/lib/checkout-routes/heal");
       const erro = new HealRouteError(`A loja de checkout ${input.targetId} está pausada.`, 409, {
-        motivo: "loja_pausada",
-        lado: "checkout",
-        proximaTentativa: "2999-01-01T00:00:00.000Z",
+        foraDoAr: { motivo: "loja_pausada", lado: "checkout", proximaTentativa: "2999-01-01T00:00:00.000Z" },
+        registrado: true,
       });
       throw erro;
     }
@@ -72,10 +71,12 @@ vi.mock("@/lib/checkout-routes/heal", () => ({
   HealRouteError: class extends Error {
     status: number;
     foraDoAr?: unknown;
-    constructor(m: string, status = 500, fora?: unknown) {
+    registrado: boolean;
+    constructor(m: string, status = 500, extra: { foraDoAr?: unknown; registrado?: boolean } = {}) {
       super(m);
       this.status = status;
-      if (fora) this.foraDoAr = fora;
+      if (extra.foraDoAr) this.foraDoAr = extra.foraDoAr;
+      this.registrado = extra.registrado ?? false;
     }
   },
 }));

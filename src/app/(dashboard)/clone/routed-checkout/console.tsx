@@ -7,6 +7,8 @@ import { getRouteGraph, type GraphRoute, type RouteGraph } from "@/lib/checkout-
 import { lojasCandidatasACheckout } from "@/lib/checkout-routes/par-de-lojas";
 import { quandoFoi } from "@/lib/leitura/lojas-estado";
 import { conferirLeituraDasRotas, lerUltimoSinalDoScript } from "@/lib/leitura/roteamento";
+import { lerFunilDaRota } from "@/lib/leitura/funil-rota";
+import type { FunilDaRota } from "@/lib/checkout-routes/sensor";
 import { AbaDiagnostico } from "./aba-diagnostico";
 import { AbaInstalacao } from "./aba-instalacao";
 import { AbaLojas } from "./aba-lojas";
@@ -54,14 +56,24 @@ export async function Console({
   if (!rota) notFound();
 
   // O sinal do script (Visao e Instalacao) e lido sempre: e uma consulta com
-  // limit 1, e as abas trocam no navegador, sem voltar ao servidor.
-  let sinal = { em: null as string | null, erro: false };
-  try {
-    sinal = { em: await lerUltimoSinalDoScript(rota.id), erro: false };
-  } catch (erro) {
-    console.error("[rotas] sinal do script", erro);
-    sinal = { em: null, erro: true };
-  }
+  // limit 1, e as abas trocam no navegador, sem voltar ao servidor. O funil
+  // (Visao) sao contagens pelo indice, so desta rota, em paralelo.
+  const [sinal, funil] = await Promise.all([
+    lerUltimoSinalDoScript(rota.id).then(
+      (em) => ({ em, erro: false }),
+      (erro) => {
+        console.error("[rotas] sinal do script", erro);
+        return { em: null as string | null, erro: true };
+      }
+    ),
+    lerFunilDaRota(rota.id).then(
+      (dado) => ({ dado, erro: false }),
+      (erro) => {
+        console.error("[rotas] funil da rota", erro);
+        return { dado: null as FunilDaRota | null, erro: true };
+      }
+    ),
+  ]);
 
   return (
     <ConsoleView
@@ -71,6 +83,7 @@ export async function Console({
       conferir={conferir}
       origem={origem}
       sinal={sinal}
+      funil={funil}
       agora={instante()}
     />
   );
@@ -84,6 +97,7 @@ export function ConsoleView({
   conferir,
   origem,
   sinal,
+  funil,
   agora,
 }: {
   grafo: RouteGraph;
@@ -92,6 +106,7 @@ export function ConsoleView({
   conferir: boolean;
   origem: string;
   sinal: { em: string | null; erro: boolean };
+  funil?: { dado: FunilDaRota | null; erro: boolean };
   agora: number;
 }) {
   const lojas = new Map(grafo.stores.map((s) => [s.id, s]));
@@ -144,7 +159,7 @@ export function ConsoleView({
         <AbasRota
           rotaId={rota.id}
           conteudo={{
-            visao: <AbaVisao rota={rota} lojas={lojas} sinal={sinal} origem={origem} agora={agora} />,
+            visao: <AbaVisao rota={rota} lojas={lojas} sinal={sinal} origem={origem} agora={agora} funil={funil} />,
             lojas: (
               <AbaLojas
                 rotaId={rota.id}

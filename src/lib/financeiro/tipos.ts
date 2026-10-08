@@ -373,7 +373,10 @@ export type RegraAlerta =
   | "fila_travada"
   | "pedidos_sync_erro"
   | "app_desinstalado"
-  | "rastreamento_parado";
+  | "rastreamento_parado"
+  | "roteamento_script_sumiu"
+  | "roteamento_escape_vitrine"
+  | "roteamento_conserto_falhando";
 
 export const ROTULO_REGRA: Record<RegraAlerta, string> = {
   ads_sync_atrasado: "Gasto de anúncio sem atualizar",
@@ -384,6 +387,9 @@ export const ROTULO_REGRA: Record<RegraAlerta, string> = {
   pedidos_sync_erro: "Pedidos da Shopify sem atualizar",
   app_desinstalado: "App desinstalado com rastreamento ligado",
   rastreamento_parado: "Rastreamento sem eventos",
+  roteamento_script_sumiu: "Script do roteamento sumiu",
+  roteamento_escape_vitrine: "Carrinhos caindo no checkout da vitrine",
+  roteamento_conserto_falhando: "Conserto da rota falhando",
 };
 
 export interface AlertaRow {

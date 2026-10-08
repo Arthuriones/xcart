@@ -286,6 +286,12 @@ const EVENTOS: Record<string, { rotulo: string; tom: TomEvento; descricao: strin
     tom: "warn",
     descricao: "Um link levou o comprador direto ao checkout da vitrine.",
   },
+  // Avisado pela Shopify (checkouts/create na vitrine), nao pelo script.
+  checkout_na_vitrine: {
+    rotulo: "Carrinho caiu no checkout da vitrine",
+    tom: "err",
+    descricao: "A Shopify avisou um checkout aberto na vitrine, que não cobra.",
+  },
 };
 
 export interface EventoNaTela {

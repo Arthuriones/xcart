@@ -62,15 +62,24 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({}) }));
 const heal = vi.hoisted(() => ({
   chamados: [] as string[],
   falharCom: {} as Record<string, unknown>,
+  /** registrarFalhaDoConserto: a falha que o cron gravou por cima. */
+  registradas: [] as { routeId: string; mensagem: string; extra?: unknown }[],
+  sensor: 0,
 }));
 vi.mock("@/lib/checkout-routes/heal", () => {
   class HealRouteError extends Error {
     status: number;
     foraDoAr?: { motivo: string; lado: string; proximaTentativa: string };
-    constructor(m: string, status = 500, fora?: { motivo: string; lado: string; proximaTentativa: string }) {
+    registrado: boolean;
+    constructor(
+      m: string,
+      status = 500,
+      extra: { foraDoAr?: { motivo: string; lado: string; proximaTentativa: string }; registrado?: boolean } = {}
+    ) {
       super(m);
       this.status = status;
-      if (fora) this.foraDoAr = fora;
+      if (extra.foraDoAr) this.foraDoAr = extra.foraDoAr;
+      this.registrado = extra.registrado ?? false;
     }
   }
   return {
@@ -82,8 +91,17 @@ vi.mock("@/lib/checkout-routes/heal", () => {
       if (erro) throw erro;
       return { noop: true };
     },
+    registrarFalhaDoConserto: async (_admin: unknown, routeId: string, mensagem: string, extra?: unknown) => {
+      heal.registradas.push({ routeId, mensagem, ...(extra ? { extra } : {}) });
+    },
   };
 });
+vi.mock("@/lib/checkout-routes/sensores", () => ({
+  conferirWebhooks: async () => {
+    heal.sensor += 1;
+    return { conferidas: 0 };
+  },
+}));
 
 process.env.CRON_SECRET = "segredo";
 const { GET } = await import("@/app/api/jobs/routes/heal/route");
@@ -101,6 +119,8 @@ const futuro = new Date(Date.now() + 6 * 3_600_000).toISOString();
 beforeEach(() => {
   heal.chamados.length = 0;
   heal.falharCom = {};
+  heal.registradas.length = 0;
+  heal.sensor = 0;
   db.escritas.length = 0;
   db.tabelas = {
     routed_checkout_configs: [
@@ -149,9 +169,8 @@ describe("fila do cron de conserto", () => {
 
   it("loja fora do ar no meio da passada: o resultado diz o motivo e a fila anda", async () => {
     heal.falharCom.a = new HealRouteError("pausada", 409, {
-      motivo: "loja_pausada",
-      lado: "checkout",
-      proximaTentativa: futuro,
+      foraDoAr: { motivo: "loja_pausada", lado: "checkout", proximaTentativa: futuro },
+      registrado: true,
     });
     const r = await chamarCron();
     const corpo = await r.json();
@@ -160,6 +179,21 @@ describe("fila do cron de conserto", () => {
     // A tentativa conta: o destino vai para o fim da fila.
     const a = db.tabelas.routed_checkout_targets.find((t) => t.id === "a") as Linha;
     expect(a.last_healed_at).not.toBe("2026-10-08T01:00:00Z");
+    // O conserto ja gravou o motivo e a espera: o cron nao grava por cima
+    // (contaria a passada duas vezes e apagaria a proximaTentativa).
+    expect(heal.registradas).toEqual([]);
+  });
+
+  it("falha que caiu antes de gravar: o cron registra uma vez", async () => {
+    heal.falharCom.a = new Error("Shopify respondeu 500");
+    await chamarCron();
+    expect(heal.registradas).toHaveLength(1);
+    expect(heal.registradas[0]).toMatchObject({ routeId: "ligada", mensagem: "Shopify respondeu 500" });
+  });
+
+  it("no fim da passada do cron, confere os webhooks do sensor", async () => {
+    await chamarCron();
+    expect(heal.sensor).toBe(1);
   });
 
   it("sem rota ligada: nada a consertar, sem erro", async () => {

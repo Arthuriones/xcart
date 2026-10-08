@@ -143,19 +143,24 @@ export const getRouteGraph = cache(async (): Promise<RouteGraph> => {
   // clicou em finalizar E foi redirecionado. E o numero que a tela de
   // roteamento quer: nao "quantos pedidos a loja teve" (isso e Vendas), mas
   // quantos carrinhos ESTA rota entregou.
+  //
+  // Uma contagem por rota (head: true, pelo indice parcial de routed_ok da
+  // 028), e nao as linhas: o PostgREST corta a resposta em 1000 linhas, e a
+  // NORAH ja leva ~660 carrinhos em 30 dias. Com a soma das rotas passando de
+  // 1000, o numero parava de subir sem aviso.
   const desde = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const roteados = new Map<string, number>();
-  if (routeIds.length > 0) {
-    const { data } = await supabase
-      .from("routed_checkout_fallbacks")
-      .select("route_config_id")
-      .in("route_config_id", routeIds)
-      .eq("reason", "routed_ok")
-      .gte("created_at", desde);
-    for (const linha of (data || []) as { route_config_id: string }[]) {
-      roteados.set(linha.route_config_id, (roteados.get(linha.route_config_id) || 0) + 1);
-    }
-  }
+  await Promise.all(
+    routeIds.map(async (id) => {
+      const { count } = await supabase
+        .from("routed_checkout_fallbacks")
+        .select("id", { count: "exact", head: true })
+        .eq("route_config_id", id)
+        .eq("reason", "routed_ok")
+        .gte("created_at", desde);
+      roteados.set(id, count ?? 0);
+    })
+  );
 
   const byRoute = new Map<string, TargetRow[]>();
   for (const target of targets) {

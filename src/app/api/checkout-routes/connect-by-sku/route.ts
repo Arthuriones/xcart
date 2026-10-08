@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { randomUUID } from "crypto";
 import {
   completarVariantes,
@@ -14,6 +14,7 @@ import { conferirRoteamento, corpoDoBloqueio } from "@/lib/billing/limites";
 import { garantirDestinoPrimario, settingsDoDestino } from "@/lib/checkout-routes/destino-primario";
 import { linhaDoDestinoConectado } from "@/lib/checkout-routes/destino-conectado";
 import { sincronizarTemaDaRota, type ResultadoTema } from "@/lib/checkout-routes/tema-vitrine";
+import { conferirWebhooks } from "@/lib/checkout-routes/sensores";
 import {
   COBERTURA_MINIMA_PARA_ENTRAR,
   lojaEhVitrineDeOutraRota,
@@ -500,6 +501,20 @@ export async function POST(request: NextRequest) {
         .select("id")
         .single();
       targetId = target?.id ?? null;
+    }
+
+    // Rota nova ou loja de checkout nova: liga ja os avisos da Shopify do
+    // sensor (orders/create no checkout, checkouts/create na vitrine), sem
+    // esperar o cron. Depois da resposta: sao chamadas a Shopify, e falhar
+    // aqui so deixa o estado na tela para a conferencia diaria tentar de novo.
+    const rotaGravada = route?.id;
+    if (rotaGravada) {
+      after(() =>
+        conferirWebhooks(createAdminClient(), { rotaId: rotaGravada, forcar: true }).then(
+          () => undefined,
+          (e) => console.warn("[connect-by-sku] webhooks do sensor:", e instanceof Error ? e.message : e)
+        )
+      );
     }
 
     return NextResponse.json({

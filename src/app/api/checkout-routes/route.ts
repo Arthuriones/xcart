@@ -1,10 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { randomUUID } from "crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { usuarioPossuiLojas } from "@/lib/stores/authorize";
 import { conferirRoteamento, corpoDoBloqueio } from "@/lib/billing/limites";
 import { garantirDestinoPrimario } from "@/lib/checkout-routes/destino-primario";
+import { conferirWebhooks } from "@/lib/checkout-routes/sensores";
 
 async function getUserAndClient() {
   const supabase = await createClient();
@@ -161,6 +162,15 @@ export async function POST(request: NextRequest) {
   if (destino.erro) {
     console.warn("[checkout-routes] rota sem linha de destino:", data.id, destino.erro);
   }
+
+  // Os avisos da Shopify do sensor ja na criacao (ver connect-by-sku).
+  const rotaCriada = data.id as string;
+  after(() =>
+    conferirWebhooks(admin, { rotaId: rotaCriada, forcar: true }).then(
+      () => undefined,
+      (e) => console.warn("[checkout-routes] webhooks do sensor:", e instanceof Error ? e.message : e)
+    )
+  );
 
   return NextResponse.json({ config: data });
 }

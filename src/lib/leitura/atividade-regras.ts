@@ -382,6 +382,7 @@ export const MOTIVOS_CARRINHO = [
   "cart_checkout_error",
   "bypass_form_submit",
   "bypass_link",
+  "checkout_na_vitrine",
 ] as const;
 
 function eventoCarrinho(c: LinhaCarrinho, ctx: Contexto): EventoAtividade | null {
@@ -448,6 +449,17 @@ function eventoCarrinho(c: LinhaCarrinho, ctx: Contexto): EventoAtividade | null
         selo: SELO.atencao,
         titulo: "Checkout escapou por um link",
         descricao: `Um link${naVitrine} levou direto ao checkout dela, que não cobra.`,
+        href: hrefRota(rotaId, "diagnostico"),
+        destino: "Abrir o diagnóstico da rota",
+      };
+    // A Shopify avisou um checkout aberto NA vitrine (webhook checkouts/create).
+    case "checkout_na_vitrine":
+      return {
+        ...base,
+        tom: "err",
+        selo: SELO.falhou,
+        titulo: "Carrinho caiu no checkout da vitrine",
+        descricao: `Um comprador abriu o checkout${naVitrine}, que não cobra.`,
         href: hrefRota(rotaId, "diagnostico"),
         destino: "Abrir o diagnóstico da rota",
       };

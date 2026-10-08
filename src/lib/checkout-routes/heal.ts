@@ -37,6 +37,13 @@ import {
   type ResultadoTema,
 } from "@/lib/checkout-routes/tema-vitrine";
 import { verificarParDaRota } from "@/lib/shopify/store-health";
+import {
+  lerUltimoConserto,
+  motivoDaFalha,
+  proximoUltimoConserto,
+  type UltimoConserto,
+  type UltimoConsertoDoDestino,
+} from "@/lib/checkout-routes/ultimo-conserto";
 import { neutralizeProductForDestination } from "@/lib/ai/product-neutralizer";
 import {
   enqueueImageNeutralizeJobs,
@@ -267,10 +274,21 @@ export class HealRouteError extends Error {
   status: number;
   /** Loja que o conserto nao atende: o cron espera para tentar de novo. */
   foraDoAr?: ForaDoAr;
-  constructor(message: string, status = 500, fora?: ForaDoAr) {
+  /**
+   * O last_heal desta falha ja foi gravado (gravarStatus). O cron nao grava
+   * de novo -- contaria a mesma passada duas vezes nas falhas seguidas e, com
+   * loja fora do ar, apagaria a espera dela (proximaTentativa).
+   */
+  registrado: boolean;
+  constructor(
+    message: string,
+    status = 500,
+    extra: { foraDoAr?: ForaDoAr; registrado?: boolean } = {}
+  ) {
     super(message);
     this.status = status;
-    if (fora) this.foraDoAr = fora;
+    if (extra.foraDoAr) this.foraDoAr = extra.foraDoAr;
+    this.registrado = extra.registrado ?? false;
   }
 }
 
@@ -308,40 +326,24 @@ interface HealRouteInput {
 //
 // Vive em settings (jsonb que ja existe) de proposito: e dado derivado. Se
 // algo sobrescrever, a proxima passada do cron reconstroi em ate uma hora —
-// nao vale uma coluna e uma migration.
-export interface UltimoConserto {
-  at: string;
-  ok: boolean;
-  /** Motivo curto quando ok=false, pronto para o card. */
-  message?: string;
-  mappedCount?: number;
-  /**
-   * Loja que o conserto nao atende (pausada, sem app, vitrine com senha):
-   * o motivo tipado para a tela, de qual lado e quando o cron volta a tentar.
-   */
-  motivo?: MotivoForaDoAr;
-  lado?: LadoDaRota;
-  proximaTentativa?: string;
-}
-
-/**
- * O mesmo, por loja de checkout, em routed_checkout_targets.settings.last_heal.
- * O da rota (routed_checkout_configs.settings.last_heal) e da ultima passada
- * de QUALQUER destino; com rodizio, so este diz o estado de cada loja.
- */
-export interface UltimoConsertoDoDestino extends UltimoConserto {
-  conferencia?: ConferenciaDosPares;
-}
+// nao vale uma coluna e uma migration. O formato (com as falhas seguidas que
+// o alerta le e o motivo da loja fora do ar) esta em ultimo-conserto.ts.
+export type { UltimoConserto, UltimoConsertoDoDestino };
 
 async function gravarStatus(
   admin: ReturnType<typeof createAdminClient>,
   routeId: string,
   settings: Record<string, unknown> | null,
-  status: UltimoConserto
+  status: Omit<UltimoConserto, "falhas">
 ) {
   await admin
     .from("routed_checkout_configs")
-    .update({ settings: { ...(settings || {}), last_heal: status } })
+    .update({
+      settings: {
+        ...(settings || {}),
+        last_heal: proximoUltimoConserto(lerUltimoConserto(settings), status),
+      },
+    })
     .eq("id", routeId);
 }
 
@@ -358,26 +360,54 @@ async function pararComLojaForaDoAr(
   dominio: string
 ): Promise<never> {
   const fora = foraDoAr(motivo, lado);
-  const status: UltimoConserto = {
+  const status = {
     at: new Date().toISOString(),
     ok: false,
     message: mensagemForaDoAr(motivo, lado, dominio),
     ...fora,
-  };
+  } satisfies Omit<UltimoConserto, "falhas">;
   await gravarStatus(admin, config.id, config.settings as Record<string, unknown> | null, status);
   if (targetRow) {
+    const settingsDoDestino = (targetRow.settings as Record<string, unknown> | null) || {};
     const { error } = await admin
       .from("routed_checkout_targets")
       .update({
         settings: {
-          ...((targetRow.settings as Record<string, unknown> | null) || {}),
-          last_heal: status,
+          ...settingsDoDestino,
+          last_heal: proximoUltimoConserto(lerUltimoConserto(settingsDoDestino), status),
         },
       })
       .eq("id", targetRow.id);
     if (error) console.warn("[heal] nao gravei o estado do destino:", error.message);
   }
-  throw new HealRouteError(status.message as string, 409, fora);
+  // registrado: o cron nao grava de novo por cima (perderia a espera).
+  throw new HealRouteError(status.message, 409, { foraDoAr: fora, registrado: true });
+}
+
+/**
+ * Uma passada do cron que caiu antes de gravar o proprio last_heal (loja nao
+ * encontrada, erro da Shopify no meio). Sem isto a falha nao deixava rastro:
+ * o card seguia mostrando o ultimo "Tudo certo" e as falhas seguidas nunca
+ * contavam. Le o settings na hora, como o tema-vitrine.
+ */
+export async function registrarFalhaDoConserto(
+  admin: ReturnType<typeof createAdminClient>,
+  routeId: string,
+  mensagem: string
+): Promise<void> {
+  const { data, error } = await admin
+    .from("routed_checkout_configs")
+    .select("settings")
+    .eq("id", routeId)
+    .maybeSingle();
+  if (error || !data) return;
+  const motivo = motivoDaFalha(mensagem);
+  await gravarStatus(admin, routeId, (data.settings as Record<string, unknown> | null) ?? null, {
+    at: new Date().toISOString(),
+    ok: false,
+    message: mensagem.slice(0, 300),
+    ...(motivo ? { motivo } : {}),
+  });
 }
 
 /** Depois disto, um conserto travado e considerado abandonado. */
@@ -581,7 +611,7 @@ async function executarConserto(
       config.settings as Record<string, unknown> | null,
       { at: new Date().toISOString(), ok: false, message: mensagem }
     );
-    throw new HealRouteError(mensagem, 409);
+    throw new HealRouteError(mensagem, 409, { registrado: true });
   }
 
   const [
@@ -633,7 +663,7 @@ async function executarConserto(
         ok: false,
         message: mensagem,
       });
-      throw new HealRouteError(mensagem, 502);
+      throw new HealRouteError(mensagem, 502, { registrado: true });
     }
   }
   const sourceProducts = leituraDaVitrine.products;
@@ -1197,7 +1227,7 @@ async function executarConserto(
   });
 
   const agora = new Date().toISOString();
-  const statusDoConserto: UltimoConserto = {
+  const statusDoConserto: Omit<UltimoConserto, "falhas"> = {
     at: agora,
     // Aviso aqui e problema que o conserto NAO resolveu sozinho
     // (produto que falhou ao criar, SKU que nao gravou).
@@ -1218,7 +1248,10 @@ async function executarConserto(
         // qualquer uma). Sobrescreve o "fora do ar" de antes: a loja voltou.
         settings: {
           ...((targetRow.settings as Record<string, unknown> | null) || {}),
-          last_heal: { ...statusDoConserto, conferencia } satisfies UltimoConsertoDoDestino,
+          last_heal: proximoUltimoConserto(lerUltimoConserto(targetRow.settings), {
+            ...statusDoConserto,
+            conferencia,
+          }) satisfies UltimoConsertoDoDestino,
         },
       })
       .eq("id", targetRow.id);
@@ -1245,7 +1278,10 @@ async function executarConserto(
         ...((config.settings as Record<string, unknown>) || {}),
         // Rota antiga sem linha de destino: a conferencia so tem onde morar
         // aqui (a tela le dali para o destino legado).
-        last_heal: targetRow ? statusDoConserto : { ...statusDoConserto, conferencia },
+        last_heal: proximoUltimoConserto(
+          lerUltimoConserto(config.settings),
+          targetRow ? statusDoConserto : { ...statusDoConserto, conferencia }
+        ),
       },
     })
     .eq("id", config.id);

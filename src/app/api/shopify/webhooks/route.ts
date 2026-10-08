@@ -168,6 +168,20 @@ export async function POST(request: NextRequest) {
       }
       return resposta;
     }
+    case "checkouts/create": {
+      const resposta = await executarComRetentativa(cab.topic, () =>
+        tratarCheckoutNaVitrine(admin, loja, payload)
+      );
+      // Mesmo cuidado dos outros: sem apagar o marcador, a reentrega cairia
+      // em "duplicado" e o escape nunca seria contado.
+      if (resposta.status >= 500 && cab.webhookId) {
+        await admin
+          .from("shopify_webhook_events")
+          .delete()
+          .eq("webhook_id", cab.webhookId);
+      }
+      return resposta;
+    }
     default:
       // Topico assinado que ainda nao tratamos: registrado (para idempotencia)
       // e aceito, sem retry.
@@ -443,6 +457,24 @@ async function tratarPedidoCriado(
     // 503 para a Shopify reentregar: conversao perdida nao se recupera.
     return NextResponse.json({ error: "Tente de novo." }, { status: 503 });
   }
+}
+
+/**
+ * Checkout criado na VITRINE de uma rota: o comprador escapou do roteamento e
+ * caiu num checkout que nao cobra. Vira um evento "checkout_na_vitrine" so com
+ * os itens; o resto do payload (e-mail, telefone, endereco) e descartado.
+ * Ver registrarCheckoutNaVitrine em src/lib/checkout-routes/sensores.ts.
+ */
+async function tratarCheckoutNaVitrine(
+  admin: ReturnType<typeof createAdminClient>,
+  loja: { id: string; user_id: string; shop_domain: string },
+  payload: Record<string, unknown>
+) {
+  const { registrarCheckoutNaVitrine } = await import("@/lib/checkout-routes/sensores");
+  const r = await registrarCheckoutNaVitrine(admin, loja, payload);
+  return r.gravado
+    ? ok({ topic: "checkouts/create", escape: true })
+    : ok({ ignorado: r.motivo ?? "nao contado", topic: "checkouts/create" });
 }
 
 /**
