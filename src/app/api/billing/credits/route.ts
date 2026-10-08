@@ -26,6 +26,9 @@ export const runtime = "nodejs";
 // O tier vem em `plano` e o valor sai de plans.ts, nunca do corpo.
 export const PRO_PIX_ID = "pro_month";
 
+const JA_ASSINA_NO_CARTAO =
+  "Você já assina no cartão. Para mudar de plano, fale com o suporte.";
+
 function itemDe(packId: string, planoId: unknown) {
   if (packId === PRO_PIX_ID) {
     const plano = ehPlanoId(planoId) ? planoPorId(planoId)! : null;
@@ -89,9 +92,19 @@ export async function POST(request: NextRequest) {
   // CPF: usa o que ja esta salvo; se vier um novo no corpo, valida e guarda.
   const { data: perfil } = await admin
     .from("profiles")
-    .select("document_number")
+    .select("document_number, pagou_subscription_id, subscription_status")
     .eq("id", user.id)
     .maybeSingle();
+
+  // 30 dias por Pix em cima de um cartao que esta cobrando: a renovacao do
+  // cartao regrava o fim do periodo e os dias do Pix somem.
+  if (
+    item.kind === "pro_month" &&
+    perfil?.pagou_subscription_id &&
+    ["active", "trialing", "past_due"].includes(String(perfil.subscription_status))
+  ) {
+    return NextResponse.json({ error: JA_ASSINA_NO_CARTAO }, { status: 409 });
+  }
 
   const informado = digitos(typeof body.document === "string" ? body.document : "");
   const bruto = informado || digitos(perfil?.document_number || "");

@@ -2,8 +2,22 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { USD_BRL_REPORTING, precoMensalCentavos } from "@/lib/billing/plans";
+import { lerComPlano } from "@/lib/billing/limites";
 
 export const runtime = "nodejs";
+
+interface PerfilAdmin {
+  id: string;
+  plan: string | null;
+  /** Ausente enquanto a migration 064 nao foi aplicada. */
+  plano?: string | null;
+  subscription_status: string | null;
+  ai_credits: number | null;
+  current_period_end: string | null;
+  created_at: string;
+  access_granted: boolean | null;
+  is_admin: boolean | null;
+}
 
 // GET -> visao geral para o admin: usuarios, lojas, uso/custo de IA, MRR.
 export async function GET() {
@@ -30,17 +44,21 @@ export async function GET() {
   startOfMonth.setUTCHours(0, 0, 0, 0);
 
   const [
-    { data: profiles },
+    perfisLidos,
     { data: stores },
     { data: usage },
     { data: compras },
     usersList,
   ] = await Promise.all([
-    admin
-      .from("profiles")
-      .select(
-        "id, plan, plano, subscription_status, ai_credits, current_period_end, created_at, access_granted, is_admin"
-      ),
+    // Sem a coluna `plano` (064 pendente), le sem ela: a lista e o MRR nao
+    // podem sair vazios por isso.
+    lerComPlano((plano) =>
+      admin
+        .from("profiles")
+        .select(
+          `id, plan${plano}, subscription_status, ai_credits, current_period_end, created_at, access_granted, is_admin`
+        )
+    ),
     admin.from("stores").select("id, user_id, shop_domain, name"),
     admin
       .from("ai_usage_log")
@@ -54,6 +72,8 @@ export async function GET() {
       .order("created_at", { ascending: false }),
     admin.auth.admin.listUsers({ perPage: 1000 }),
   ]);
+
+  const profiles = perfisLidos.data as PerfilAdmin[] | null;
 
   // email por id
   const emailById = new Map<string, string>();

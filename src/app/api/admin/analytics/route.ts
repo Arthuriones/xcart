@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { USD_BRL_REPORTING, precoMensalCentavos } from "@/lib/billing/plans";
+import { lerComPlano } from "@/lib/billing/limites";
 
 export const runtime = "nodejs";
 
@@ -35,7 +36,7 @@ export async function GET() {
   since6m.setUTCDate(1);
   since6m.setUTCHours(0, 0, 0, 0);
 
-  const [{ data: usage30 }, { data: purchases }, { data: profiles }, { data: newProfiles }] =
+  const [{ data: usage30 }, { data: purchases }, perfisLidos, { data: newProfiles }] =
     await Promise.all([
       admin
         .from("ai_usage_log")
@@ -45,9 +46,12 @@ export async function GET() {
         .from("credit_purchases")
         .select("amount_cents, created_at")
         .gte("created_at", since6m.toISOString()),
-      admin.from("profiles").select("plan, plano"),
+      // Sem a coluna `plano` (064 pendente), le sem ela: o MRR cai nos R$ 89.
+      lerComPlano((plano) => admin.from("profiles").select(`plan${plano}`)),
       admin.from("profiles").select("created_at").gte("created_at", since6m.toISOString()),
     ]);
+
+  const profiles = perfisLidos.data as { plan: string | null; plano?: string | null }[] | null;
 
   // Por acao (30 dias)
   const byActionMap = new Map<string, { costUsd: number; count: number; credits: number }>();

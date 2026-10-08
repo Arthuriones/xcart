@@ -13,12 +13,16 @@ import {
 // poe loja no roteamento passa por aqui, e a tela de Assinatura le o uso daqui.
 //
 // O que conta:
-//  - rastreamento: lojas do usuario, conectadas (uninstalled_at null), com
-//    tracking_configs.enabled = true;
+//  - rastreamento: lojas do usuario com tracking_configs.enabled = true;
 //  - roteamento: lojas distintas nas rotas do usuario -- a vitrine de cada rota
 //    e cada loja de checkout (routed_checkout_targets). Rota sem nenhuma linha
 //    de destino conta a loja de checkout da propria rota (o destino legado que
-//    o loader usa). Loja desinstalada nao conta.
+//    o loader usa).
+// Loja desinstalada CONTA nos dois. Se nao contasse, desinstalar o app, ligar
+// outra loja e reinstalar abria vaga -- e `uninstalled_at` o proprio usuario
+// consegue gravar pela API do Supabase. Para liberar a vaga: desligar o
+// rastreamento da loja (a tela de Rastreamento mostra a desinstalada que ainda
+// esta ligada) ou tirar a loja da rota.
 //
 // Conectar loja NAO tem limite. O limite so barra uma ativacao NOVA: nada que
 // ja esta ligado acima do limite e desligado (quem passou do limite continua
@@ -82,11 +86,11 @@ export interface LinhaDestino {
   target_store_id: string | null;
 }
 
-/** Lojas distintas no roteamento, so entre as conectadas. */
+/** Lojas distintas no roteamento, so entre as do usuario (instaladas ou nao). */
 export function lojasNoRoteamento(
   rotas: readonly LinhaRota[],
   destinos: readonly LinhaDestino[],
-  conectadas: ReadonlySet<string>
+  donas: ReadonlySet<string>
 ): Set<string> {
   const comDestino = new Set(destinos.map((d) => d.route_id));
   const ids = new Set<string>();
@@ -99,16 +103,16 @@ export function lojasNoRoteamento(
   for (const d of destinos) {
     if (d.target_store_id && daConta.has(d.route_id)) ids.add(d.target_store_id);
   }
-  return new Set([...ids].filter((id) => conectadas.has(id)));
+  return new Set([...ids].filter((id) => donas.has(id)));
 }
 
-/** Lojas conectadas com o rastreamento ligado. */
+/** Lojas do usuario (instaladas ou nao) com o rastreamento ligado. */
 export function lojasComRastreamento(
   configs: readonly { store_id: string; enabled: boolean | null }[],
-  conectadas: ReadonlySet<string>
+  donas: ReadonlySet<string>
 ): Set<string> {
   return new Set(
-    configs.filter((c) => c.enabled === true && conectadas.has(c.store_id)).map((c) => c.store_id)
+    configs.filter((c) => c.enabled === true && donas.has(c.store_id)).map((c) => c.store_id)
   );
 }
 
@@ -194,6 +198,29 @@ const COLUNAS_PERFIL =
   "is_admin, access_granted, plan, payment_provider, pagou_subscription_id, current_period_end";
 
 /**
+ * O erro de coluna `plano` inexistente (migration 064 pendente). Sao DOIS
+ * codigos: na leitura o Postgres responde 42703; num insert/update com a chave
+ * o PostgREST recusa antes, com PGRST204 ("Could not find the 'plano' column
+ * ... in the schema cache"). Reconhecer so o primeiro deixava a escrita do
+ * perfil falhar em silencio depois de o cartao ser cobrado.
+ */
+export function semColunaPlano(e: { code?: string; message?: string } | null | undefined): boolean {
+  if (!e || (e.code !== "42703" && e.code !== "PGRST204")) return false;
+  return !e.message || /\bplano\b/.test(e.message);
+}
+
+/**
+ * Le com a coluna `plano` e, se ela ainda nao existe, sem ela. `ler` recebe o
+ * pedaco do select (", plano" ou "") e monta a consulta.
+ */
+export async function lerComPlano<R extends { error: { code?: string; message?: string } | null }>(
+  ler: (colunaPlano: string) => PromiseLike<R>
+): Promise<R> {
+  const r = await ler(", plano");
+  return semColunaPlano(r.error) ? ler("") : r;
+}
+
+/**
  * O perfil com o tier. Se a coluna `plano` ainda nao existe (migration 064 nao
  * aplicada), le sem ela: a conta cai no legado, nunca num erro.
  */
@@ -201,21 +228,11 @@ export async function lerPerfilParaLimites(
   db: SupabaseClient,
   userId: string
 ): Promise<PerfilParaLimites | null> {
-  const comPlano = await db
-    .from("profiles")
-    .select(`${COLUNAS_PERFIL}, plano`)
-    .eq("id", userId)
-    .maybeSingle();
-  if (!comPlano.error) return (comPlano.data as PerfilParaLimites | null) ?? null;
-  if (!semColunaPlano(comPlano.error)) throw new Error(comPlano.error.message);
-  const semPlano = await db.from("profiles").select(COLUNAS_PERFIL).eq("id", userId).maybeSingle();
-  if (semPlano.error) throw new Error(semPlano.error.message);
-  return (semPlano.data as PerfilParaLimites | null) ?? null;
-}
-
-/** O erro do PostgREST para coluna que nao existe (migration 064 pendente). */
-export function semColunaPlano(e: { code?: string } | null | undefined): boolean {
-  return e?.code === "42703";
+  const r = await lerComPlano((plano) =>
+    db.from("profiles").select(`${COLUNAS_PERFIL}${plano}`).eq("id", userId).maybeSingle()
+  );
+  if (r.error) throw new Error(r.error.message);
+  return (r.data as PerfilParaLimites | null) ?? null;
 }
 
 /**
@@ -235,7 +252,8 @@ export async function atualizarPerfil(
 }
 
 export interface LeituraDeUso {
-  conectadas: Set<string>;
+  /** Todas as lojas do usuario, instaladas ou nao. */
+  donas: Set<string>;
   rastreamento: Set<string>;
   rotas: LinhaRota[];
   destinos: LinhaDestino[];
@@ -245,7 +263,7 @@ export interface LeituraDeUso {
 /** O uso atual da conta. Funciona com o cliente admin ou com o da sessao (RLS). */
 export async function lerUso(db: SupabaseClient, userId: string): Promise<LeituraDeUso> {
   const [lojas, rotas] = await Promise.all([
-    db.from("stores").select("id").eq("user_id", userId).is("uninstalled_at", null),
+    db.from("stores").select("id").eq("user_id", userId),
     db
       .from("routed_checkout_configs")
       .select("id, source_store_id, target_store_id")
@@ -254,17 +272,17 @@ export async function lerUso(db: SupabaseClient, userId: string): Promise<Leitur
   if (lojas.error) throw new Error(lojas.error.message);
   if (rotas.error) throw new Error(rotas.error.message);
 
-  const conectadas = new Set(((lojas.data || []) as { id: string }[]).map((l) => l.id));
+  const donas = new Set(((lojas.data || []) as { id: string }[]).map((l) => l.id));
   const linhasRota = (rotas.data || []) as LinhaRota[];
   const idsRota = linhasRota.map((r) => r.id);
 
   const [configs, destinos] = await Promise.all([
-    conectadas.size
+    donas.size
       ? db
           .from("tracking_configs")
           .select("store_id, enabled")
           .eq("enabled", true)
-          .in("store_id", [...conectadas])
+          .in("store_id", [...donas])
       : Promise.resolve({ data: [], error: null }),
     idsRota.length
       ? db
@@ -278,14 +296,14 @@ export async function lerUso(db: SupabaseClient, userId: string): Promise<Leitur
 
   const linhasDestino = (destinos.data || []) as LinhaDestino[];
   return {
-    conectadas,
+    donas,
     rastreamento: lojasComRastreamento(
       (configs.data || []) as { store_id: string; enabled: boolean | null }[],
-      conectadas
+      donas
     ),
     rotas: linhasRota,
     destinos: linhasDestino,
-    roteamento: lojasNoRoteamento(linhasRota, linhasDestino, conectadas),
+    roteamento: lojasNoRoteamento(linhasRota, linhasDestino, donas),
   };
 }
 
@@ -327,7 +345,10 @@ export function corpoDoBloqueio(c: Exclude<Checagem, { ok: true }>) {
   return { error: c.mensagem, code: c.codigo };
 }
 
-/** Pode LIGAR o rastreamento desta loja? Ja ligada passa sempre. */
+/**
+ * Pode LIGAR o rastreamento desta loja? Ja ligada passa sempre. Quem chama ja
+ * conferiu que a loja e do usuario; desinstalada ou nao, ela entra na conta.
+ */
 export async function conferirLigarRastreamento(
   db: SupabaseClient,
   userId: string,
@@ -337,8 +358,7 @@ export async function conferirLigarRastreamento(
     const limites = limitesDoPerfil(await lerPerfilParaLimites(db, userId));
     if (limites.rastreamento === null) return { ok: true };
     const uso = await lerUso(db, userId);
-    const depois = new Set(uso.rastreamento);
-    if (uso.conectadas.has(storeId)) depois.add(storeId);
+    const depois = new Set(uso.rastreamento).add(storeId);
     return passaDoLimite(uso.rastreamento, depois, limites.rastreamento)
       ? bloqueio("rastreamento", limites)
       : { ok: true };
@@ -370,11 +390,11 @@ export async function conferirRoteamento(
     if (mudanca.trocarRota) {
       const t = mudanca.trocarRota;
       const rotas = uso.rotas.map((r) => (r.id === t.id ? { ...r, ...t } : r));
-      depois = lojasNoRoteamento(rotas, uso.destinos, uso.conectadas);
+      depois = lojasNoRoteamento(rotas, uso.destinos, uso.donas);
     } else {
       depois = new Set(uso.roteamento);
     }
-    for (const id of mudanca.adicionar || []) if (uso.conectadas.has(id)) depois.add(id);
+    for (const id of mudanca.adicionar || []) if (uso.donas.has(id)) depois.add(id);
 
     return passaDoLimite(uso.roteamento, depois, limites.roteamento)
       ? bloqueio("roteamento", limites)

@@ -16,6 +16,8 @@ export const metadata: Metadata = { title: "Entrar · xcart" };
  *   interrompido -- so caminho interno, nunca URL absoluta (open redirect);
  * - ?error=link_invalido (o /callback, quando o link falha) vira o aviso de
  *   link expirado. Antes ninguem lia e a pessoa via o formulario em branco.
+ * - ?plano=loja1|lojas3|ilimitado (o "Escolher plano" da landing) fica
+ *   guardado no navegador, e a escolha de plano do app ja abre nele.
  */
 export default async function LoginPage({
   searchParams,
@@ -31,6 +33,7 @@ export default async function LoginPage({
       modoInicial={modoInicial(texto(sp.mode), texto(sp.error))}
       destino={caminhoInternoSeguro(texto(sp.next)) || APP_HOME}
       erroDaUrl={texto(sp.error)}
+      plano={texto(sp.plano)}
       termos={{ uso: `${site}/terms`, privacidade: `${site}/privacy` }}
     />
   );

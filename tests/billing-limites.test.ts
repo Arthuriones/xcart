@@ -5,6 +5,7 @@ import {
   atualizarPerfil,
   conferirLigarRastreamento,
   conferirRoteamento,
+  lerComPlano,
   lerUso,
   limitesDoPerfil,
   lojasComRastreamento,
@@ -12,6 +13,7 @@ import {
   mensagemDeLimite,
   passaDoLimite,
   resumoDoUso,
+  semColunaPlano,
 } from "@/lib/billing/limites";
 import { PLANOS, planoDoValor, precoMensalCentavos, PRO_PRICE_CENTS } from "@/lib/billing/plans";
 
@@ -94,7 +96,7 @@ describe("limitesDoPerfil", () => {
 });
 
 describe("contagem de lojas", () => {
-  const conectadas = new Set(["v1", "c1", "c2", "c3", "v2"]);
+  const donas = new Set(["v1", "c1", "c2", "c3", "v2", "desinstalada"]);
 
   it("roteamento: vitrine + lojas de checkout, distintas", () => {
     const rotas = [
@@ -106,29 +108,32 @@ describe("contagem de lojas", () => {
       { route_id: "r1", target_store_id: "c2" },
       { route_id: "r2", target_store_id: "c1" },
     ];
-    expect([...lojasNoRoteamento(rotas, destinos, conectadas)].sort()).toEqual(["c1", "c2", "v1", "v2"]);
+    expect([...lojasNoRoteamento(rotas, destinos, donas)].sort()).toEqual(["c1", "c2", "v1", "v2"]);
   });
 
   it("rota sem linha de destino conta a loja de checkout da própria rota", () => {
     const rotas = [{ id: "r1", source_store_id: "v1", target_store_id: "c3" }];
-    expect([...lojasNoRoteamento(rotas, [], conectadas)].sort()).toEqual(["c3", "v1"]);
+    expect([...lojasNoRoteamento(rotas, [], donas)].sort()).toEqual(["c3", "v1"]);
   });
 
   it("com linhas de destino, o destino legado da rota não conta de novo", () => {
     const rotas = [{ id: "r1", source_store_id: "v1", target_store_id: "c3" }];
     const destinos = [{ route_id: "r1", target_store_id: "c1" }];
-    expect([...lojasNoRoteamento(rotas, destinos, conectadas)].sort()).toEqual(["c1", "v1"]);
+    expect([...lojasNoRoteamento(rotas, destinos, donas)].sort()).toEqual(["c1", "v1"]);
   });
 
-  it("loja desinstalada não conta", () => {
-    const rotas = [{ id: "r1", source_store_id: "v1", target_store_id: "morta" }];
-    expect([...lojasNoRoteamento(rotas, [], conectadas)]).toEqual(["v1"]);
+  it("loja desinstalada conta (desinstalar e reinstalar não abre vaga); loja de outro dono, não", () => {
+    const rotas = [{ id: "r1", source_store_id: "v1", target_store_id: "desinstalada" }];
+    expect([...lojasNoRoteamento(rotas, [], donas)].sort()).toEqual(["desinstalada", "v1"]);
+    const deOutro = [{ id: "r2", source_store_id: "v1", target_store_id: "alheia" }];
+    expect([...lojasNoRoteamento(deOutro, [], donas)]).toEqual(["v1"]);
     const configs = [
       { store_id: "v1", enabled: true },
-      { store_id: "morta", enabled: true },
+      { store_id: "desinstalada", enabled: true },
+      { store_id: "alheia", enabled: true },
       { store_id: "c1", enabled: false },
     ];
-    expect([...lojasComRastreamento(configs, conectadas)]).toEqual(["v1"]);
+    expect([...lojasComRastreamento(configs, donas)].sort()).toEqual(["desinstalada", "v1"]);
   });
 });
 
@@ -205,8 +210,15 @@ function bancoFalso(tabelas: Record<string, Linha[]>, opcoes: { semColunaPlano?:
         return { data: null, error: { code: "42703", message: "column profiles.plano does not exist" } };
       }
       if (patch) {
+        // Na escrita o PostgREST recusa a chave antes do Postgres: PGRST204.
         if (opcoes.semColunaPlano && "plano" in patch) {
-          return { data: null, error: { code: "42703", message: "column plano does not exist" } };
+          return {
+            data: null,
+            error: {
+              code: "PGRST204",
+              message: "Could not find the 'plano' column of 'profiles' in the schema cache",
+            },
+          };
         }
         updates.push({ tabela, patch, filtros: eqs });
         return { data: null, error: null };
@@ -248,7 +260,7 @@ function bancoFalso(tabelas: Record<string, Linha[]>, opcoes: { semColunaPlano?:
   return { db: { from } as unknown as SupabaseClient, updates };
 }
 
-/** Conta de Alice: 4 lojas conectadas, 1 desinstalada; uma de outro dono. */
+/** Conta de Alice: 4 lojas conectadas, 1 desinstalada (a5); uma de outro dono. */
 function conta(perfil: Linha, extra: Partial<Record<string, Linha[]>> = {}) {
   return {
     profiles: [{ id: "alice", ...perfil }, { id: "bob", is_admin: true }],
@@ -299,11 +311,24 @@ describe("conferirLigarRastreamento", () => {
     expect(r).toMatchObject({ ok: false, status: 403 });
   });
 
-  it("não conta loja de outro dono nem desinstalada", async () => {
+  it("não conta loja de outro dono", async () => {
     const { db } = bancoFalso(
-      conta({ plan: "pro", plano: "loja1" }, { tracking_configs: [{ store_id: "a5", enabled: true }, { store_id: "b1", enabled: true }] })
+      conta({ plan: "pro", plano: "loja1" }, { tracking_configs: [{ store_id: "b1", enabled: true }] })
     );
     expect(await conferirLigarRastreamento(db, "alice", "a1")).toEqual({ ok: true });
+  });
+
+  it("loja desinstalada com o rastreamento ligado ocupa a vaga", async () => {
+    // Desinstalou a1 (que seguia ligada), quer ligar a2 e depois reinstalar a1.
+    const { db } = bancoFalso(
+      conta({ plan: "pro", plano: "loja1" }, { tracking_configs: [{ store_id: "a5", enabled: true }] })
+    );
+    expect(await conferirLigarRastreamento(db, "alice", "a2")).toMatchObject({ ok: false, status: 403 });
+  });
+
+  it("ligar numa loja desinstalada também passa pelo limite", async () => {
+    const { db } = bancoFalso(conta({ plan: "pro", plano: "loja1" }));
+    expect(await conferirLigarRastreamento(db, "alice", "a5")).toMatchObject({ ok: false, status: 403 });
   });
 });
 
@@ -347,6 +372,21 @@ describe("conferirRoteamento", () => {
     ).toMatchObject({ ok: false, status: 403 });
   });
 
+  it("loja desinstalada na rota conta: criar rota com ela e reinstalar não abre vaga", async () => {
+    const lojas = Array.from({ length: 8 }, (_, i) => ({
+      id: `s${i}`,
+      user_id: "alice",
+      uninstalled_at: i === 5 ? "2026-10-01T00:00:00Z" : null,
+    }));
+    const rotas = [{ id: "r1", user_id: "alice", source_store_id: "s0", target_store_id: "s1" }];
+    const destinos = [1, 2, 3, 4, 5].map((n) => ({ route_id: "r1", target_store_id: `s${n}` }));
+    const { db } = bancoFalso(
+      conta({ plan: "pro", plano: "loja1" }, { stores: lojas, routed_checkout_configs: rotas, routed_checkout_targets: destinos })
+    );
+    // s0..s5 = 6 (s5 desinstalada conta): a setima nao entra.
+    expect(await conferirRoteamento(db, "alice", { adicionar: ["s0", "s6"] })).toMatchObject({ ok: false, status: 403 });
+  });
+
   it("Ilimitado e admin nem leem o uso", async () => {
     const { db } = bancoFalso(conta({ plan: "pro", plano: "ilimitado" }));
     expect(await conferirRoteamento(db, "alice", { adicionar: ["a3", "a4"] })).toEqual({ ok: true });
@@ -375,7 +415,31 @@ describe("lerUso e gravar o perfil", () => {
 
   it("sem a coluna plano, grava o resto (quem pagou não fica sem o Pro)", async () => {
     const { db, updates } = bancoFalso(conta({ plan: "free" }), { semColunaPlano: true });
-    await atualizarPerfil(db, "alice", { plan: "pro", plano: "lojas3" });
+    const r = await atualizarPerfil(db, "alice", { plan: "pro", plano: "lojas3" });
+    expect(r.error).toBeNull();
     expect(updates).toEqual([{ tabela: "profiles", patch: { plan: "pro" }, filtros: { id: "alice" } }]);
+  });
+
+  it("reconhece a coluna ausente na leitura (42703) e na escrita (PGRST204)", () => {
+    expect(semColunaPlano({ code: "42703", message: "column profiles.plano does not exist" })).toBe(true);
+    expect(
+      semColunaPlano({ code: "PGRST204", message: "Could not find the 'plano' column of 'profiles' in the schema cache" })
+    ).toBe(true);
+    // Outra coluna, ou outro erro: nao e o caso da 064.
+    expect(semColunaPlano({ code: "PGRST204", message: "Could not find the 'nome' column" })).toBe(false);
+    expect(semColunaPlano({ code: "23505", message: "duplicate key" })).toBe(false);
+    expect(semColunaPlano(null)).toBe(false);
+  });
+
+  it("lerComPlano tenta com a coluna e, sem ela, lê sem", async () => {
+    const pedidos: string[] = [];
+    const r = await lerComPlano(async (plano) => {
+      pedidos.push(plano);
+      return plano
+        ? { data: null, error: { code: "42703", message: "column profiles.plano does not exist" } }
+        : { data: [{ plan: "pro" }], error: null };
+    });
+    expect(pedidos).toEqual([", plano", ""]);
+    expect(r.data).toEqual([{ plan: "pro" }]);
   });
 });

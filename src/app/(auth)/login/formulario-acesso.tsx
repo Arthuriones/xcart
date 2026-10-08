@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { cn } from "@/components/ui/cn";
 import { createClient } from "@/lib/supabase/client";
+import { guardarPlanoEscolhido } from "@/components/billing/plano-escolhido";
 import {
   BOTAO,
   SUBTITULO,
@@ -78,6 +79,7 @@ export function FormularioAcesso({
   destino,
   erroDaUrl,
   termos,
+  plano = null,
 }: {
   modoInicial: Modo;
   /** Caminho interno ja validado (?next= ou a home do app). */
@@ -85,6 +87,8 @@ export function FormularioAcesso({
   /** ?error= da URL (o /callback manda "link_invalido"). */
   erroDaUrl: string | null;
   termos: { uso: string; privacidade: string };
+  /** ?plano= da landing: guardado para a escolha de plano do app. */
+  plano?: string | null;
 }) {
   const router = useRouter();
   const [modo, setModo] = React.useState<Modo>(modoInicial);
@@ -107,6 +111,10 @@ export function FormularioAcesso({
   // O erro do limite de tentativas sai sozinho quando a contagem acaba.
   const erroVisivel = erro && !(erro.esperarSegundos && espera.segundos === 0) ? erro : null;
   const esperando = espera.segundos > 0;
+
+  React.useEffect(() => {
+    guardarPlanoEscolhido(plano);
+  }, [plano]);
 
   // Troca de modo ou de estado: o foco vai para o titulo novo (o leitor de
   // tela anuncia onde a pessoa esta; o Tab segue dali).

@@ -418,6 +418,8 @@ const MENSAGENS_NOSSAS = new Set([
   "Pacote inválido.",
   "Cobrança criada, mas não foi registrada. Fale com o suporte.",
   "Você já tem uma assinatura ativa.",
+  "Você já assina no cartão. Para mudar de plano, fale com o suporte.",
+  "Seu pagamento anterior ainda está sendo processado. Tente de novo em alguns minutos.",
   "Escolha um plano.",
   "Token de cartão inválido.",
   "Esta assinatura foi criada no provedor anterior. Fale com o suporte para cancelar.",

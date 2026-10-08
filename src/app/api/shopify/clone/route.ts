@@ -385,8 +385,9 @@ async function insertRoutingConfig(input: {
   skuMap: Record<string, string>;
   variantMap: Record<string, string>;
 }) {
-  const supabase = await createClient();
-  const { data, error } = await supabase
+  // Service role: a sessao nao insere mais rota (064). O limite e a posse das
+  // lojas foram conferidos no comeco do POST.
+  const { data, error } = await createAdminClient()
     .from("routed_checkout_configs")
     .insert({
       user_id: input.userId,
@@ -468,6 +469,10 @@ export async function POST(request: NextRequest) {
   const duplicatePolicy: DuplicatePolicy =
     body.duplicatePolicy === "create" ? "create" : "skip";
   const createRoutingConfig = Boolean(body.createRoutingConfig);
+  // O assistente importa em lotes e cria a rota so no fim (POST
+  // /api/checkout-routes). O primeiro lote manda `conferirRota` para o limite
+  // de lojas no roteamento barrar ANTES de copiar o catalogo e gastar credito.
+  const conferirRota = createRoutingConfig || body.conferirRota === true;
   const importMode = body.importMode === "single" ? "single" : "bulk";
   const selectedProductHandles = Array.isArray(body.productHandles)
     ? body.productHandles
@@ -522,6 +527,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Acao invalida." }, { status: 400 });
   }
 
+  // A rota que o clone cria no fim passa pelo limite de lojas no roteamento
+  // do plano -- conferido antes de clonar, para nao copiar tudo e barrar no
+  // fim. E antes da trava do trial, que CONSOME a clonagem gratuita: barrar
+  // depois gastava a clonagem sem clonar nada.
+  if (action === "apply" && conferirRota && sourceStoreId && targetStoreId) {
+    const limite = await conferirRoteamento(await createClient(), userId, {
+      adicionar: [sourceStoreId, targetStoreId],
+    });
+    if (!limite.ok) return NextResponse.json(corpoDoBloqueio(limite), { status: limite.status });
+  }
+
   // Trava do trial: clonar (apply) so e liberado para quem assinou OU na 1a
   // loja gratuita. Preview/export nao consomem o trial.
   if (action === "apply" && targetStoreId) {
@@ -536,15 +552,6 @@ export async function POST(request: NextRequest) {
         { status: 402 }
       );
     }
-  }
-
-  // A rota que o clone cria no fim passa pelo limite de lojas no roteamento
-  // do plano -- conferido antes de clonar, para nao copiar tudo e barrar no fim.
-  if (action === "apply" && createRoutingConfig && sourceStoreId && targetStoreId) {
-    const limite = await conferirRoteamento(await createClient(), userId, {
-      adicionar: [sourceStoreId, targetStoreId],
-    });
-    if (!limite.ok) return NextResponse.json(corpoDoBloqueio(limite), { status: limite.status });
   }
 
   try {

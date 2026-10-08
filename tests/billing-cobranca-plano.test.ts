@@ -12,6 +12,13 @@ const estado = {
   perfil: {} as Linha,
   updates: [] as Linha[],
   inserts: [] as { tabela: string; linha: Linha }[],
+  /** Simula a migration 064 ainda nao aplicada: a escrita com `plano` da PGRST204. */
+  semColunaPlano: false,
+};
+
+const SEM_COLUNA = {
+  code: "PGRST204",
+  message: "Could not find the 'plano' column of 'profiles' in the schema cache",
 };
 
 function adminFalso() {
@@ -26,12 +33,16 @@ function adminFalso() {
           return api;
         },
         insert: async (linha: Linha) => {
+          if (estado.semColunaPlano && "plano" in linha) return { error: SEM_COLUNA };
           estado.inserts.push({ tabela, linha });
           return { error: null };
         },
         single: async () => ({ data: estado.perfil, error: null }),
         maybeSingle: async () => ({ data: estado.perfil, error: null }),
         then: (ok: (v: unknown) => unknown) => {
+          if (patch && estado.semColunaPlano && "plano" in patch) {
+            return Promise.resolve({ data: null, error: SEM_COLUNA }).then(ok);
+          }
           if (patch) estado.updates.push(patch);
           return Promise.resolve({ data: null, error: null }).then(ok);
         },
@@ -50,11 +61,15 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => adminFalso() }
 
 const createSubscription = vi.fn();
 const createPixTransaction = vi.fn();
+const getSubscription = vi.fn();
+const cancelSubscription = vi.fn();
 vi.mock("@/lib/billing/pagou", async (original) => ({
   ...(await original<typeof import("@/lib/billing/pagou")>()),
   getOrCreateCustomer: async () => "cus_1",
   createSubscription: (...a: unknown[]) => createSubscription(...a),
   createPixTransaction: (...a: unknown[]) => createPixTransaction(...a),
+  getSubscription: (...a: unknown[]) => getSubscription(...a),
+  cancelSubscription: (...a: unknown[]) => cancelSubscription(...a),
 }));
 
 const { POST: assinar } = await import("@/app/api/billing/subscribe/route");
@@ -67,6 +82,10 @@ beforeEach(() => {
   estado.perfil = { plan: "free", pagou_subscription_id: null, subscription_status: null, document_number: "52998224725" };
   estado.updates = [];
   estado.inserts = [];
+  estado.semColunaPlano = false;
+  getSubscription.mockReset();
+  cancelSubscription.mockReset();
+  cancelSubscription.mockImplementation(async (id: string) => ({ id, status: "canceled" }));
   createSubscription.mockReset();
   createSubscription.mockImplementation(async (p: { amountCents: number }) => ({
     id: "sub_1",
@@ -104,13 +123,68 @@ describe("/api/billing/subscribe", () => {
     expect(chamada.amountCents).toBe(valor);
     expect(chamada.plano).toBe(plano);
     // Trocar de plano no mesmo dia nao pode reaproveitar a assinatura antiga.
-    expect(chamada.idempotencyKey).toMatch(new RegExp(`_${plano}$`));
+    expect(chamada.idempotencyKey).toMatch(new RegExp(`^sub_u1_${plano}_`));
     expect(estado.updates.at(-1)).toMatchObject({ plan: "pro", plano, pagou_subscription_id: "sub_1" });
   });
 
   it("Pix automático também cobra pelo plano", async () => {
     await assinar(req("/api/billing/subscribe", { method: "pix_automatic", plano: "lojas3" }));
     expect(createSubscription.mock.calls[0][0]).toMatchObject({ amountCents: 11990, cardToken: undefined });
+  });
+
+  it("a chave leva o cartão: duplo clique repete, outro cartão depois da recusa é pedido novo", async () => {
+    await assinar(req("/api/billing/subscribe", { cardToken: "pgct_a", plano: "lojas3" }));
+    await assinar(req("/api/billing/subscribe", { cardToken: "pgct_a", plano: "lojas3" }));
+    await assinar(req("/api/billing/subscribe", { cardToken: "pgct_b", plano: "lojas3" }));
+    const [a1, a2, b] = createSubscription.mock.calls.map((c) => c[0].idempotencyKey);
+    expect(a1).toBe(a2);
+    expect(b).not.toBe(a1);
+    // O token (de uso unico) nao vai cru na chave.
+    expect(a1).not.toContain("pgct_a");
+  });
+
+  it("tentativa anterior parada no 1º pagamento é cancelada antes de criar a nova", async () => {
+    estado.perfil = { plan: "free", pagou_subscription_id: "sub_0", subscription_status: "incomplete" };
+    getSubscription.mockResolvedValue({ id: "sub_0", status: "incomplete", metadata: { chave: "outra" } });
+    const r = await assinar(req("/api/billing/subscribe", { cardToken: "pgct_x", plano: "ilimitado" }));
+    expect(r.status).toBe(200);
+    expect(cancelSubscription).toHaveBeenCalledWith("sub_0", "user_requested");
+    expect(createSubscription).toHaveBeenCalledTimes(1);
+  });
+
+  it("o mesmo pedido de novo (mesma chave) não cancela a própria tentativa", async () => {
+    await assinar(req("/api/billing/subscribe", { cardToken: "pgct_x", plano: "lojas3" }));
+    const chave = createSubscription.mock.calls[0][0].idempotencyKey;
+    estado.perfil = { plan: "free", pagou_subscription_id: "sub_1", subscription_status: "incomplete" };
+    getSubscription.mockResolvedValue({ id: "sub_1", status: "incomplete", metadata: { chave } });
+    const r = await assinar(req("/api/billing/subscribe", { cardToken: "pgct_x", plano: "lojas3" }));
+    expect(r.status).toBe(200);
+    expect(cancelSubscription).not.toHaveBeenCalled();
+  });
+
+  it("tentativa anterior que já passou: não cria a segunda", async () => {
+    estado.perfil = { plan: "free", pagou_subscription_id: "sub_0", subscription_status: "incomplete" };
+    getSubscription.mockResolvedValue({ id: "sub_0", status: "active", metadata: {} });
+    const r = await assinar(req("/api/billing/subscribe", { cardToken: "pgct_x", plano: "loja1" }));
+    expect(r.status).toBe(409);
+    expect(createSubscription).not.toHaveBeenCalled();
+  });
+
+  it("não deu para conferir a tentativa anterior: recusa em vez de arriscar duas", async () => {
+    estado.perfil = { plan: "free", pagou_subscription_id: "sub_0", subscription_status: "incomplete" };
+    getSubscription.mockRejectedValue(new Error("fora do ar"));
+    const r = await assinar(req("/api/billing/subscribe", { cardToken: "pgct_x", plano: "loja1" }));
+    expect(r.status).toBe(409);
+    expect((await r.json()).error).toMatch(/ainda está sendo processado/);
+    expect(createSubscription).not.toHaveBeenCalled();
+  });
+
+  it("sem a migration 064, grava o perfil sem o tier (PGRST204) em vez de deixar sem Pro", async () => {
+    estado.semColunaPlano = true;
+    const r = await assinar(req("/api/billing/subscribe", { cardToken: "pgct_x", plano: "lojas3" }));
+    expect(r.status).toBe(200);
+    expect(estado.updates.at(-1)).toMatchObject({ plan: "pro", pagou_subscription_id: "sub_1" });
+    expect(estado.updates.at(-1)).not.toHaveProperty("plano");
   });
 
   it("quem já assina não cria a segunda assinatura", async () => {
@@ -128,6 +202,30 @@ describe("/api/billing/credits (Pix de 30 dias)", () => {
     expect(createPixTransaction.mock.calls[0][0].amountCents).toBe(11990);
     const compra = estado.inserts.find((i) => i.tabela === "credit_purchases")?.linha;
     expect(compra).toMatchObject({ kind: "pro_month", plano: "lojas3", amount_cents: 11990 });
+  });
+
+  it("sem a migration 064, registra a compra sem o tier (PGRST204) em vez de dar 500", async () => {
+    estado.semColunaPlano = true;
+    const r = await pix(req("/api/billing/credits", { packId: "pro_month", plano: "lojas3" }));
+    expect(r.status).toBe(200);
+    const compra = estado.inserts.find((i) => i.tabela === "credit_purchases")?.linha;
+    expect(compra).toMatchObject({ kind: "pro_month", amount_cents: 11990 });
+    expect(compra).not.toHaveProperty("plano");
+  });
+
+  it("quem assina no cartão não paga 30 dias por Pix por cima", async () => {
+    estado.perfil = {
+      plan: "pro",
+      pagou_subscription_id: "sub_0",
+      subscription_status: "active",
+      document_number: "52998224725",
+    };
+    const r = await pix(req("/api/billing/credits", { packId: "pro_month", plano: "ilimitado" }));
+    expect(r.status).toBe(409);
+    expect(createPixTransaction).not.toHaveBeenCalled();
+    // Recarga de credito continua.
+    const recarga = await pix(req("/api/billing/credits", { packId: "pack_50" }));
+    expect(recarga.status).toBe(200);
   });
 
   it("sem plano, recusa sem gerar Pix", async () => {

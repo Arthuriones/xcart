@@ -394,6 +394,10 @@ export function Assistente({ dados, escopoInicial }: { dados: DadosImportar; esc
             collections: colecoesRun.map((c) => ({ handle: c.handle, title: c.title })),
             productCollections: colecoesDoLote,
             createRoutingConfig: false,
+            // A rota so nasce no fim, mas o limite de lojas no roteamento e
+            // conferido ja no primeiro lote: barrar depois de copiar tudo
+            // gastaria o catalogo e os creditos a toa.
+            conferirRota: pagina === 1 && opcoes.rota && !!vitrineId && !!destinoId,
             recordRun: false,
           },
           signal

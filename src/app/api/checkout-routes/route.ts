@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { usuarioPossuiLojas } from "@/lib/stores/authorize";
 import { conferirRoteamento, corpoDoBloqueio } from "@/lib/billing/limites";
 
@@ -115,7 +116,10 @@ export async function POST(request: NextRequest) {
   });
   if (!limite.ok) return NextResponse.json(corpoDoBloqueio(limite), { status: limite.status });
 
-  const { data, error } = await supabase
+  // Pelo service role: a sessao nao tem mais INSERT nesta tabela (migration
+  // 064), senao a rota nascia pela API do Supabase sem passar pelo limite. O
+  // dono vem da sessao e a posse das lojas foi conferida acima.
+  const { data, error } = await createAdminClient()
     .from("routed_checkout_configs")
     .insert({
       user_id: user.id,
@@ -193,7 +197,10 @@ export async function PATCH(request: NextRequest) {
   });
   if (!limite.ok) return NextResponse.json(corpoDoBloqueio(limite), { status: limite.status });
 
-  const { data, error } = await supabase
+  // Trocar as lojas da rota e so pelo service role (a sessao so altera
+  // liga/desliga e configuracao). O filtro por user_id fica: e ele que prende
+  // a rota ao dono da sessao.
+  const { data, error } = await createAdminClient()
     .from("routed_checkout_configs")
     .update({
       source_store_id: sourceStoreId,

@@ -477,7 +477,8 @@ export default function Landing() {
                   <span className="sr-only">por mês</span>
                 </p>
                 <a
-                  href={URL_CRIAR_CONTA}
+                  // O cadastro guarda o plano: a escolha de plano do app ja abre nele.
+                  href={`${URL_CRIAR_CONTA}&plano=${plano.id}`}
                   className={cn(plano.destaque ? LINK_BOTAO_PRIMARIO : LINK_BOTAO_SECUNDARIO, "w-full")}
                 >
                   Escolher plano

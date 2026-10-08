@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import { Check, CreditCard, QrCode } from "lucide-react";
 import { toast } from "sonner";
@@ -13,6 +13,7 @@ import { BENEFICIOS_PRO } from "@/components/billing/beneficios";
 import { CampoCpf } from "@/components/billing/campo-cpf";
 import { Escolha } from "@/components/billing/escolha";
 import { EscolhaDePlano } from "@/components/billing/escolha-plano";
+import { lerPlanoEscolhido, semAvisos } from "@/components/billing/plano-escolhido";
 import { ERRO_PADRAO, brl, mensagemDeErro, type ErroNaTela } from "@/components/billing/regras";
 
 // So aparecem depois de escolher a forma de pagamento. Somados sao 16 KB que
@@ -59,7 +60,11 @@ export function AssinarPro({
   /** A lista do que todo plano inclui. */
   mostrarResumo?: boolean;
 }) {
-  const [planoId, setPlanoId] = useState<PlanoId>(planoInicial ?? planoEmDestaque().id);
+  // De partida: o plano atual (renovacao), o escolhido na landing, ou o em
+  // destaque. O da landing so existe no navegador: no servidor e null.
+  const daLanding = useSyncExternalStore(semAvisos, lerPlanoEscolhido, () => null);
+  const [escolhido, setPlanoId] = useState<PlanoId | null>(null);
+  const planoId = escolhido ?? planoInicial ?? daLanding ?? planoEmDestaque().id;
   const plano = planoPorId(planoId) ?? planoEmDestaque();
   const [via, setVia] = useState<Via | null>(somentePix ? "pix" : null);
   const [cpf, setCpf] = useState("");
@@ -225,9 +230,9 @@ export function AssinarPro({
           </Button>
           <p className="text-center text-label text-t2">
             {somentePix
-              ? `Mais 30 dias do plano ${plano.nome}, somados aos que ainda faltam.${
-                  planoInicial && planoInicial !== plano.id ? " O plano novo vale assim que o Pix cair." : ""
-                } Não renova sozinho.`
+              ? planoInicial && planoInicial !== plano.id
+                ? `30 dias do plano ${plano.nome}, que vale assim que o Pix cair. Os dias que ainda faltam do plano atual viram dias do ${plano.nome}, pelo valor de cada um. Não renova sozinho.`
+                : `Mais 30 dias do plano ${plano.nome}, somados aos que ainda faltam. Não renova sozinho.`
               : `Libera 30 dias do plano ${plano.nome} assim que o pagamento cair. Não renova sozinho: quando acabar, é só pagar de novo.`}
           </p>
         </div>

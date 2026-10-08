@@ -159,7 +159,13 @@ export function PainelExecucao({
       {e.fase === "erro" && e.erro ? (
         <Callout
           tom="err"
-          titulo={e.erro.plano ? "A importação gratuita acabou" : "O que aconteceu"}
+          titulo={
+            e.erro.limite
+              ? "Limite do plano"
+              : e.erro.plano
+                ? "A importação gratuita acabou"
+                : "O que aconteceu"
+          }
           acao={
             e.erro.plano ? (
               <Link href="/billing" className={buttonVariants({ variant: "secondary", size: "sm" })}>

@@ -273,7 +273,12 @@ export async function createSubscription(params: {
     amount: params.amountCents,
     currency: params.currency,
     failure_policy: "retry_then_cancel",
-    metadata: { user_id: params.userId, ...(params.plano ? { plano: params.plano } : {}) },
+    // `chave` deixa o /subscribe reconhecer o mesmo pedido repetido.
+    metadata: {
+      user_id: params.userId,
+      chave: params.idempotencyKey,
+      ...(params.plano ? { plano: params.plano } : {}),
+    },
     idempotency_key: params.idempotencyKey,
   };
 

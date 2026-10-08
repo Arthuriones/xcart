@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHash } from "crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  cancelSubscription,
   createSubscription,
   getOrCreateCustomer,
+  getSubscription,
   planoDoStatus,
   PagouError,
 } from "@/lib/billing/pagou";
@@ -11,6 +14,32 @@ import { CURRENCY, ehPlanoId, planoDoValor, planoPorId } from "@/lib/billing/pla
 import { atualizarPerfil } from "@/lib/billing/limites";
 
 export const runtime = "nodejs";
+
+const PROCESSANDO =
+  "Seu pagamento anterior ainda está sendo processado. Tente de novo em alguns minutos.";
+
+/**
+ * A tentativa anterior ficou parada no primeiro pagamento ('incomplete': 3DS,
+ * cartao recusado ou em analise). Criar outra por cima deixava duas
+ * assinaturas na conta: se as duas aprovassem, duas cobrancas por mes, e o
+ * perfil so conhece uma. Entao: o mesmo pedido de novo (duplo clique, mesma
+ * chave) segue; a anterior que ja passou e "ja assinante"; a parada e
+ * cancelada antes de criar a nova. Devolve a resposta de bloqueio, ou null.
+ */
+async function liberarTentativaAnterior(id: string, chave: string): Promise<NextResponse | null> {
+  try {
+    const anterior = await getSubscription(id);
+    if (anterior.metadata?.chave === chave) return null;
+    if (["active", "trialing", "past_due", "cancel_scheduled"].includes(anterior.status)) {
+      return NextResponse.json({ error: "Você já tem uma assinatura ativa." }, { status: 409 });
+    }
+    if (anterior.status === "incomplete") await cancelSubscription(id, "user_requested");
+    return null;
+  } catch (e) {
+    console.error("[billing/subscribe] tentativa anterior", id, e instanceof Error ? e.message : e);
+    return NextResponse.json({ error: PROCESSANDO }, { status: 409 });
+  }
+}
 
 /**
  * POST -> cria a assinatura de um dos planos na Pagou.
@@ -73,15 +102,25 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Chave: usuario + plano + o cartao (o token pgct_ e de uso unico; vai com
+  // hash) ou, no Pix automatico, o dia. A Pagou devolve a assinatura da
+  // primeira chamada para a mesma chave: o duplo clique manda o mesmo token e
+  // recebe a mesma assinatura; outro cartao depois de uma recusa gera chave
+  // nova -- com a chave por dia, a Pagou devolvia a assinatura recusada ate o
+  // dia seguinte.
+  const idempotencyKey = `sub_${user.id}_${plano.id}_${
+    cardToken
+      ? createHash("sha256").update(cardToken).digest("hex").slice(0, 24)
+      : `pix_${new Date().toISOString().slice(0, 10)}`
+  }`;
+
+  if (profile?.pagou_subscription_id && profile.subscription_status === "incomplete") {
+    const bloqueio = await liberarTentativaAnterior(profile.pagou_subscription_id, idempotencyKey);
+    if (bloqueio) return bloqueio;
+  }
+
   try {
     const customerId = await getOrCreateCustomer(user.id, user.email, null);
-
-    // Chave estavel por usuario+dia+plano: um duplo clique nao gera duas
-    // assinaturas. O plano entra na chave porque a Pagou devolve a assinatura
-    // da primeira chamada para a mesma chave -- sem ele, quem trocasse de
-    // plano no mesmo dia (cartao recusado, tenta de novo com outro) receberia
-    // a assinatura do valor antigo.
-    const idempotencyKey = `sub_${user.id}_${new Date().toISOString().slice(0, 10)}_${plano.id}`;
 
     const sub = await createSubscription({
       customerId,
@@ -96,7 +135,7 @@ export async function POST(request: NextRequest) {
       idempotencyKey,
     });
 
-    await atualizarPerfil(admin, user.id, {
+    const gravado = await atualizarPerfil(admin, user.id, {
       pagou_customer_id: customerId,
       pagou_subscription_id: sub.id,
       payment_provider: "pagou",
@@ -108,6 +147,12 @@ export async function POST(request: NextRequest) {
       cancel_at_period_end: sub.cancelAtPeriodEnd === true,
       updated_at: new Date().toISOString(),
     });
+    // A assinatura ja existe e o cartao pode ja ter sido cobrado: responder
+    // erro faria a pessoa tentar de novo. O webhook (pelo user_id do metadata)
+    // grava o perfil depois.
+    if (gravado.error) {
+      console.error("[billing/subscribe] perfil nao gravou", sub.id, gravado.error.message);
+    }
 
     return NextResponse.json({
       subscriptionId: sub.id,

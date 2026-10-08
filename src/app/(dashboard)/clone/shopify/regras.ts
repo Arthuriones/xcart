@@ -556,8 +556,10 @@ export interface ErroNaTela {
   texto: string;
   /** O texto cru da API, recolhido em "Detalhes para o suporte". */
   detalhe: string | null;
-  /** 402: acabou a importacao gratuita -- a acao leva a Assinatura. */
+  /** 402 ou limite do plano: a acao leva a Assinatura. */
   plano: boolean;
+  /** Foi o limite de lojas do plano (e nao o fim da importacao gratuita). */
+  limite?: boolean;
 }
 
 /**
@@ -585,7 +587,12 @@ export function erroNaTela(
   }
   if (codigo === "limite_do_plano") {
     // A frase do servidor ja diz o que o plano cobre e para onde ir.
-    return { detalhe: null, plano: true, texto: cru || "O limite de lojas do seu plano foi atingido." };
+    return {
+      detalhe: null,
+      plano: true,
+      limite: true,
+      texto: cru || "O limite de lojas do seu plano foi atingido.",
+    };
   }
   if (status === 402 || codigo === "subscribe_required") {
     return {

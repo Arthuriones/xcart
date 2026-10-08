@@ -7,6 +7,7 @@ import {
 } from "@/lib/shopify/client";
 import { normalizarSkus } from "@/lib/shopify/sku-stamp";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { lojaDoUsuario } from "@/lib/stores/authorize";
 import { conferirRoteamento, corpoDoBloqueio } from "@/lib/billing/limites";
 
@@ -311,7 +312,9 @@ export async function POST(request: NextRequest) {
 
       // Destino novo entra com peso 0 quando a cobertura esta ruim: fica
       // configurado e visivel, mas fora do rodizio ate o dono revisar.
-      const { data: target, error: targetError } = await supabase
+      // Gravacao pelo service role: a sessao nao insere mais destino (064). A
+      // rota foi lida pela sessao com o user_id, e as lojas sao do usuario.
+      const { data: target, error: targetError } = await createAdminClient()
         .from("routed_checkout_targets")
         .upsert(
           {
@@ -337,7 +340,8 @@ export async function POST(request: NextRequest) {
       targetId = target?.id ?? null;
       route = { id: existing.id, public_token: existing.public_token };
     } else if (createRoute && hasMatches) {
-      const { data, error } = await supabase
+      const admin = createAdminClient();
+      const { data, error } = await admin
         .from("routed_checkout_configs")
         .insert({
           user_id: user.id,
@@ -365,7 +369,7 @@ export async function POST(request: NextRequest) {
 
       // O destino e a unidade real do roteamento desde a 025. As colunas da
       // rota continuam preenchidas acima so como legado/resumo.
-      const { data: target } = await supabase
+      const { data: target } = await admin
         .from("routed_checkout_targets")
         .insert({
           route_id: data.id,

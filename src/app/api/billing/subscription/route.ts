@@ -7,8 +7,8 @@ import {
   planoDoStatus,
   PagouError,
 } from "@/lib/billing/pagou";
-import { planoDoValor } from "@/lib/billing/plans";
-import { atualizarPerfil } from "@/lib/billing/limites";
+import { atualizarPerfil, lerComPlano } from "@/lib/billing/limites";
+import { decidirAviso } from "@/lib/billing/evento-assinatura";
 
 export const runtime = "nodejs";
 
@@ -30,13 +30,24 @@ export async function GET() {
   }
 
   const admin = createAdminClient();
-  const { data: profile } = await admin
-    .from("profiles")
-    .select(
-      "plan, payment_provider, pagou_subscription_id, stripe_subscription_id, subscription_status, current_period_end, cancel_at_period_end"
-    )
-    .eq("id", user.id)
-    .single();
+  const { data: lido } = await lerComPlano((plano) =>
+    admin
+      .from("profiles")
+      .select(
+        `plan, payment_provider, pagou_subscription_id, stripe_subscription_id, subscription_status, current_period_end, cancel_at_period_end${plano}`
+      )
+      .eq("id", user.id)
+      .single()
+  );
+  const profile = lido as {
+    plan: string | null;
+    plano?: string | null;
+    payment_provider: string | null;
+    pagou_subscription_id: string | null;
+    subscription_status: string | null;
+    current_period_end: string | null;
+    cancel_at_period_end: boolean | null;
+  } | null;
 
   // Assinatura legada do Stripe: o app so mostra, nao gerencia por aqui.
   if (profile?.payment_provider === "stripe") {
@@ -59,9 +70,10 @@ export async function GET() {
     const sub = await getSubscription(profile.pagou_subscription_id);
 
     // Mantem o profile em dia mesmo se algum webhook tiver se perdido. O tier
-    // sai do valor cobrado; valor desconhecido (o R$ 89 antigo) nao mexe nele.
-    const plano = planoDoValor(sub.amount);
-    await atualizarPerfil(admin, user.id, {
+    // so e gravado pelo valor quando o perfil ainda nao tem: se o suporte
+    // mudou o plano, a visita a esta tela nao desfaz.
+    const { plano } = decidirAviso(profile, sub);
+    const gravado = await atualizarPerfil(admin, user.id, {
       subscription_status: sub.status,
       plan: planoDoStatus(sub.status),
       ...(plano ? { plano } : {}),
@@ -69,6 +81,7 @@ export async function GET() {
       cancel_at_period_end: sub.cancelAtPeriodEnd === true,
       updated_at: new Date().toISOString(),
     });
+    if (gravado.error) console.error("[billing/subscription] GET sincronizar", gravado.error.message);
 
     return NextResponse.json({
       provider: "pagou",

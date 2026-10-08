@@ -6,8 +6,9 @@ import {
   getTransaction,
   planoDoStatus,
 } from "@/lib/billing/pagou";
-import { PRO_INCLUDED_CREDITS, planoDoValor } from "@/lib/billing/plans";
-import { atualizarPerfil } from "@/lib/billing/limites";
+import { PRO_INCLUDED_CREDITS } from "@/lib/billing/plans";
+import { atualizarPerfil, lerComPlano } from "@/lib/billing/limites";
+import { decidirAviso, type PerfilDoAviso } from "@/lib/billing/evento-assinatura";
 
 export const runtime = "nodejs";
 
@@ -84,7 +85,11 @@ export async function POST(request: NextRequest) {
 
   const admin = createAdminClient();
 
-  // Dedupe: o primeiro insert vence, os repetidos batem na PK e saem em 200.
+  // Dedupe: o primeiro insert vence, os repetidos batem na PK e saem em 200 --
+  // menos o evento que ja chegou e FALHOU: o 500 abaixo pede reenvio, e o
+  // reenvio tem que processar de novo (antes ele batia na PK e saia em 200, e
+  // o evento ficava perdido). Reprocessar e seguro: o Pix aplica uma vez so
+  // (apply_paid_purchase) e a assinatura e lida da API e regravada igual.
   const { error: dupErr } = await admin.from("payment_events").insert({
     id: eventId,
     provider: "pagou",
@@ -95,11 +100,18 @@ export async function POST(request: NextRequest) {
   });
   if (dupErr) {
     // 23505 = unique_violation: evento ja recebido.
-    if ((dupErr as { code?: string }).code === "23505") {
+    if ((dupErr as { code?: string }).code !== "23505") {
+      console.error("[pagou/webhook] falha ao registrar evento", dupErr);
+      return NextResponse.json({ error: "Erro interno." }, { status: 500 });
+    }
+    const { data: anterior } = await admin
+      .from("payment_events")
+      .select("processed_at")
+      .eq("id", eventId)
+      .maybeSingle();
+    if (!anterior || anterior.processed_at) {
       return NextResponse.json({ received: true, duplicate: true });
     }
-    console.error("[pagou/webhook] falha ao registrar evento", dupErr);
-    return NextResponse.json({ error: "Erro interno." }, { status: 500 });
   }
 
   try {
@@ -111,7 +123,7 @@ export async function POST(request: NextRequest) {
 
     await admin
       .from("payment_events")
-      .update({ processed_at: new Date().toISOString() })
+      .update({ processed_at: new Date().toISOString(), error: null })
       .eq("id", eventId);
   } catch (error) {
     const msg = error instanceof Error ? error.message : "erro";
@@ -141,7 +153,10 @@ async function tratarTransacao(id: string | null) {
   if (!compra) return; // transacao que nao e recarga de credito
 
   if (tx.status === "paid") {
-    await admin.rpc("apply_paid_purchase", { p_transaction_id: id });
+    const { error } = await admin.rpc("apply_paid_purchase", { p_transaction_id: id });
+    // Sem isto a falha marcava o evento como processado e o Pix pago ficava
+    // sem aplicar ate alguem abrir a tela do QR.
+    if (error) throw new Error(error.message);
     return;
   }
 
@@ -171,28 +186,42 @@ async function tratarAssinatura(id: string | null) {
     ).data?.id;
   if (!userId) return;
 
-  const { data: antes } = await admin
-    .from("profiles")
-    .select("current_period_end, subscription_status")
-    .eq("id", userId)
-    .single();
+  const { data: lido, error: erroLeitura } = await lerComPlano((plano) =>
+    admin
+      .from("profiles")
+      .select(`current_period_end, subscription_status, pagou_subscription_id${plano}`)
+      .eq("id", userId)
+      .maybeSingle()
+  );
+  // Lancar responde 500 e a Pagou reenvia.
+  if (erroLeitura) throw new Error(erroLeitura.message);
+  const antes = lido as unknown as
+    | (PerfilDoAviso & { current_period_end: string | null })
+    | null;
+  if (!antes) return;
 
-  // O tier sai do VALOR que a API diz que cobra (7990, 11990 ou 16990). O
-  // R$ 89 antigo e qualquer outro valor nao mexem no plano gravado: o webhook
-  // nunca rebaixa nem apaga o tier. Assinatura cancelada vira plan = 'free' e
-  // o tier fica guardado, sem efeito (o limite de quem nao tem Pro e o base).
-  const plano = planoDoValor(sub.amount);
-  await atualizarPerfil(admin, userId, {
+  // So a assinatura do perfil (ou uma nova que esta pagando) mexe nele: o
+  // cancelamento de uma tentativa abandonada, ou do cartao antigo de quem
+  // passou para o Pix, nao tira o acesso. O tier sai do VALOR que a API diz
+  // que cobra, e so quando a assinatura e nova ou o perfil nao tem tier.
+  const decisao = decidirAviso(antes, sub);
+  if (!decisao.aplicar) {
+    console.warn("[pagou/webhook] aviso ignorado", { assinatura: sub.id, motivo: decisao.motivo });
+    return;
+  }
+
+  const gravado = await atualizarPerfil(admin, userId, {
     pagou_subscription_id: sub.id,
     pagou_customer_id: sub.customerId,
     payment_provider: "pagou",
     subscription_status: sub.status,
     plan: planoDoStatus(sub.status),
-    ...(plano ? { plano } : {}),
+    ...(decisao.plano ? { plano: decisao.plano } : {}),
     current_period_end: sub.currentPeriodEnd || null,
     cancel_at_period_end: sub.cancelAtPeriodEnd === true,
     updated_at: new Date().toISOString(),
   });
+  if (gravado.error) throw new Error(gravado.error.message);
 
   // Renovacao: o periodo avancou e a assinatura esta em dia -> repoe creditos.
   // Comparar o fim do periodo evita repor duas vezes no mesmo ciclo.

@@ -123,5 +123,13 @@ Every AI call receives `StoreContext` (name, niche, target_audience, brand_voice
   `src/lib/billing/limites.ts`** -- rota nova de escrita tambem. So barra
   ativacao NOVA: nada ligado acima do limite e desligado. Admin e
   `access_granted` nao tem limite. A Pagou nao muda o valor de assinatura
-  existente: trocar de plano no cartao e pelo suporte.
+  existente: trocar de plano no cartao e pelo suporte. **Loja desinstalada
+  conta no limite** (senao desinstalar/ligar outra/reinstalar abria vaga, e
+  `stores.uninstalled_at` o usuario grava pela API do Supabase). **Criar rota
+  e por loja nela e so pelo service role** (a 064 tira INSERT e o UPDATE de
+  `source_store_id`/`target_store_id` da sessao; a tela so grava liga/desliga,
+  configuracao, peso, teto e ordem). Webhook e sincronizacao da Pagou so
+  aplicam a assinatura do perfil (`src/lib/billing/evento-assinatura.ts`).
+  Coluna `plano` ausente: leitura da 42703, escrita da PGRST204 --
+  `semColunaPlano` reconhece as duas.
 - Funcao nova em `public` vira endpoint em `/rest/v1/rpc/`. Se for SECURITY DEFINER, **revogue de `public, anon, authenticated`** e conceda so a `service_role` — sao DOIS caminhos de privilegio (o grant a PUBLIC e o explicito que o default-privileges do Supabase cria), e tirar um deixa o outro. Confira com `has_function_privilege`: o comando responde sucesso sem ter revogado nada. Ver migration 027.
