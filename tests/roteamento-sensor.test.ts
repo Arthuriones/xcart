@@ -9,6 +9,7 @@ import {
   itensDoCheckout,
   lerInscricao,
   montarFunil,
+  motivoDoLoader,
   precisaConferir,
   type EntradaDoFunil,
   type InscricaoWebhook,
@@ -16,10 +17,12 @@ import {
 import {
   consertoFalhando,
   credencialRevogada,
+  ladoDaFalha,
   lerUltimoConserto,
   lojaForaNoConserto,
   motivoDaFalha,
   proximoUltimoConserto,
+  vitrineForaNoConserto,
 } from "@/lib/checkout-routes/ultimo-conserto";
 import { blocosDoFunil, lojasSemAviso } from "@/app/(dashboard)/clone/routed-checkout/logica";
 import { CHECKOUT_DE_EXEMPLO, DADOS_DO_COMPRADOR } from "./_checkout-de-exemplo";
@@ -99,6 +102,16 @@ describe("inscricao dos webhooks", () => {
     expect(
       decidirTopico({ topico: "ORDERS_CREATE", escopos: ["read_orders"], inscricoes: [nossa("CHECKOUTS_CREATE")] })
     ).toEqual({ acao: "inscrever" });
+  });
+
+  it("write_orders sozinho tambem da leitura de pedido: inscreve", () => {
+    expect(decidirTopico({ topico: "CHECKOUTS_CREATE", escopos: ["write_products", "write_orders"], inscricoes: [] })).toEqual({
+      acao: "inscrever",
+    });
+    // read_all_orders nao e o escopo do topico.
+    expect(decidirTopico({ topico: "ORDERS_CREATE", escopos: ["read_all_orders"], inscricoes: [] })).toEqual({
+      acao: "sem_escopo",
+    });
   });
 
   it("erro da Shopify vira estado e frase curta", () => {
@@ -214,6 +227,28 @@ describe("funil da rota", () => {
   });
 });
 
+describe("track-fallback: so o que o loader manda", () => {
+  it("aceita os motivos do script e recusa o escape, que so o webhook grava", () => {
+    for (const m of [
+      "loader_ready",
+      "routed_ok",
+      "cart_checkout_error",
+      "direct_checkout_error",
+      "bypass_form_submit",
+      "bypass_link",
+      "bypass_location_assign",
+      "bypass_location_replace",
+    ]) {
+      expect(motivoDoLoader(m)).toBe(m);
+    }
+    expect(motivoDoLoader("checkout_na_vitrine")).toBeNull();
+    expect(motivoDoLoader("bypass_location_href")).toBeNull();
+    expect(motivoDoLoader("")).toBeNull();
+    expect(motivoDoLoader(42)).toBeNull();
+    expect(motivoDoLoader(undefined)).toBeNull();
+  });
+});
+
 describe("falhas seguidas do conserto", () => {
   it("conta as passadas com falha e zera no sucesso", () => {
     const um = proximoUltimoConserto(null, { at: ha(3), ok: false, message: "x" });
@@ -255,5 +290,17 @@ describe("falhas seguidas do conserto", () => {
     expect(lerUltimoConserto({ last_heal: { at: ha(1), ok: false, motivo: "sem_acesso" } })?.motivo).toBe("sem_app");
     expect(lerUltimoConserto({ last_heal: { at: ha(1), ok: false, motivo: "erro" } })?.motivo).toBeUndefined();
     expect(motivoDaFalha("A vitrine x está com senha: o xcart não consegue ler os produtos dela.")).toBe("vitrine_fechada");
+  });
+
+  it("o lado da falha: gravado, ou pela mensagem do registro antigo", () => {
+    const lido = lerUltimoConserto({ last_heal: { at: ha(1), ok: false, motivo: "congelada", lado: "checkout", message: "x" } });
+    expect(lido?.lado).toBe("checkout");
+    expect(vitrineForaNoConserto(lido)).toBe(false);
+    expect(lerUltimoConserto({ last_heal: { at: ha(1), ok: false, lado: "outro" } })?.lado).toBeUndefined();
+    expect(ladoDaFalha({ at: ha(1), ok: false, message: "Loja vitrine (a.myshopify.com): pausada ou sem plano" })).toBe("vitrine");
+    expect(ladoDaFalha({ at: ha(1), ok: false, message: "Loja de checkout (b.myshopify.com): pausada ou sem plano" })).toBe("checkout");
+    expect(ladoDaFalha({ at: ha(1), ok: false, message: "O app foi removido de c.myshopify.com." })).toBeUndefined();
+    expect(ladoDaFalha({ at: ha(1), ok: true, lado: "vitrine" })).toBeUndefined();
+    expect(vitrineForaNoConserto({ at: ha(1), ok: false, motivo: "sem_app", lado: "vitrine" })).toBe(true);
   });
 });

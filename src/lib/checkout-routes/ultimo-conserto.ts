@@ -1,8 +1,17 @@
 // ============================================================================
 // O resultado da ultima passada do conserto (settings.last_heal). Puro:
 // heal.ts grava, o cron de alertas e a tela leem. E o UNICO formato do
-// last_heal -- da rota e do destino; loja-fora-do-ar.ts so da o vocabulario
-// (motivo, lado, espera do cron) que entra nele.
+// last_heal; loja-fora-do-ar.ts so da o vocabulario (motivo, lado, espera do
+// cron) que entra nele. Fica em dois lugares:
+//
+//   routed_checkout_targets.settings.last_heal -- por LOJA DE CHECKOUT. E o
+//     que o alerta le: o cron conserta um destino por vez, e com rodizio um
+//     destino quebrado alternava com outro bom -- o contador da rota ia
+//     0,1,0,1 e o "3 seguidas" nunca abria. Leva tambem a conferencia dos
+//     pares (UltimoConsertoDoDestino).
+//   routed_checkout_configs.settings.last_heal -- a ultima passada da rota,
+//     de qualquer destino. E o que o card mostra, e o unico que existe em rota
+//     antiga sem linha de destino.
 //
 // `falhas` conta as passadas SEGUIDAS com ok=false. Sem ele, "falhou 3 vezes
 // seguidas" nao existia -- o last_heal so guarda a ultima, e uma falha solta
@@ -15,6 +24,7 @@ import {
   ehMotivoForaDoAr,
   motivoDaSaude,
   type ForaDoAr,
+  type LadoDaRota,
   type MotivoForaDoAr,
 } from "@/lib/checkout-routes/loja-fora-do-ar";
 import type { MotivoLojaOffline } from "@/lib/shopify/store-health";
@@ -126,6 +136,25 @@ function motivoDe(u: UltimoConserto): MotivoForaDoAr | undefined {
 export function lojaForaNoConserto(u: UltimoConserto | null): boolean {
   if (!u || u.ok) return false;
   return Boolean(motivoDe(u));
+}
+
+/**
+ * De que lado veio a falha. Registro sem `lado` (antigo) sai pelo comeco da
+ * mensagem do verificarParDaRota ("Loja vitrine (...)" / "Loja de checkout
+ * (...)"); sem isso, nao se sabe.
+ */
+export function ladoDaFalha(u: UltimoConserto | null): LadoDaRota | undefined {
+  if (!u || u.ok) return undefined;
+  if (u.lado) return u.lado;
+  const m = String(u.message || "");
+  if (/^Loja vitrine \(/.test(m)) return "vitrine";
+  if (/^Loja de checkout \(/.test(m)) return "checkout";
+  return undefined;
+}
+
+/** A VITRINE nao esta no ar para o app (checkout fora nao conta). */
+export function vitrineForaNoConserto(u: UltimoConserto | null): boolean {
+  return lojaForaNoConserto(u) && ladoDaFalha(u) === "vitrine";
 }
 
 /** App removido ou credencial recusada: nao melhora sozinho, alerta na hora. */

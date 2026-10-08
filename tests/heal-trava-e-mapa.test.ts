@@ -157,7 +157,8 @@ vi.mock("@/lib/checkout-routes/tema-vitrine", () => ({
   },
 }));
 
-import { healRoute, HealRouteError } from "@/lib/checkout-routes/heal";
+import { healRoute, HealRouteError, registrarFalhaDoConserto } from "@/lib/checkout-routes/heal";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { skuNeutro } from "@/lib/shopify/sku-stamp";
 
 // --------------------------------------------------------------- montagem
@@ -651,5 +652,72 @@ describe("erro do banco nao vira destino legado", () => {
     } finally {
       falharDestinos.sim = false;
     }
+  });
+});
+
+describe("falhas seguidas por loja de checkout (o alerta le do destino)", () => {
+  function lastHealDo(id: string) {
+    const d = db.routed_checkout_targets.find((l) => l.id === id) as { settings?: { last_heal?: Linha } } | undefined;
+    return d?.settings?.last_heal;
+  }
+
+  it("rodizio: a loja que passa nao zera a contagem da que falha", async () => {
+    montar({});
+    db.routed_checkout_targets.push({
+      id: "destino-b",
+      route_id: "rota",
+      target_store_id: "checkout",
+      enabled: true,
+      weight: 1,
+      sku_map: {},
+      variant_map: {},
+      position: 1,
+      healing_since: null,
+      settings: { webhook_pedidos: { em: "2026-10-08T00:00:00Z", estado: "inscrito" } },
+    });
+    vitrine.produtos = [produtoVitrine(100, "bolsa-a", [{ id: 1000, sku: "a" }])];
+    shopify.checkout = [produtoCheckout(9001, [{ id: 7001, sku: "a" }])];
+    const admin = createAdminClient();
+    await registrarFalhaDoConserto(admin, "rota", "Produto sem SKU", { targetId: "destino" });
+    await registrarFalhaDoConserto(admin, "rota", "Produto sem SKU", { targetId: "destino" });
+
+    const r = await healRoute({ routeId: "rota", targetId: "destino-b" });
+    expect(r.warnings).toEqual([]);
+    // O card (rota) mostra a ultima passada; o alerta le cada destino.
+    expect(ultimoConserto()).toMatchObject({ ok: true, falhas: 0 });
+    expect(lastHealDo("destino-b")).toMatchObject({ ok: true, falhas: 0 });
+    expect(lastHealDo("destino")).toMatchObject({ ok: false, falhas: 2 });
+    // O resto do settings do destino fica.
+    expect((db.routed_checkout_targets[1].settings as Linha).webhook_pedidos).toBeTruthy();
+
+    await registrarFalhaDoConserto(admin, "rota", "Produto sem SKU", { targetId: "destino" });
+    expect(lastHealDo("destino")).toMatchObject({ ok: false, falhas: 3, message: "Produto sem SKU" });
+  });
+
+  it("a falha do cron leva o lado, e o motivo tipado sai da mensagem", async () => {
+    montar({});
+    await registrarFalhaDoConserto(
+      createAdminClient(),
+      "rota",
+      "O app foi removido de checkout.myshopify.com. Reinstale para voltar a rotear.",
+      { targetId: "destino", lado: "checkout" }
+    );
+    expect(lastHealDo("destino")).toMatchObject({ ok: false, falhas: 1, lado: "checkout", motivo: "sem_app" });
+    expect(ultimoConserto()).toMatchObject({ ok: false, lado: "checkout" });
+  });
+
+  it("app removido da loja de checkout: sem_app tipado, com o lado, a espera e ja registrado", async () => {
+    montar({});
+    (db.stores[1] as Linha).uninstalled_at = "2026-10-08T00:00:00Z";
+    await expect(healRoute({ routeId: "rota", targetId: "destino" })).rejects.toMatchObject({
+      status: 409,
+      lado: "checkout",
+      registrado: true,
+      foraDoAr: { motivo: "sem_app", lado: "checkout" },
+    });
+    // Gravado no destino com o contador E a espera do cron: o cron nao grava
+    // por cima (registrado), entao a proximaTentativa fica.
+    expect(lastHealDo("destino")).toMatchObject({ ok: false, falhas: 1, motivo: "sem_app", lado: "checkout" });
+    expect(typeof lastHealDo("destino")?.proximaTentativa).toBe("string");
   });
 });

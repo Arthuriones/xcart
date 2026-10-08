@@ -207,11 +207,16 @@ async function executar(request: NextRequest) {
         .from("routed_checkout_targets")
         .update({ last_healed_at: new Date().toISOString() })
         .eq("id", alvo.targetId);
-      // A falha entra no last_heal (e nas falhas seguidas que o alerta
-      // "Conserto da rota falhando" le), a nao ser que o conserto ja tenha
-      // gravado esta mesma passada antes de lancar.
+      // A falha entra no last_heal da rota e no DESTINO (as falhas seguidas
+      // que o alerta "Conserto da rota falhando" le sao por loja de
+      // checkout), a nao ser que o conserto ja tenha gravado esta mesma
+      // passada antes de lancar -- toda loja fora do ar e assim: gravar de
+      // novo contaria a passada duas vezes e apagaria a espera dela.
       if (!(erro instanceof HealRouteError && erro.registrado)) {
-        await registrarFalhaDoConserto(admin, alvo.rota.id, msg).catch((e) =>
+        await registrarFalhaDoConserto(admin, alvo.rota.id, msg, {
+          targetId: alvo.targetId,
+          ...(erro instanceof HealRouteError && erro.lado ? { lado: erro.lado } : {}),
+        }).catch((e) =>
           console.warn("[heal] nao gravei a falha do conserto:", e instanceof Error ? e.message : e)
         );
       }

@@ -61,6 +61,10 @@ function consulta(tabela: string) {
       const linha = Array.isArray(r.data) ? r.data[0] : null;
       return { data: linha ?? null, error: linha ? null : { message: "nao achou" } };
     },
+    maybeSingle: async () => {
+      const r = await executar();
+      return { data: (Array.isArray(r.data) ? r.data[0] : null) ?? null, error: null };
+    },
     then: (ok: (v: unknown) => unknown, erro?: (e: unknown) => unknown) => executar().then(ok, erro),
   };
   return api;
@@ -461,7 +465,11 @@ describe("loja que o conserto nao atende", () => {
     const erro = await healRoute({ routeId: "rota", targetId: "destino" }).catch((e) => e);
     expect(erro.foraDoAr).toBeUndefined();
     expect(ultimoDaRota()?.proximaTentativa).toBeUndefined();
-    expect(destino().settings.last_heal).toBeUndefined();
+    // O destino guarda a falha (as falhas seguidas do alerta sao por loja de
+    // checkout), mas sem espera: o cron tenta de novo na proxima hora.
+    expect(destino().settings.last_heal).toMatchObject({ ok: false, falhas: 1, lado: "checkout" });
+    expect(destino().settings.last_heal?.proximaTentativa).toBeUndefined();
+    expect(erro.registrado).toBe(true);
   });
 
   it("a loja voltou: a passada boa apaga o motivo e mantem o resto do settings", async () => {

@@ -345,7 +345,7 @@ export function regrasNaTela(gastoMinimo: number): RegraNaTela[] {
       explicacao:
         "A vitrine dava sinal do script e parou: sem ele o comprador cai no checkout da vitrine, que não cobra.",
       severidade: "critico",
-      quando: "Depois de 6 h sem sinal, se havia sinal nas 72 h",
+      quando: "6 h sem sinal num horário que ontem e anteontem tinha visita",
     },
     {
       regra: "roteamento_escape_vitrine",
@@ -357,7 +357,7 @@ export function regrasNaTela(gastoMinimo: number): RegraNaTela[] {
     {
       regra: "roteamento_conserto_falhando",
       titulo: "Conserto da rota falhando",
-      explicacao: "A checagem automática da rota falhou seguidas vezes, ou perdeu o acesso a uma das lojas.",
+      explicacao: "A checagem automática falhou seguidas vezes numa loja de checkout, ou perdeu o acesso a uma das lojas.",
       severidade: "critico",
       quando: "Na 3ª falha seguida, ou na hora sem acesso",
     },

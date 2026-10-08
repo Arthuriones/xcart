@@ -35,8 +35,13 @@ const DIA = 24 * HORA;
 
 export const TOPICO_PEDIDOS = "ORDERS_CREATE";
 export const TOPICO_CHECKOUT = "CHECKOUTS_CREATE";
-/** Os dois topicos pedem read_orders (doc da Shopify, 2024-10). */
-export const ESCOPO_DOS_TOPICOS = "read_orders";
+/**
+ * Os dois topicos pedem read_orders (doc da Shopify, 2024-10). write_orders
+ * tambem serve: "any scope that writes a resource also grants read access to
+ * it" (doc de access scopes). As lojas lidas em 08/10 listam o read_ ao lado
+ * de cada write_, mas a doc nao promete isso, entao aceita os dois.
+ */
+export const ESCOPOS_DOS_TOPICOS: readonly string[] = ["read_orders", "write_orders"];
 export const CAMINHO_DOS_WEBHOOKS = "/api/shopify/webhooks";
 
 /** Onde a inscricao fica: settings da linha de destino e da rota. */
@@ -45,6 +50,29 @@ export const CHAVE_VITRINE = "webhook_vitrine";
 
 /** O motivo do evento de escape em routed_checkout_fallbacks. */
 export const MOTIVO_ESCAPE = "checkout_na_vitrine";
+
+/**
+ * Os motivos que o script da vitrine manda ao track-fallback (todos os que o
+ * loader ja mandou, ver o historico do arquivo). O endpoint e publico e o
+ * token esta no HTML da vitrine: aceitar qualquer motivo deixava qualquer um
+ * gravar "checkout_na_vitrine" -- que so o webhook da Shopify grava -- e abrir
+ * o alerta critico de escape com tres POSTs.
+ */
+const MOTIVOS_DO_LOADER: ReadonlySet<string> = new Set([
+  "loader_ready",
+  "routed_ok",
+  "cart_checkout_error",
+  "direct_checkout_error",
+  "bypass_form_submit",
+  "bypass_link",
+  "bypass_location_assign",
+  "bypass_location_replace",
+]);
+
+/** O motivo, se for um que o loader manda; qualquer outro vira null. */
+export function motivoDoLoader(reason: unknown): string | null {
+  return typeof reason === "string" && MOTIVOS_DO_LOADER.has(reason) ? reason : null;
+}
 
 /** Uma conferencia por loja por dia, de qualquer jeito que tenha dado. */
 export const RECONFERIR_MS = DIA;
@@ -116,8 +144,9 @@ export function ehNossoEndpoint(url: string | null | undefined): boolean {
  *
  * Inscricao existente em qualquer host nosso vale: a lista do
  * webhookSubscriptions so traz as do proprio app, e criar outra para o host
- * novo faria cada pedido chegar duas vezes. Sem read_orders nem tenta: a
- * Shopify recusa a inscricao, e o motivo para a tela e o mesmo.
+ * novo faria cada pedido chegar duas vezes. Sem read_orders (nem
+ * write_orders) nem tenta: a Shopify recusa a inscricao, e o motivo para a
+ * tela e o mesmo.
  */
 export function decidirTopico(p: {
   topico: string;
@@ -126,7 +155,7 @@ export function decidirTopico(p: {
 }): { acao: "ja_inscrito"; desde: string | null } | { acao: "sem_escopo" } | { acao: "inscrever" } {
   const minha = p.inscricoes.find((i) => i.topico === p.topico && ehNossoEndpoint(i.url));
   if (minha) return { acao: "ja_inscrito", desde: minha.criadoEm };
-  if (!p.escopos.includes(ESCOPO_DOS_TOPICOS)) return { acao: "sem_escopo" };
+  if (!p.escopos.some((e) => ESCOPOS_DOS_TOPICOS.includes(e))) return { acao: "sem_escopo" };
   return { acao: "inscrever" };
 }
 

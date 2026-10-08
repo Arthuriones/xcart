@@ -190,13 +190,17 @@ A route rots rather than breaking: the merchant adds a product by hand in Shopif
 - **Price and availability are counted, never synced** (`conferirPares`). Each target's `settings.last_heal.conferencia` holds how many matched variants have a price different from the vitrine (only when both stores have the same currency, from `shop.currencyCode`) and how many the checkout does not sell (product not ACTIVE, `onlineStoreUrl` null = off the Online Store channel, `availableForSale` false = tracked and out of stock), with 3 examples each. The route Overview shows them per checkout store. The merchant may have changed a price on purpose.
 - A product created by the heal goes with the checkout store's current name as `vendor` (from `shop.name`), never the vitrine's vendor (store name or brand).
 - After writing, the heal calls `sincronizarTemaDaRota` (see §13.9).
-- `settings.last_heal.falhas` counts consecutive failing passes; the cron also records passes that threw before writing (`registrarFalhaDoConserto`). The alert "Conserto da rota falhando" fires at 3, or at once when a store's credential is revoked.
+- `last_heal` is written twice: on the route (`routed_checkout_configs.settings`, the last pass of any target -- what the card shows) and on the healed target (`routed_checkout_targets.settings`). `falhas` counts consecutive failing passes **per target**: the cron heals one target at a time, so a route-level counter alternated 0,1,0,1 between a good and a broken target and never reached 3. The cron also records passes that threw before writing (`registrarFalhaDoConserto`, with `targetId`). Store-down failures carry `lado` (`vitrine`/`checkout`). The alert "Conserto da rota falhando" fires when any enabled target with weight > 0 reaches 3, or at once when a store's credential is revoked; a route with no target rows (legacy) uses the route-level record.
 
 ### 10.3 Sensor — escapes and orders
 
-`src/lib/checkout-routes/sensor.ts` (rules) + `sensores.ts` (I/O). Two Shopify webhooks, both requiring `read_orders`:
+`src/lib/checkout-routes/sensor.ts` (rules) + `sensores.ts` (I/O). Two Shopify webhooks, both requiring `read_orders` (`write_orders` also counts, since it grants read; on 08/10 NORAH, NORAH OUTLET, Stepz and Stepz Club had no order scope at all):
 - `orders/create` on every enabled checkout store → `routed_checkout_orders` (kept 8 days). Without it the route screen used to show "0 pedidos" — now it shows which store lacks the webhook and why.
 - `checkouts/create` on the vitrine of every enabled route → `routed_checkout_fallbacks` with reason `checkout_na_vitrine`, detail = SKU/variant/quantity only (no email/phone/address). Deduped per checkout token via the PK of `shopify_webhook_events`. Ignored when the vitrine is also an enabled checkout store of some route. Shopify's docs only say it "occurs whenever a checkout is created" (abandoned checkouts exist only after contact info), so the count is a floor.
+
+`track-fallback` (public, token in the vitrine HTML) only stores the reasons the loader sends (`motivoDoLoader`); `checkout_na_vitrine` is refused there, so the escape count and its alert come only from the webhook.
+
+Alert "Script do roteamento sumiu": no `loader_ready` in the last 6 h while the same 6 h window yesterday AND the day before each had >= 5. Traffic is not uniform: a minimum over 72 h fired almost every night on small vitrines. Suppressed only when the VITRINE is down (`lado: "vitrine"`), not the checkout store.
 
 Subscription (`conferirWebhooks`): end of the heal cron (≤ 6 stores/run, each store ≤ 1×/day), after `connect-by-sku`/`POST /api/checkout-routes`, and on "Testar agora" (pending ones only). State lives in `settings.webhook_pedidos` (target row) and `settings.webhook_vitrine` (route row). The funnel (`src/lib/leitura/funil-rota.ts`, Visão tab) uses only `count: exact, head: true` — rows are capped at 1000 by PostgREST.
 

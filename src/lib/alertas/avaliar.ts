@@ -17,15 +17,16 @@ import {
 import { enviarTelegram, tokenDoBot } from "@/lib/alertas/telegram";
 import { RE_DESINSTALADO } from "@/lib/leitura/lojas-estado";
 import {
-  SCRIPT_JANELA_MS,
-  SCRIPT_SILENCIO_MS,
-  consertoFalhando,
+  consertoFalhandoNaRota,
   credencialRevogada,
   escapesDemais,
   haQuanto,
+  janelasDeComparacao,
   rotaRecebendo,
   scriptSumiu,
+  valeContarJanelas,
   vitrineFora,
+  type DestinoNoAlerta,
 } from "@/lib/alertas/roteamento";
 import { MOTIVO_ESCAPE } from "@/lib/checkout-routes/sensor";
 import { lerUltimoConserto, type UltimoConserto } from "@/lib/checkout-routes/ultimo-conserto";
@@ -601,7 +602,10 @@ export async function coletarCondicoesDetalhado(
     name: string | null;
     source_store_id: string;
     settings: unknown;
+    /** O da rota: a ultima passada, de qualquer destino (vitrine fora). */
     ultimoConserto: UltimoConserto | null;
+    /** Por loja de checkout: as falhas seguidas do alerta do conserto. */
+    destinos: DestinoNoAlerta[];
   };
   let rotasLigadas: RotaAlerta[] | null = null;
   const lerRotasLigadas = async (): Promise<RotaAlerta[]> => {
@@ -611,7 +615,7 @@ export async function coletarCondicoesDetalhado(
       .select("id, user_id, name, source_store_id, settings")
       .eq("enabled", true);
     if (error) throw new Error(error.message);
-    const rotas = ((data || []) as Omit<RotaAlerta, "ultimoConserto">[]).filter((r) =>
+    const rotas = ((data || []) as Omit<RotaAlerta, "ultimoConserto" | "destinos">[]).filter((r) =>
       lojas.has(String(r.source_store_id))
     );
     if (rotas.length === 0) {
@@ -620,19 +624,39 @@ export async function coletarCondicoesDetalhado(
     }
     const { data: destinos, error: erroDestinos } = await admin
       .from("routed_checkout_targets")
-      .select("route_id, enabled, weight")
+      .select("route_id, enabled, weight, target_store_id, settings")
       .in(
         "route_id",
         rotas.map((r) => r.id)
       );
     if (erroDestinos) throw new Error(erroDestinos.message);
-    const porRota = new Map<string, { enabled: boolean | null; weight: number | null }[]>();
-    for (const d of (destinos || []) as { route_id: string; enabled: boolean | null; weight: number | null }[]) {
-      porRota.set(String(d.route_id), [...(porRota.get(String(d.route_id)) || []), d]);
+    type LinhaDestino = {
+      route_id: string;
+      enabled: boolean | null;
+      weight: number | null;
+      target_store_id: string | null;
+      settings: unknown;
+    };
+    const porRota = new Map<string, DestinoNoAlerta[]>();
+    for (const d of (destinos || []) as LinhaDestino[]) {
+      const loja = d.target_store_id ? lojas.get(String(d.target_store_id)) : undefined;
+      porRota.set(String(d.route_id), [
+        ...(porRota.get(String(d.route_id)) || []),
+        {
+          enabled: d.enabled,
+          weight: d.weight,
+          nome: cortar(loja?.name || loja?.shop_domain, 40),
+          ultimoConserto: lerUltimoConserto(d.settings),
+        },
+      ]);
     }
     rotasLigadas = rotas
       .filter((r) => rotaRecebendo(porRota.get(String(r.id)) || []))
-      .map((r) => ({ ...r, ultimoConserto: lerUltimoConserto(r.settings) }));
+      .map((r) => ({
+        ...r,
+        ultimoConserto: lerUltimoConserto(r.settings),
+        destinos: porRota.get(String(r.id)) || [],
+      }));
     return rotasLigadas;
   };
   const nomeDaRota = (r: RotaAlerta) => cortar(r.name, 60) || "sem nome";
@@ -653,10 +677,15 @@ export async function coletarCondicoesDetalhado(
       .is("resolvido_em", null);
     if (error) throw new Error(error.message);
     const jaAberto = new Set(((abertos || []) as { chave: string }[]).map((a) => String(a.chave)));
-    const desde72 = new Date(agora.getTime() - SCRIPT_JANELA_MS).toISOString();
+    const janelas = janelasDeComparacao(agora.getTime()).map((j) => ({
+      de: new Date(j.de).toISOString(),
+      ate: new Date(j.ate).toISOString(),
+    }));
 
     // Uma leitura (limit 1) por rota e, so quando o ultimo sinal passou de 6
-    // h, uma contagem das 72 h -- pelo indice (route_config_id, created_at).
+    // h (e o alerta nao esta aberto), uma contagem por janela de comparacao
+    // -- as mesmas 6 h de ontem e anteontem, pelo indice (route_config_id,
+    // created_at).
     for (let i = 0; i < rotas.length; i += 10) {
       const lote = await Promise.all(
         rotas.slice(i, i + 10).map(async (r) => {
@@ -669,23 +698,27 @@ export async function coletarCondicoesDetalhado(
             .limit(1);
           if (e) throw new Error(e.message);
           const ultimo = ((data || []) as { created_at: string | null }[])[0]?.created_at ?? null;
-          const t = ultimo ? Date.parse(ultimo) : NaN;
-          let sinais = 0;
-          if (Number.isFinite(t) && agora.getTime() - t >= SCRIPT_SILENCIO_MS && agora.getTime() - t < SCRIPT_JANELA_MS) {
-            const c = await admin
-              .from("routed_checkout_fallbacks")
-              .select("id", { count: "exact", head: true })
-              .eq("route_config_id", r.id)
-              .eq("reason", "loader_ready")
-              .gte("created_at", desde72);
-            if (c.error) throw new Error(c.error.message);
-            sinais = c.count ?? 0;
+          let mesmasJanelas: (number | null)[] = [];
+          if (!jaAberto.has(String(r.id)) && valeContarJanelas(ultimo, agora.getTime())) {
+            mesmasJanelas = await Promise.all(
+              janelas.map(async (j) => {
+                const c = await admin
+                  .from("routed_checkout_fallbacks")
+                  .select("id", { count: "exact", head: true })
+                  .eq("route_config_id", r.id)
+                  .eq("reason", "loader_ready")
+                  .gte("created_at", j.de)
+                  .lt("created_at", j.ate);
+                if (c.error) throw new Error(c.error.message);
+                return c.count ?? null;
+              })
+            );
           }
-          return { r, ultimo, sinais };
+          return { r, ultimo, mesmasJanelas };
         })
       );
-      for (const { r, ultimo, sinais } of lote) {
-        if (!scriptSumiu({ ultimoSinal: ultimo, sinais72h: sinais, aberto: jaAberto.has(String(r.id)) }, agora.getTime())) {
+      for (const { r, ultimo, mesmasJanelas } of lote) {
+        if (!scriptSumiu({ ultimoSinal: ultimo, mesmasJanelas, aberto: jaAberto.has(String(r.id)) }, agora.getTime())) {
           continue;
         }
         condicoes.push({
@@ -737,8 +770,15 @@ export async function coletarCondicoesDetalhado(
 
   await rodar("roteamento_conserto_falhando", async () => {
     for (const r of await lerRotasLigadas()) {
-      if (!consertoFalhando(r.ultimoConserto)) continue;
-      const semAcesso = credencialRevogada(r.ultimoConserto);
+      // Por loja de checkout: com rodizio, a loja quebrada nao se esconde
+      // atras da boa (ver consertoFalhandoNaRota).
+      const falha = consertoFalhandoNaRota(r.destinos, r.ultimoConserto);
+      if (!falha) continue;
+      const semAcesso = credencialRevogada(falha.conserto);
+      const mensagem = cortar(falha.conserto.message, 200) || "a última checagem não terminou";
+      // O nome da loja so quando ha mais de uma e a mensagem nao o traz.
+      const daLoja =
+        falha.nome && r.destinos.length > 1 && !mensagem.includes(falha.nome) ? `, loja ${falha.nome}` : "";
       condicoes.push({
         user_id: r.user_id,
         store_id: String(r.source_store_id),
@@ -746,7 +786,7 @@ export async function coletarCondicoesDetalhado(
         chave: String(r.id),
         severidade: "critico",
         titulo: semAcesso ? "Rota sem acesso a uma das lojas" : "Conserto automático da rota falhando",
-        detalhe: `Rota ${nomeDaRota(r)}: ${cortar(r.ultimoConserto?.message, 200) || "a última checagem não terminou"}`,
+        detalhe: `Rota ${nomeDaRota(r)}${daLoja}: ${mensagem}`,
       });
     }
   });

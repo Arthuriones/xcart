@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sufixoDaMoeda } from "@/lib/checkout-routes/carrinho-levado";
+import { motivoDoLoader } from "@/lib/checkout-routes/sensor";
 
 export const runtime = "nodejs";
 
@@ -43,8 +44,10 @@ const UUID_RE =
 export async function POST(request: NextRequest) {
   const body = await lerCorpo(request);
   const token = typeof body.token === "string" ? body.token.trim() : "";
-  const reason =
-    typeof body.reason === "string" ? body.reason.slice(0, 200) : "desconhecido";
+  // So os motivos que o loader manda. "checkout_na_vitrine" (o escape que
+  // abre alerta critico) so o webhook da Shopify grava: o token daqui esta
+  // no HTML da vitrine, e qualquer um forjaria o numero.
+  const reason = motivoDoLoader(body.reason);
   const detalheBruto =
     typeof body.detail === "string" ? body.detail.slice(0, 500) : null;
   // Carrinho levado: a moeda da vitrine e o pais do permalink vao no fim do
@@ -63,7 +66,7 @@ export async function POST(request: NextRequest) {
       ? body.targetId
       : null;
 
-  if (!token) {
+  if (!token || !reason) {
     return NextResponse.json({ ok: false }, { headers: corsHeaders });
   }
 
