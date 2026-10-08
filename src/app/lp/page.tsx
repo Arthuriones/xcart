@@ -7,7 +7,6 @@ import {
   Check,
   CircleDollarSign,
   Download,
-  Info,
   Minus,
   Plug,
   Plus,
@@ -43,8 +42,7 @@ import {
   PreviaLucro,
   PreviaRastreamento,
 } from "./ilustracoes";
-import { BENEFICIOS_PRO } from "@/components/billing/beneficios";
-import { PACOTES, POLITICA_TESTE, PRECO_PRO, PRECO_PRO_PARTES } from "./plano";
+import { GARANTIA, PACOTES, PLANOS, PRECO_A_PARTIR } from "./plano";
 
 /**
  * A landing comercial (raiz do host publico e /lp), no design v2
@@ -183,8 +181,8 @@ function ListaComCheck({ itens, className }: { itens: readonly string[]; classNa
 function LinhaDoPlano({ className }: { className?: string }) {
   return (
     <p className={cn("flex flex-wrap gap-x-3.5 gap-y-1.5 text-dense text-t2", className)}>
-      <span className="num font-semibold text-ink">{PRECO_PRO} por mês</span>
-      <span>{POLITICA_TESTE.curta}</span>
+      <span className="num font-semibold text-ink">A partir de {PRECO_A_PARTIR} por mês</span>
+      <span>{GARANTIA.curta}</span>
       <span>Cancele quando quiser</span>
     </p>
   );
@@ -451,47 +449,44 @@ export default function Landing() {
 
         {/* -------------------------------------------------------- preço */}
         <Secao id="preco">
-          <Cabecalho
-            id="preco"
-            sobretitulo="Preço"
-            titulo="Um plano, tudo liberado"
-            descricao="Pague a mais só se precisar de mais fotos refeitas por IA."
-          />
-          <div className="mt-10 grid gap-4 md:mt-14 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-            <div className="dark flex flex-col gap-5 rounded-overlay border border-border-strong bg-surface p-6 text-ink sm:p-8">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-lg font-semibold text-ink">Pro</h3>
-                <Badge variant="neutral">Plano único</Badge>
-              </div>
-              <p className="flex flex-wrap items-baseline gap-x-1.5">
-                {PRECO_PRO_PARTES.moeda ? (
-                  <span className="text-base font-semibold text-t2">{PRECO_PRO_PARTES.moeda}</span>
-                ) : null}
-                <span className="num text-[clamp(44px,5vw,52px)] leading-none font-semibold tracking-[-0.03em] text-ink">
-                  {PRECO_PRO_PARTES.valor}
-                </span>
-                <span aria-hidden="true" className="text-[15px] text-t2">
-                  / mês
-                </span>
-                <span className="sr-only">por mês</span>
-              </p>
-              <a href={URL_CRIAR_CONTA} className={cn(LINK_BOTAO_PRIMARIO, "w-full")}>
-                Criar conta e assinar
-              </a>
-              <ListaComCheck itens={BENEFICIOS_PRO} className="border-t border-border pt-5" />
-            </div>
-
-            <div className="flex flex-col gap-4 rounded-overlay border border-border bg-surface p-6 sm:p-8">
-              <h3 className="text-lg font-semibold text-ink">Pagamento</h3>
-              <p className="text-body leading-relaxed text-pretty text-t1">
-                Cartão de crédito, que renova todo mês, ou Pix, que libera 30 dias.
-              </p>
-              <p className="flex gap-2 text-body leading-relaxed text-pretty text-t1">
-                <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-info" strokeWidth={1.75} />
-                {POLITICA_TESTE.longa}
-              </p>
-            </div>
-          </div>
+          <Cabecalho id="preco" sobretitulo="Preço" titulo="Escolha seu plano" descricao={GARANTIA.longa} />
+          <ul className="mt-10 grid gap-4 md:mt-14 lg:grid-cols-3">
+            {PLANOS.map((plano) => (
+              <li
+                key={plano.id}
+                className={cn(
+                  "flex flex-col gap-5 rounded-overlay border p-6 sm:p-8",
+                  plano.destaque ? "dark border-border-strong bg-surface text-ink" : "border-border bg-surface"
+                )}
+              >
+                <div className="flex flex-col gap-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-lg font-semibold text-ink">{plano.nome}</h3>
+                    {plano.selo ? <Badge variant="neutral">{plano.selo}</Badge> : null}
+                  </div>
+                  <p className="text-dense text-t2">{plano.subtitulo}</p>
+                </div>
+                <p className="flex flex-wrap items-baseline gap-x-1.5">
+                  <span className="text-base font-semibold text-t2">R$</span>
+                  <span className="num text-[clamp(40px,4.5vw,48px)] leading-none font-semibold tracking-[-0.03em] text-ink">
+                    {plano.valor}
+                  </span>
+                  <span aria-hidden="true" className="text-[15px] text-t2">
+                    / mês
+                  </span>
+                  <span className="sr-only">por mês</span>
+                </p>
+                <a
+                  href={URL_CRIAR_CONTA}
+                  className={cn(plano.destaque ? LINK_BOTAO_PRIMARIO : LINK_BOTAO_SECUNDARIO, "w-full")}
+                >
+                  Escolher plano
+                  <span className="sr-only"> {plano.nome}</span>
+                </a>
+                <ListaComCheck itens={plano.itens} className="border-t border-border pt-5" />
+              </li>
+            ))}
+          </ul>
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-4 rounded-overlay border border-border bg-surface px-5 py-5 sm:px-8">
             <div className="flex max-w-[52ch] flex-col gap-1">
@@ -595,8 +590,8 @@ export default function Landing() {
         className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t border-border bg-surface px-4 pt-3 pb-[calc(12px+env(safe-area-inset-bottom))] md:hidden"
       >
         <p className="flex min-w-0 flex-1 flex-col">
-          <span className="num truncate text-[15px] font-semibold text-ink">{PRECO_PRO} por mês</span>
-          <span className="truncate text-label text-t2">Cancele quando quiser</span>
+          <span className="num truncate text-[15px] font-semibold text-ink">A partir de {PRECO_A_PARTIR}/mês</span>
+          <span className="truncate text-label text-t2">{GARANTIA.curta}</span>
         </p>
         <a href={URL_CRIAR_CONTA} className={LINK_BOTAO_PRIMARIO}>
           Criar conta

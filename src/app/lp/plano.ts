@@ -31,6 +31,66 @@ export const PRECO_PRO_PARTES: { moeda: string; valor: string } = (() => {
 
 export const CREDITOS_INCLUSOS = PRO_INCLUDED_CREDITS;
 
+// ============================================================================
+// Os 3 planos da LANDING (decisao do Arthur, 08/10/2026).
+//
+// So vitrine por enquanto: a cobranca continua com o plano unico de
+// src/lib/billing/plans.ts ate ele liberar os planos de verdade. Quando a
+// cobranca mudar, estes numeros passam a sair de plans.ts como o PRECO_PRO.
+// ============================================================================
+
+export interface PlanoNaTela {
+  id: string;
+  nome: string;
+  subtitulo: string;
+  /** "79,90" -- o "R$" vai separado, pequeno. */
+  valor: string;
+  selo?: string;
+  destaque?: boolean;
+  itens: readonly string[];
+}
+
+const ITENS_COMUNS = [
+  "7 dias de garantia.",
+  "Métricas de produto 100% assertivas.",
+  "Perfis de Facebook e Google ilimitados.",
+  "Análise de tráfego detalhada.",
+  "Suporte prioritário.",
+] as const;
+
+export const PLANOS: readonly PlanoNaTela[] = [
+  {
+    id: "1-loja",
+    nome: "1 Loja",
+    subtitulo: "Perfeito para começar",
+    valor: "79,90",
+    itens: ["1 loja disponível.", ...ITENS_COMUNS],
+  },
+  {
+    id: "3-lojas",
+    nome: "3 Lojas",
+    subtitulo: "Mais lojas para integrar",
+    valor: "119,90",
+    selo: "Custo benefício!",
+    destaque: true,
+    itens: ["3 lojas disponíveis.", "20% OFF todo mês de assinatura.", ...ITENS_COMUNS],
+  },
+  {
+    id: "ilimitado",
+    nome: "Ilimitado",
+    subtitulo: "Máxima economia + recursos infinitos",
+    valor: "169,90",
+    selo: "Maior desconto!",
+    itens: ["Sem limite de lojas.", "Desconto insuperável.", ...ITENS_COMUNS],
+  },
+];
+
+export const PRECO_A_PARTIR = `R$ ${PLANOS[0].valor}`;
+export const GARANTIA = {
+  curta: "7 dias de garantia",
+  longa: "7 dias de garantia de satisfação ou seu dinheiro de volta!",
+} as const;
+
 export interface PacoteNaTela {
   id: string;
   rotulo: string;
