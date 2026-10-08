@@ -46,7 +46,8 @@ describe("preço na landing", () => {
 describe("lista de benefícios do plano", () => {
   it("começa por lucro, rastreamento e alertas (decisão 2)", () => {
     expect(BENEFICIOS_PRO[0]).toMatch(/^Lucro/);
-    expect(BENEFICIOS_PRO[1]).toMatch(/Meta e ao Google/);
+    expect(BENEFICIOS_PRO[1]).toMatch(/Meta e ao TikTok/);
+    expect(BENEFICIOS_PRO[1]).toMatch(/Google/);
     expect(BENEFICIOS_PRO[2]).toMatch(/^Alertas/);
   });
 

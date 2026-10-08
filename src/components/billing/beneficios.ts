@@ -14,7 +14,7 @@ import { PRO_INCLUDED_CREDITS } from "@/lib/billing/plans";
  */
 export const BENEFICIOS_PRO: readonly string[] = [
   "Lucro estimado por loja, já descontados produto, frete, taxas e anúncio",
-  "Rastreamento pelo servidor: as compras chegam ao Meta e ao Google",
+  "Rastreamento: as compras chegam ao Meta e ao TikTok pelo servidor, e ao Google pela tag",
   "Alertas no Telegram quando o rastreamento falha, o anúncio gasta sem vender ou a loja para de atualizar",
   "Importação de Shopify, WooCommerce, Shoplazza e AliExpress, com tradução",
   "Neutralização de texto sem limite",
