@@ -78,6 +78,28 @@ export async function loadRouteTargets(
 }
 
 /**
+ * Os destinos que recebem comprador agora: os ligados.
+ *
+ * O destino legado (as colunas da propria rota) so entra quando a rota NAO
+ * TEM nenhuma linha de destino. Antes ele entrava quando nao havia nenhuma
+ * linha LIGADA -- e pausar a unica loja de checkout no painel (porque a conta
+ * de pagamento caiu) fazia o resolve e o tema voltarem a mandar o comprador
+ * para a mesma loja, pelo legado. Rota com destinos e todos pausados nao
+ * roteia, que e o que "pausar" diz na tela.
+ */
+export async function destinosParaRotear(
+  supabase: SupabaseClient,
+  config: Parameters<typeof legacyTargetFromConfig>[0]
+): Promise<RouteTarget[]> {
+  const todos = await loadRouteTargets(supabase, config.id);
+  if (todos.length === 0) {
+    const legacy = legacyTargetFromConfig(config);
+    return legacy ? [legacy] : [];
+  }
+  return todos.filter((target) => target.enabled);
+}
+
+/**
  * Destino legado montado a partir das colunas da propria rota. Rede de
  * seguranca para rota sem nenhuma linha em routed_checkout_targets.
  */

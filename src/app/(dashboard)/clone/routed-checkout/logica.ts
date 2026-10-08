@@ -357,14 +357,56 @@ export function testePedeConserto(r: ResultadoTeste): boolean {
   return n(r.missingCount) > 0 || n(r.wrongCount) > 0 || n(r.noSkuCount) > 0;
 }
 
-/** Frase do conserto, a partir do que /api/checkout-routes/repair devolve. */
-export function fraseDoConserto(d: {
+/** O que /api/checkout-routes/repair devolve e a tela usa. */
+export interface RespostaConserto {
   noop?: boolean;
   createdProductCount?: number;
   extendedCount?: number;
   stampedSkuCount?: number;
   fixedWrongCount?: number;
-}): string {
+  /** Faltam no checkout e nao foram criados (trava do par de lojas). */
+  pendingProductCount?: number;
+  pendingVariantCount?: number;
+  creationBlockedReason?: string | null;
+}
+
+/**
+ * O que o conserto deixou de criar e por que. A tela mostra o botao de
+ * confirmar a criacao so quando isto nao e null: o conserto nao cria mais
+ * catalogo inteiro em loja de checkout sem o lojista ver (ver
+ * src/lib/checkout-routes/conserto-regras.ts).
+ */
+export function pendenciaDoConserto(
+  d: RespostaConserto
+): { produtos: number; variantes: number; texto: string; botao: string } | null {
+  const produtos = n(d.pendingProductCount);
+  const variantes = n(d.pendingVariantCount);
+  if (!d.creationBlockedReason || (produtos === 0 && variantes === 0)) return null;
+  const oQue =
+    produtos > 0
+      ? produtos === 1
+        ? "1 produto da vitrine falta na loja de checkout e não foi criado sozinho"
+        : `${produtos} produtos da vitrine faltam na loja de checkout e não foram criados sozinhos`
+      : variantes === 1
+        ? "1 variante da vitrine falta na loja de checkout e não foi criada sozinha"
+        : `${variantes} variantes da vitrine faltam na loja de checkout e não foram criadas sozinhas`;
+  return {
+    produtos,
+    variantes,
+    texto: `${oQue}: ${d.creationBlockedReason}.`,
+    botao:
+      produtos > 0
+        ? produtos === 1
+          ? "Criar 1 produto na loja de checkout"
+          : `Criar ${produtos} produtos na loja de checkout`
+        : variantes === 1
+          ? "Criar 1 variante na loja de checkout"
+          : `Criar ${variantes} variantes na loja de checkout`,
+  };
+}
+
+/** Frase do conserto, a partir do que /api/checkout-routes/repair devolve. */
+export function fraseDoConserto(d: RespostaConserto): string {
   if (d.noop) return "Nada para corrigir: a rota já estava certa.";
   const partes: string[] = [];
   const criados = n(d.createdProductCount);
@@ -375,7 +417,54 @@ export function fraseDoConserto(d: {
   if (variantes > 0) partes.push(variantes === 1 ? "1 variante criada" : `${variantes} variantes criadas`);
   if (skus > 0) partes.push(skus === 1 ? "1 SKU gravado na vitrine" : `${skus} SKUs gravados na vitrine`);
   if (trocados > 0) partes.push(trocados === 1 ? "1 par corrigido" : `${trocados} pares corrigidos`);
-  return partes.length > 0 ? `Corrigida: ${partes.join(", ")}.` : "Corrigida.";
+  const pendente = pendenciaDoConserto(d);
+  const base =
+    partes.length > 0
+      ? `Corrigida: ${partes.join(", ")}.`
+      : pendente
+        ? "Os pares que já existiam foram ligados."
+        : "Corrigida.";
+  return pendente ? `${base} ${pendente.texto}` : base;
+}
+
+/**
+ * Depois de mudar loja, divisao ou pausa, o xcart reenvia o config ao tema
+ * da vitrine sozinho e a resposta diz como foi. So pede o botao "Reenviar ao
+ * tema" quando o reenvio nao chegou: falhou, o tema publicado nao tem o
+ * script, ou tem o script de outra rota. Script colado a mao (sem config
+ * embutido) le a API, que ja esta em dia.
+ */
+export function temaFicouParaTras(tema: { estado?: string } | null | undefined): boolean {
+  if (!tema || !tema.estado) return true;
+  return tema.estado === "falhou" || tema.estado === "sem_script" || tema.estado === "script_de_outra_rota";
+}
+
+/**
+ * A linha da aba Instalacao sobre o config embutido no tema. null = ainda
+ * nao houve reenvio (rota nova, ou anterior a ele): nao diz nada.
+ */
+export function estadoDoTema(
+  sync: { estado: string; mensagem?: string } | null | undefined
+): { tom: TomStatus; texto: string } | null {
+  if (!sync) return null;
+  switch (sync.estado) {
+    case "atualizado":
+    case "instalado":
+      return { tom: "ok", texto: "Lojas, divisão e produtos em dia no tema da vitrine." };
+    case "sem_config_url":
+      return { tom: "ok", texto: "Script colado à mão: a vitrine consulta o xcart a cada compra." };
+    case "sem_script":
+      return { tom: "warn", texto: "O tema publicado da vitrine não tem o script desta rota. Instale de novo." };
+    case "script_de_outra_rota":
+      return { tom: "warn", texto: "O tema publicado tem o script de outra rota. Instale de novo para esta valer." };
+    case "falhou":
+      return {
+        tom: "err",
+        texto: `Não deu para levar a configuração ao tema${sync.mensagem ? ` (${sync.mensagem})` : ""}. Instale de novo.`,
+      };
+    default:
+      return null;
+  }
 }
 
 // ---------------------------------------------------------------- instalacao

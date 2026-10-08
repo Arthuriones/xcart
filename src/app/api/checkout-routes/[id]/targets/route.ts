@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { sincronizarTemaDaRota } from "@/lib/checkout-routes/tema-vitrine";
 
 export const runtime = "nodejs";
 
@@ -138,7 +140,11 @@ export async function PATCH(
     }
   }
 
-  return NextResponse.json({ ok: true });
+  // Peso, pausa e teto mudam o config que o tema da vitrine embute. Antes a
+  // mudanca so chegava ao comprador quando alguem lembrava de reenviar --
+  // loja pausada porque a conta caiu seguia recebendo pelo caminho inline.
+  const tema = await sincronizarTemaDaRota(createAdminClient(), id);
+  return NextResponse.json({ ok: true, tema });
 }
 
 /** Remove um destino do rodizio. */
@@ -181,5 +187,6 @@ export async function DELETE(
   if (error) {
     return NextResponse.json({ error: "Falha ao remover o destino." }, { status: 500 });
   }
-  return NextResponse.json({ ok: true });
+  const tema = await sincronizarTemaDaRota(createAdminClient(), id);
+  return NextResponse.json({ ok: true, tema });
 }

@@ -69,61 +69,150 @@ export interface ResultadoCarimbo {
   falhas: string[];
 }
 
+/** Menor id numerico primeiro. Ids da Shopify nao cabem em Number com folga. */
+function compararIds(a: string, b: string): number {
+  if (a.length !== b.length) return a.length - b.length;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+export interface OpcoesCarimbo {
+  /**
+   * Variantes da vitrine (id numerico ou gid) que JA tem par na loja de
+   * checkout -- as chaves do variant_map do destino.
+   *
+   * Em SKU repetido, quem fica com o SKU e quem ja esta mapeada; as outras
+   * ganham SKU proprio. Sem isso, o dono era "quem aparece primeiro", e o
+   * conserto le a vitrine pelo products.json publico, que vem do produto MAIS
+   * NOVO para o mais antigo: o lojista duplicava a bolsa A para cadastrar a
+   * bolsa B (a copia leva os SKUs), B ficava com o SKU e casava com a variante
+   * de A no checkout -- o comprador de B pagava pelo produto A -- e A ganhava
+   * SKU novo e uma duplicata na loja de checkout.
+   */
+  mapeadas?: Iterable<string | number>;
+  /**
+   * So carimba quem esta SEM SKU; SKU repetido fica como esta. Para quem ve
+   * um pedaco do catalogo (um lote do create-destination) e nao tem como
+   * saber quem e o dono de um SKU que se repete em outro lote -- isso fica
+   * para o conserto, que le a vitrine inteira.
+   */
+  soSemSku?: boolean;
+}
+
+/**
+ * Quem fica com o SKU repetido: a variante ja mapeada; sem nenhuma (ou com
+ * varias), a de menor id -- a mais antiga. Deterministico, e o mesmo nos dois
+ * chamadores (conserto pelo products.json e connect-by-sku pela Admin API,
+ * que leem a vitrine em ordens opostas).
+ */
+export function donoDoSkuRepetido<T extends { numero: string }>(
+  candidatas: readonly T[],
+  mapeadas: ReadonlySet<string>
+): T {
+  const preferidas = candidatas.filter((c) => mapeadas.has(c.numero));
+  const fila = (preferidas.length > 0 ? preferidas : [...candidatas]).sort((a, b) =>
+    compararIds(a.numero, b.numero)
+  );
+  return fila[0];
+}
+
 /**
  * Garante que toda variante da loja tenha um SKU unico, escrevendo no Shopify
  * o que estiver faltando. Nao mexe em SKU que ja e unico.
  */
 export async function normalizarSkus(
   creds: ShopifyCredentials,
-  produtos: ProdutoComVariantes[]
+  produtos: ProdutoComVariantes[],
+  opcoes: OpcoesCarimbo = {}
 ): Promise<ResultadoCarimbo> {
   const skuPorVariante = new Map<string, string>();
   const falhas: string[] = [];
   const skusRepetidos = new Set<string>();
+  const mapeadas = new Set<string>();
+  for (const id of opcoes.mapeadas || []) {
+    const numero = idNumerico(id);
+    if (numero) mapeadas.add(numero);
+  }
+
+  interface Entrada {
+    produtoGid: string;
+    produtoTitulo: string;
+    idBruto: string | number;
+    varianteGid: string;
+    numero: string;
+    atual: string;
+  }
 
   // Primeira passada: decide o SKU final de cada variante sem tocar na API.
-  // Quem aparece primeiro com um SKU fica com ele; os seguintes sao tratados
-  // como duplicata e recebem um SKU proprio.
+  const entradas: Entrada[] = [];
+  const porSku = new Map<string, Entrada[]>();
+  for (const produto of produtos) {
+    const produtoGid = paraGid(produto.id, "Product");
+    for (const bruta of variantesDe(produto)) {
+      const entrada: Entrada = {
+        produtoGid,
+        produtoTitulo: produto.title,
+        idBruto: bruta.id,
+        varianteGid: paraGid(bruta.id, "ProductVariant"),
+        numero: idNumerico(bruta.id),
+        atual: bruta.sku?.trim() || "",
+      };
+      entradas.push(entrada);
+      if (!entrada.atual) continue;
+      const chave = entrada.atual.toLowerCase();
+      const grupo = porSku.get(chave) || [];
+      grupo.push(entrada);
+      porSku.set(chave, grupo);
+    }
+  }
+
+  // Dono de cada SKU presente, decidido antes de qualquer carimbo.
   const donoDoSku = new Map<string, string>();
+  for (const [chave, grupo] of porSku) {
+    donoDoSku.set(chave, donoDoSkuRepetido(grupo, mapeadas).varianteGid);
+  }
+
   const aEscrever = new Map<string, { variantId: string; sku: string }[]>();
   let carimbadas = 0;
   let desduplicadas = 0;
 
-  for (const produto of produtos) {
-    const produtoGid = paraGid(produto.id, "Product");
-    for (const bruta of variantesDe(produto)) {
-      const varianteGid = paraGid(bruta.id, "ProductVariant");
-      const variante = { id: varianteGid, sku: bruta.sku };
-      const atual = variante.sku?.trim() || "";
-      const chave = atual.toLowerCase();
-      const jaUsado = chave ? donoDoSku.get(chave) : undefined;
+  for (const entrada of entradas) {
+    const chave = entrada.atual.toLowerCase();
 
-      // SKU presente e ainda nao visto: esta bom, nao mexe.
-      if (atual && !jaUsado) {
-        donoDoSku.set(chave, variante.id);
-        skuPorVariante.set(variante.id, atual);
-        continue;
-      }
-
-      const novo = skuNeutro(variante.id);
-      if (!novo || !produtoGid) {
-        falhas.push(`${produto.title}: variante sem id numerico (${bruta.id})`);
-        continue;
-      }
-
-      if (atual) {
-        skusRepetidos.add(atual);
-        desduplicadas += 1;
-      } else {
-        carimbadas += 1;
-      }
-
-      donoDoSku.set(novo.toLowerCase(), variante.id);
-      skuPorVariante.set(variante.id, novo);
-      const lista = aEscrever.get(produtoGid) || [];
-      lista.push({ variantId: variante.id, sku: novo });
-      aEscrever.set(produtoGid, lista);
+    // SKU presente e esta variante e a dona dele: esta bom, nao mexe.
+    if (
+      entrada.atual &&
+      (opcoes.soSemSku || donoDoSku.get(chave) === entrada.varianteGid)
+    ) {
+      skuPorVariante.set(entrada.varianteGid, entrada.atual);
+      continue;
     }
+
+    const novo = skuNeutro(entrada.idBruto);
+    if (!novo || !entrada.produtoGid) {
+      falhas.push(`${entrada.produtoTitulo}: variante sem id numerico (${entrada.idBruto})`);
+      continue;
+    }
+    // O SKU neutro e derivado do id da propria variante. So colide se alguem
+    // gravou na mao, em OUTRA variante, exatamente "xc-<id desta>": nao da
+    // para resolver sem tirar o SKU da outra, entao fica de fora e avisa.
+    const donoDoNovo = donoDoSku.get(novo.toLowerCase());
+    if (donoDoNovo && donoDoNovo !== entrada.varianteGid) {
+      falhas.push(`${entrada.produtoTitulo}: o SKU ${novo} ja esta em outra variante`);
+      continue;
+    }
+
+    if (entrada.atual) {
+      skusRepetidos.add(entrada.atual);
+      desduplicadas += 1;
+    } else {
+      carimbadas += 1;
+    }
+
+    donoDoSku.set(novo.toLowerCase(), entrada.varianteGid);
+    skuPorVariante.set(entrada.varianteGid, novo);
+    const lista = aEscrever.get(entrada.produtoGid) || [];
+    lista.push({ variantId: entrada.varianteGid, sku: novo });
+    aEscrever.set(entrada.produtoGid, lista);
   }
 
   // Segunda passada: grava. Um productVariantsBulkUpdate por produto, em

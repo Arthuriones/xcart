@@ -124,6 +124,15 @@ async function executar(request: NextRequest) {
               extendedCount: r.extendedCount,
               createdProductCount: r.createdProductCount,
               imageQueueCount: r.imageQueueCount,
+              // Faltando e NAO criado: a trava do par de lojas segurou (peso
+              // 0, rota pausada, cobertura baixa ou leva grande).
+              ...(r.creationBlockedReason
+                ? {
+                    pendingProductCount: r.pendingProductCount,
+                    creationBlockedReason: r.creationBlockedReason,
+                  }
+                : {}),
+              theme: r.theme?.estado,
             }),
       });
     } catch (erro) {

@@ -21,6 +21,11 @@ import { AI_COST, logAiUsage } from "@/lib/billing/usage";
 import { createClient } from "@/lib/supabase/server";
 import { lojaDoUsuario } from "@/lib/stores/authorize";
 import { conferirRoteamento, corpoDoBloqueio } from "@/lib/billing/limites";
+import { normalizarSkus } from "@/lib/shopify/sku-stamp";
+import {
+  casarVariantesDoProduto,
+  ehOMesmoProduto,
+} from "@/lib/checkout-routes/casar-variantes";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -80,42 +85,9 @@ async function getAuthenticatedUserId() {
   return user?.id || null;
 }
 
-function variantSignature(variant: ConnectedVariant) {
-  return (variant.selectedOptions || [])
-    .map((option) => option.value)
-    .filter(Boolean)
-    .join(" / ")
-    .toLowerCase();
-}
-
-function buildVariantMaps(
-  sourceProduct: ConnectedProduct,
-  targetProduct: { variants?: { nodes?: ConnectedVariant[] } } | null | undefined
-) {
-  const sourceVariants = sourceProduct.variants?.nodes || [];
-  const targetVariants = targetProduct?.variants?.nodes || [];
-  const targetBySignature = new Map(
-    targetVariants.map((variant) => [variantSignature(variant), variant.id])
-  );
-
-  const skuMap: Record<string, string> = {};
-  const variantMap: Record<string, string> = {};
-
-  sourceVariants.forEach((sourceVariant, index) => {
-    const targetId =
-      targetBySignature.get(variantSignature(sourceVariant)) ||
-      targetVariants[index]?.id;
-
-    if (!targetId) return;
-
-    variantMap[sourceVariant.id] = targetId;
-    if (sourceVariant.sku?.trim()) {
-      skuMap[sourceVariant.sku.trim()] = targetId;
-    }
-  });
-
-  return { skuMap, variantMap };
-}
+// Casamento variante a variante: src/lib/checkout-routes/casar-variantes.ts.
+// SKU, depois opcoes; posicao so no produto recem-criado. O fallback por
+// posicao em produto que JA existia casava a bolsa B nas variantes da bolsa A.
 
 function slugify(value: string) {
   return value
@@ -347,7 +319,13 @@ async function findExistingBySku(
 
 async function findExistingProduct(
   creds: ShopifyCredentials,
-  sourceProduct: ConnectedProduct
+  sourceProduct: ConnectedProduct,
+  // SKUs da vitrine (o produto de busca pode ter o titulo/handle da IA).
+  vitrine: ConnectedProduct,
+  // O handle de busca e o da propria vitrine (copia sem IA)? Handle tirado de
+  // titulo neutralizado nao identifica produto: a IA da o mesmo titulo
+  // generico para bolsas diferentes.
+  handleConfiavel: boolean
 ) {
   // Primeiro tenta casar por SKU: e o sinal mais confiavel de que o mesmo
   // produto ja existe no destino, evitando falso positivo por titulo generico
@@ -375,14 +353,18 @@ async function findExistingProduct(
     if (exactBySku) return exactBySku;
   }
 
-  // Fallback: busca por handle exato (mais seguro que titulo).
-  // Nao usa titulo como critério para evitar colisao entre produtos com
-  // nomes genéricos identicos.
+  // Fallback: handle exato -- so quando o handle e o da vitrine. O casamento
+  // por titulo saiu por causa de titulos genericos iguais ("Zapatilla Urbana
+  // Unisex Negro"); o handle do titulo NEUTRALIZADO e o mesmo buraco, e
+  // fundia duas bolsas num produto so. E mesmo com handle confiavel, o achado
+  // tem que passar em ehOMesmoProduto: SKU de outra origem = outro produto.
+  if (!handleConfiavel) return null;
   const handleQuery = `handle:${sourceProduct.handle}`;
   const handleResult = await getProducts(creds, { first: 5, query: handleQuery });
   const byHandle = (handleResult?.products?.nodes || []) as ConnectedProduct[];
   const exact = byHandle.find((product) => product.handle === sourceProduct.handle);
-  return exact || null;
+  if (!exact || !ehOMesmoProduto(vitrine, exact, { handleConfiavel })) return null;
+  return exact;
 }
 
 export async function POST(request: NextRequest) {
@@ -525,6 +507,24 @@ export async function POST(request: NextRequest) {
   const totalCount = withCount
     ? await getProductsCount(sourceCreds).catch(() => null)
     : null;
+
+  // Variante da vitrine sem SKU ganha o SKU neutro "xc-<id>" ANTES de criar:
+  // o produto do checkout nasce com ele, a rota casa por SKU e tentar o lote
+  // de novo acha o produto pelo SKU em vez de criar outro (o casamento pelo
+  // handle do titulo da IA saiu -- ver findExistingProduct). E o mesmo SKU
+  // que o conserto carimbaria depois; sem isto, o conserto carimbava, nao
+  // achava nada no checkout e recriava o catalogo inteiro. So o que falta:
+  // SKU repetido entre lotes so o conserto, que le a vitrine inteira, decide.
+  if (sourceProducts.length > 0) {
+    const carimbo = await normalizarSkus(sourceCreds, sourceProducts, { soSemSku: true });
+    for (const product of sourceProducts) {
+      for (const variant of product.variants?.nodes || []) {
+        const final = carimbo.skuPorVariante.get(variant.id);
+        if (final) variant.sku = final;
+      }
+    }
+  }
+
   const created: { sourceHandle: string; targetProductId?: string }[] = [];
   const skipped: { sourceHandle: string; targetProductId?: string }[] = [];
   const failed: { sourceHandle: string; error: string }[] = [];
@@ -547,16 +547,14 @@ export async function POST(request: NextRequest) {
       // criado isso evita uma chamada de IA por produto.
       const alreadyThere = await findExistingBySku(targetCreds, product);
       if (alreadyThere?.id) {
-        const maps = buildVariantMaps(product, alreadyThere);
+        const maps = casarVariantesDoProduto(product, alreadyThere, { porPosicao: false });
         Object.assign(skuMap, maps.skuMap);
         Object.assign(variantMap, maps.variantMap);
-        const skuUpdates = Object.entries(maps.skuMap).map(([sku, variantId]) => ({
-          variantId,
-          sku,
-        }));
-        if (skuUpdates.length > 0) {
+        // So preenche SKU em variante do checkout que esta SEM SKU: reescrever
+        // um SKU diferente tirava o par de outra variante (ou de outra rota).
+        if (maps.preencherSku.length > 0) {
           try {
-            await updateVariantSkus(targetCreds, alreadyThere.id, skuUpdates);
+            await updateVariantSkus(targetCreds, alreadyThere.id, maps.preencherSku);
           } catch {
             // SKU duplicado/limite nao deve derrubar a operacao.
           }
@@ -616,21 +614,21 @@ export async function POST(request: NextRequest) {
 
       const existing = await findExistingProduct(
         targetCreds,
-        destination.productForLookup
+        destination.productForLookup,
+        product,
+        // Sem IA, o produto de busca e a propria vitrine: handle dela.
+        !neutralizeProducts && !translateProducts
       );
       if (existing?.id) {
-        const maps = buildVariantMaps(product, existing);
+        const maps = casarVariantesDoProduto(product, existing, { porPosicao: false });
         Object.assign(skuMap, maps.skuMap);
         Object.assign(variantMap, maps.variantMap);
-        // Carimba os SKUs da vitrine nas variantes ja existentes da loja checkout,
-        // pra que a conexao por SKU passe a funcionar sem recriar o produto.
-        const skuUpdates = Object.entries(maps.skuMap).map(([sku, variantId]) => ({
-          variantId,
-          sku,
-        }));
-        if (skuUpdates.length > 0) {
+        // Carimba os SKUs da vitrine nas variantes da loja checkout que estao
+        // SEM SKU, pra que a conexao por SKU passe a funcionar sem recriar o
+        // produto. SKU diferente fica: e de outra variante.
+        if (maps.preencherSku.length > 0) {
           try {
-            await updateVariantSkus(targetCreds, existing.id, skuUpdates);
+            await updateVariantSkus(targetCreds, existing.id, maps.preencherSku);
           } catch (skuError) {
             // Nao falha a operacao inteira por causa de SKU duplicado/limite.
             console.warn(
@@ -651,7 +649,9 @@ export async function POST(request: NextRequest) {
         | { id?: string; variants?: { nodes?: ConnectedVariant[] } }
         | null
         | undefined;
-      const maps = buildVariantMaps(product, targetProduct);
+      // Produto recem-criado a partir desta lista de variantes: a posicao vale
+      // (opcao traduzida muda a assinatura, a ordem nao).
+      const maps = casarVariantesDoProduto(product, targetProduct, { porPosicao: true });
       Object.assign(skuMap, maps.skuMap);
       Object.assign(variantMap, maps.variantMap);
       created.push({

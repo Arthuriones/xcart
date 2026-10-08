@@ -10,6 +10,12 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { lojaDoUsuario } from "@/lib/stores/authorize";
 import { conferirRoteamento, corpoDoBloqueio } from "@/lib/billing/limites";
+import { garantirDestinoPrimario } from "@/lib/checkout-routes/destino-primario";
+import { sincronizarTemaDaRota, type ResultadoTema } from "@/lib/checkout-routes/tema-vitrine";
+import {
+  COBERTURA_MINIMA_PARA_ENTRAR,
+  lojaEhVitrineDeOutraRota,
+} from "@/lib/checkout-routes/par-de-lojas";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -124,6 +130,74 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Loja que e vitrine de uma rota nao vira loja de checkout de outra. A
+  // vitrine tem o catalogo com marca; pendurada como checkout, o conserto
+  // passava a despejar nela o catalogo da outra vitrine (reclamacao da
+  // NORAH: produto de outro nicho aparecendo na loja de checkout).
+  // ANTES de qualquer escrita: o carimbo de SKU abaixo grava na vitrine.
+  if (routeId || createRoute) {
+    const { data: rotasDoUsuario } = await supabase
+      .from("routed_checkout_configs")
+      .select("id, source_store_id")
+      .eq("user_id", user.id);
+    if (lojaEhVitrineDeOutraRota(targetStoreId, rotasDoUsuario || [], routeId || null)) {
+      return NextResponse.json(
+        {
+          error:
+            "Esta loja é a vitrine de outra rota. Uma vitrine não pode ser loja de checkout: escolha outra loja.",
+        },
+        { status: 409 }
+      );
+    }
+  }
+
+  // Modo "adicionar destino": a rota e os destinos que ela ja tem. Lidos
+  // antes do carimbo pelo mesmo motivo -- recusar sem ter escrito nada.
+  let rotaExistente: { id: string; public_token: string; source_store_id: string } | null = null;
+  let destinosDaRota: {
+    target_store_id: string;
+    position: number | null;
+    variant_map: Record<string, unknown> | null;
+  }[] = [];
+  if (routeId) {
+    const { data: existing } = await supabase
+      .from("routed_checkout_configs")
+      .select("id, public_token, source_store_id, target_store_id, variant_map")
+      .eq("id", routeId)
+      .eq("user_id", user.id)
+      .single();
+    if (!existing) {
+      return NextResponse.json({ error: "Rota nao encontrada." }, { status: 404 });
+    }
+    // A vitrine tem que ser a mesma: os mapas sao construidos a partir das
+    // variantes DELA, entao pendurar um destino casado contra outra vitrine
+    // rotearia o comprador para variantes que nao tem nada a ver.
+    if (existing.source_store_id !== sourceStoreId) {
+      return NextResponse.json(
+        { error: "Esta rota pertence a outra vitrine." },
+        { status: 409 }
+      );
+    }
+    rotaExistente = existing;
+    const { data: linhas } = await supabase
+      .from("routed_checkout_targets")
+      .select("target_store_id, position, variant_map")
+      .eq("route_id", existing.id);
+    destinosDaRota = (linhas || []) as typeof destinosDaRota;
+    // Rota antiga sem linha: o destino legado (as colunas da rota) vira linha
+    // na posicao 0 logo abaixo, e o mapa dele conta para decidir quem fica com
+    // SKU repetido.
+    if (destinosDaRota.length === 0) {
+      destinosDaRota = [
+        {
+          target_store_id: (existing.target_store_id as string | null) || "",
+          position: 0,
+          variant_map: (existing.variant_map || {}) as Record<string, unknown>,
+        },
+      ];
+    }
+  }
+
   // Limite de lojas no roteamento, ANTES de qualquer escrita (o carimbo de SKU
   // abaixo grava na vitrine). Criar rota traz as duas lojas; adicionar destino
   // traz a loja de checkout nova. So casar, sem gravar rota, nao conta.
@@ -161,11 +235,19 @@ export async function POST(request: NextRequest) {
     // carimba um SKU neutro e segue. SKU repetido tambem e corrigido aqui:
     // repetido nao e "nao roteia", e "roteia pro produto errado".
     // ------------------------------------------------------------------
-    const carimbo = await normalizarSkus(sourceCreds, sourceProducts);
+    //
+    // SKU repetido: quem ja tem par em algum destino da rota fica com ele; sem
+    // nenhuma, a variante mais antiga -- a mesma regra do conserto, que le a
+    // vitrine na ordem contraria (ver OpcoesCarimbo.mapeadas).
+    const carimbo = await normalizarSkus(sourceCreds, sourceProducts, {
+      mapeadas: destinosDaRota.flatMap((d) => Object.keys(d.variant_map || {})),
+    });
     for (const product of sourceProducts) {
       for (const variant of product.variants?.nodes || []) {
         const final = carimbo.skuPorVariante.get(variant.id);
-        if (final) variant.sku = final;
+        // Sem SKU final = o carimbo falhou; se era a copia de um SKU repetido,
+        // o SKU velho a casaria com a variante do dono. Fica sem SKU.
+        variant.sku = final || null;
       }
     }
 
@@ -288,43 +370,62 @@ export async function POST(request: NextRequest) {
     let targetId: string | null = null;
     const hasMatches = Object.keys(variantMap).length > 0;
 
-    if (routeId && hasMatches) {
-      // --- adicionar mais uma loja de checkout a uma rota existente ---
-      const { data: existing } = await supabase
-        .from("routed_checkout_configs")
-        .select("id, public_token, source_store_id")
-        .eq("id", routeId)
-        .eq("user_id", user.id)
-        .single();
+    let tema: ResultadoTema | null = null;
 
-      if (!existing) {
-        return NextResponse.json({ error: "Rota nao encontrada." }, { status: 404 });
-      }
-      // A vitrine tem que ser a mesma: os mapas sao construidos a partir das
-      // variantes DELA, entao pendurar um destino casado contra outra vitrine
-      // rotearia o comprador para variantes que nao tem nada a ver.
-      if (existing.source_store_id !== sourceStoreId) {
+    if (rotaExistente && cobertura < COBERTURA_MINIMA_PARA_ENTRAR) {
+      // Um casamento so bastava para a loja entrar na rota. Com SKU curto
+      // ("1", "3", "101") colidir e trivial, e uma loja de outro nicho
+      // entrava -- com peso 0, mas o rodizio ainda a escolhe quando so ela
+      // "cobre" o carrinho, e o conserto despejava a vitrine nela.
+      return NextResponse.json(
+        {
+          error: `Só ${Math.round(cobertura * 100)}% dos produtos da vitrine casaram com esta loja. Para entrar na rota, a loja de checkout precisa ter pelo menos ${Math.round(COBERTURA_MINIMA_PARA_ENTRAR * 100)}% do catálogo da vitrine (copie os produtos para ela antes).`,
+          code: "cobertura_baixa",
+          coveragePercent: Math.round(cobertura * 100),
+          matchedCount: Object.keys(variantMap).length,
+          sourceVariantCount: sourceVariants.length,
+        },
+        { status: 422 }
+      );
+    }
+
+    if (rotaExistente && hasMatches) {
+      // --- adicionar mais uma loja de checkout a uma rota existente ---
+      const admin = createAdminClient();
+
+      // Rota antiga sem linha de destino: a loja original vira linha ANTES da
+      // nova entrar. O legado so vale com zero linhas, entao a linha da loja
+      // nova sozinha tirava a original da rota sem aviso (destino-primario.ts).
+      const primario = await garantirDestinoPrimario(admin, rotaExistente.id, "connect_by_sku");
+      if (primario.erro) {
         return NextResponse.json(
-          { error: "Esta rota pertence a outra vitrine." },
-          { status: 409 }
+          { error: "Não consegui preservar a loja de checkout atual da rota. Nada foi alterado." },
+          { status: 500 }
         );
       }
+
+      // Re-adicionar a mesma loja mantem o lugar dela; loja nova vai para o fim.
+      const jaNaRota = destinosDaRota.find((d) => d.target_store_id === targetStoreId);
+      const position =
+        jaNaRota?.position ??
+        destinosDaRota.reduce((maior, d) => Math.max(maior, d.position ?? 0), -1) + 1;
 
       // Destino novo entra com peso 0 quando a cobertura esta ruim: fica
       // configurado e visivel, mas fora do rodizio ate o dono revisar.
       // Gravacao pelo service role: a sessao nao insere mais destino (064). A
       // rota foi lida pela sessao com o user_id, e as lojas sao do usuario.
-      const { data: target, error: targetError } = await createAdminClient()
+      const { data: target, error: targetError } = await admin
         .from("routed_checkout_targets")
         .upsert(
           {
-            route_id: existing.id,
+            route_id: rotaExistente.id,
             target_store_id: targetStoreId,
             weight: seguro ? 1 : 0,
             enabled: true,
             sku_map: skuMap,
             variant_map: variantMap,
             settings: { generatedBy: "connect_by_sku" },
+            position,
           },
           { onConflict: "route_id,target_store_id" }
         )
@@ -338,7 +439,9 @@ export async function POST(request: NextRequest) {
         );
       }
       targetId = target?.id ?? null;
-      route = { id: existing.id, public_token: existing.public_token };
+      route = { id: rotaExistente.id, public_token: rotaExistente.public_token };
+      // Loja nova no rodizio muda o config que o tema da vitrine embute.
+      tema = await sincronizarTemaDaRota(admin, rotaExistente.id);
     } else if (createRoute && hasMatches) {
       const admin = createAdminClient();
       const { data, error } = await admin
@@ -410,6 +513,7 @@ export async function POST(request: NextRequest) {
       variantMap,
       route,
       targetId,
+      ...(tema ? { tema } : {}),
     });
   } catch (error) {
     return NextResponse.json(

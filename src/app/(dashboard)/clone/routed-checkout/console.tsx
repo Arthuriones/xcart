@@ -4,6 +4,7 @@ import { ChevronLeftIcon } from "lucide-react";
 import { cn } from "@/components/ui/cn";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { getRouteGraph, type GraphRoute, type RouteGraph } from "@/lib/checkout-routes/graph";
+import { lojasCandidatasACheckout } from "@/lib/checkout-routes/par-de-lojas";
 import { quandoFoi } from "@/lib/leitura/lojas-estado";
 import { conferirLeituraDasRotas, lerUltimoSinalDoScript } from "@/lib/leitura/roteamento";
 import { AbaDiagnostico } from "./aba-diagnostico";
@@ -165,9 +166,11 @@ export function ConsoleView({
                   orders24h: t.orders24h,
                   legacy: t.legacy,
                 }))}
-                disponiveis={grafo.stores
-                  .filter((s) => s.id !== rota.sourceStoreId && !rota.targets.some((t) => t.storeId === s.id))
-                  .map((s) => ({ id: s.id, nome: s.name || s.shopDomain, dominio: s.shopDomain }))}
+                disponiveis={lojasCandidatasACheckout(grafo.stores, rota, grafo.routes).map((s) => ({
+                  id: s.id,
+                  nome: s.name || s.shopDomain,
+                  dominio: s.shopDomain,
+                }))}
               />
             ),
             diagnostico: (

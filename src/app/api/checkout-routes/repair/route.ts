@@ -24,6 +24,9 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => ({}));
   const routeId = typeof body.id === "string" ? body.id : "";
+  // O lojista viu "N produtos faltam" e confirmou. Sem isto o conserto so
+  // cria quando o par de lojas passa na trava (ver conserto-regras.ts).
+  const criarFaltantes = body.criarFaltantes === true;
   if (!routeId) {
     return NextResponse.json(
       { error: "Id da rota e obrigatorio." },
@@ -60,6 +63,7 @@ export async function POST(request: NextRequest) {
           userId: user.id,
           origin: request.nextUrl.origin,
           cookie: request.headers.get("cookie") || "",
+          criarFaltantes,
         })
       );
     }
@@ -81,6 +85,13 @@ export async function POST(request: NextRequest) {
       createdProductCount: soma((r) => r.createdProductCount),
       createdVariantCount: soma((r) => r.createdVariantCount),
       imageQueueCount: soma((r) => r.imageQueueCount),
+      pendingProductCount: soma((r) => r.pendingProductCount),
+      pendingVariantCount: soma((r) => r.pendingVariantCount),
+      creationBlockedReason:
+        results.find((r) => r.creationBlockedReason)?.creationBlockedReason ?? null,
+      // O ultimo reenvio ao tema e o que vale: cada passada compara o config
+      // inteiro da rota.
+      theme: results[results.length - 1]?.theme,
       warnings: results.flatMap((r) => r.warnings),
       noop: results.every((r) => r.noop),
     });

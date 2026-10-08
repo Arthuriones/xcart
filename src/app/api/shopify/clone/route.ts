@@ -40,6 +40,7 @@ import { createClient } from "@/lib/supabase/server";
 import { conferirRoteamento, corpoDoBloqueio } from "@/lib/billing/limites";
 import { lojaDoUsuario } from "@/lib/stores/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { garantirDestinoPrimario } from "@/lib/checkout-routes/destino-primario";
 import { translateProductVariantOptionsToPortuguese } from "@/lib/products/variant-translation";
 import { AI_COST, logAiUsage } from "@/lib/billing/usage";
 import { checkAndConsumeFreeClone } from "@/lib/billing/access";
@@ -405,6 +406,10 @@ async function insertRoutingConfig(input: {
   if (error) {
     throw new Error("Produtos criados, mas falhou ao criar rota de checkout.");
   }
+
+  // Sem a linha de destino a rota ficava fora do conserto automatico e a loja
+  // sumia no primeiro "Adicionar loja" (ver destino-primario.ts).
+  await garantirDestinoPrimario(createAdminClient(), data.id, "shopify_clone");
 
   return data;
 }

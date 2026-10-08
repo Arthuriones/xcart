@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeRotation, type RouteTarget } from "@/lib/checkout-routes/rotation";
-import { legacyTargetFromConfig, loadRouteTargets } from "@/lib/checkout-routes/targets";
+import { destinosParaRotear } from "@/lib/checkout-routes/targets";
 
 export const EMBED_CONFIG_SELECT =
   "id, rotation, sku_map, variant_map, settings, target_store_id, target:target_store_id(name, shop_domain, target_language)";
@@ -84,13 +84,11 @@ export async function buildEmbedConfig(
   supabase: SupabaseClient,
   config: ConfigRow
 ): Promise<EmbedConfig> {
-  let targets = await loadRouteTargets(supabase, config.id, { onlyEnabled: true });
-  if (targets.length === 0) {
-    const legacy = legacyTargetFromConfig(
-      config as Parameters<typeof legacyTargetFromConfig>[0]
-    );
-    if (legacy) targets = [legacy];
-  }
+  // Legado so sem nenhuma linha de destino; todos pausados = nenhum destino.
+  const targets = await destinosParaRotear(
+    supabase,
+    config as Parameters<typeof destinosParaRotear>[1]
+  );
 
   const embedTargets = targets.filter((t) => t.domain).map(toEmbedTarget);
   const primary = embedTargets[0];

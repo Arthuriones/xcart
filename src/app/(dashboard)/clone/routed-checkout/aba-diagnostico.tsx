@@ -11,8 +11,10 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import {
   fraseDoConserto,
   linhasDoTeste,
+  pendenciaDoConserto,
   testePedeConserto,
   type LinhaTeste,
+  type RespostaConserto,
   type ResultadoTeste,
 } from "./logica";
 
@@ -78,6 +80,9 @@ export function AbaDiagnostico({
   const [teste, setTeste] = useState<Teste | null>(null);
   const [corrigindo, setCorrigindo] = useState(false);
   const [conserto, setConserto] = useState<{ ok: boolean; texto: string } | null>(null);
+  // O conserto achou produto faltando e nao criou (trava do par de lojas):
+  // o botao de confirmar aparece com o numero e o motivo.
+  const [pendencia, setPendencia] = useState<ReturnType<typeof pendenciaDoConserto>>(null);
 
   // Veio do "Conferir agora": testa uma vez e tira o pedido da URL, para
   // recarregar a pagina nao testar de novo. O estado so muda na resposta.
@@ -101,31 +106,35 @@ export function AbaDiagnostico({
     setTestando(true);
     setTeste(null);
     setConserto(null);
+    setPendencia(null);
     setTeste(await testarRota(rotaId));
     setTestando(false);
   }
 
-  async function corrigir() {
+  // criarFaltantes: o lojista confirmou criar o que a trava segurou.
+  async function corrigir(criarFaltantes = false) {
     setCorrigindo(true);
     setConserto(null);
     try {
       const r = await fetch("/api/checkout-routes/repair", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: rotaId }),
+        body: JSON.stringify({ id: rotaId, ...(criarFaltantes ? { criarFaltantes: true } : {}) }),
       });
-      const d = await r.json().catch(() => ({}));
+      const d = (await r.json().catch(() => ({}))) as RespostaConserto & { error?: string };
       if (!r.ok) {
         setConserto({
           ok: false,
           texto:
             r.status === 409
-              ? "O conserto automático já está mexendo nesta loja agora. Tente de novo em alguns minutos."
+              ? d.error || "O conserto automático já está mexendo nesta loja agora. Tente de novo em alguns minutos."
               : "Não deu para corrigir agora. Nada foi apagado; tente de novo em instantes.",
         });
         return;
       }
-      setConserto({ ok: true, texto: fraseDoConserto(d) });
+      const falta = pendenciaDoConserto(d);
+      setPendencia(falta);
+      setConserto({ ok: !falta, texto: fraseDoConserto(d) });
       setTeste(null);
       startTransition(() => router.refresh());
     } catch {
@@ -150,7 +159,7 @@ export function AbaDiagnostico({
             {testando ? "Testando…" : dado ? "Testar de novo" : "Testar agora"}
           </Button>
           {dado && testePedeConserto(dado) ? (
-            <Button variant="secondary" pending={corrigindo} onClick={corrigir}>
+            <Button variant="secondary" pending={corrigindo} onClick={() => corrigir()}>
               Corrigir agora
             </Button>
           ) : null}
@@ -204,10 +213,25 @@ export function AbaDiagnostico({
             </div>
           ) : null}
 
-          {conserto ? (
+          {conserto && !pendencia ? (
             <Callout tom={conserto.ok ? "ok" : "err"} titulo={conserto.ok ? "Rota corrigida" : "O conserto não terminou"}>
               {conserto.texto}
               {conserto.ok ? " Teste de novo para conferir." : ""}
+            </Callout>
+          ) : null}
+
+          {conserto && pendencia ? (
+            <Callout tom="warn" titulo="Falta confirmar">
+              <p>{conserto.texto}</p>
+              <p className="mt-1">
+                Confira se esta é mesmo a loja de checkout desta vitrine antes de criar: os produtos entram
+                publicados nela, com texto e imagem sem marca.
+              </p>
+              <div className="mt-2">
+                <Button variant="secondary" pending={corrigindo} onClick={() => corrigir(true)}>
+                  {pendencia.botao}
+                </Button>
+              </div>
             </Callout>
           ) : null}
         </div>
@@ -224,6 +248,13 @@ export function AbaDiagnostico({
               {ultimaChecagem.quando ? `Última: ${ultimaChecagem.quando}.` : ""}{" "}
               {!ultimaChecagem.ok && ultimaChecagem.mensagem ? ultimaChecagem.mensagem : ""}
             </span>
+            {!ultimaChecagem.ok && !dado ? (
+              // A checagem achou algo (ex.: produtos que faltam e ela nao criou
+              // sozinha). O resultado aparece em "Testar a rota", acima.
+              <Button variant="secondary" size="sm" pending={corrigindo} onClick={() => corrigir()}>
+                Corrigir agora
+              </Button>
+            ) : null}
           </div>
         ) : (
           <p className="text-dense text-t2">Ainda não rodou para esta rota. Teste agora para não esperar.</p>

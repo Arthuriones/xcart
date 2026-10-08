@@ -49,6 +49,11 @@ export interface GraphRoute {
   mode: string | null;
   publicToken: string;
   lastHeal: { at: string; ok: boolean; message?: string; mappedCount?: number } | null;
+  /**
+   * Ultimo reenvio do xcart-config.json ao tema da vitrine (settings.theme_sync,
+   * gravado por src/lib/checkout-routes/tema-vitrine.ts).
+   */
+  themeSync?: { at: string; estado: string; mensagem?: string } | null;
   sourceStoreId: string;
   rotationStrategy: "sticky" | "each_checkout";
   targets: GraphTarget[];
@@ -173,6 +178,7 @@ export const getRouteGraph = cache(async (): Promise<RouteGraph> => {
     // que existe sem o usuario pedir, entao o console mostra ele direto.
     const settings = (route.settings || {}) as {
       last_heal?: { at: string; ok: boolean; message?: string; mappedCount?: number };
+      theme_sync?: { at: string; estado: string; mensagem?: string };
     };
 
     return {
@@ -182,6 +188,13 @@ export const getRouteGraph = cache(async (): Promise<RouteGraph> => {
       mode: route.mode,
       publicToken: route.public_token,
       lastHeal: settings.last_heal ?? null,
+      themeSync: settings.theme_sync
+        ? {
+            at: settings.theme_sync.at,
+            estado: settings.theme_sync.estado,
+            ...(settings.theme_sync.mensagem ? { mensagem: settings.theme_sync.mensagem } : {}),
+          }
+        : null,
       sourceStoreId: route.source_store_id,
       rotationStrategy:
         (route.rotation as { strategy?: string } | null)?.strategy === "each_checkout"

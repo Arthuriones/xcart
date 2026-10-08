@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { sincronizarTemaDaRota } from "@/lib/checkout-routes/tema-vitrine";
 
 export const runtime = "nodejs";
 
@@ -41,5 +43,10 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
-  return NextResponse.json({ config: data });
+  // Pausar so valia na API: o tema da vitrine continuava roteando pelo
+  // config embutido. Reenvia (rota pausada vai sem destino; ver
+  // configParaOTema) e diz a tela se chegou.
+  const tema = await sincronizarTemaDaRota(createAdminClient(), data.id);
+
+  return NextResponse.json({ config: data, tema });
 }

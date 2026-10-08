@@ -7,9 +7,15 @@
  * de imagem, que gasta 1 credito por imagem; sem a flag o produto entra na
  * loja de checkout com o texto neutralizado e a foto original.
  *
+ * O conserto so CRIA produto na loja de checkout quando o par de lojas passa
+ * na trava (rota e loja ligadas, peso > 0, >= 70% da vitrine com par, ate 20
+ * produtos novos -- ver src/lib/checkout-routes/conserto-regras.ts). `--criar`
+ * e o "confirmo" do lojista: cria o que faltar mesmo barrado. Confira o par
+ * antes: foi assim que calcados entraram numa loja de checkout de bolsas.
+ *
  * Uso:
- *   npx tsx scripts/consertar-rota.ts <routeId> [--com-imagens]
- *   npx tsx scripts/consertar-rota.ts --todas [--com-imagens]
+ *   npm run op -- scripts/consertar-rota.ts <routeId> [--com-imagens] [--criar]
+ *   npm run op -- scripts/consertar-rota.ts --todas [--com-imagens]
  *
  * ATENCAO ao topo deste arquivo: "dotenv/config" precisa ser o PRIMEIRO
  * import e os demais precisam ser dinamicos. `import` hoista -- um
@@ -23,6 +29,7 @@ import { config } from "dotenv";
 config({ path: ".env.local", override: true });
 
 const comImagens = process.argv.includes("--com-imagens");
+const criar = process.argv.includes("--criar");
 const todas = process.argv.includes("--todas");
 const alvo = process.argv.slice(2).find((a) => !a.startsWith("--"));
 
@@ -62,12 +69,21 @@ async function main() {
   for (const [i, rota] of ids.entries()) {
     const prefixo = `[${i + 1}/${ids.length}] ${rota.name}`;
     try {
-      const r = await healRoute({ routeId: rota.id, neutralizeImages: comImagens });
+      // --criar so vale para UMA rota: "confirmar" o catalogo de todas de uma
+      // vez e exatamente o que a trava existe para impedir.
+      const r = await healRoute({
+        routeId: rota.id,
+        neutralizeImages: comImagens,
+        criarFaltantes: criar && !todas,
+      });
       ok += 1;
       console.log(
         `${prefixo}\n  ok=${r.ok}${r.noop ? " (nada a fazer)" : ""} ` +
           `criados=${r.createdProductCount} variantes=${r.createdVariantCount} ` +
-          `mapeados=${r.finalMappedCount} imagens=${r.imageQueueCount}` +
+          `mapeados=${r.finalMappedCount} imagens=${r.imageQueueCount} cobertura=${r.coveragePercent}%` +
+          (r.creationBlockedReason
+            ? `\n  NAO criou ${r.pendingProductCount} produto(s): ${r.creationBlockedReason} (use --criar para confirmar)`
+            : "") +
           (r.warnings.length ? `\n  avisos: ${r.warnings.slice(0, 3).join(" | ")}` : "")
       );
     } catch (e) {

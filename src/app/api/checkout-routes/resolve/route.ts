@@ -9,10 +9,7 @@ import {
   normalizeRotation,
   pickTarget,
 } from "@/lib/checkout-routes/rotation";
-import {
-  legacyTargetFromConfig,
-  loadRouteTargets,
-} from "@/lib/checkout-routes/targets";
+import { destinosParaRotear } from "@/lib/checkout-routes/targets";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { contarPedidos24h } from "@/lib/checkout-routes/pedidos-24h";
 import { hydrateTargetBySku } from "@/lib/checkout-routes/hidratar-por-sku";
@@ -71,16 +68,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Destinos do rodizio. Rota sem linha de destino (apagada a mao) cai no
-    // destino legado da propria rota em vez de derrubar o checkout.
-    let targets = await loadRouteTargets(supabase, config.id, { onlyEnabled: true });
-    if (targets.length === 0) {
-      const legacy = legacyTargetFromConfig(config);
-      if (legacy) targets = [legacy];
-    }
+    // Destinos do rodizio. Rota sem NENHUMA linha de destino (apagada a mao)
+    // cai no destino legado da propria rota em vez de derrubar o checkout;
+    // rota com todas as lojas pausadas nao roteia (ver destinosParaRotear).
+    const targets: RouteTarget[] = await destinosParaRotear(supabase, config);
     if (targets.length === 0) {
       return NextResponse.json(
-        { error: "Rota sem loja de checkout configurada." },
+        { error: "Rota sem loja de checkout ligada." },
         { status: 409, headers: corsHeaders }
       );
     }

@@ -18,14 +18,27 @@ export interface VarianteDoDestino {
   productId: string;
 }
 
-export function produtoNoDestino<T extends VarianteDoDestino>(
-  variantesDaVitrine: readonly { sku?: string | null }[],
-  porSku: ReadonlyMap<string, T>
+/**
+ * `achar` diz qual variante do checkout ja e par de uma variante da vitrine.
+ * Um Map por SKU serve para o caso simples; o conserto passa uma funcao que
+ * tambem enxerga o par adotado pelo variant_map (SKU trocado na vitrine).
+ */
+export function produtoNoDestino<
+  T extends VarianteDoDestino,
+  V extends { sku?: string | null } = { sku?: string | null },
+>(
+  variantesDaVitrine: readonly V[],
+  achar: ReadonlyMap<string, T> | ((variante: V) => T | null | undefined)
 ): T | null {
   for (const irma of variantesDaVitrine) {
-    const sku = (irma.sku || "").trim().toLowerCase();
-    if (!sku) continue;
-    const achada = porSku.get(sku);
+    let achada: T | null | undefined;
+    if (typeof achar === "function") {
+      achada = achar(irma);
+    } else {
+      const sku = (irma.sku || "").trim().toLowerCase();
+      if (!sku) continue;
+      achada = achar.get(sku);
+    }
     if (achada) return achada;
   }
   return null;

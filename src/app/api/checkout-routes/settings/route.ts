@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { sincronizarTemaDaRota } from "@/lib/checkout-routes/tema-vitrine";
 import { normalizarDominioDeDestino } from "@/lib/net/url-guard";
 
 export const runtime = "nodejs";
@@ -89,5 +91,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  return NextResponse.json({ config: data });
+  // Dominio/pais/locale do destino legado vao no config do tema.
+  const tema = await sincronizarTemaDaRota(createAdminClient(), data.id);
+  return NextResponse.json({ config: data, tema });
 }

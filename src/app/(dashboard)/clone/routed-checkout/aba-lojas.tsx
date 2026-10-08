@@ -33,6 +33,7 @@ import {
   mudancasDaDivisao,
   mudancasDaLista,
   rascunhoInicial,
+  temaFicouParaTras,
   textoDoLimite,
   type Estrategia,
 } from "./logica";
@@ -71,13 +72,18 @@ type Props = {
   origem: string;
 };
 
-async function patchAlvos(rotaId: string, corpo: object): Promise<void> {
+type Tema = { estado?: string } | undefined;
+
+/** Devolve como foi o reenvio automatico ao tema da vitrine. */
+async function patchAlvos(rotaId: string, corpo: object): Promise<Tema> {
   const r = await fetch(`/api/checkout-routes/${rotaId}/targets`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(corpo),
   });
   if (!r.ok) throw new Error("patch");
+  const d = (await r.json().catch(() => ({}))) as { tema?: Tema };
+  return d.tema;
 }
 
 /**
@@ -86,22 +92,29 @@ async function patchAlvos(rotaId: string, corpo: object): Promise<void> {
  * divisao" (antes cada tecla gravava: digitar 45 gravava 4 e redistribuia as
  * outras); e adicionar lojas.
  *
- * Mudou a divisao ou entrou loja: o comprador so ve depois que a configuracao
- * vai de novo ao tema -- o aviso com o botao aparece logo abaixo.
+ * Mudou a divisao, pausou ou entrou loja: o servidor reenvia a configuracao
+ * ao tema da vitrine sozinho. O aviso com o botao so aparece quando esse
+ * reenvio nao chegou (ver temaFicouParaTras).
  */
 export function AbaLojas(props: Props) {
   const [reenviar, setReenviar] = useState(false);
+  // Cada reenvio leva o config inteiro: o ultimo que chegou deixa o tema em
+  // dia, mesmo depois de um que falhou.
+  const aoMudar = (tema: Tema) => setReenviar(temaFicouParaTras(tema));
   // O editor remonta quando o servidor devolve outra divisao (depois de
   // salvar, pausar, tirar): o rascunho nasce do dado novo, sem efeito.
   const chave = `${props.estrategia}|${props.lojas.map((l) => `${l.id}:${l.enabled}:${l.sharePercent}:${l.dailyLimit ?? ""}`).join(",")}`;
 
   return (
     <div className="flex flex-col gap-4">
-      <EditorLojas key={chave} {...props} aoMudar={() => setReenviar(true)} />
+      <EditorLojas key={chave} {...props} aoMudar={aoMudar} />
 
       {reenviar ? (
         <Callout tom="warn" titulo="Falta reenviar ao tema da vitrine">
-          <p>A mudança está salva, mas o comprador só vê a nova divisão depois que a configuração chega ao tema.</p>
+          <p>
+            A mudança está salva, mas o xcart não conseguiu levar a configuração ao tema da vitrine sozinho. O
+            comprador só vê a mudança depois que ela chega ao tema.
+          </p>
           <div className="mt-2">
             <Instalador
               rotaId={props.rotaId}
@@ -118,7 +131,7 @@ export function AbaLojas(props: Props) {
         rotaId={props.rotaId}
         vitrineId={props.vitrineId}
         disponiveis={props.disponiveis}
-        aoMudar={() => setReenviar(true)}
+        aoMudar={aoMudar}
       />
     </div>
   );
@@ -130,7 +143,7 @@ function EditorLojas({
   estrategia: estrategiaSalva,
   lojas,
   aoMudar,
-}: Props & { aoMudar: () => void }) {
+}: Props & { aoMudar: (tema: Tema) => void }) {
   const router = useRouter();
   const [atualizando, startTransition] = useTransition();
   const [rascunho, setRascunho] = useState(() => rascunhoInicial(lojas.filter((l) => !l.legacy)));
@@ -166,12 +179,12 @@ function EditorLojas({
     setSalvando(true);
     setErroSalvar(null);
     try {
-      await patchAlvos(rotaId, {
+      const tema = await patchAlvos(rotaId, {
         ...(mudouEstrategia ? { rotation: { strategy: estrategia } } : {}),
         ...(mudancas.length > 0 ? { targets: mudancas } : {}),
       });
       toast.success("Divisão salva.");
-      aoMudar();
+      aoMudar(tema);
       atualizar();
     } catch {
       setErroSalvar("Não deu para salvar a divisão. Nada mudou; tente de novo.");
@@ -183,9 +196,9 @@ function EditorLojas({
   async function alternarLoja(l: LojaNaRota) {
     setOcupado(l.id);
     try {
-      await patchAlvos(rotaId, { targets: [{ id: l.id, weight: l.weight, enabled: !l.enabled }] });
+      const tema = await patchAlvos(rotaId, { targets: [{ id: l.id, weight: l.weight, enabled: !l.enabled }] });
       toast.success(l.enabled ? `${l.nome} pausada na rota.` : `${l.nome} voltou para a rota.`);
-      aoMudar();
+      aoMudar(tema);
       atualizar();
     } catch {
       toast.error(`Não deu para ${l.enabled ? "pausar" : "retomar"} ${l.nome}. Nada mudou; tente de novo.`);
@@ -198,8 +211,9 @@ function EditorLojas({
     if (!tirar) return;
     const r = await fetch(`/api/checkout-routes/${rotaId}/targets?targetId=${tirar.id}`, { method: "DELETE" });
     if (!r.ok) throw new Error("delete");
+    const d = (await r.json().catch(() => ({}))) as { tema?: Tema };
     toast.success(`${tirar.nome} saiu da rota.`);
-    aoMudar();
+    aoMudar(d.tema);
     atualizar();
   }
 
@@ -384,7 +398,7 @@ function EditorLojas({
             </p>
           ) : null}
           <p className="text-label text-t2">
-            A nova divisão só chega ao comprador depois de reenviar a configuração ao tema da vitrine.
+            Ao salvar, o xcart reenvia a nova divisão ao tema da vitrine.
           </p>
         </div>
       ) : null}
@@ -428,7 +442,7 @@ function AdicionarLojas({
   rotaId: string;
   vitrineId: string;
   disponiveis: { id: string; nome: string; dominio: string }[];
-  aoMudar: () => void;
+  aoMudar: (tema: Tema) => void;
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -440,6 +454,9 @@ function AdicionarLojas({
     if (marcadas.length === 0 || progresso) return;
     const fila = disponiveis.filter((d) => marcadas.includes(d.id));
     const saida: Resultado[] = [];
+    // So conta o reenvio ao tema da ultima loja que entrou: cada um leva o
+    // config inteiro da rota.
+    let ultimoTema: Tema | null = null;
     setResultados([]);
     for (const [i, loja] of fila.entries()) {
       setProgresso({ feito: i, total: fila.length, nome: loja.nome });
@@ -454,11 +471,17 @@ function AdicionarLojas({
           coveragePercent?: number;
           error?: string;
           code?: string;
+          tema?: Tema;
         };
+        if (r.ok) ultimoTema = d.tema;
         if (!r.ok && d.code === "limite_do_plano") {
           // Limite de lojas do plano: as proximas da fila tambem nao cabem.
           saida.push({ nome: loja.nome, ok: false, entrou: false, texto: `não entrou. ${d.error ?? ""}`.trim() });
           break;
+        } else if (!r.ok && (r.status === 409 || r.status === 422) && d.error) {
+          // Recusa com motivo: vitrine de outra rota, ou catalogo que nao e
+          // copia desta vitrine.
+          saida.push({ nome: loja.nome, ok: false, entrou: false, texto: `não entrou: ${d.error}` });
         } else if (!r.ok) {
           saida.push({ nome: loja.nome, ok: false, entrou: false, texto: "não entrou: a Shopify não respondeu ou nenhum SKU casou." });
         } else if (d.safeToEnable === false) {
@@ -478,7 +501,7 @@ function AdicionarLojas({
     setProgresso(null);
     setMarcadas([]);
     setResultados(saida);
-    if (saida.some((s) => s.entrou)) aoMudar();
+    if (saida.some((s) => s.entrou) && ultimoTema !== null) aoMudar(ultimoTema);
     startTransition(() => router.refresh());
   }
 
@@ -489,7 +512,10 @@ function AdicionarLojas({
       acoes={<BotaoConectar variante="secondary">Conectar outra loja</BotaoConectar>}
     >
       {disponiveis.length === 0 ? (
-        <p className="text-dense text-t2">Todas as suas lojas já estão nesta rota ou são a vitrine dela.</p>
+        <p className="text-dense text-t2">
+          Todas as suas lojas já estão nesta ou em outra rota. Uma loja de checkout nova precisa ser conectada e
+          receber os produtos da vitrine antes de entrar.
+        </p>
       ) : (
         <>
           <ul className="flex flex-col gap-1.5" aria-label="Lojas que podem entrar na rota">

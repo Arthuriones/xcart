@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { usuarioPossuiLojas } from "@/lib/stores/authorize";
 import { conferirRoteamento, corpoDoBloqueio } from "@/lib/billing/limites";
+import { garantirDestinoPrimario } from "@/lib/checkout-routes/destino-primario";
 
 async function getUserAndClient() {
   const supabase = await createClient();
@@ -119,7 +120,8 @@ export async function POST(request: NextRequest) {
   // Pelo service role: a sessao nao tem mais INSERT nesta tabela (migration
   // 064), senao a rota nascia pela API do Supabase sem passar pelo limite. O
   // dono vem da sessao e a posse das lojas foi conferida acima.
-  const { data, error } = await createAdminClient()
+  const admin = createAdminClient();
+  const { data, error } = await admin
     .from("routed_checkout_configs")
     .insert({
       user_id: user.id,
@@ -145,6 +147,19 @@ export async function POST(request: NextRequest) {
       { error: "Nao foi possivel salvar o checkout roteado." },
       { status: 500 }
     );
+  }
+
+  // A rota nasce com a linha do destino, como a do connect-by-sku. Sem ela, a
+  // loja de checkout ficava como destino "legacy:" -- fora do conserto
+  // automatico, sem pausar nem pesar -- e sumia da rota no primeiro
+  // "Adicionar loja" (ver destino-primario.ts).
+  const destino = await garantirDestinoPrimario(
+    admin,
+    data.id,
+    typeof data.settings?.generatedBy === "string" ? data.settings.generatedBy : "rota"
+  );
+  if (destino.erro) {
+    console.warn("[checkout-routes] rota sem linha de destino:", data.id, destino.erro);
   }
 
   return NextResponse.json({ config: data });

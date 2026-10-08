@@ -431,7 +431,12 @@ export function Assistente({ lojas, origem }: { lojas: Loja[]; origem: string })
 
         // Sobrou produto sem par: cria o que falta agora (o mesmo conserto do
         // "Corrigir" da rota), em vez de deixar a cobertura baixa.
-        if ((data.unmatchedCount ?? 0) > 0 && data.route?.id) {
+        //
+        // So com o par de lojas aprovado pelo diagnostico. Rota que nasceu
+        // pausada (cobertura < 90% ou SKU repetido) e justamente o caso da loja
+        // errada: completar ali despejava a vitrine inteira numa loja de
+        // checkout de outro nicho. O lojista ve o aviso e decide no Diagnostico.
+        if ((data.unmatchedCount ?? 0) > 0 && data.route?.id && data.safeToEnable === true) {
           const completado = await completarDestino(data.route.id);
           if (completado) {
             diag = { ...diag, ...completado };
@@ -474,10 +479,13 @@ export function Assistente({ lojas, origem }: { lojas: Loja[]; origem: string })
   async function completarDestino(id: string) {
     setCompletando(true);
     try {
+      // criarFaltantes: o lojista escolheu este par no assistente e o
+      // diagnostico aprovou (so chega aqui com safeToEnable). Sem isto, mais
+      // de 20 produtos faltando esperariam confirmacao no Diagnostico.
       const res = await fetch("/api/checkout-routes/repair", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
+        body: JSON.stringify({ id, criarFaltantes: true }),
       });
       const reparo = await res.json().catch(() => ({}));
       if (!res.ok) return null;
