@@ -238,8 +238,13 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // A tela manda o id na querystring (?id=); o corpo fica como reserva. So o
+  // corpo era lido, e todo "Apagar rota" respondia 400 -- ninguem conseguia
+  // apagar rota pela tela.
   const body = await request.json().catch(() => ({}));
-  const id = typeof body.id === "string" ? body.id : "";
+  const id =
+    request.nextUrl.searchParams.get("id")?.trim() ||
+    (typeof body.id === "string" ? body.id : "");
 
   if (!id) {
     return NextResponse.json(
