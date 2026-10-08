@@ -62,7 +62,10 @@ export async function POST(
     });
   } catch (error) {
     if (error instanceof TemaError) {
-      return NextResponse.json({ error: error.message }, { status: error.status === 502 ? 500 : error.status });
+      return NextResponse.json(
+        { error: error.message, ...(error.codigo ? { code: error.codigo } : {}) },
+        { status: error.status === 502 ? 500 : error.status }
+      );
     }
     const message = error instanceof Error ? error.message : "Falha ao atualizar tema.";
     return NextResponse.json({ error: message }, { status: 500 });

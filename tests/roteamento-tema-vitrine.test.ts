@@ -7,7 +7,7 @@ import {
   scriptDoLoader,
   trocarScriptNoTema,
 } from "@/lib/checkout-routes/tema-script";
-import { destinosParaRotear } from "@/lib/checkout-routes/targets";
+import { destinosParaRotear, RouteTargetsLoadError } from "@/lib/checkout-routes/targets";
 import type { EmbedConfig } from "@/lib/checkout-routes/embed-config";
 
 // ============================================================================
@@ -131,12 +131,12 @@ describe("o que vai no asset", () => {
 
 // ---------------------------------------------------------------------------
 
-function supabaseCom(linhas: Record<string, unknown>[]): SupabaseClient {
+function supabaseCom(linhas: Record<string, unknown>[] | null, erro: { message: string } | null = null): SupabaseClient {
   const api = {
     select: () => api,
     eq: () => api,
     order: () => api,
-    then: (ok: (v: unknown) => unknown) => Promise.resolve({ data: linhas, error: null }).then(ok),
+    then: (ok: (v: unknown) => unknown) => Promise.resolve({ data: linhas, error: erro }).then(ok),
   };
   return { from: () => api } as unknown as SupabaseClient;
 }
@@ -177,5 +177,13 @@ describe("destinos que recebem comprador (resolve e tema)", () => {
   it("so as ligadas", async () => {
     const r = await destinosParaRotear(supabaseCom([linha("a", false), linha("b", true)]), ROTA);
     expect(r.map((t) => t.id)).toEqual(["b"]);
+  });
+});
+
+describe("erro do banco ao ler os destinos", () => {
+  it("lanca em vez de cair no legado (mapa velho do primario, sem rodizio)", async () => {
+    await expect(destinosParaRotear(supabaseCom(null, { message: "timeout" }), ROTA)).rejects.toBeInstanceOf(
+      RouteTargetsLoadError
+    );
   });
 });

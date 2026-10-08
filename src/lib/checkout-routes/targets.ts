@@ -50,12 +50,28 @@ export function toRouteTarget(raw: RawRouteTarget): RouteTarget {
 }
 
 /**
+ * A leitura dos destinos falhou (banco fora, timeout). Diferente de "a rota
+ * nao tem destino": quem pega isto NAO pode cair no destino legado.
+ */
+export class RouteTargetsLoadError extends Error {
+  constructor(message: string) {
+    super(`Falha ao ler as lojas de checkout da rota: ${message}`);
+    this.name = "RouteTargetsLoadError";
+  }
+}
+
+/**
  * Destinos de uma rota, ja ordenados e com o dominio resolvido.
  *
  * Rota criada antes da migracao 025 tem os destinos backfillados, entao aqui
  * sempre volta pelo menos um. Se voltar vazio (linha de destino apagada a mao,
  * loja de checkout removida), o chamador cai no destino legado da propria rota
  * -- e melhor rotear para o destino antigo do que derrubar o checkout.
+ *
+ * Erro do banco LANCA (RouteTargetsLoadError). Antes voltava [] -- igual a
+ * "rota sem destino" --, e um soluco do Supabase fazia o resolve rotear pelo
+ * legado (mapa velho do primario, sem rodizio, talvez a loja que o lojista
+ * pausou) e o reenvio automatico gravar esse config no tema da vitrine.
  */
 export async function loadRouteTargets(
   supabase: SupabaseClient,
@@ -73,8 +89,8 @@ export async function loadRouteTargets(
     .order("position", { ascending: true })
     .order("id", { ascending: true });
 
-  if (error || !data) return [];
-  return (data as unknown as RawRouteTarget[]).map(toRouteTarget);
+  if (error) throw new RouteTargetsLoadError(error.message);
+  return ((data || []) as unknown as RawRouteTarget[]).map(toRouteTarget);
 }
 
 /**
@@ -86,6 +102,9 @@ export async function loadRouteTargets(
  * de pagamento caiu) fazia o resolve e o tema voltarem a mandar o comprador
  * para a mesma loja, pelo legado. Rota com destinos e todos pausados nao
  * roteia, que e o que "pausar" diz na tela.
+ *
+ * So cai no legado depois de uma leitura que deu certo e veio vazia: erro do
+ * banco sobe como RouteTargetsLoadError (ver loadRouteTargets).
  */
 export async function destinosParaRotear(
   supabase: SupabaseClient,

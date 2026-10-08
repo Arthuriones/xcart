@@ -56,9 +56,12 @@ export class TemaError extends Error {
   status: number;
   /** A falha ja foi gravada em theme_sync (com o hash). */
   registrado = false;
-  constructor(message: string, status = 500) {
+  /** Motivo que a tela trata pelo nome (ex.: "rota_pausada"). */
+  codigo?: string;
+  constructor(message: string, status = 500, codigo?: string) {
     super(message);
     this.status = status;
+    this.codigo = codigo;
   }
 }
 
@@ -178,7 +181,34 @@ export async function publicarConfigNoTema(
   const { data: config, error } = await query.maybeSingle();
   if (error || !config) throw new TemaError("Rota não encontrada.", 404);
 
-  const embed = await buildEmbedConfig(admin, config);
+  // Instalar com a rota pausada grava o config sem destino: o loader cai na
+  // API, a API recusa rota pausada e TODO clique de checkout da vitrine vira
+  // "Erro ao carregar checkout". O assistente oferecia "Instalar" logo abaixo
+  // de "rota criada pausada" -- e respondia "instalado" com as contagens do
+  // mapa cheio. Recusa: ligue a rota primeiro. O reenvio automatico continua
+  // valendo para rota pausada, porque ali o script ja esta no tema e quem
+  // pausou quer mesmo parar de rotear.
+  if (opcoes.instalar && config.enabled === false) {
+    throw new TemaError(
+      "A rota está pausada. Com ela pausada, o script trava o checkout da vitrine. Ligue a rota e instale de novo.",
+      409,
+      "rota_pausada"
+    );
+  }
+
+  let embed: EmbedConfig;
+  try {
+    embed = await buildEmbedConfig(admin, config);
+  } catch (erro) {
+    // Banco fora na leitura dos destinos: nao escreve nada no tema. Montar o
+    // config assim (sem as linhas de destino, caindo no legado) gravaria na
+    // vitrine o mapa velho do primario, sem rodizio. Sem hash: a proxima
+    // chamada tenta de novo.
+    throw new TemaError(
+      erro instanceof Error ? erro.message : "Falha ao ler as lojas de checkout da rota.",
+      503
+    );
+  }
   if (opcoes.instalar && embed.targets.length === 0) {
     throw new TemaError("Esta rota nao tem loja de checkout com dominio configurado.", 409);
   }

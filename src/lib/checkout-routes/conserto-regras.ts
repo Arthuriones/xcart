@@ -59,6 +59,120 @@ export function parPeloMapaAntigo(entrada: {
 }
 
 // ---------------------------------------------------------------------------
+// Tirar do mapa o par morto ou errado
+// ---------------------------------------------------------------------------
+
+/**
+ * O mapa gravado depois do conserto, sem os pares que levariam o comprador
+ * ao lugar errado.
+ *
+ * O conserto montava `{ ...mapaAntigo, ...pares desta passada }`: so
+ * acrescentava. E o loader e o resolve leem o variant_map ANTES do sku_map.
+ * Quando a trava de criacao segura o produto, ou quando o par antigo e
+ * recusado (outra variante ja tem aquele par, ou o SKU dele e de outro
+ * produto da vitrine), a entrada velha ficava para sempre:
+ *  - variante apagada no checkout -> /cart/<id morto>:1, carrinho vazio;
+ *  - variante de OUTRO produto -> o comprador da bolsa B paga pela bolsa A.
+ * Sem a entrada, a linha cai no sku_map ou na API (hidratacao por SKU, ou o
+ * aviso de erro), que e melhor que entregar o produto trocado.
+ *
+ * Tira:
+ *  - de qualquer chave, o par cujo alvo nao existe mais no checkout -- so com
+ *    `checkoutCompleto` (indice paginado ate o fim e sem produto cortado nas
+ *    50 variantes da consulta): com o indice incompleto, "nao achei" nao
+ *    prova que morreu;
+ *  - das variantes vivas da vitrine que ficaram SEM par nesta passada, o par
+ *    antigo (id numerico, gid e SKU) cujo alvo ja e de outra variante ou
+ *    carrega o SKU de outra variante da vitrine.
+ * Variante que nao aparece no products.json (produto despublicado) so perde
+ * o par se o alvo morreu.
+ */
+export function podarMapas(e: {
+  skuMap: Readonly<Record<string, string | number>>;
+  variantMap: Readonly<Record<string, string | number>>;
+  /**
+   * Os pares desta passada, que entram por cima do que sobrar. Chave antiga
+   * que volta com par novo foi trocada, nao tirada: nao conta em `removidos`.
+   */
+  novos: {
+    skuMap: Readonly<Record<string, string>>;
+    variantMap: Readonly<Record<string, string>>;
+  };
+  /** Variantes vivas da vitrine que terminaram a passada sem par. */
+  semPar: readonly { id: number | string; sku: string | null | undefined }[];
+  /** Variantes do checkout, por id numerico, com o SKU delas. */
+  checkoutPorId: ReadonlyMap<string, { sku?: string | null }>;
+  checkoutCompleto: boolean;
+  /** Variantes do checkout que ja sao par de alguem nesta passada. */
+  reivindicadas: ReadonlySet<string>;
+  /** SKUs (minusculos) de todas as variantes da vitrine. */
+  skusDaVitrine: ReadonlySet<string>;
+}): {
+  /** O mapa final: o antigo podado, com os pares novos por cima. */
+  skuMap: Record<string, string | number>;
+  variantMap: Record<string, string | number>;
+  /** Pares tirados sem substituto (variante da vitrine ou SKU). */
+  removidos: number;
+} {
+  const morto = (alvo: string | null) =>
+    !!alvo && e.checkoutCompleto && !e.checkoutPorId.has(alvo);
+  // Alvo vivo, mas de outra variante (o morto e com `morto`).
+  const deOutro = (alvo: string | null) => {
+    if (!alvo) return false;
+    const variante = e.checkoutPorId.get(alvo);
+    if (!variante) return false;
+    if (e.reivindicadas.has(alvo)) return true;
+    const sku = (variante.sku || "").trim().toLowerCase();
+    return !!sku && e.skusDaVitrine.has(sku);
+  };
+
+  const skuMap: Record<string, string | number> = {};
+  const variantMap: Record<string, string | number> = {};
+  const removidos = new Set<string>();
+
+  // Variantes sem par: chaves numerica e gid, e o SKU (sem caixa) -> id,
+  // para contar a variante uma vez so quando sai pelos dois mapas.
+  const idsSemPar = new Set<string>();
+  const skusSemPar = new Map<string, string>();
+  for (const v of e.semPar) {
+    const id = idNumerico(v.id);
+    if (id) idsSemPar.add(id);
+    const sku = (v.sku || "").trim().toLowerCase();
+    if (sku && id) skusSemPar.set(sku, id);
+  }
+
+  // O sku_map guarda a chave com a caixa da vitrine e o loader compara sem
+  // caixa: "ABC" velho e "abc" novo sao o mesmo par.
+  const skusNovos = new Set(
+    Object.keys(e.novos.skuMap).map((k) => k.trim().toLowerCase())
+  );
+
+  for (const [chave, valor] of Object.entries(e.variantMap)) {
+    const alvo = idNumerico(valor);
+    const origem = idNumerico(chave);
+    const tirar =
+      morto(alvo) || (!!origem && idsSemPar.has(origem) && deOutro(alvo));
+    if (!tirar) variantMap[chave] = valor;
+    else if (!(chave in e.novos.variantMap)) removidos.add(`v:${origem ?? chave}`);
+  }
+
+  for (const [chave, valor] of Object.entries(e.skuMap)) {
+    const alvo = idNumerico(valor);
+    const sku = chave.trim().toLowerCase();
+    const dono = skusSemPar.get(sku);
+    const tirar = morto(alvo) || (!!dono && deOutro(alvo));
+    if (!tirar) skuMap[chave] = valor;
+    else if (!skusNovos.has(sku)) removidos.add(dono ? `v:${dono}` : `s:${sku}`);
+  }
+
+  return {
+    skuMap: { ...skuMap, ...e.novos.skuMap },
+    variantMap: { ...variantMap, ...e.novos.variantMap },
+    removidos: removidos.size,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Quando o conserto pode CRIAR produto na loja de checkout
 // ---------------------------------------------------------------------------
 
@@ -138,19 +252,24 @@ export function decidirCriacao(e: {
   return { criarProdutos: true, estenderProdutos: true, motivo: null };
 }
 
-/** A frase do card quando sobrou produto sem criar. */
+/**
+ * A frase do card quando sobrou produto sem criar. `loja` diz qual: com
+ * rodizio, cada loja de checkout tem a sua pendencia.
+ */
 export function mensagemDeCriacaoPendente(
   produtos: number,
   variantes: number,
-  motivo: string
+  motivo: string,
+  loja?: string | null
 ): string {
+  const onde = loja ? `na loja de checkout ${loja}` : "na loja de checkout";
   const oQue =
     produtos > 0
       ? produtos === 1
-        ? "1 produto da vitrine falta na loja de checkout e não foi criado sozinho"
-        : `${produtos} produtos da vitrine faltam na loja de checkout e não foram criados sozinhos`
+        ? `1 produto da vitrine falta ${onde} e não foi criado sozinho`
+        : `${produtos} produtos da vitrine faltam ${onde} e não foram criados sozinhos`
       : variantes === 1
-        ? "1 variante da vitrine falta na loja de checkout e não foi criada sozinha"
-        : `${variantes} variantes da vitrine faltam na loja de checkout e não foram criadas sozinhas`;
+        ? `1 variante da vitrine falta ${onde} e não foi criada sozinha`
+        : `${variantes} variantes da vitrine faltam ${onde} e não foram criadas sozinhas`;
   return `${oQue} (${motivo}). Confira e confirme em Diagnóstico.`;
 }

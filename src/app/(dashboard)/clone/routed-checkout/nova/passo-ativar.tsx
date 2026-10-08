@@ -167,7 +167,14 @@ export function PassoAtivar({
         titulo="Instalar na vitrine"
         descricao="Sem o script no tema da vitrine, a rota não leva ninguém ao checkout. O xcart instala sozinho."
       >
-        {rota.id ? (
+        {pausada ? (
+          // Instalar com a rota pausada trava o checkout da vitrine (o
+          // servidor recusa). O botao volta quando a rota liga.
+          <p className="text-dense text-t1 text-pretty">
+            Ligue a rota antes de instalar. Com ela pausada, o script trava o checkout da vitrine em vez de levar o
+            comprador à loja de checkout.
+          </p>
+        ) : rota.id ? (
           <Instalador rotaId={rota.id} token={rota.token} origem={origem} />
         ) : (
           <CodigoManual codigo={codigoDoScript(origem, rota.token)} />

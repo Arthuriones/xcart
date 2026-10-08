@@ -15,6 +15,7 @@ import {
   decidirCriacao,
   mensagemDeCriacaoPendente,
   parPeloMapaAntigo,
+  podarMapas,
 } from "@/lib/checkout-routes/conserto-regras";
 import {
   sincronizarTemaDaRota,
@@ -68,7 +69,15 @@ function chaveDeOpcoes(productId: string, valores: (string | null | undefined)[]
   );
 }
 
+/** A consulta de produtos traz no maximo isto de variantes por produto. */
+const VARIANTES_POR_PRODUTO_NA_CONSULTA = 50;
+
 async function getAllTargetVariants(creds: ShopifyCredentials) {
+  // false = o indice pode nao ter toda variante do checkout (paginacao parou
+  // no teto, ou algum produto bateu nas 50 variantes da consulta). Ai "nao
+  // achei pelo id" nao prova que a variante foi apagada, e o conserto nao
+  // tira par do mapa por isso (ver podarMapas).
+  let completo = true;
   const bySku = new Map<string, TargetVariantInfo>();
   // Segundo indice, pela combinacao de opcoes. Aqui entra TODA variante,
   // inclusive a sem SKU -- que e justamente a que o indice por SKU perdia.
@@ -84,7 +93,9 @@ async function getAllTargetVariants(creds: ShopifyCredentials) {
       const options = (product.options || []).map(
         (option: { name: string }) => option.name
       );
-      for (const variant of product.variants?.nodes || []) {
+      const variantes = product.variants?.nodes || [];
+      if (variantes.length >= VARIANTES_POR_PRODUTO_NA_CONSULTA) completo = false;
+      for (const variant of variantes) {
         const info: TargetVariantInfo = {
           variantId: numericId(variant.id) as string,
           productId: product.id,
@@ -112,15 +123,24 @@ async function getAllTargetVariants(creds: ShopifyCredentials) {
       }
     }
     const pageInfo = data?.products?.pageInfo;
-    if (!pageInfo?.hasNextPage || !pageInfo?.endCursor) break;
+    if (!pageInfo?.hasNextPage || !pageInfo?.endCursor) {
+      return { bySku, byOpcoes, byId, completo };
+    }
     after = pageInfo.endCursor;
   }
-  return { bySku, byOpcoes, byId };
+  // Saiu pelo teto de paginas: sobrou produto sem ler.
+  return { bySku, byOpcoes, byId, completo: false };
 }
 
 export interface HealRouteResult {
   /** Destino consertado. null = rota legada, sem linha de destino. */
   targetId?: string | null;
+  /**
+   * A loja de checkout deste resultado, para a tela dizer EM QUAL loja falta
+   * produto -- com rodizio, o "Criar N produtos" vale para uma loja so.
+   */
+  targetStoreName?: string | null;
+  targetShopDomain?: string | null;
   ok: true;
   routeId: string;
   stampedSkuCount: number;
@@ -129,6 +149,16 @@ export interface HealRouteResult {
   extendedCount: number;
   /** Variantes que ja existiam no destino e so entraram no mapa. */
   adoptedVariantCount: number;
+  /**
+   * Pares tirados do mapa sem substituto: alvo apagado no checkout, ou alvo
+   * que e de outra variante (ver podarMapas).
+   */
+  removedPairCount: number;
+  /**
+   * Variantes sem par porque o produto do checkout onde entrariam mistura
+   * produtos da vitrine: o conserto nao acrescenta nada nele.
+   */
+  mixedBlockedVariantCount: number;
   createdProductCount: number;
   createdVariantCount: number;
   imageQueueCount: number;
@@ -303,10 +333,15 @@ async function executarConserto(
   if (input.targetId) targetQuery = targetQuery.eq("id", input.targetId);
   else targetQuery = targetQuery.eq("enabled", true);
 
-  const { data: targetRows } = await targetQuery
+  const { data: targetRows, error: targetsError } = await targetQuery
     .order("position", { ascending: true })
     .order("id", { ascending: true })
     .limit(1);
+  // Erro do banco NAO e "rota sem destino": cair nas colunas da rota
+  // consertaria (e criaria produto) no destino legado.
+  if (targetsError) {
+    throw new HealRouteError("Falha ao ler as lojas de checkout da rota.", 503);
+  }
 
   const targetRow = targetRows?.[0] || null;
   if (input.targetId && !targetRow) {
@@ -335,7 +370,7 @@ async function executarConserto(
   const { data: stores } = await admin
     .from("stores")
     .select(
-      "id, shop_domain, client_id, client_secret, access_token, niche, target_language, uninstalled_at"
+      "id, name, shop_domain, client_id, client_secret, access_token, niche, target_language, uninstalled_at"
     )
     .eq("user_id", userId)
     .in("id", [config.source_store_id, targetStoreId]);
@@ -391,7 +426,12 @@ async function executarConserto(
   }
 
   const [
-    { bySku: targetIndex, byOpcoes: targetPorOpcoes, byId: targetPorId },
+    {
+      bySku: targetIndex,
+      byOpcoes: targetPorOpcoes,
+      byId: targetPorId,
+      completo: checkoutCompleto,
+    },
     { products: sourceProducts },
   ] =
     await Promise.all([
@@ -513,24 +553,32 @@ async function executarConserto(
   // variante que continua viva no checkout -- e por ela que o comprador ja
   // estava sendo roteado. Adota em vez de criar uma duplicata (ver
   // parPeloMapaAntigo).
+  //
+  // Da mais antiga (menor id) para a mais nova: quando duas variantes da
+  // vitrine apontam no mapa para a mesma variante do checkout (copia de
+  // produto), fica com ela a original -- a mesma regra do SKU repetido. Na
+  // ordem do products.json (mais novo primeiro) a copia levava, e o par da
+  // original saia do mapa.
   let adotadasPeloMapa = 0;
-  for (const product of sourceProducts) {
-    for (const variant of product.variants) {
-      if (!variant.sku || parDaVariante.has(variant.id)) continue;
-      const alvo = parPeloMapaAntigo({
-        varianteId: variant.id,
-        mapaAntigo: oldVariantMap,
-        checkoutPorId: targetPorId,
-        reivindicadas,
-        skusDaVitrine,
-      });
-      const info = alvo ? targetPorId.get(alvo) : undefined;
-      if (!alvo || !info) continue;
-      recordCorrect(variant.sku, variant.id, alvo);
-      parDaVariante.set(variant.id, info);
-      reivindicadas.add(alvo);
-      adotadasPeloMapa += 1;
-    }
+  const candidatasPeloMapa = sourceProducts
+    .flatMap((product) => product.variants)
+    .filter((variant) => variant.sku && !parDaVariante.has(variant.id))
+    .sort((a, b) => Number(a.id) - Number(b.id));
+  for (const variant of candidatasPeloMapa) {
+    if (!variant.sku) continue;
+    const alvo = parPeloMapaAntigo({
+      varianteId: variant.id,
+      mapaAntigo: oldVariantMap,
+      checkoutPorId: targetPorId,
+      reivindicadas,
+      skusDaVitrine,
+    });
+    const info = alvo ? targetPorId.get(alvo) : undefined;
+    if (!alvo || !info) continue;
+    recordCorrect(variant.sku, variant.id, alvo);
+    parDaVariante.set(variant.id, info);
+    reivindicadas.add(alvo);
+    adotadasPeloMapa += 1;
   }
 
   const missingByHandle = new Map<string, PublicShopifyProduct>();
@@ -615,6 +663,17 @@ async function executarConserto(
     }
   }
   const misturados = [...origensPorProduto.values()].filter((g) => g.handles.size > 1);
+  // O conserto nao acrescenta variante nem adota par num produto assim: a
+  // variante nova de um produto da vitrine entraria com o titulo e a foto do
+  // outro -- a reclamacao 3 se repetindo a cada cor nova, sem ninguem pedir.
+  // Fica sem par (o comprador ve o erro de roteamento) ate o lojista separar.
+  const produtosMisturados = new Set(
+    [...origensPorProduto.entries()]
+      .filter(([, grupo]) => grupo.handles.size > 1)
+      .map(([productId]) => productId)
+  );
+  let bloqueadasPorMistura = 0;
+  const handlesBloqueados: string[] = [];
   for (const grupo of misturados.slice(0, 3)) {
     warnings.push(
       `O produto "${grupo.titulo}" da loja de checkout recebe variantes de ${grupo.handles.size} produtos da vitrine (${[...grupo.handles].slice(0, 4).join(", ")}): o comprador de um paga pelo outro. Separe-os na loja de checkout.`
@@ -629,6 +688,12 @@ async function executarConserto(
     // produto-no-destino.ts: o "xc-" do carimbo casava todo produto com todo).
     const existingTarget: TargetVariantInfo | null =
       produtoDoFaltante.get(handle) ?? null;
+
+    if (existingTarget && produtosMisturados.has(existingTarget.productId)) {
+      bloqueadasPorMistura += items.length;
+      handlesBloqueados.push(handle);
+      continue;
+    }
 
     if (existingTarget) {
       // Produto ja existe no destino: so faltam variantes.
@@ -839,6 +904,14 @@ async function executarConserto(
     }
   }
 
+  if (bloqueadasPorMistura > 0) {
+    warnings.push(
+      `${bloqueadasPorMistura === 1 ? "1 variante" : `${bloqueadasPorMistura} variantes`} de ${handlesBloqueados.slice(0, 4).join(", ")} ${bloqueadasPorMistura === 1 ? "ficou" : "ficaram"} sem par: o produto da loja de checkout onde ${bloqueadasPorMistura === 1 ? "ela entraria" : "elas entrariam"} mistura produtos da vitrine, e o xcart não acrescenta nada nele até ser separado.`
+    );
+  }
+
+  const nomeDaLoja =
+    (targetStore as { name?: string | null }).name || targetStore.shop_domain;
   const creationBlockedReason =
     pendingVariantCount > 0 ? decisao.motivo : null;
   if (creationBlockedReason) {
@@ -847,16 +920,34 @@ async function executarConserto(
       mensagemDeCriacaoPendente(
         pendingProductCount,
         pendingVariantCount,
-        creationBlockedReason
+        creationBlockedReason,
+        nomeDaLoja
       )
     );
   }
 
-  const finalSkuMap = { ...oldSkuMap, ...correctSkuMap };
-  const finalVariantMap = {
-    ...(oldMaps.variantMap as Record<string, string | number>),
-    ...correctVariantMap,
-  };
+  // O mapa antigo entra podado: par com alvo apagado no checkout, ou com
+  // alvo que e de outra variante, sai (ver podarMapas). So acrescentar
+  // deixava o comprador indo para /cart/<id morto> ou para o produto errado
+  // sempre que a trava segurava a criacao.
+  const variantesSemPar = sourceProducts.flatMap((product) =>
+    product.variants
+      .filter((variant) => !(String(variant.id) in correctVariantMap))
+      .map((variant) => ({ id: variant.id, sku: variant.sku }))
+  );
+  const mapaFinal = podarMapas({
+    skuMap: oldSkuMap,
+    variantMap: oldVariantMap,
+    novos: { skuMap: correctSkuMap, variantMap: correctVariantMap },
+    semPar: variantesSemPar,
+    checkoutPorId: targetPorId,
+    checkoutCompleto,
+    reivindicadas,
+    skusDaVitrine,
+  });
+  const finalSkuMap = mapaFinal.skuMap;
+  const finalVariantMap = mapaFinal.variantMap;
+  const removedPairCount = mapaFinal.removidos;
 
   const agora = new Date().toISOString();
 
@@ -913,6 +1004,7 @@ async function executarConserto(
     fixedWrongCount > 0 ||
     extendedCount > 0 ||
     adotadasCount > 0 ||
+    removedPairCount > 0 ||
     createdProductCount > 0;
 
   // O mapa mudou no banco; o tema da vitrine guarda uma copia dele
@@ -925,11 +1017,15 @@ async function executarConserto(
     ok: true,
     routeId: config.id,
     targetId: targetRow?.id ?? null,
+    targetStoreName: (targetStore as { name?: string | null }).name ?? null,
+    targetShopDomain: targetStore.shop_domain,
     stampedSkuCount: carimbo.carimbadas,
     dedupedSkuCount: carimbo.desduplicadas,
     fixedWrongCount,
     extendedCount,
     adoptedVariantCount: adotadasCount,
+    removedPairCount,
+    mixedBlockedVariantCount: bloqueadasPorMistura,
     createdProductCount,
     createdVariantCount,
     imageQueueCount,
@@ -963,10 +1059,15 @@ async function idDoDestino(
   if (input.targetId) q = q.eq("id", input.targetId);
   else q = q.eq("enabled", true);
 
-  const { data } = await q
+  const { data, error } = await q
     .order("position", { ascending: true })
     .order("id", { ascending: true })
     .limit(1);
+  // Erro do banco nao pode virar "sem destino": o caminho sem destino cai nas
+  // colunas da rota (o destino legado).
+  if (error) {
+    throw new HealRouteError("Falha ao ler as lojas de checkout da rota.", 503);
+  }
   return data?.[0]?.id ?? null;
 }
 
@@ -988,11 +1089,14 @@ export async function healRoute(
     // Rota com destinos, todos pausados: nao ha loja de checkout a consertar.
     // Cair nas colunas da rota (o destino legado) consertaria -- e criaria
     // produto -- justamente na loja que o lojista pausou.
-    const { count } = await admin
+    const { count, error } = await admin
       .from("routed_checkout_targets")
       .select("id", { count: "exact", head: true })
       .eq("route_id", input.routeId);
-    if ((count ?? 0) > 0) {
+    if (error || count === null || count === undefined) {
+      throw new HealRouteError("Falha ao ler as lojas de checkout da rota.", 503);
+    }
+    if (count > 0) {
       throw new HealRouteError(
         "Nenhuma loja de checkout ligada nesta rota. Retome uma loja para consertar.",
         409

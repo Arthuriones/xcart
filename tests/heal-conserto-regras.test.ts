@@ -13,6 +13,7 @@ import {
   decidirCriacao,
   mensagemDeCriacaoPendente,
   parPeloMapaAntigo,
+  podarMapas,
 } from "@/lib/checkout-routes/conserto-regras";
 import { produtoNoDestino } from "@/lib/checkout-routes/produto-no-destino";
 import { donoDoSkuRepetido, normalizarSkus, skuNeutro } from "@/lib/shopify/sku-stamp";
@@ -186,5 +187,80 @@ describe("SKU repetido: dono deterministico", () => {
     expect(r.desduplicadas).toBe(0);
     expect(r.skuPorVariante.get("gid://shopify/ProductVariant/2000")).toBe("x");
     expect(gravados).toHaveLength(1);
+  });
+});
+
+describe("podarMapas", () => {
+  const checkout = new Map<string, { sku?: string | null }>([
+    ["7001", { sku: "a" }],
+    ["7002", { sku: "velho" }],
+  ]);
+  const base = {
+    novos: { skuMap: {}, variantMap: {} },
+    checkoutPorId: checkout,
+    checkoutCompleto: true,
+    reivindicadas: new Set<string>(),
+    skusDaVitrine: new Set(["a", "b"]),
+  };
+
+  it("alvo morto sai de qualquer chave; vivo fica", () => {
+    const r = podarMapas({
+      ...base,
+      skuMap: { SUMIDA: "gid://shopify/ProductVariant/7999", velho: "7002" },
+      variantMap: { "5555": "7999", "6666": 7002 },
+      semPar: [],
+    });
+    expect(r.skuMap).toEqual({ velho: "7002" });
+    expect(r.variantMap).toEqual({ "6666": 7002 });
+    expect(r.removidos).toBe(2);
+  });
+
+  it("indice incompleto: nao tira por 'nao achei'", () => {
+    const r = podarMapas({
+      ...base,
+      checkoutCompleto: false,
+      skuMap: { b: "7999" },
+      variantMap: { "1001": "7999" },
+      semPar: [{ id: 1001, sku: "b" }],
+    });
+    expect(r.variantMap).toEqual({ "1001": "7999" });
+    expect(r.skuMap).toEqual({ b: "7999" });
+  });
+
+  it("variante sem par apontando para a variante de outra (SKU 'a'): sai pelo id, pelo gid e pelo SKU sem caixa", () => {
+    const r = podarMapas({
+      ...base,
+      skuMap: { B: "7001" },
+      variantMap: { "1001": "7001", "gid://shopify/ProductVariant/1001": "7001" },
+      semPar: [{ id: 1001, sku: "b" }],
+    });
+    expect(r.variantMap).toEqual({});
+    expect(r.skuMap).toEqual({});
+    // Uma variante, um par.
+    expect(r.removidos).toBe(1);
+  });
+
+  it("alvo ja reivindicado por outra variante nesta passada: sai", () => {
+    const r = podarMapas({
+      ...base,
+      reivindicadas: new Set(["7002"]),
+      skuMap: {},
+      variantMap: { "1001": "7002" },
+      semPar: [{ id: 1001, sku: null }],
+    });
+    expect(r.variantMap).toEqual({});
+  });
+
+  it("par trocado (chave volta com par novo) nao conta como tirado", () => {
+    const r = podarMapas({
+      ...base,
+      novos: { skuMap: { a: "8000" }, variantMap: { "1000": "8000" } },
+      skuMap: { A: "7999" },
+      variantMap: { "1000": "7999" },
+      semPar: [],
+    });
+    expect(r.variantMap).toEqual({ "1000": "8000" });
+    expect(r.skuMap).toEqual({ a: "8000" });
+    expect(r.removidos).toBe(0);
   });
 });

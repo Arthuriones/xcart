@@ -9,7 +9,7 @@ import {
   normalizeRotation,
   pickTarget,
 } from "@/lib/checkout-routes/rotation";
-import { destinosParaRotear } from "@/lib/checkout-routes/targets";
+import { destinosParaRotear, RouteTargetsLoadError } from "@/lib/checkout-routes/targets";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { contarPedidos24h } from "@/lib/checkout-routes/pedidos-24h";
 import { hydrateTargetBySku } from "@/lib/checkout-routes/hidratar-por-sku";
@@ -152,6 +152,15 @@ export async function POST(request: NextRequest) {
     // Endpoint publico: a mensagem crua (erro do banco, da Shopify) fica no
     // log; o navegador do comprador so precisa saber que falhou.
     console.error("[checkout-routes/resolve]", error);
+    // Nao deu para ler as lojas de checkout: 503, e NAO o destino legado.
+    // Rotear pelo legado num soluco do banco mandava o comprador para o mapa
+    // velho do primario -- talvez a loja que o lojista pausou.
+    if (error instanceof RouteTargetsLoadError) {
+      return NextResponse.json(
+        { error: "Checkout indisponivel agora. Tente de novo." },
+        { status: 503, headers: corsHeaders }
+      );
+    }
     return NextResponse.json(
       { error: "Falha ao resolver checkout." },
       { status: 500, headers: corsHeaders }

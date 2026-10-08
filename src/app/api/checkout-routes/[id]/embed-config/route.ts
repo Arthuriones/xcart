@@ -28,5 +28,14 @@ export async function GET(
     return NextResponse.json({ error: "Rota não encontrada." }, { status: 404 });
   }
 
-  return NextResponse.json(await buildEmbedConfig(admin, config));
+  try {
+    return NextResponse.json(await buildEmbedConfig(admin, config));
+  } catch (erro) {
+    // Leitura dos destinos falhou: 503, nunca um config montado pelo legado.
+    console.error("[checkout-routes/embed-config]", erro);
+    return NextResponse.json(
+      { error: "Não deu para ler as lojas de checkout agora. Tente de novo." },
+      { status: 503 }
+    );
+  }
 }

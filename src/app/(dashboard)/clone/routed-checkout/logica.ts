@@ -364,10 +364,27 @@ export interface RespostaConserto {
   extendedCount?: number;
   stampedSkuCount?: number;
   fixedWrongCount?: number;
+  /** Pares tirados do mapa: alvo apagado no checkout ou de outra variante. */
+  removedPairCount?: number;
+  /** Variantes sem par porque o produto do checkout mistura produtos da vitrine. */
+  mixedBlockedVariantCount?: number;
   /** Faltam no checkout e nao foram criados (trava do par de lojas). */
   pendingProductCount?: number;
   pendingVariantCount?: number;
   creationBlockedReason?: string | null;
+  /** Qual loja de checkout (um resultado por loja em `targets`). */
+  targetId?: string | null;
+  targetStoreName?: string | null;
+  targetShopDomain?: string | null;
+  /** Um resultado por loja de checkout consertada. */
+  targets?: RespostaConserto[];
+}
+
+export interface PendenciaDoConserto {
+  produtos: number;
+  variantes: number;
+  texto: string;
+  botao: string;
 }
 
 /**
@@ -375,21 +392,27 @@ export interface RespostaConserto {
  * confirmar a criacao so quando isto nao e null: o conserto nao cria mais
  * catalogo inteiro em loja de checkout sem o lojista ver (ver
  * src/lib/checkout-routes/conserto-regras.ts).
+ *
+ * `loja` entra no texto e no botao: com rodizio, a confirmacao vale para uma
+ * loja so, e o lojista precisa saber qual.
  */
 export function pendenciaDoConserto(
-  d: RespostaConserto
-): { produtos: number; variantes: number; texto: string; botao: string } | null {
+  d: RespostaConserto,
+  loja?: string | null
+): PendenciaDoConserto | null {
   const produtos = n(d.pendingProductCount);
   const variantes = n(d.pendingVariantCount);
   if (!d.creationBlockedReason || (produtos === 0 && variantes === 0)) return null;
+  const onde = loja ? `na loja de checkout ${loja}` : "na loja de checkout";
   const oQue =
     produtos > 0
       ? produtos === 1
-        ? "1 produto da vitrine falta na loja de checkout e não foi criado sozinho"
-        : `${produtos} produtos da vitrine faltam na loja de checkout e não foram criados sozinhos`
+        ? `1 produto da vitrine falta ${onde} e não foi criado sozinho`
+        : `${produtos} produtos da vitrine faltam ${onde} e não foram criados sozinhos`
       : variantes === 1
-        ? "1 variante da vitrine falta na loja de checkout e não foi criada sozinha"
-        : `${variantes} variantes da vitrine faltam na loja de checkout e não foram criadas sozinhas`;
+        ? `1 variante da vitrine falta ${onde} e não foi criada sozinha`
+        : `${variantes} variantes da vitrine faltam ${onde} e não foram criadas sozinhas`;
+  const em = loja ? `em ${loja}` : "na loja de checkout";
   return {
     produtos,
     variantes,
@@ -397,34 +420,70 @@ export function pendenciaDoConserto(
     botao:
       produtos > 0
         ? produtos === 1
-          ? "Criar 1 produto na loja de checkout"
-          : `Criar ${produtos} produtos na loja de checkout`
+          ? `Criar 1 produto ${em}`
+          : `Criar ${produtos} produtos ${em}`
         : variantes === 1
-          ? "Criar 1 variante na loja de checkout"
-          : `Criar ${variantes} variantes na loja de checkout`,
+          ? `Criar 1 variante ${em}`
+          : `Criar ${variantes} variantes ${em}`,
   };
+}
+
+/**
+ * A pendencia de CADA loja de checkout, com o targetId que o botao manda ao
+ * repair. Antes a tela somava as lojas e mostrava o motivo da primeira -- e
+ * o clique criava em todas, inclusive na loja de peso 0 que a trava protegia.
+ * Resposta sem `targets` (servidor antigo, rota legada): um item, sem id.
+ */
+export function pendenciasDoConserto(
+  d: RespostaConserto
+): (PendenciaDoConserto & { targetId: string | null })[] {
+  const porLoja = d.targets && d.targets.length > 0 ? d.targets : [d];
+  const comNome = porLoja.length > 1;
+  const lista: (PendenciaDoConserto & { targetId: string | null })[] = [];
+  for (const r of porLoja) {
+    const loja = comNome ? r.targetStoreName || r.targetShopDomain || null : null;
+    const p = pendenciaDoConserto(r, loja);
+    if (p) lista.push({ ...p, targetId: r.targetId ?? null });
+  }
+  return lista;
 }
 
 /** Frase do conserto, a partir do que /api/checkout-routes/repair devolve. */
 export function fraseDoConserto(d: RespostaConserto): string {
-  if (d.noop) return "Nada para corrigir: a rota já estava certa.";
+  const misturadas = n(d.mixedBlockedVariantCount);
+  const mistura =
+    misturadas > 0
+      ? `${misturadas === 1 ? "1 variante ficou" : `${misturadas} variantes ficaram`} sem par: o produto da loja de checkout onde ${misturadas === 1 ? "ela entraria" : "elas entrariam"} mistura produtos da vitrine. Separe-os na loja de checkout.`
+      : "";
+  // "noop" e "nada mudou", nao "nada errado": o produto misturado so o
+  // lojista separa, e o conserto passa por ele sem mexer.
+  if (d.noop) return mistura || "Nada para corrigir: a rota já estava certa.";
   const partes: string[] = [];
   const criados = n(d.createdProductCount);
   const variantes = n(d.extendedCount);
   const skus = n(d.stampedSkuCount);
   const trocados = n(d.fixedWrongCount);
+  const tirados = n(d.removedPairCount);
   if (criados > 0) partes.push(criados === 1 ? "1 produto criado" : `${criados} produtos criados`);
   if (variantes > 0) partes.push(variantes === 1 ? "1 variante criada" : `${variantes} variantes criadas`);
   if (skus > 0) partes.push(skus === 1 ? "1 SKU gravado na vitrine" : `${skus} SKUs gravados na vitrine`);
   if (trocados > 0) partes.push(trocados === 1 ? "1 par corrigido" : `${trocados} pares corrigidos`);
-  const pendente = pendenciaDoConserto(d);
+  if (tirados > 0) {
+    partes.push(
+      tirados === 1
+        ? "1 par apagado ou errado tirado do mapa"
+        : `${tirados} pares apagados ou errados tirados do mapa`
+    );
+  }
+  const pendentes = pendenciasDoConserto(d);
   const base =
     partes.length > 0
       ? `Corrigida: ${partes.join(", ")}.`
-      : pendente
+      : pendentes.length > 0
         ? "Os pares que já existiam foram ligados."
         : "Corrigida.";
-  return pendente ? `${base} ${pendente.texto}` : base;
+  const falta = pendentes.map((p) => ` ${p.texto}`).join("");
+  return `${base}${mistura ? ` ${mistura}` : ""}${falta}`;
 }
 
 /**

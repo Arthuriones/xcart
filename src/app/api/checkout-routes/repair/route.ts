@@ -24,8 +24,12 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => ({}));
   const routeId = typeof body.id === "string" ? body.id : "";
-  // O lojista viu "N produtos faltam" e confirmou. Sem isto o conserto so
-  // cria quando o par de lojas passa na trava (ver conserto-regras.ts).
+  // Uma loja de checkout so. E obrigatorio para confirmar a criacao numa
+  // rota com mais de uma loja (ver abaixo).
+  const targetIdPedido =
+    typeof body.targetId === "string" && body.targetId ? body.targetId : null;
+  // O lojista viu "N produtos faltam em LOJA X" e confirmou. Sem isto o
+  // conserto so cria quando o par de lojas passa na trava (conserto-regras.ts).
   const criarFaltantes = body.criarFaltantes === true;
   if (!routeId) {
     return NextResponse.json(
@@ -38,18 +42,46 @@ export async function POST(request: NextRequest) {
   // checkout, e consertar so a primeira deixaria o comprador sorteado para as
   // outras caindo em mapa velho -- exatamente o problema que o botao existe
   // para resolver.
-  const { data: alvos } = await supabase
+  const { data: alvos, error: alvosError } = await supabase
     .from("routed_checkout_targets")
     .select("id")
     .eq("route_id", routeId)
     .eq("enabled", true)
     .order("position", { ascending: true })
     .order("id", { ascending: true });
+  if (alvosError) {
+    return NextResponse.json(
+      { error: "Não deu para ler as lojas de checkout da rota agora. Tente de novo." },
+      { status: 503 }
+    );
+  }
 
   // Sem linha de destino (rota legada): uma passada sem targetId, que cai nas
   // colunas da propria rota.
-  const targetIds: (string | undefined)[] =
+  let targetIds: (string | undefined)[] =
     alvos && alvos.length > 0 ? alvos.map((alvo) => alvo.id) : [undefined];
+
+  if (targetIdPedido) {
+    if (!alvos?.some((alvo) => alvo.id === targetIdPedido)) {
+      return NextResponse.json(
+        { error: "Loja de checkout não encontrada nesta rota, ou está pausada." },
+        { status: 404 }
+      );
+    }
+    targetIds = [targetIdPedido];
+  }
+
+  // A confirmacao vale para UMA loja: a que o lojista viu na tela. Antes ela
+  // ia para todas as lojas ligadas -- e "Criar 40 produtos", visto na loja
+  // certa, despejava a vitrine tambem na loja de peso 0 que entrou por
+  // "Adicionar loja" com 55% de cobertura (a reclamacao 4 da NORAH). Com uma
+  // loja so (assistente, rota de um destino), nao ha o que escolher.
+  if (criarFaltantes && targetIds.length !== 1) {
+    return NextResponse.json(
+      { error: "Diga em qual loja de checkout criar os produtos (targetId)." },
+      { status: 400 }
+    );
+  }
 
   try {
     const results: HealRouteResult[] = [];
@@ -70,7 +102,7 @@ export async function POST(request: NextRequest) {
 
     // O primeiro resultado continua no topo do payload para nao quebrar a UI
     // que le r.stampedSkuCount e companhia direto da raiz.
-    const soma = (pick: (r: HealRouteResult) => number) =>
+    const soma = (pick: (r: HealRouteResult) => number | undefined) =>
       results.reduce((total, r) => total + (pick(r) || 0), 0);
 
     return NextResponse.json({
@@ -82,9 +114,13 @@ export async function POST(request: NextRequest) {
       dedupedSkuCount: soma((r) => r.dedupedSkuCount),
       fixedWrongCount: soma((r) => r.fixedWrongCount),
       extendedCount: soma((r) => r.extendedCount),
+      removedPairCount: soma((r) => r.removedPairCount),
+      mixedBlockedVariantCount: soma((r) => r.mixedBlockedVariantCount),
       createdProductCount: soma((r) => r.createdProductCount),
       createdVariantCount: soma((r) => r.createdVariantCount),
       imageQueueCount: soma((r) => r.imageQueueCount),
+      // Somados so para o resumo. A tela confirma pela pendencia de CADA
+      // loja (targets[]), com o targetId dela.
       pendingProductCount: soma((r) => r.pendingProductCount),
       pendingVariantCount: soma((r) => r.pendingVariantCount),
       creationBlockedReason:

@@ -17,6 +17,8 @@ import { codigoDoScript } from "./logica";
 
 type Resposta = {
   error?: string;
+  /** "rota_pausada": o servidor recusou instalar com a rota pausada. */
+  code?: string;
   targetCount?: number;
   skuCount?: number;
 };
@@ -30,10 +32,16 @@ function horaAgora(): string {
 }
 
 /** Frase de erro por status, sem repetir o texto cru da Shopify. */
-function erroDaInstalacao(status: number): string {
+function erroDaInstalacao(status: number, codigo?: string): string {
+  // Instalar com a rota pausada travaria o checkout da vitrine: o servidor
+  // recusa (ver publicarConfigNoTema).
+  if (codigo === "rota_pausada") {
+    return "A rota está pausada. Instalada assim, a vitrine não finaliza compra nenhuma. Ligue a rota e instale de novo.";
+  }
   if (status === 404) return "Não achei o tema ativo da vitrine. Confira se a loja tem um tema publicado.";
   if (status === 409) return "Esta rota não tem loja de checkout com domínio pronto. Confira as lojas na aba Lojas e divisão.";
   if (status === 401) return "Sua sessão venceu. Entre de novo e tente outra vez.";
+  if (status === 503) return "Não deu para ler as lojas de checkout agora. Nada foi escrito no tema; tente de novo em instantes.";
   return "A Shopify não deixou escrever no tema da vitrine. Cole o código na mão, logo abaixo.";
 }
 
@@ -66,8 +74,10 @@ export function Instalador({
       const r = await fetch(`/api/checkout-routes/${rotaId}/update-theme`, { method: "POST" });
       const d = (await r.json().catch(() => ({}))) as Resposta;
       if (!r.ok) {
-        setResultado({ ok: false, texto: erroDaInstalacao(r.status) });
-        if (comCodigo) setManual(true);
+        setResultado({ ok: false, texto: erroDaInstalacao(r.status, d.code) });
+        // Colar o codigo na mao tambem travaria a vitrine com a rota pausada,
+        // e o 503 e soluco do banco, nao falta de permissao no tema.
+        if (comCodigo && d.code !== "rota_pausada" && r.status !== 503) setManual(true);
         return;
       }
       const lojas = plural(d.targetCount ?? 0, "loja de checkout", "lojas de checkout");

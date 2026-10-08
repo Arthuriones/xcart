@@ -11,7 +11,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import {
   fraseDoConserto,
   linhasDoTeste,
-  pendenciaDoConserto,
+  pendenciasDoConserto,
   testePedeConserto,
   type LinhaTeste,
   type RespostaConserto,
@@ -81,8 +81,8 @@ export function AbaDiagnostico({
   const [corrigindo, setCorrigindo] = useState(false);
   const [conserto, setConserto] = useState<{ ok: boolean; texto: string } | null>(null);
   // O conserto achou produto faltando e nao criou (trava do par de lojas):
-  // o botao de confirmar aparece com o numero e o motivo.
-  const [pendencia, setPendencia] = useState<ReturnType<typeof pendenciaDoConserto>>(null);
+  // um botao de confirmar POR LOJA de checkout, com o numero e o motivo dela.
+  const [pendencias, setPendencias] = useState<ReturnType<typeof pendenciasDoConserto>>([]);
 
   // Veio do "Conferir agora": testa uma vez e tira o pedido da URL, para
   // recarregar a pagina nao testar de novo. O estado so muda na resposta.
@@ -106,20 +106,25 @@ export function AbaDiagnostico({
     setTestando(true);
     setTeste(null);
     setConserto(null);
-    setPendencia(null);
+    setPendencias([]);
     setTeste(await testarRota(rotaId));
     setTestando(false);
   }
 
-  // criarFaltantes: o lojista confirmou criar o que a trava segurou.
-  async function corrigir(criarFaltantes = false) {
+  // `criarEm`: o lojista confirmou criar o que a trava segurou NESTA loja de
+  // checkout (targetId; null = rota antiga, sem linha de destino). O repair
+  // so confirma uma loja por vez -- as outras continuam com a trava.
+  async function corrigir(criarEm?: { targetId: string | null }) {
     setCorrigindo(true);
     setConserto(null);
     try {
       const r = await fetch("/api/checkout-routes/repair", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: rotaId, ...(criarFaltantes ? { criarFaltantes: true } : {}) }),
+        body: JSON.stringify({
+          id: rotaId,
+          ...(criarEm ? { criarFaltantes: true, ...(criarEm.targetId ? { targetId: criarEm.targetId } : {}) } : {}),
+        }),
       });
       const d = (await r.json().catch(() => ({}))) as RespostaConserto & { error?: string };
       if (!r.ok) {
@@ -132,9 +137,15 @@ export function AbaDiagnostico({
         });
         return;
       }
-      const falta = pendenciaDoConserto(d);
-      setPendencia(falta);
-      setConserto({ ok: !falta, texto: fraseDoConserto(d) });
+      const falta = pendenciasDoConserto(d);
+      // Confirmou uma loja: so a pendencia dela muda; a das outras continua.
+      setPendencias((antes) =>
+        criarEm ? [...antes.filter((p) => p.targetId !== criarEm.targetId), ...falta] : falta
+      );
+      setConserto({
+        ok: falta.length === 0 && !(d.mixedBlockedVariantCount && d.mixedBlockedVariantCount > 0),
+        texto: fraseDoConserto(d),
+      });
       setTeste(null);
       startTransition(() => router.refresh());
     } catch {
@@ -213,24 +224,31 @@ export function AbaDiagnostico({
             </div>
           ) : null}
 
-          {conserto && !pendencia ? (
+          {conserto && pendencias.length === 0 ? (
             <Callout tom={conserto.ok ? "ok" : "err"} titulo={conserto.ok ? "Rota corrigida" : "O conserto não terminou"}>
               {conserto.texto}
               {conserto.ok ? " Teste de novo para conferir." : ""}
             </Callout>
           ) : null}
 
-          {conserto && pendencia ? (
+          {conserto && pendencias.length > 0 ? (
             <Callout tom="warn" titulo="Falta confirmar">
               <p>{conserto.texto}</p>
               <p className="mt-1">
-                Confira se esta é mesmo a loja de checkout desta vitrine antes de criar: os produtos entram
-                publicados nela, com texto e imagem sem marca.
+                Confira se a loja é mesmo a loja de checkout desta vitrine antes de criar: os produtos entram
+                publicados nela, com texto e imagem sem marca. Cada botão cria só na loja dele.
               </p>
-              <div className="mt-2">
-                <Button variant="secondary" pending={corrigindo} onClick={() => corrigir(true)}>
-                  {pendencia.botao}
-                </Button>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {pendencias.map((p) => (
+                  <Button
+                    key={p.targetId ?? "rota"}
+                    variant="secondary"
+                    pending={corrigindo}
+                    onClick={() => corrigir({ targetId: p.targetId })}
+                  >
+                    {p.botao}
+                  </Button>
+                ))}
               </div>
             </Callout>
           ) : null}

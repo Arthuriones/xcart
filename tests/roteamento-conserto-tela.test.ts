@@ -3,6 +3,7 @@ import {
   estadoDoTema,
   fraseDoConserto,
   pendenciaDoConserto,
+  pendenciasDoConserto,
   temaFicouParaTras,
 } from "@/app/(dashboard)/clone/routed-checkout/logica";
 
@@ -68,5 +69,65 @@ describe("aba Instalacao: o config no tema", () => {
     expect(estadoDoTema({ estado: "falhou", mensagem: "Shopify REST 403" })?.texto).toBe(
       "Não deu para levar a configuração ao tema (Shopify REST 403). Instale de novo."
     );
+  });
+});
+
+describe("pendencia por loja de checkout (rodizio)", () => {
+  const resposta = {
+    pendingProductCount: 49,
+    pendingVariantCount: 60,
+    creationBlockedReason: "são 49 produtos de uma vez",
+    targets: [
+      {
+        targetId: "t-a",
+        targetStoreName: "Loja A",
+        pendingProductCount: 40,
+        pendingVariantCount: 50,
+        creationBlockedReason: "são 40 produtos de uma vez",
+      },
+      {
+        targetId: "t-b",
+        targetStoreName: "Loja B",
+        pendingProductCount: 9,
+        pendingVariantCount: 10,
+        creationBlockedReason: "esta loja de checkout está fora do rodízio",
+      },
+      { targetId: "t-c", targetStoreName: "Loja C", pendingProductCount: 0, pendingVariantCount: 0 },
+    ],
+  };
+
+  it("um botao por loja, com o nome dela e o motivo DELA", () => {
+    const p = pendenciasDoConserto(resposta);
+    expect(p.map((x) => x.targetId)).toEqual(["t-a", "t-b"]);
+    expect(p[0].botao).toBe("Criar 40 produtos em Loja A");
+    expect(p[1].botao).toBe("Criar 9 produtos em Loja B");
+    expect(p[1].texto).toBe(
+      "9 produtos da vitrine faltam na loja de checkout Loja B e não foram criados sozinhos: esta loja de checkout está fora do rodízio."
+    );
+  });
+
+  it("uma loja so: o botao leva o targetId, sem nome no texto", () => {
+    const p = pendenciasDoConserto({ ...resposta, targets: [resposta.targets[1]] });
+    expect(p).toHaveLength(1);
+    expect(p[0].targetId).toBe("t-b");
+    expect(p[0].botao).toBe("Criar 9 produtos na loja de checkout");
+  });
+
+  it("resposta sem targets (rota antiga): um item sem id", () => {
+    const p = pendenciasDoConserto({ pendingProductCount: 2, creationBlockedReason: "x" });
+    expect(p).toEqual([expect.objectContaining({ targetId: null, produtos: 2 })]);
+  });
+});
+
+describe("frase do conserto: par tirado e produto misturado", () => {
+  it("conta o par morto/errado tirado do mapa", () => {
+    expect(fraseDoConserto({ removedPairCount: 3 })).toBe("Corrigida: 3 pares apagados ou errados tirados do mapa.");
+  });
+
+  it("produto misturado aparece mesmo quando nada mudou", () => {
+    expect(fraseDoConserto({ noop: true, mixedBlockedVariantCount: 2 })).toContain(
+      "2 variantes ficaram sem par: o produto da loja de checkout onde elas entrariam mistura produtos da vitrine"
+    );
+    expect(fraseDoConserto({ noop: true })).toBe("Nada para corrigir: a rota já estava certa.");
   });
 });

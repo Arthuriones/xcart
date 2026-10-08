@@ -45,9 +45,15 @@ const EMBED = {
   country: "",
   locale: "",
 };
-vi.mock("@/lib/checkout-routes/embed-config", () => ({ buildEmbedConfig: async () => EMBED }));
+const banco = vi.hoisted(() => ({ falharDestinos: false }));
+vi.mock("@/lib/checkout-routes/embed-config", () => ({
+  buildEmbedConfig: async () => {
+    if (banco.falharDestinos) throw new Error("Falha ao ler as lojas de checkout da rota: timeout");
+    return EMBED;
+  },
+}));
 
-import { publicarConfigNoTema, sincronizarTemaDaRota } from "@/lib/checkout-routes/tema-vitrine";
+import { publicarConfigNoTema, sincronizarTemaDaRota, TemaError } from "@/lib/checkout-routes/tema-vitrine";
 import { hashDoConfig, URL_DO_CONFIG_LIQUID } from "@/lib/checkout-routes/tema-script";
 
 const ORIGEM = process.env.NEXT_PUBLIC_APP_URL || "https://user.xcart.app";
@@ -99,6 +105,7 @@ beforeEach(() => {
   shopify.asset = null;
   shopify.chamadas = [];
   shopify.falhar = false;
+  banco.falharDestinos = false;
 });
 
 const puts = () => shopify.chamadas.filter((c) => c.metodo === "PUT");
@@ -164,5 +171,29 @@ describe("botao Instalar", () => {
     expect(r.estado).toBe("instalado");
     expect(r.troca).toBe("inserido");
     expect(shopify.themeLiquid).toContain('data-token="tok-rota"');
+  });
+});
+
+describe("o que NAO pode chegar ao tema", () => {
+  it("leitura dos destinos falhou: nada escrito no tema, falha registrada sem hash", async () => {
+    banco.falharDestinos = true;
+    const r = await sincronizarTemaDaRota(adminFalso(), "rota");
+    expect(r.estado).toBe("falhou");
+    expect(shopify.chamadas).toHaveLength(0);
+    expect(sync()?.estado).toBe("falhou");
+    expect(sync()?.hash).toBeUndefined();
+  });
+
+  it("Instalar com a rota pausada: recusa (o script travaria o checkout da vitrine)", async () => {
+    rota.enabled = false;
+    shopify.themeLiquid = "<head>\n</head>";
+    const erro = await publicarConfigNoTema(adminFalso(), "rota", { instalar: true, forcar: true, userId: "u1" }).catch(
+      (e: unknown) => e
+    );
+    expect(erro).toBeInstanceOf(TemaError);
+    expect((erro as TemaError).status).toBe(409);
+    expect((erro as TemaError).codigo).toBe("rota_pausada");
+    expect(shopify.chamadas).toHaveLength(0);
+    expect(shopify.themeLiquid).not.toContain("data-token");
   });
 });

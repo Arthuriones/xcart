@@ -18,6 +18,8 @@ type Linha = Record<string, unknown>;
 
 const db: Record<string, Linha[]> = {};
 const escritas: { tabela: string; patch: Linha }[] = [];
+// Leitura de routed_checkout_targets devolvendo erro (banco fora).
+const falharDestinos = { sim: false };
 
 function consulta(tabela: string) {
   const filtros: ((l: Linha) => boolean)[] = [];
@@ -26,6 +28,9 @@ function consulta(tabela: string) {
   let limite: number | undefined;
 
   async function executar() {
+    if (falharDestinos.sim && tabela === "routed_checkout_targets" && !patch) {
+      return { data: null, count: null, error: { message: "timeout" } };
+    }
     const linhas = (db[tabela] || []).filter((l) => filtros.every((f) => f(l)));
     if (patch) {
       for (const l of linhas) Object.assign(l, patch);
@@ -386,7 +391,7 @@ describe("SKU trocado na vitrine: adota o par do variant_map em vez de duplicar"
     expect(destinoGravado().variant_map["1000"]).not.toBe("7001");
   });
 
-  it("variante sem par cuja combinacao ja e par de outro produto: avisa, nao adota nem cria", async () => {
+  it("variante sem par num produto misturado: avisa, nao adota nem cria", async () => {
     // Produto do checkout misturado (5 bolsas numa "Arque"): a variante
     // Preta ja e da bolsa C; a bolsa A (irma casada no mesmo produto) pede
     // uma Preta tambem.
@@ -407,7 +412,8 @@ describe("SKU trocado na vitrine: adota o par do variant_map em vez de duplicar"
     const r = await healRoute({ routeId: "rota", targetId: "destino", criarFaltantes: true });
     expect(destinoGravado().sku_map["a-preta"]).toBeUndefined();
     expect(shopify.estendidos).toHaveLength(0);
-    expect(r.warnings.join(" ")).toContain("ja e par de outro produto");
+    expect(r.mixedBlockedVariantCount).toBe(1);
+    expect(r.warnings.join(" ")).toContain("mistura produtos da vitrine");
     // E o produto misturado aparece no aviso, com os dois produtos da vitrine.
     expect(r.warnings.join(" ")).toContain(
       'O produto "Produto 9001" da loja de checkout recebe variantes de 2 produtos da vitrine (bolsa-a, bolsa-c)'
@@ -476,5 +482,157 @@ describe("o tema da vitrine acompanha o conserto", () => {
     const r = await healRoute({ routeId: "rota", targetId: "destino" });
     expect(tema.chamadas).toBe(1);
     expect(r.theme).toEqual({ estado: "atualizado" });
+  });
+});
+
+describe("o mapa gravado nao guarda par morto nem par de outra variante", () => {
+  // O loader e o resolve leem o variant_map ANTES do sku_map. Com a trava
+  // segurando a criacao, a entrada velha ficava para sempre.
+
+  it("alvo apagado no checkout, criacao barrada: o par sai dos dois mapas", async () => {
+    montar({
+      destino: { weight: 0 },
+      skuMap: { a: "7001", b: "7999" },
+      variantMap: { "1001": "7999", "gid://shopify/ProductVariant/1001": "7999" },
+    });
+    vitrine.produtos = [
+      produtoVitrine(100, "bolsa-a", [{ id: 1000, sku: "a" }]),
+      produtoVitrine(101, "bolsa-b", [{ id: 1001, sku: "b" }]),
+    ];
+    // 7999 foi apagada (o lojista limpou o produto misturado).
+    shopify.checkout = [produtoCheckout(9001, [{ id: 7001, sku: "a" }])];
+
+    const r = await healRoute({ routeId: "rota", targetId: "destino" });
+    expect(shopify.criados).toHaveLength(0);
+    expect(destinoGravado().variant_map["1001"]).toBeUndefined();
+    expect(destinoGravado().variant_map["gid://shopify/ProductVariant/1001"]).toBeUndefined();
+    expect(destinoGravado().sku_map["b"]).toBeUndefined();
+    expect(destinoGravado().sku_map["a"]).toBe("7001");
+    expect(r.removedPairCount).toBe(1);
+    expect(r.noop).toBe(false);
+  });
+
+  it("par antigo recusado (SKU do alvo e de outra bolsa): sai, e o comprador da bolsa A nao paga pela C", async () => {
+    montar({
+      destino: { weight: 0 },
+      skuMap: { a: "7001" },
+      variantMap: { "1000": "7001", "gid://shopify/ProductVariant/1000": "7001" },
+    });
+    vitrine.produtos = [
+      produtoVitrine(100, "bolsa-a", [{ id: 1000, sku: "a" }]),
+      produtoVitrine(102, "bolsa-c", [{ id: 1002, sku: "c" }]),
+    ];
+    shopify.checkout = [produtoCheckout(9001, [{ id: 7001, sku: "c" }])];
+
+    const r = await healRoute({ routeId: "rota", targetId: "destino" });
+    expect(destinoGravado().variant_map["1000"]).toBeUndefined();
+    expect(destinoGravado().variant_map["gid://shopify/ProductVariant/1000"]).toBeUndefined();
+    expect(destinoGravado().sku_map["a"]).toBeUndefined();
+    expect(destinoGravado().sku_map["c"]).toBe("7001");
+    expect(r.removedPairCount).toBe(1);
+  });
+
+  it("produto fora do products.json (despublicado) com alvo vivo: o par fica", async () => {
+    montar({ variantMap: { "5555": "7002" }, skuMap: { sumida: "7002" } });
+    vitrine.produtos = [produtoVitrine(100, "bolsa-a", [{ id: 1000, sku: "a" }])];
+    shopify.checkout = [
+      produtoCheckout(9001, [{ id: 7001, sku: "a" }]),
+      produtoCheckout(9002, [{ id: 7002, sku: "x" }]),
+    ];
+    const r = await healRoute({ routeId: "rota", targetId: "destino" });
+    expect(destinoGravado().variant_map["5555"]).toBe("7002");
+    expect(destinoGravado().sku_map["sumida"]).toBe("7002");
+    expect(r.removedPairCount).toBe(0);
+  });
+
+  it("indice do checkout incompleto (produto com 50 variantes): nao conclui que o alvo morreu", async () => {
+    montar({ destino: { weight: 0 }, variantMap: { "1001": "7999" }, skuMap: { b: "7999" } });
+    vitrine.produtos = [
+      produtoVitrine(100, "bolsa-a", [{ id: 1000, sku: "a" }]),
+      produtoVitrine(101, "bolsa-b", [{ id: 1001, sku: "b" }]),
+    ];
+    // A consulta traz no maximo 50 variantes por produto: a 7999 pode ser a 51a.
+    shopify.checkout = [
+      produtoCheckout(
+        9001,
+        Array.from({ length: 50 }, (_, i) => ({ id: 7001 + i, sku: i === 0 ? "a" : `t${i}`, cor: `c${i}` }))
+      ),
+    ];
+    const r = await healRoute({ routeId: "rota", targetId: "destino" });
+    expect(destinoGravado().variant_map["1001"]).toBe("7999");
+    expect(destinoGravado().sku_map["b"]).toBe("7999");
+    expect(r.removedPairCount).toBe(0);
+  });
+
+  it("duas variantes da vitrine com o mesmo par no mapa: fica com ele a mais antiga", async () => {
+    // Copia de produto: o mapa das duas aponta para 7001; o products.json
+    // traz a copia (mais nova) primeiro.
+    montar({ variantMap: { "1000": "7001", "2000": "7001" } });
+    vitrine.produtos = [
+      produtoVitrine(200, "bolsa-b-copia", [{ id: 2000, sku: "b" }]),
+      produtoVitrine(100, "bolsa-a", [{ id: 1000, sku: "a" }]),
+    ];
+    shopify.checkout = [produtoCheckout(9001, [{ id: 7001, sku: "velho" }])];
+    const r = await healRoute({ routeId: "rota", targetId: "destino", criarFaltantes: true });
+    expect(destinoGravado().variant_map["1000"]).toBe("7001");
+    expect(destinoGravado().variant_map["2000"]).not.toBe("7001");
+    expect(r.adoptedVariantCount).toBe(1);
+  });
+});
+
+describe("produto do checkout misturado (caso Arque): o conserto nao pendura mais nada nele", () => {
+  it("cor nova da bolsa 2, cuja irma esta na Arque: nao acrescenta na Arque, mesmo confirmando", async () => {
+    montar({});
+    vitrine.produtos = [
+      produtoVitrine(100, "arque", [{ id: 1000, sku: "arque-preta", cor: "Preta" }]),
+      produtoVitrine(200, "bolsa-2", [
+        { id: 2000, sku: "b2-marrom", cor: "Marrom" },
+        { id: 2001, sku: "b2-bege", cor: "Bege" },
+      ]),
+    ];
+    // O conserto antigo (prefixo "xc-") pendurou a Marrom da bolsa 2 na Arque.
+    shopify.checkout = [
+      produtoCheckout(9001, [
+        { id: 7001, sku: "arque-preta", cor: "Preta" },
+        { id: 7002, sku: "b2-marrom", cor: "Marrom" },
+      ]),
+    ];
+    const r = await healRoute({ routeId: "rota", targetId: "destino", criarFaltantes: true });
+    expect(shopify.estendidos).toHaveLength(0);
+    expect(shopify.criados).toHaveLength(0);
+    expect(destinoGravado().sku_map["b2-bege"]).toBeUndefined();
+    expect(r.mixedBlockedVariantCount).toBe(1);
+    expect(r.warnings.join(" ")).toContain("bolsa-2");
+    expect(ultimoConserto()?.ok).toBe(false);
+  });
+
+  it("produto que NAO mistura continua ganhando a variante nova", async () => {
+    montar({});
+    vitrine.produtos = [
+      produtoVitrine(100, "bolsa-a", [
+        { id: 1000, sku: "a-preta", cor: "Preta" },
+        { id: 1001, sku: "a-bege", cor: "Bege" },
+      ]),
+    ];
+    shopify.checkout = [produtoCheckout(9001, [{ id: 7001, sku: "a-preta", cor: "Preta" }])];
+    const r = await healRoute({ routeId: "rota", targetId: "destino", criarFaltantes: true });
+    expect(shopify.estendidos).toHaveLength(1);
+    expect(r.mixedBlockedVariantCount).toBe(0);
+    expect(destinoGravado().sku_map["a-bege"]).toBe("8000");
+  });
+});
+
+describe("erro do banco nao vira destino legado", () => {
+  it("leitura dos destinos falhou: 503, nada consertado nem criado", async () => {
+    montar({});
+    vitrine.produtos = [produtoVitrine(100, "bolsa-a", [{ id: 1000, sku: "a" }])];
+    falharDestinos.sim = true;
+    try {
+      await expect(healRoute({ routeId: "rota" })).rejects.toMatchObject({ status: 503 });
+      expect(shopify.criados).toHaveLength(0);
+      expect(escritas).toHaveLength(0);
+    } finally {
+      falharDestinos.sim = false;
+    }
   });
 });
