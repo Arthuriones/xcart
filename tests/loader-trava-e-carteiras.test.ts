@@ -266,13 +266,20 @@ const resposta = (dados: unknown, ok = true): Resposta => ({
 interface Opcoes {
   /** Caminho da pagina da vitrine. */
   caminho?: string;
+  /** Carrinho inicial (padrao: CARRINHO). O add.js do teste soma nele. */
+  carrinho?: Carrinho;
   /** Monta o tema ANTES do loader rodar (ele liga os botoes no init). */
   tema: (h: Harness) => void;
 }
 
 type Harness = ReturnType<typeof criarVitrine>;
 
-const CARRINHO = {
+type Carrinho = {
+  item_count: number;
+  items: { id: number; variant_id: number; sku: string; quantity: number }[];
+};
+
+const CARRINHO: Carrinho = {
   item_count: 1,
   items: [{ id: 111, variant_id: 111, sku: "xc-abc", quantity: 1 }],
 };
@@ -290,6 +297,12 @@ function criarVitrine(opcoes: Opcoes) {
   }[] = [];
   const ouvintesJanela: Ouvinte[] = [];
   const ouvintesDoc: Ouvinte[] = [];
+  const intervalos: (() => void)[] = [];
+  const carrinho: Carrinho = JSON.parse(JSON.stringify(opcoes.carrinho ?? CARRINHO));
+  /** O que cada /cart/add.js mandou (o add.js de verdade SOMA na linha). */
+  const adicionados: { id: number; quantidade: number }[] = [];
+  /** Corpo de cada chamada ao /resolve. */
+  const corposRota: { lines: { sourceVariantId: string; quantity: number }[] }[] = [];
 
   // Relogio de mentira: os timers so andam quando o teste manda.
   let agora = 0;
@@ -430,13 +443,51 @@ function criarVitrine(opcoes: Opcoes) {
     return ev;
   }
 
-  const fetchFalso = (url: string, init: { body?: string; signal?: AbortSignal } = {}) => {
+  // FormData como o navegador monta: os campos de dentro do <form> e os de
+  // fora ligados por form="id" (no Dawn a quantidade fica assim).
+  class FormDataFalso {
+    campos = new Map<string, string>();
+    constructor(form?: El) {
+      if (!form) return;
+      const idDoForm = form.getAttribute("id");
+      const ligados = idDoForm
+        ? html.descendentes().filter((d) => d.getAttribute("form") === idDoForm)
+        : [];
+      for (const d of [...form.descendentes(), ...ligados]) {
+        const nome = d.getAttribute("name");
+        const valor = d.getAttribute("value");
+        if (nome && valor !== null && !this.campos.has(nome)) this.campos.set(nome, valor);
+      }
+    }
+    set(k: string, v: string) {
+      this.campos.set(k, String(v));
+    }
+    get(k: string) {
+      return this.campos.get(k) ?? null;
+    }
+  }
+
+  const fetchFalso = (
+    url: string,
+    init: { body?: string | FormDataFalso; signal?: AbortSignal } = {}
+  ) => {
     buscas.push(url);
-    if (url.endsWith("/cart.js")) return Promise.resolve(resposta(CARRINHO));
+    if (url.endsWith("/cart.js")) {
+      return Promise.resolve(resposta(JSON.parse(JSON.stringify(carrinho))));
+    }
     if (url.endsWith("/cart/add.js")) {
-      return Promise.resolve(resposta({ id: 4242, variant_id: 4242, quantity: 1 }));
+      const corpo = init.body as FormDataFalso;
+      const id = Number(corpo.get("id"));
+      const quantidade = Number(corpo.get("quantity") ?? 1) || 1;
+      adicionados.push({ id, quantidade });
+      const linha = carrinho.items.find((i) => i.variant_id === id);
+      if (linha) linha.quantity += quantidade;
+      else carrinho.items.push({ id, variant_id: id, sku: `xc-${id}`, quantity: quantidade });
+      carrinho.item_count += quantidade;
+      return Promise.resolve(resposta({ id, variant_id: id, quantity: quantidade }));
     }
     if (url.includes("/api/checkout-routes/resolve")) {
+      corposRota.push(JSON.parse(String(init.body)));
       return new Promise<Resposta>((resolver, rejeitar) => {
         pendentesRota.push({ resolver, rejeitar });
         init.signal?.addEventListener("abort", () => rejeitar(new Error("aborted")));
@@ -492,13 +543,14 @@ function criarVitrine(opcoes: Opcoes) {
       const t = timers.find((x) => x.id === id);
       if (t) t.vivo = false;
     },
-    setInterval: () => 0,
+    setInterval: (fn: () => void) => {
+      intervalos.push(fn);
+      return intervalos.length;
+    },
     clearInterval: () => {},
     URL,
     Blob: BlobFalso,
-    FormData: class {
-      set() {}
-    },
+    FormData: FormDataFalso,
     AbortController,
     CustomEvent: class {
       constructor(public type: string) {}
@@ -521,7 +573,19 @@ function criarVitrine(opcoes: Opcoes) {
     submitsNativos,
     doTema,
     pagina,
+    adicionados,
+    corposRota,
     avancar,
+    /** Roda uma volta dos intervalos do loader (o rescan). */
+    rodarIntervalos: () => intervalos.forEach((fn) => fn()),
+    /** Quantidade da variante no carrinho da vitrine. */
+    noCarrinho: (id: number) =>
+      carrinho.items.filter((i) => i.variant_id === id).reduce((n, i) => n + i.quantity, 0),
+    /** Quantidade da variante na ultima chamada ao /resolve. */
+    naRota: (id: number) =>
+      (corposRota[corposRota.length - 1]?.lines ?? [])
+        .filter((l) => l.sourceVariantId === `gid://shopify/ProductVariant/${id}`)
+        .reduce((n, l) => n + l.quantity, 0),
     tocar,
     enviarFormulario,
     /** Quantas vezes o carrinho foi lido para rotear. */
@@ -759,14 +823,25 @@ describe("trava do roteamento: o segundo toque nao vaza para a vitrine", () => {
 });
 
 describe("carteiras e botao dinamico (shadow DOM fechado)", () => {
-  function paginaDeProduto() {
+  function paginaDeProduto(
+    opcoes: {
+      carrinho?: Carrinho;
+      /** Quantidade num campo FORA do <form>, ligado por form="..." (Dawn). */
+      quantidadeFora?: string;
+      /** Produto esgotado: o tema desliga o "Adicionar". */
+      esgotado?: boolean;
+    } = {}
+  ) {
     let host!: El;
     let maisOpcoes!: El;
     let comprarAgora!: El;
     let adicionar!: El;
     let link!: El;
+    let involucro!: El;
+    let form!: El;
     const abriuCarteira: string[] = [];
     const h = criarVitrine({
+      carrinho: opcoes.carrinho,
       tema: (v) => {
         host = v.el("shopify-accelerated-checkout");
         host.addEventListener("click", () => abriuCarteira.push("shop-pay"));
@@ -783,28 +858,42 @@ describe("carteiras e botao dinamico (shadow DOM fechado)", () => {
           },
           "Buy it now"
         );
-        adicionar = v.el("button", { type: "submit", name: "add" }, "Add to bag");
+        adicionar = v.el(
+          "button",
+          { type: "submit", name: "add", ...(opcoes.esgotado ? { disabled: "" } : {}) },
+          opcoes.esgotado ? "Sold out" : "Add to bag"
+        );
         adicionar.addEventListener("click", () => v.doTema.push("add"));
         link = v.el("a", { href: "/collections/all" }, "Shop all");
         v.body.appendChild(link);
-        v.body.appendChild(
-          v.el(
-            "form",
-            { action: "/cart/add", method: "post" },
-            v.el("input", { type: "hidden", name: "id", value: "4242" }),
-            adicionar,
-            v.el(
-              "div",
-              { class: "shopify-payment-button", "data-shopify": "payment-button" },
-              host,
-              comprarAgora,
-              maisOpcoes
-            )
-          )
+        if (opcoes.quantidadeFora) {
+          v.body.appendChild(
+            v.el("input", {
+              type: "number",
+              name: "quantity",
+              value: opcoes.quantidadeFora,
+              form: "product-form-main",
+            })
+          );
+        }
+        involucro = v.el(
+          "div",
+          { class: "shopify-payment-button", "data-shopify": "payment-button" },
+          host,
+          comprarAgora,
+          maisOpcoes
         );
+        form = v.el(
+          "form",
+          { id: "product-form-main", action: "/cart/add", method: "post" },
+          v.el("input", { type: "hidden", name: "id", value: "4242" }),
+          adicionar,
+          involucro
+        );
+        v.body.appendChild(form);
       },
     });
-    return { h, host, maisOpcoes, comprarAgora, adicionar, link, abriuCarteira };
+    return { h, host, maisOpcoes, comprarAgora, adicionar, link, abriuCarteira, involucro, form };
   }
 
   it("carteira do carrinho leva o carrinho inteiro, sem abrir a carteira da vitrine", async () => {
@@ -844,10 +933,68 @@ describe("carteiras e botao dinamico (shadow DOM fechado)", () => {
     expect(h.tocar(host).defaultPrevented).toBe(true);
     expect(abriuCarteira).toEqual([]);
     await esvaziar();
+    // Le o carrinho, adiciona o que falta e le de novo para rotear.
     const add = h.buscas.findIndex((u) => u.endsWith("/cart/add.js"));
-    const leitura = h.buscas.findIndex((u) => u.endsWith("/cart.js"));
-    expect(add).toBeGreaterThanOrEqual(0);
-    expect(leitura).toBeGreaterThan(add);
+    const leituras = h.buscas
+      .map((u, i) => (u.endsWith("/cart.js") ? i : -1))
+      .filter((i) => i >= 0);
+    expect(leituras[0]).toBeLessThan(add);
+    expect(leituras[leituras.length - 1]).toBeGreaterThan(add);
+    expect(h.adicionados).toEqual([{ id: 4242, quantidade: 1 }]);
+    expect(h.naRota(4242)).toBe(1);
+  });
+
+  it("rota falha depois do add e o comprador toca de novo: a variante entra uma vez so", async () => {
+    const { h, comprarAgora } = paginaDeProduto();
+    h.tocar(comprarAgora);
+    await esvaziar();
+    expect(h.adicionados).toEqual([{ id: 4242, quantidade: 1 }]);
+    h.falharRota(new TypeError("Load failed"));
+    await esvaziar();
+
+    expect(h.tocar(comprarAgora).defaultPrevented).toBe(true);
+    await esvaziar();
+    expect(h.adicionados).toHaveLength(1);
+    expect(h.noCarrinho(4242)).toBe(1);
+    expect(h.naRota(4242)).toBe(1);
+    h.responderRota();
+    await esvaziar();
+    expect(h.navegacoes).toEqual(["https://tdicbr-3u.myshopify.com/cart/987:1"]);
+  });
+
+  it("item que ja estava no carrinho nao e adicionado de novo pela carteira", async () => {
+    const { h, host } = paginaDeProduto({
+      carrinho: {
+        item_count: 2,
+        items: [
+          { id: 111, variant_id: 111, sku: "xc-abc", quantity: 1 },
+          { id: 4242, variant_id: 4242, sku: "xc-4242", quantity: 1 },
+        ],
+      },
+    });
+    h.tocar(host);
+    await esvaziar();
+    expect(h.adicionados).toEqual([]);
+    // O carrinho lido antes ja serve para a rota: uma leitura so.
+    expect(h.leiturasDoCarrinho()).toBe(1);
+    expect(h.naRota(4242)).toBe(1);
+  });
+
+  it("quantidade do formulario (campo fora do form, como no Dawn): adiciona so o que falta", async () => {
+    const parcial = paginaDeProduto({
+      quantidadeFora: "3",
+      carrinho: { item_count: 1, items: [{ id: 4242, variant_id: 4242, sku: "xc-4242", quantity: 1 }] },
+    });
+    parcial.h.tocar(parcial.comprarAgora);
+    await esvaziar();
+    expect(parcial.h.adicionados).toEqual([{ id: 4242, quantidade: 2 }]);
+    expect(parcial.h.naRota(4242)).toBe(3);
+
+    // Nada no carrinho: o add sai como o formulario manda, sem sobrepor.
+    const vazio = paginaDeProduto({ quantidadeFora: "3" });
+    vazio.h.tocar(vazio.comprarAgora);
+    await esvaziar();
+    expect(vazio.h.adicionados).toEqual([{ id: 4242, quantidade: 3 }]);
   });
 
   it("'More payment options' e 'Buy it now' sao levados como compra imediata", async () => {
@@ -869,6 +1016,52 @@ describe("carteiras e botao dinamico (shadow DOM fechado)", () => {
     expect(h.tocar(link).defaultPrevented).toBe(false);
     expect(h.navegacoes).toEqual(["/collections/all"]);
     expect(h.leiturasDoCarrinho()).toBe(0);
+  });
+
+  it("capa sobre o bloco de pagamento: o toque nela (PayPal em iframe) e levado como compra imediata", async () => {
+    const { h, involucro } = paginaDeProduto();
+    const capas = involucro.querySelectorAll("[data-xcart-capa]");
+    expect(capas).toHaveLength(1);
+    const capa = capas[0];
+    expect(involucro.style.position).toBe("relative");
+    // Contexto proprio: o z-index da capa nao passa por cima de gaveta.
+    expect(involucro.style.isolation).toBe("isolate");
+    expect(capa.style.cssText).toContain("position:absolute");
+    expect(capa.getAttribute("aria-hidden")).toBe("true");
+
+    expect(h.tocar(capa).defaultPrevented).toBe(true);
+    await esvaziar();
+    expect(h.adicionados).toEqual([{ id: 4242, quantidade: 1 }]);
+    expect(involucro.getAttribute("aria-busy")).toBe("true");
+    h.responderRota();
+    await esvaziar();
+    expect(h.navegacoes).toEqual(["https://tdicbr-3u.myshopify.com/cart/987:1"]);
+  });
+
+  it("bloco trocado pelo tema (troca de variante) ganha capa de novo, sem duplicar", () => {
+    const { h, involucro, form } = paginaDeProduto();
+    h.rodarIntervalos();
+    expect(involucro.querySelectorAll("[data-xcart-capa]")).toHaveLength(1);
+
+    form.removeChild(involucro);
+    const novo = h.el(
+      "div",
+      { class: "shopify-payment-button", "data-shopify": "payment-button" },
+      h.el("shopify-accelerated-checkout")
+    );
+    form.appendChild(novo);
+    h.rodarIntervalos();
+    expect(novo.querySelectorAll("[data-xcart-capa]")).toHaveLength(1);
+  });
+
+  it("produto esgotado: toque na capa nao leva nada, como o botao nativo desligado", async () => {
+    const { h, involucro } = paginaDeProduto({ esgotado: true });
+    const capa = involucro.querySelector("[data-xcart-capa]")!;
+    h.tocar(capa);
+    await esvaziar();
+    expect(h.buscas).toEqual([]);
+    expect(h.navegacoes).toEqual([]);
+    expect(involucro.getAttribute("aria-busy")).toBeNull();
   });
 
   it("o CSS esconde as carteiras do carrinho e, em regra propria, o botao de carteira em iframe", () => {

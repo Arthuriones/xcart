@@ -256,6 +256,11 @@
   var TRAVA_MAXIMA_MS = 10000;
   // Nenhuma tentativa pode ficar pendurada: com a trava valendo ate a pagina
   // sair, um fetch que nunca volta deixaria o botao morto para sempre.
+  //
+  // PAR com ORCAMENTO_HIDRATACAO_MS de src/lib/checkout-routes/hidratar-por-sku.ts:
+  // o /resolve tem que responder antes deste prazo, ou o loader corta uma
+  // rota que o servidor ainda terminaria. Travado por
+  // tests/resolve-orcamento.test.ts -- subir um sem olhar o outro quebra.
   var PRAZO_REDE_MS = 15000;
   var travaTimer = null;
   var toquesDuranteRota = 0;
@@ -429,6 +434,7 @@
     ".shopify-payment-button__more-options",
     ".shopify-payment-button",
     "[data-shopify='payment-button']",
+    "[data-xcart-carteira]",
     SELETOR_EXPRESSO_CARRINHO
   ].join(", ");
 
@@ -480,9 +486,10 @@
   // vitrine carteira nenhuma deve aparecer -- quem cobra e a loja de checkout.
   // As do CARRINHO somem inteiras (ali so ha carteira; o "Finalizar" do tema
   // fica). Na pagina de produto o componente tambem traz o "Comprar agora",
-  // entao ele fica e o clique e levado pela rota; so some o botao antigo de
-  // carteira que e iframe. O :has vai em regra propria: navegador sem :has
-  // descarta a regra inteira, e nao pode levar a do carrinho junto.
+  // entao ele fica, e a capa de cobrirCarteirasDoProduto leva o toque; so
+  // some o botao antigo de carteira que e iframe. O :has vai em regra propria:
+  // navegador sem :has descarta a regra inteira, e nao pode levar a do
+  // carrinho junto.
   function esconderCarteiras() {
     try {
       if (document.getElementById("xcart-rota-carteiras")) return;
@@ -493,6 +500,103 @@
         ".shopify-payment-button__button--branded:has(iframe){display:none!important}";
       (document.head || document.documentElement).appendChild(estilo);
     } catch (e) {}
+  }
+
+  // ==========================================================================
+  // Capa sobre o bloco de pagamento da pagina de produto.
+  //
+  // O shopify-accelerated-checkout do produto desenha o PayPal num iframe de
+  // outro dominio dentro do shadow fechado. Toque dentro do iframe nao chega a
+  // esta pagina -- nenhum ouvinte nosso roda, e a vitrine cobrava com o nome
+  // da marca. Esconder o componente levaria o "Comprar agora" junto.
+  //
+  // Entao uma capa transparente cobre o bloco: o toque cai nela, que e DESTA
+  // pagina, e o caminho do clique passa pelo involucro marcado, que
+  // alvoExpresso leva como compra imediata. "Comprar agora" e carteiras
+  // continuam a vista.
+  //
+  // O involucro vira contexto de empilhamento proprio (isolation): o z-index
+  // da capa vale so ali dentro e nao passa por cima de gaveta ou cabecalho
+  // fixo que estejam sobre o bloco. Tema que troca o bloco ao mudar de
+  // variante perde a capa; vigiarCarteirasDoProduto poe de novo.
+  // ==========================================================================
+  var MARCA_INVOLUCRO = "data-xcart-carteira";
+  var MARCA_CAPA = "data-xcart-capa";
+
+  function cobrirCarteirasDoProduto() {
+    try {
+      var hosts = document.querySelectorAll("shopify-accelerated-checkout");
+      for (var i = 0; i < hosts.length; i++) {
+        var host = hosts[i];
+        var involucro =
+          (host.closest && host.closest(".shopify-payment-button, [data-shopify='payment-button']")) ||
+          host.parentNode;
+        if (!involucro || involucro.nodeType !== 1 || !involucro.style) continue;
+        if (involucro.querySelector("[" + MARCA_CAPA + "]")) continue;
+
+        var posicao = "";
+        try {
+          posicao = window.getComputedStyle ? window.getComputedStyle(involucro).position : "";
+        } catch (e) {
+          posicao = "";
+        }
+        if (!posicao || posicao === "static") involucro.style.position = "relative";
+        involucro.style.isolation = "isolate";
+        involucro.setAttribute(MARCA_INVOLUCRO, "1");
+
+        var capa = document.createElement("div");
+        capa.setAttribute(MARCA_CAPA, "1");
+        capa.setAttribute("aria-hidden", "true");
+        capa.style.cssText =
+          "position:absolute;top:0;right:0;bottom:0;left:0;z-index:2147483647;" +
+          "background:transparent;cursor:pointer;-webkit-tap-highlight-color:transparent";
+        involucro.appendChild(capa);
+      }
+    } catch (e) {}
+  }
+
+  // O tema troca o bloco de pagamento quando o comprador muda de variante.
+  // MutationObserver poe a capa no bloco novo antes do proximo toque; sem
+  // ele (navegador muito velho), um intervalo.
+  function vigiarCarteirasDoProduto() {
+    cobrirCarteirasDoProduto();
+    var pendente = false;
+    var agendar = function () {
+      if (pendente) return;
+      pendente = true;
+      setTimeout(function () {
+        pendente = false;
+        cobrirCarteirasDoProduto();
+      }, 50);
+    };
+    try {
+      if (typeof MutationObserver === "function") {
+        new MutationObserver(agendar).observe(document.body, { childList: true, subtree: true });
+        return;
+      }
+    } catch (e) {}
+    setInterval(cobrirCarteirasDoProduto, 1000);
+  }
+
+  // Produto esgotado: o tema desliga o "Adicionar" e o "Comprar agora", e
+  // botao desligado nem dispara clique. A capa dispararia -- e levaria o
+  // carrinho sem o item. Com a compra desligada no tema, o toque na capa nao
+  // faz nada, como o botao nativo.
+  function compraDesligadaNoTema(involucro) {
+    try {
+      var host = involucro.querySelector("shopify-accelerated-checkout");
+      if (host && host.getAttribute("disabled") !== null) return true;
+      var form = involucro.closest("form") || findProductForm(involucro);
+      var adicionar = form && form.querySelector("[name='add']");
+      return Boolean(
+        adicionar &&
+          (adicionar.disabled === true ||
+            adicionar.getAttribute("disabled") !== null ||
+            adicionar.getAttribute("aria-disabled") === "true")
+      );
+    } catch (e) {
+      return false;
+    }
   }
 
   function rootPath() {
@@ -855,12 +959,14 @@
 
   // skipGuard: quem chama ja travou (routeCheckout). Os outros (Yampi, redes
   // de seguranca) travam aqui, e com a trava ligada nao fazem nada.
-  async function routeCartCheckout(skipGuard) {
+  // carrinhoLido: o carrinho que quem chama acabou de ler e nao mudou depois
+  // (poupa uma ida ao cart.js).
+  async function routeCartCheckout(skipGuard, carrinhoLido) {
     if (isRouting && !skipGuard) return;
     if (!isRouting) travarRoteamento(null);
 
     try {
-      var cart = await getCart();
+      var cart = carrinhoLido || await getCart();
       if (!cart.items || cart.items.length === 0) {
         segurarAteSair();
         window.location.href = rootPath() + "cart";
@@ -905,14 +1011,13 @@
 
     try {
       var compraImediata = modo ? modo === "produto" : isImmediatePurchaseTarget(target);
+      var carrinhoLido = null;
       if (compraImediata) {
         var form = findProductForm(target);
-        if (form) {
-          try { await submitProductForm(form); } catch (e) {}
-        }
+        if (form) carrinhoLido = await garantirVarianteNoCarrinho(form);
       }
 
-      await routeCartCheckout(true);
+      await routeCartCheckout(true, carrinhoLido);
     } catch (error) {
       console.warn("[RoutedCheckout] erro ao rotear checkout", error);
       trackFallback("direct_checkout_error", detalheDoErro(error));
@@ -928,8 +1033,71 @@
     return document.querySelector('form[action*="/cart/add"]');
   }
 
-  function submitProductForm(form) {
+  // ==========================================================================
+  // "Comprar agora" e carteira na pagina de produto: a variante do formulario
+  // tem que estar no carrinho na quantidade do formulario -- e nada a mais.
+  //
+  // /cart/add.js SOMA na linha que ja existe. Adicionar a cada tentativa
+  // dobrava o item na loja de checkout (quantidade e preco x2) em dois casos
+  // comuns: a rota falhava depois do add e o comprador tocava de novo (o add
+  // rodava outra vez, e o tema nem sabia do primeiro, porque nao sai
+  // cart:update), e o item ja estava no carrinho (adicionou, fechou a gaveta,
+  // tocou no Apple Pay). Agora le o carrinho antes e adiciona so o que falta.
+  //
+  // Devolve o carrinho lido quando nada foi adicionado (ele ainda vale para a
+  // rota), ou null quando o add mudou o carrinho e ele tem que ser relido.
+  // ==========================================================================
+  async function garantirVarianteNoCarrinho(form) {
+    var idVariante = campoDoFormulario(form, "id");
+    // Sem variante no formulario o add.js falharia de qualquer jeito.
+    if (!idVariante) return null;
+    var desejada = Number(campoDoFormulario(form, "quantity") || 1);
+    if (!(desejada > 0)) desejada = 1;
+
+    var cart = await getCart();
+    var noCarrinho = 0;
+    (cart.items || []).forEach(function (item) {
+      if (String(item.variant_id || item.id) === idVariante) {
+        noCarrinho += Number(item.quantity) || 0;
+      }
+    });
+
+    var falta = desejada - noCarrinho;
+    if (falta <= 0) return cart;
+    try {
+      // So sobrepoe a quantidade quando parte ja esta no carrinho; senao o
+      // add sai exatamente como o formulario manda.
+      await submitProductForm(form, falta < desejada ? falta : 0);
+    } catch (e) {}
+    return null;
+  }
+
+  // Valor de um campo como o formulario o enviaria. FormData conta tambem o
+  // campo de FORA do <form> ligado por form="..." -- no Dawn a quantidade fica
+  // assim, e o querySelector dentro do form nao acha.
+  function campoDoFormulario(form, nome) {
+    try {
+      var valor = new FormData(form).get(nome);
+      if (valor !== null && valor !== undefined && valor !== "") return String(valor);
+    } catch (e) {}
+    try {
+      var campo = form.querySelector('[name="' + nome + '"]');
+      return campo && campo.value ? String(campo.value) : "";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  // quantidade: sobrepoe a do formulario (garantirVarianteNoCarrinho manda so
+  // a diferenca). Sem ela, vale a do formulario.
+  function dadosDoFormulario(form, quantidade) {
     var formData = new FormData(form);
+    if (quantidade) formData.set("quantity", String(quantidade));
+    return formData;
+  }
+
+  function submitProductForm(form, quantidade) {
+    var formData = dadosDoFormulario(form, quantidade);
     var sectionIds = Array.prototype.slice
       .call(document.querySelectorAll("cart-items-component"))
       .map(function (element) {
@@ -962,7 +1130,7 @@
               Accept: "application/json",
               "X-Requested-With": "XMLHttpRequest",
             },
-            body: new FormData(form),
+            body: dadosDoFormulario(form, quantidade),
           });
         });
       }
@@ -1093,6 +1261,13 @@
     if (ehLinkProprio(event.target)) return;
     var expresso = alvoExpresso(event);
     if (expresso) {
+      var naCapa = Boolean(
+        event.target && event.target.getAttribute && event.target.getAttribute(MARCA_CAPA) !== null
+      );
+      if (naCapa && compraDesligadaNoTema(expresso.el)) {
+        barrarEvento(event);
+        return;
+      }
       routeCheckout(event, expresso.el, expresso.modo);
       return;
     }
@@ -1205,6 +1380,7 @@
     initialized = true;
     instalarRedesDeSeguranca();
     esconderCarteiras();
+    vigiarCarteirasDoProduto();
     reportarPresenca();
     window.addEventListener("click", handleDocumentClick, true);
     document.addEventListener("click", handleDocumentClick, true);

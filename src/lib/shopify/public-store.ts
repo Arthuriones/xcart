@@ -460,7 +460,14 @@ export async function fetchPublicShopifyProductsByHandles(
 
 export async function fetchPublicShopifyProducts(
   source: string,
-  options?: { limit?: number; maxPages?: number; page?: number; pageSize?: number }
+  options?: {
+    limit?: number;
+    maxPages?: number;
+    page?: number;
+    pageSize?: number;
+    /** Prazo de cada pagina (ver fetchWithImportProxy). Sem ele, sem prazo. */
+    timeoutMs?: number;
+  }
 ): Promise<{ domain: string; products: PublicShopifyProduct[] }> {
   const domain = normalizePublicShopifyDomain(source);
   if (!domain) {
@@ -493,13 +500,17 @@ export async function fetchPublicShopifyProducts(
       ? `/collections/${encodeURIComponent(collectionHandle)}/products.json`
       : "/products.json";
     const url = `https://${domain}${path}?limit=${pageSize}&page=${page}`;
-    const res = await fetchWithImportProxy(url, {
-      headers: {
-        accept: "application/json",
-        "user-agent": "ShopifyCreator/1.0 (+https://shopify.dev)",
+    const res = await fetchWithImportProxy(
+      url,
+      {
+        headers: {
+          accept: "application/json",
+          "user-agent": "ShopifyCreator/1.0 (+https://shopify.dev)",
+        },
+        cache: "no-store",
       },
-      cache: "no-store",
-    });
+      { timeoutMs: options?.timeoutMs }
+    );
 
     if (!res.ok) {
       if (page === 1) {
@@ -568,8 +579,29 @@ function podarCacheDeSku() {
   }
 }
 
+/**
+ * Leituras do indice em andamento, por dominio.
+ *
+ * O /resolve espera a leitura so ate o orcamento dele (ver
+ * lib/checkout-routes/hidratar-por-sku) e deixa ela seguir depois da
+ * resposta. Sem isto, a nova tentativa do comprador -- que vem justamente
+ * porque a primeira estourou -- comecava OUTRA leitura das mesmas 20 paginas
+ * em vez de esperar a que ja estava quase pronta.
+ */
+const indicesEmLeitura = new Map<string, Promise<Map<string, number>>>();
+
+/**
+ * Prazo de cada pagina do products.json no indice. Sem ele, uma pagina
+ * pendurada no proxy prendia a leitura (e a funcao) ate o limite da
+ * plataforma.
+ */
+const PRAZO_PAGINA_INDICE_MS = 10_000;
+
 async function buildSkuIndex(domain: string): Promise<Map<string, number>> {
-  const { products } = await fetchPublicShopifyProducts(domain, { limit: 5000 });
+  const { products } = await fetchPublicShopifyProducts(domain, {
+    limit: 5000,
+    timeoutMs: PRAZO_PAGINA_INDICE_MS,
+  });
   const index = new Map<string, number>();
   for (const product of products) {
     for (const variant of product.variants) {
@@ -594,10 +626,19 @@ export async function resolveVariantIdsBySku(
     ? cached.index
     : null;
   if (!index) {
+    let leitura = indicesEmLeitura.get(domain);
+    if (!leitura) {
+      leitura = buildSkuIndex(domain)
+        .then((novo) => {
+          podarCacheDeSku();
+          skuIndexCache.set(domain, { at: Date.now(), index: novo });
+          return novo;
+        })
+        .finally(() => indicesEmLeitura.delete(domain));
+      indicesEmLeitura.set(domain, leitura);
+    }
     try {
-      index = await buildSkuIndex(domain);
-      podarCacheDeSku();
-      skuIndexCache.set(domain, { at: Date.now(), index });
+      index = await leitura;
     } catch {
       return new Map();
     }

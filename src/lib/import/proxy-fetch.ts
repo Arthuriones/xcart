@@ -41,26 +41,40 @@ export function getImportProxyTemplate() {
 export async function fetchWithImportProxy(
   url: string,
   init?: RequestInit,
-  options?: { proxyFirst?: boolean }
+  options?: {
+    proxyFirst?: boolean;
+    /**
+     * Desiste de CADA tentativa (proxy, direto) depois de N ms. Opcional e sem
+     * padrao, como em safeFetch: importacao legitimamente demora. Um relogio
+     * por tentativa, e nao um sinal so, porque o direto e o fallback do
+     * proxy: com o sinal do proxy ja abortado ele morreria sem tentar.
+     */
+    timeoutMs?: number;
+  }
 ) {
   const proxyTemplate = getImportProxyTemplate();
   const proxyUrl = proxyTemplate ? applyProxyTemplate(proxyTemplate, url) : "";
   const proxyFirst = options?.proxyFirst !== false;
+  const timeoutMs = options?.timeoutMs;
+  const comPrazo = (): RequestInit | undefined =>
+    timeoutMs && !init?.signal
+      ? { ...init, signal: AbortSignal.timeout(timeoutMs) }
+      : init;
 
   if (proxyUrl && proxyFirst) {
     try {
-      const response = await fetch(proxyUrl, init);
+      const response = await fetch(proxyUrl, comPrazo());
       if (response.ok) return response;
     } catch {
       // Fallback direto abaixo. Alguns dominios bloqueiam proxy ou vice-versa.
     }
   }
 
-  const directResponse = await safeFetch(url, init);
+  const directResponse = await safeFetch(url, { ...init, timeoutMs });
   if (directResponse.ok || !proxyUrl || proxyFirst) return directResponse;
 
   try {
-    return await fetch(proxyUrl, init);
+    return await fetch(proxyUrl, comPrazo());
   } catch {
     return directResponse;
   }

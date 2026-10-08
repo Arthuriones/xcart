@@ -1,16 +1,13 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { normalizarLinhas } from "@/lib/checkout-routes/linhas";
 import {
   buildCartPermalink,
   marketParamsFromLanguage,
-  type CheckoutRouteLine,
 } from "@/lib/shopify/cart-routing";
-import { resolveVariantIdsBySku } from "@/lib/shopify/public-store";
 import {
   computeCoverage,
   normalizeRotation,
   pickTarget,
-  type RouteTarget,
 } from "@/lib/checkout-routes/rotation";
 import {
   legacyTargetFromConfig,
@@ -18,8 +15,14 @@ import {
 } from "@/lib/checkout-routes/targets";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { contarPedidos24h } from "@/lib/checkout-routes/pedidos-24h";
+import { hydrateTargetBySku } from "@/lib/checkout-routes/hidratar-por-sku";
 
 export const runtime = "nodejs";
+// A resposta sai dentro do orcamento de hidratacao (bem antes do prazo do
+// loader); o resto e a leitura do indice de SKU que estourou o orcamento e
+// segue por `after` para aquecer o cache. 60 s cobrem as 20 paginas do
+// products.json com folga e limitam o que um endpoint publico pode gastar.
+export const maxDuration = 60;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -88,8 +91,15 @@ export async function POST(request: NextRequest) {
     // entrou no mapa. Roda ANTES do sorteio, senao um destino com o mapa
     // desatualizado pareceria ter cobertura pior do que realmente tem e o
     // rodizio o excluiria por um motivo que nao existe.
+    //
+    // Com orcamento (ver hidratar-por-sku): leitura que nao cabe nele segue
+    // depois da resposta, para a proxima tentativa achar o indice pronto.
     const enriched = await Promise.all(
-      targets.map(async (target) => hydrateTargetBySku(target, lines))
+      targets.map(async (target) =>
+        hydrateTargetBySku(target, lines, {
+          continuarDepois: (leitura) => after(() => leitura),
+        })
+      )
     );
 
     // Teto de pedidos por dia: a contagem so e lida quando algum destino tem.
@@ -152,36 +162,6 @@ export async function POST(request: NextRequest) {
       { error: "Falha ao resolver checkout." },
       { status: 500, headers: corsHeaders }
     );
-  }
-}
-
-/**
- * Completa o sku_map do destino, em memoria, com o que der para resolver no
- * products.json publico dele. Nao grava nada -- quem consolida o mapa e o
- * heal; aqui e so para o carrinho da vez nao perder item.
- */
-async function hydrateTargetBySku(
-  target: RouteTarget,
-  lines: CheckoutRouteLine[]
-): Promise<RouteTarget> {
-  const [coverage] = computeCoverage([target], lines);
-  const missing = coverage.resolved
-    .filter((line) => !line.variantId && line.sku)
-    .map((line) => line.sku);
-
-  if (missing.length === 0 || !target.domain) return target;
-
-  try {
-    const bySku = await resolveVariantIdsBySku(target.domain, missing);
-    if (bySku.size === 0) return target;
-    const skuMap = { ...target.skuMap };
-    for (const [sku, variantId] of bySku.entries()) {
-      skuMap[String(sku).trim().toLowerCase()] = String(variantId);
-    }
-    return { ...target, skuMap };
-  } catch {
-    // Loja fora do ar ou products.json bloqueado: segue com o mapa que tem.
-    return target;
   }
 }
 
