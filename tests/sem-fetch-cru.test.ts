@@ -34,7 +34,7 @@ const PERMITIDOS: Record<string, string> = {
   "src/lib/import/proxy-fetch.ts":
     "monta a URL do proxy Bright Data (host constante) e o caminho direto ja passa por safeFetch",
   "src/lib/shopify/client.ts":
-    "host vem de hostDaLoja(), que chama assertShopDomainPublico (parser + DNS) na linha anterior",
+    "host vem de hostDaLoja(), que chama assertShopDomainPublico (parser + DNS) na linha anterior; redirect manual e recusado (tests/shopify-sem-redirect.test.ts)",
   "src/lib/aliexpress/scraper.ts":
     "endpoint fixo da API do Bright Data (api.brightdata.com), sem entrada do usuario",
   "src/lib/billing/pagou.ts": "BASE e a URL da API do Pagou, vinda de env",

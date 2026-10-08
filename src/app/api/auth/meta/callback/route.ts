@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -12,119 +12,30 @@ import {
   trocarCodigoPorTokenMeta,
 } from "@/lib/ads/meta-oauth";
 import { listarContasMeta } from "@/lib/ads/meta-graph";
+import { mensagemDoErroOAuth, renderPopupOAuth } from "@/lib/ads/popup-oauth";
 
 export const runtime = "nodejs";
 
-function renderPopupResposta({
-  ok,
-  nome,
-  contas,
-  erro,
-}: {
-  ok: boolean;
-  nome?: string;
-  contas?: number;
-  erro?: string;
-}) {
-  const dados = { ok, nome: nome || null, contas: contas ?? 0, erro: erro || null };
-  const jsonStr = JSON.stringify(dados);
-
-  const html = `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8">
-  <title>${ok ? "Conectado com sucesso" : "Falha na conexão"}</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    body {
-      font-family: system-ui, -apple-system, sans-serif;
-      background: #0f1115;
-      color: #f1f3f5;
-      display: grid;
-      place-items: center;
-      height: 100vh;
-      margin: 0;
-      text-align: center;
-      padding: 20px;
-      box-sizing: border-box;
-    }
-    .box {
-      background: #181b21;
-      border: 1px solid #282d37;
-      border-radius: 12px;
-      padding: 32px 24px;
-      max-width: 380px;
-      width: 100%;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-    }
-    .icon {
-      font-size: 36px;
-      margin-bottom: 12px;
-    }
-    h2 {
-      font-size: 18px;
-      margin: 0 0 8px;
-      font-weight: 600;
-      color: ${ok ? "#34d399" : "#f87171"};
-    }
-    p {
-      font-size: 14px;
-      color: #9ca3af;
-      margin: 0 0 16px;
-      line-height: 1.5;
-    }
-    .aviso {
-      font-size: 12px;
-      color: #6b7280;
-    }
-  </style>
-</head>
-<body>
-  <div class="box">
-    <div class="icon">${ok ? "✓" : "⚠"}</div>
-    <h2>${ok ? (nome ? `Olá, ${nome}!` : "Perfil Conectado!") : "Falha na autorização"}</h2>
-    <p>${
-      ok
-        ? `Sua conta do Meta Ads foi vinculada com sucesso.${contas ? ` Encontramos ${contas} conta(s) de anúncio.` : ""}`
-        : erro || "Ocorreu um erro ao autorizar a conta no Facebook."
-    }</p>
-    <div class="aviso">Fechando esta janela em instantes...</div>
-  </div>
-  <script>
-    (function() {
-      try {
-        if (window.opener && !window.opener.closed) {
-          window.opener.postMessage({ type: 'XCART_META_CONNECTED', ...${jsonStr} }, window.location.origin);
-          setTimeout(function() { window.close(); }, 900);
-          return;
-        }
-      } catch (e) {}
-      setTimeout(function() {
-        window.location.href = '/integracoes/meta';
-      }, 1500);
-    })();
-  </script>
-</body>
-</html>`;
-
-  return new NextResponse(html, {
-    status: ok ? 200 : 400,
-    headers: { "content-type": "text/html; charset=utf-8" },
-  });
-}
+const renderPopup = (dados: Parameters<typeof renderPopupOAuth>[1]) =>
+  renderPopupOAuth("meta", dados);
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const stateQuery = searchParams.get("state");
-  const erroUrl = searchParams.get("error_description") || searchParams.get("error");
+  const erroUrl = searchParams.get("error");
 
-  // Se o usuario cancelou ou a Meta retornou erro
+  // Cancelou, ou a Meta devolveu erro. O texto da URL NAO vai para a tela: a
+  // URL e publica e qualquer um monta o link -- ver popup-oauth.ts. So o
+  // codigo escolhe entre duas mensagens nossas; o resto fica no log.
   if (erroUrl || !code) {
-    return renderPopupResposta({
-      ok: false,
-      erro: erroUrl || "Você cancelou a autorização do Facebook.",
-    });
+    if (erroUrl) {
+      console.warn("[auth/meta/callback] autorizacao recusada", {
+        error: erroUrl.slice(0, 100),
+        descricao: (searchParams.get("error_description") || "").slice(0, 200),
+      });
+    }
+    return renderPopup({ ok: false, erro: mensagemDoErroOAuth(erroUrl || "access_denied") });
   }
 
   // 1. Confere usuario logado no xcart
@@ -134,7 +45,7 @@ export async function GET(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return renderPopupResposta({
+    return renderPopup({
       ok: false,
       erro: "Sua sessão expirou. Faça login no xcart novamente.",
     });
@@ -146,7 +57,7 @@ export async function GET(request: NextRequest) {
   const queryState = lerEstadoMeta(stateQuery || undefined);
 
   if (!cookieState || !queryState || !nonceConfere(cookieState.nonce, queryState.nonce)) {
-    return renderPopupResposta({
+    return renderPopup({
       ok: false,
       erro: "Falha de validação de segurança (state inválido ou expirado). Tente novamente.",
     });
@@ -241,7 +152,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const response = renderPopupResposta({
+    const response = renderPopup({
       ok: true,
       nome: perfil.nome,
       contas: contas.length,
@@ -251,10 +162,9 @@ export async function GET(request: NextRequest) {
     response.cookies.delete(COOKIE_META_STATE);
     return response;
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Erro interno ao processar autorização.";
-    return renderPopupResposta({
-      ok: false,
-      erro: msg,
-    });
+    // A mensagem da excecao pode trazer texto da resposta da Meta: fica no
+    // log, e a tela recebe a nossa.
+    console.error("[auth/meta/callback] falha ao concluir a conexao", err);
+    return renderPopup({ ok: false });
   }
 }

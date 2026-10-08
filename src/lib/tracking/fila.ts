@@ -112,6 +112,11 @@ export async function enfileirar(
      * checkout expresso (migration 057): fora dela a coluna nem vai no INSERT.
      */
     shopifyClientId?: string | null;
+    /**
+     * Hash do IP de quem chamou o coletor (ip-balde.ts). So nos eventos de
+     * navegador: alimenta o teto por IP. Coluna da migration 065.
+     */
+    ipHash?: string | null;
   }
 ): Promise<{ id: string | null; duplicado: boolean }> {
   const { data, error } = await admin
@@ -131,12 +136,18 @@ export async function enfileirar(
         ? { next_attempt_at: entrada.proximaTentativaEm.toISOString() }
         : {}),
       ...(entrada.shopifyClientId ? { shopify_client_id: entrada.shopifyClientId } : {}),
+      ...(entrada.ipHash ? { ip_hash: entrada.ipHash } : {}),
     })
     .select("id")
     .single();
 
   // 23505 = unique_violation: ja estava na fila.
   if (error?.code === "23505") return { id: null, duplicado: true };
+  // Sem a coluna `ip_hash` (065 ainda nao aplicada): de novo sem ela. O teto
+  // por IP fica cego ate a migration; o evento nao cai por causa dele.
+  if (error && entrada.ipHash && /ip_hash/.test(error.message)) {
+    return enfileirar(admin, { ...entrada, ipHash: null });
+  }
   if (error) throw new Error(`falha ao enfileirar: ${error.message}`);
   return { id: data?.id ?? null, duplicado: false };
 }

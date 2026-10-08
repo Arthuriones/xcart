@@ -118,6 +118,51 @@ async function hostDaLoja(shopDomain: string): Promise<string> {
   }
 }
 
+/**
+ * Redirect da Admin API nao e seguido: os tres fetch daqui pedem o modo
+ * manual de redirect e passam a resposta por esta funcao.
+ *
+ * `hostDaLoja` aprova so o host INICIAL. Com o `follow` padrao, um dominio
+ * publico do proprio usuario respondia 302 para http://169.254.169.254/... e o
+ * servidor ia atras -- a trava inteira contornada por um redirect, e o corpo
+ * do destino interno voltando na mensagem de erro. Mesmo buraco que safeFetch
+ * fecha em safe-url.ts.
+ *
+ * A Shopify nao redireciona a Admin API: medido em 2026-10-08, app inexistente
+ * responde 400, loja inexistente 404 e token ruim 401, sem 3xx. Quem
+ * redireciona e dominio proprio da loja (/admin -> .myshopify.com), e nesse
+ * caso o POST ja chegava como GET e sem corpo -- nunca funcionou.
+ */
+function recusarRedirect(res: Response, host: string): void {
+  if (res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400)) {
+    console.warn("[shopify] redirect recusado", { host, status: res.status });
+    throw new ShopifyClientError(
+      "A loja nao respondeu pela API. Use o dominio .myshopify.com da loja.",
+      "INVALID_DOMAIN",
+      400
+    );
+  }
+}
+
+const ehDaShopify = (host: string) => host.endsWith(".myshopify.com");
+
+/**
+ * `res.json()` sem vazar o corpo: o SyntaxError do JSON.parse cita um trecho
+ * do texto, e a mensagem do erro chega a tela pelo /api/shopify/connect.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function lerJson(res: Response): Promise<any> {
+  try {
+    return await res.json();
+  } catch {
+    throw new ShopifyClientError(
+      "Resposta invalida da Shopify.",
+      "REQUEST_FAILED",
+      502
+    );
+  }
+}
+
 async function getAccessToken(creds: ShopifyCredentials): Promise<string> {
   const normalizedShopDomain = await hostDaLoja(creds.shopDomain);
 
@@ -147,8 +192,10 @@ async function getAccessToken(creds: ShopifyCredentials): Promise<string> {
         client_id: creds.clientId,
         client_secret: creds.clientSecret,
       }),
+      redirect: "manual",
     }
   );
+  recusarRedirect(res, normalizedShopDomain);
 
   if (!res.ok) {
     const contentType = res.headers.get("content-type") || "";
@@ -230,7 +277,7 @@ async function getAccessToken(creds: ShopifyCredentials): Promise<string> {
     );
   }
 
-  const data = await res.json();
+  const data = await lerJson(res);
   const accessToken: string = data.access_token;
   const expiresIn: number = data.expires_in || 86399;
 
@@ -253,8 +300,9 @@ export async function shopifyRestGet<T>(
 
   const res = await fetch(
     `https://${normalizedShopDomain}/admin/api/${SHOPIFY_API_VERSION}/${path}`,
-    { headers: { "X-Shopify-Access-Token": accessToken } }
+    { headers: { "X-Shopify-Access-Token": accessToken }, redirect: "manual" }
   );
+  recusarRedirect(res, normalizedShopDomain);
   if (!res.ok) {
     throw new ShopifyClientError(
       `Falha ao ler ${path} (HTTP ${res.status}).`,
@@ -262,7 +310,7 @@ export async function shopifyRestGet<T>(
       res.status
     );
   }
-  return (await res.json()) as T;
+  return (await lerJson(res)) as T;
 }
 
 export async function shopifyGraphQL(
@@ -286,7 +334,9 @@ export async function shopifyGraphQL(
         "X-Shopify-Access-Token": accessToken,
       },
       body: JSON.stringify({ query, variables }),
+      redirect: "manual",
     });
+    recusarRedirect(res, normalizedShopDomain);
 
     if (!res.ok) {
       if (res.status === 402) {
@@ -306,8 +356,18 @@ export async function shopifyGraphQL(
 
       const body = await res.text().catch(() => "");
       const details = sanitizeErrorText(body);
+      console.error("[shopifyGraphQL] HTTP", {
+        status: res.status,
+        shopDomain: normalizedShopDomain,
+        operation: getOperationName(query),
+        bodySnippet: details,
+      });
+      // O corpo so volta na mensagem quando quem respondeu e a Shopify. Em
+      // dominio proprio o DNS foi conferido antes, mas pode mudar entre a
+      // conferencia e a conexao (rebinding) -- e ai o corpo seria de um
+      // endereco interno, devolvido na tela por /api/shopify/connect.
       throw new ShopifyClientError(
-        details
+        details && ehDaShopify(normalizedShopDomain)
           ? `Shopify API error: ${res.status} ${res.statusText} - ${details}`
           : `Shopify API error: ${res.status} ${res.statusText}`,
         "REQUEST_FAILED",
@@ -315,7 +375,7 @@ export async function shopifyGraphQL(
       );
     }
 
-    const json = await res.json();
+    const json = await lerJson(res);
     if (json.errors) {
       // Throttle do GraphQL vem como 200 com erro THROTTLED: espera e retenta.
       const throttled = JSON.stringify(json.errors).includes("THROTTLED");
@@ -330,7 +390,14 @@ export async function shopifyGraphQL(
         operation: getOperationName(query),
         errors: json.errors,
       });
-      throw new Error(`Shopify GraphQL error: ${JSON.stringify(json.errors)}`);
+      // Os `errors` ficam na mensagem quando vem da Shopify: e por eles que
+      // quem chama reconhece ACCESS_DENIED. De outro host, pelo mesmo motivo
+      // do corpo acima, nao.
+      throw new Error(
+        ehDaShopify(normalizedShopDomain)
+          ? `Shopify GraphQL error: ${JSON.stringify(json.errors)}`
+          : "Shopify GraphQL error"
+      );
     }
 
     return json.data;

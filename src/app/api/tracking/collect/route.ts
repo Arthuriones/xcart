@@ -15,6 +15,7 @@ import {
 import { MAX_TTCLID, montarFbc, montarUserData, montarUserTiktok } from "@/lib/tracking/normalizar";
 import { montarEventoDeFunilTiktok } from "@/lib/tracking/tiktok-evento";
 import { JANELA_PIXEL_CHECKOUT_MS } from "@/lib/tracking/google-tag";
+import { hashDoIp, ipDaRequisicao } from "@/lib/tracking/ip-balde";
 
 export const runtime = "nodejs";
 
@@ -86,6 +87,23 @@ const TETO_POR_LOJA_HORA = 20000;
  * de crescer a tabela.
  */
 const TETO_IDENTIDADES_HORA = 20000;
+
+/**
+ * LINHAS por IP por loja por hora -- contado ANTES do teto da loja.
+ *
+ * O teto da loja e um balde so, e storeId e shop estao no HTML do tema: uma
+ * origem sozinha, com um visitorId novo a cada POST, enchia o balde de outra
+ * pessoa, e ate a hora virar todo evento real caia em "teto da loja". Com
+ * este, uma origem gasta no maximo isto do balde. Ver ip-balde.ts.
+ *
+ * Folgado de proposito: rede movel com CGNAT poe muitos compradores atras do
+ * mesmo IPv4 (IPv6 conta pelo /64). Medido em 2026-10-08: a pior hora da loja
+ * mais movimentada, em 30 dias, teve 434 linhas -- da loja inteira.
+ */
+const TETO_POR_IP_HORA = 1500;
+
+/** Identidades NOVAS por IP por loja por hora. Mesmo motivo, no outro balde. */
+const TETO_IDENTIDADES_POR_IP_HORA = 500;
 
 /** Pixel e tema no mesmo checkout: o do tema chegou antes, nesta janela. */
 const JANELA_CHECKOUT_DO_TEMA_MS = 10 * 60 * 1000;
@@ -222,6 +240,11 @@ export async function POST(request: NextRequest) {
   const evento = (corpo.evento || "").trim();
   const visitorId = (corpo.visitorId || "").trim().slice(0, 64);
   let eventId = (corpo.eventId || "").trim().slice(0, 200);
+
+  // Quem chamou. O IP cru vai para o Meta e o TikTok como sinal de casamento;
+  // o hash dele e a chave do teto por IP (TETO_POR_IP_HORA).
+  const ip = ipDaRequisicao(request.headers);
+  const ipHash = hashDoIp(ip);
 
   if (!loja || !eventId || !visitorId) {
     return recusado("shop, eventId e visitorId sao obrigatorios");
@@ -411,9 +434,9 @@ export async function POST(request: NextRequest) {
    * Uma linha por visitante (`onConflict store_id,visitor_id`): reenviar o
    * mesmo visitorId so atualiza. Mas o visitorId vem do cliente, e cada id
    * inventado e uma linha nova -- por isso o teto de identidades NOVAS por
-   * hora (TETO_IDENTIDADES_HORA). Estourado, so atualiza quem ja existe.
+   * hora, por IP e por loja. Estourado, so atualiza quem ja existe.
    */
-  async function publicarIdentidade(semTtp = false): Promise<void> {
+  async function publicarIdentidade(semTtp = false, semIp = false): Promise<void> {
     const campos = {
       shopify_client_id: clientId,
       gclid: clique.gclid,
@@ -441,27 +464,53 @@ export async function POST(request: NextRequest) {
     // Sem a coluna `ttp` (059 ainda nao aplicada) o PostgREST recusa a escrita
     // INTEIRA. De novo sem ela, ja aqui: o clique do Meta e do Google nao pode
     // cair por causa do cookie do TikTok, nem pagar contagem e upsert com erro.
-    if (erroUpdate && "ttp" in campos) return publicarIdentidade(true);
+    if (erroUpdate && "ttp" in campos) return publicarIdentidade(true, semIp);
     if (!erroUpdate && existente && existente.length > 0) return;
 
-    // Linha NOVA: conta as que nasceram na ultima hora. Indice
-    // (store_id, created_at) na migration 056.
-    const { count, error: erroConta } = await admin
-      .from("tracking_identities")
-      .select("id", { count: "exact", head: true })
-      .eq("store_id", registro.id)
-      .gte("created_at", new Date(Date.now() - 36e5).toISOString());
+    // Linha NOVA: conta as que nasceram na ultima hora, na loja e deste IP.
+    // Indices (store_id, created_at) na 056 e (store_id, ip_hash, created_at)
+    // na 065. O do IP vem antes: sem ele, uma origem so enchia o balde da
+    // loja, e o visitante real novo ficava sem a linha que a compra consulta.
+    const umaHora = new Date(Date.now() - 36e5).toISOString();
+    const comIp = Boolean(ipHash) && !semIp;
+    const [daLoja, doIp] = await Promise.all([
+      admin
+        .from("tracking_identities")
+        .select("id", { count: "exact", head: true })
+        .eq("store_id", registro.id)
+        .gte("created_at", umaHora),
+      comIp
+        ? admin
+            .from("tracking_identities")
+            .select("id", { count: "exact", head: true })
+            .eq("store_id", registro.id)
+            .eq("ip_hash", ipHash as string)
+            .gte("created_at", umaHora)
+        : null,
+    ]);
 
     // Falha na contagem nao derruba a identidade: melhor uma linha a mais que
-    // um clique perdido.
-    if (!erroConta && (count ?? 0) >= TETO_IDENTIDADES_HORA) return;
+    // um clique perdido. Sem a 065 a contagem do IP erra sempre: o teto por IP
+    // fica cego, nao fechado.
+    if (doIp && !doIp.error && (doIp.count ?? 0) >= TETO_IDENTIDADES_POR_IP_HORA) return;
+    if (!daLoja.error && (daLoja.count ?? 0) >= TETO_IDENTIDADES_HORA) return;
 
     const { error: erroUpsert } = await admin.from("tracking_identities").upsert(
-      { store_id: registro.id, visitor_id: visitorId, ...campos },
+      {
+        store_id: registro.id,
+        visitor_id: visitorId,
+        ...campos,
+        // So na linha nova: e a contagem de criadas na hora que usa.
+        ...(comIp ? { ip_hash: ipHash } : {}),
+      },
       { onConflict: "store_id,visitor_id" }
     );
-    // Segunda rede do mesmo caso, se o update passou e o upsert nao.
-    if (erroUpsert && "ttp" in campos) return publicarIdentidade(true);
+    // Sem a coluna `ip_hash` (065 ainda nao aplicada): de novo sem ela.
+    if (erroUpsert && comIp && /ip_hash/.test(erroUpsert.message)) {
+      return publicarIdentidade(semTtp, true);
+    }
+    // Segunda rede do caso do `ttp`, se o update passou e o upsert nao.
+    if (erroUpsert && "ttp" in campos) return publicarIdentidade(true, semIp);
   }
 
   // O aviso de identidade termina aqui: sem fila, sem destino, sem conversao.
@@ -561,7 +610,7 @@ export async function POST(request: NextRequest) {
   const umDiaAtras = new Date(Date.now() - 864e5).toISOString();
   const umaHoraAtras = new Date(Date.now() - 36e5).toISOString();
 
-  const [{ count: doVisitante }, { count: daLoja }] = await Promise.all([
+  const [{ count: doVisitante }, { count: daLoja }, doIp] = await Promise.all([
     admin
       .from("tracking_events")
       .select("id", { count: "exact", head: true })
@@ -574,10 +623,25 @@ export async function POST(request: NextRequest) {
       .eq("store_id", registro.id)
       .not("visitor_id", "is", null)
       .gte("created_at", umaHoraAtras),
+    // Indice (store_id, ip_hash, created_at) na 065. Sem a coluna a contagem
+    // erra e o teto por IP fica cego -- o evento segue pelos outros tetos.
+    ipHash
+      ? admin
+          .from("tracking_events")
+          .select("id", { count: "exact", head: true })
+          .eq("store_id", registro.id)
+          .eq("ip_hash", ipHash)
+          .gte("created_at", umaHoraAtras)
+      : null,
   ]);
 
   if ((doVisitante ?? 0) >= TETO_POR_VISITANTE) {
     return ok({ ignorado: "teto do visitante" });
+  }
+  // ANTES do teto da loja: o que para aqui nao vira linha, entao nao gasta o
+  // balde da loja. Uma origem so consome no maximo TETO_POR_IP_HORA dele.
+  if (doIp && !doIp.error && (doIp.count ?? 0) >= TETO_POR_IP_HORA) {
+    return ok({ ignorado: "teto do ip" });
   }
   if ((daLoja ?? 0) >= TETO_POR_LOJA_HORA) {
     // Carimba, para a tela poder avisar. Descartar em silencio faria uma loja
@@ -828,10 +892,6 @@ export async function POST(request: NextRequest) {
   // Num evento de funil nao existe cliente identificado -- nao ha e-mail nem
   // telefone para mandar. O que da para oferecer e o que o pixel do navegador
   // ofereceria: cookie, IP e user agent.
-  const ip =
-    (request.headers.get("x-forwarded-for") || "").split(",")[0].trim() ||
-    request.headers.get("x-real-ip") ||
-    null;
   const userAgent = request.headers.get("user-agent");
 
   // A URL da pagina vem do CORPO, nao do header Referer.
@@ -1037,6 +1097,7 @@ export async function POST(request: NextRequest) {
             referrer,
             checkoutToken,
             payload,
+            ipHash,
           });
           saida[chave] = duplicado ? "duplicado" : "teste: nao enviado";
           if (!duplicado) await cancelarDepoisDeGravar();
@@ -1050,6 +1111,8 @@ export async function POST(request: NextRequest) {
           evento: { event_name: evento, event_id: eventId },
           orderId: eventId,
           visitorId,
+          // A chave do teto por IP (TETO_POR_IP_HORA).
+          ipHash,
           referrer,
           // Liga o evento de checkout ao pedido sem depender de cart attribute,
           // que se perde quando a sessao comeca no proprio checkout.

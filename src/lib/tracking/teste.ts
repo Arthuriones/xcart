@@ -155,6 +155,8 @@ export async function registrarSemEnviar(
     referrer?: string | null;
     checkoutToken?: string | null;
     payload: unknown;
+    /** Teto por IP do coletor (migration 065). Ver enfileirar. */
+    ipHash?: string | null;
   }
 ): Promise<{ duplicado: boolean }> {
   const { error } = await admin.from("tracking_events").insert({
@@ -171,9 +173,14 @@ export async function registrarSemEnviar(
     status: "enviado",
     sent_at: null,
     response: { teste: true, enviado: false },
+    ...(entrada.ipHash ? { ip_hash: entrada.ipHash } : {}),
   });
   // 23505: o mesmo evento ja estava na fila (reenvio do snippet, reentrega).
   if (error?.code === "23505") return { duplicado: true };
+  // Sem a coluna `ip_hash` (065 ainda nao aplicada): de novo sem ela.
+  if (error && entrada.ipHash && /ip_hash/.test(error.message)) {
+    return registrarSemEnviar(admin, { ...entrada, ipHash: null });
+  }
   if (error) throw new Error(`falha ao registrar evento de teste: ${error.message}`);
   return { duplicado: false };
 }
