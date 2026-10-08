@@ -402,6 +402,69 @@ export function situacaoDaCompra(status: string | null): { tom: TomSelo; texto: 
 }
 
 // ---------------------------------------------------------------------------
+// Desfecho do cartao (Payment Element da Pagou)
+// ---------------------------------------------------------------------------
+
+/** O que a tela diz quando a 1a cobranca no cartao nao passa. */
+export const ERRO_CARTAO = {
+  recusado: "O banco recusou o cartão. Tente outro cartão ou Pix.",
+  cancelado: "O pagamento foi cancelado antes de terminar. Tente de novo.",
+  expirou: "A confirmação do banco demorou demais. Tente de novo.",
+  autenticacao: "O banco pediu autenticação adicional. Tente outro cartão.",
+} as const;
+
+/*
+ * Status de `elements.submit(...)` (developer.pagou.ai/frontend/payment-element/
+ * sdk-reference, "Submit result"; three-d-secure, "What you get back"). Quando
+ * nao ha acao a fazer, o SDK devolve o status da propria transacao
+ * (payments/cards/transaction-lifecycle): captured/paid aprovam; authorized e
+ * processing ainda estao andando; refused/canceled encerram.
+ */
+const APROVADO = new Set(["succeeded", "completed", "paid", "captured"]);
+const RECUSADO = new Set(["refused", "failed"]);
+const EXPIROU = new Set(["timed_out", "expired"]);
+const AUTENTICACAO = new Set(["requires_action", "requires_reentry"]);
+
+export type DesfechoCartao =
+  | { tipo: "aprovado" }
+  | { tipo: "pendente" }
+  /** `bruto` vai para mensagemDeErro: as nossas aparecem, o resto vai recolhido. */
+  | { tipo: "erro"; bruto: string };
+
+/**
+ * O que fazer depois que `elements.submit(...)` resolve -- e SO depois: no meio
+ * dele o SDK ainda pode estar no 3DS, com o iframe na tela.
+ *
+ *  - `status`: result.status do SDK;
+ *  - `erro`: o texto do erro (o do nosso /api/billing/subscribe vence o do SDK);
+ *  - `servidor`: o que /api/billing/subscribe respondeu; null = a assinatura
+ *    nem foi criada.
+ *
+ * Sem transacao na resposta, o SDK nao teve o que resolver e o servidor decide
+ * (pending ou nao). Status desconhecido conta como pendente: o webhook confirma,
+ * e a tela nao diz "recusado" sem saber.
+ */
+export function desfechoDoCartao(p: {
+  status?: string | null;
+  erro?: string | null;
+  servidor?: { transaction?: unknown; pending?: boolean } | null;
+}): DesfechoCartao {
+  const status = p.status ?? "";
+  if (p.servidor && !p.servidor.transaction) {
+    return p.servidor.pending ? { tipo: "pendente" } : { tipo: "aprovado" };
+  }
+  if (RECUSADO.has(status)) return { tipo: "erro", bruto: ERRO_CARTAO.recusado };
+  if (status === "canceled") return { tipo: "erro", bruto: ERRO_CARTAO.cancelado };
+  if (EXPIROU.has(status)) return { tipo: "erro", bruto: ERRO_CARTAO.expirou };
+  if (AUTENTICACAO.has(status)) return { tipo: "erro", bruto: ERRO_CARTAO.autenticacao };
+  if (status === "error" || !p.servidor) {
+    return { tipo: "erro", bruto: p.erro || `Pagamento não concluído (${status || "sem status"})` };
+  }
+  if (APROVADO.has(status)) return { tipo: "aprovado" };
+  return { tipo: "pendente" };
+}
+
+// ---------------------------------------------------------------------------
 // Erros
 // ---------------------------------------------------------------------------
 
@@ -426,7 +489,7 @@ const MENSAGENS_NOSSAS = new Set([
   "Nenhuma assinatura ativa.",
   // Do formulario de cartao (pagou-card-form.tsx), tambem nossas.
   "Não foi possível carregar o formulário de pagamento.",
-  "O banco pediu autenticação adicional. Tente outro cartão.",
+  ...Object.values(ERRO_CARTAO),
 ]);
 
 export interface ErroNaTela {

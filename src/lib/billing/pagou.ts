@@ -176,6 +176,12 @@ export interface PagouTransaction {
     end_to_end_id?: string;
     receipt_url?: string;
   } | null;
+  /**
+   * Acao pendente no navegador (3DS: `three_ds_challenge`). Opaco: vai ao
+   * Payment Element como veio, ele resolve. So vem no GET /v2/transactions/{id}
+   * (developer.pagou.ai/api-reference/transactions/get).
+   */
+  next_action?: unknown;
   created_at?: string;
 }
 
@@ -249,9 +255,10 @@ export interface PagouSubscription {
   canceledAt?: string | null;
   cardLast4?: string | null;
   metadata?: Record<string, unknown> | null;
-  // O Payment Element espera uma TRANSACAO de volta do callback, nao a
-  // assinatura: e por ela que ele resolve 3DS e o desfecho da 1a cobranca.
-  transactions?: Array<{ id?: string; status?: string; next_action?: unknown }> | null;
+  // So no GET /v2/subscriptions/{id} ("Included on GET by id"), do mais novo
+  // para o mais antigo. O POST nao traz. E cada item NAO tem next_action: para
+  // o 3DS e preciso o GET da transacao (ver /api/billing/subscribe).
+  transactions?: Array<{ id?: string; status?: string; createdAt?: string }> | null;
 }
 
 // Cartao: precisa do token pgct_ vindo do Payment Element.

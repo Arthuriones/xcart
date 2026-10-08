@@ -191,9 +191,15 @@ export function AssinarPro({
           // O botao diz o que acontece e quanto custa, em vez de um
           // "Assinar agora" que esconde o valor.
           labelBotao={`Assinar o ${plano.nome} por ${brl(plano.precoCentavos)} por mês`}
+          // Chamado so depois do desfecho do SDK (3DS incluso); recusa fica
+          // no formulario, com a mensagem, para tentar de novo.
           onSuccess={(dados) => {
-            const pendente = (dados as { pending?: boolean } | null)?.pending === true;
-            if (pendente) toast.info("Pagamento em processamento. O plano libera assim que o banco confirmar.");
+            const pendente = dados.pending === true;
+            if (pendente) {
+              toast.info(
+                dados.mensagem || "Pagamento em processamento. O plano libera assim que o banco confirmar."
+              );
+            }
             else toast.success("Assinatura confirmada.");
             onPronto();
           }}

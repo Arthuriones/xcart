@@ -5,7 +5,12 @@ import { ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Spinner } from "@/components/ui/spinner";
-import { ERRO_PADRAO, mensagemDeErro } from "@/components/billing/regras";
+import {
+  ERRO_PADRAO,
+  desfechoDoCartao,
+  mensagemDeErro,
+  type DesfechoCartao,
+} from "@/components/billing/regras";
 import type { PlanoId } from "@/lib/billing/plans";
 
 // ============================================================================
@@ -15,8 +20,12 @@ import type { PlanoId } from "@/lib/billing/plans";
 // por js.pagou.ai, que devolve um token pgct_. O numero do cartao nunca passa
 // pelo nosso dominio nem pelo nosso servidor.
 //
-// Redesign: so a APARENCIA mudou (tema e cores do iframe, moldura, estados).
-// Script, chave, submit e a chamada a /api/billing/subscribe sao os de antes.
+// O fluxo (developer.pagou.ai/frontend/payment-element/sdk-reference):
+// elements.submit({ mode: "subscription", createTransaction }) tokeniza,
+// chama o callback (que cria a assinatura no nosso servidor e devolve a
+// TRANSACAO da 1a cobranca), roda o 3DS se ela pedir e SO ENTAO resolve com o
+// desfecho. O pai so fica sabendo depois disso: ele troca de tela, e trocar
+// antes desmontava o iframe no meio do 3DS.
 // ============================================================================
 
 const SCRIPT = "https://js.pagou.ai/payments/v3.js";
@@ -31,6 +40,8 @@ interface PagouElements {
     }
   ): { mount(seletor: string): void };
   submit(opts: {
+    // "subscription": captura de cartao para iniciar assinatura (token pgct_).
+    mode?: "payment" | "upsell" | "subscription";
     createTransaction: (tokenData: { token: string }) => Promise<unknown>;
   }): Promise<
     | {
@@ -110,12 +121,30 @@ function aparenciaDoTema(): {
   return { theme: raiz.classList.contains("dark") ? "night" : "default", style: { ...style, ...extras } };
 }
 
+/** O que /api/billing/subscribe responde quando cria a assinatura. */
+interface RespostaAssinatura {
+  subscriptionId: string;
+  status: string;
+  /** A transacao da 1a cobranca ({ id, status, next_action }); null = sem ela. */
+  transaction: Record<string, unknown> | null;
+  pending: boolean;
+  /** Quando o servidor nao conseguiu a transacao: o que dizer enquanto espera. */
+  mensagem?: string;
+}
+
+function textoDoErro(err: unknown): string | null {
+  if (typeof err === "string") return err;
+  const msg = (err as { message?: unknown } | null)?.message;
+  return typeof msg === "string" ? msg : null;
+}
+
 export function PagouCardForm({
   onSuccess,
   labelBotao,
   plano,
 }: {
-  onSuccess: (dados: unknown) => void;
+  /** So depois do desfecho do SDK (3DS incluso). `pending` diz se o banco ainda vai confirmar. */
+  onSuccess: (dados: RespostaAssinatura) => void;
   labelBotao: string;
   /** O plano escolhido: vai no corpo, e o servidor cobra o valor dele. */
   plano: PlanoId;
@@ -166,36 +195,59 @@ export function PagouCardForm({
     if (!elementsRef.current || enviando) return;
     setEnviando(true);
     setErro(null);
+    // O que o nosso servidor disse, guardado aqui: o pai so recebe depois que
+    // o submit resolver. Cada tentativa comeca do zero (token novo, chave nova).
+    const tentativa: { resposta: RespostaAssinatura | null; erro: string | null } = {
+      resposta: null,
+      erro: null,
+    };
+    let desfecho: DesfechoCartao;
     try {
       // O SDK tokeniza o cartao e chama este callback com o token pgct_.
       // A assinatura e criada no nosso backend, nunca no browser.
       const resultado = await elementsRef.current.submit({
+        mode: "subscription",
         createTransaction: async (tokenData) => {
           const res = await fetch("/api/billing/subscribe", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ cardToken: tokenData.token, plano }),
           });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || "Falha ao assinar.");
-          onSuccess(data);
-          // O SDK passa este retorno para resolvePayment(), que espera uma
-          // TRANSACAO (le id/status/next_action). Devolver a assinatura faria
-          // ele tratar 3DS com o objeto errado.
-          return data.transaction || { id: data.subscriptionId, status: data.status };
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const msg: string =
+              typeof data.error === "string" && data.error ? data.error : "Falha ao assinar.";
+            tentativa.erro = msg;
+            throw new Error(msg);
+          }
+          const resposta = data as RespostaAssinatura;
+          tentativa.resposta = resposta;
+          // A TRANSACAO da 1a cobranca, intacta (id/status/next_action): e
+          // por ela que o SDK roda o 3DS e le o desfecho. Sem ela nao ha o que
+          // resolver; o desfecho vem do servidor (pending), nao do SDK.
+          return resposta.transaction ?? { status: resposta.status };
         },
       });
-      // O SDK devolve { status, error } — error pode ser string ou objeto.
-      const err = resultado?.error as unknown;
-      const msg =
-        typeof err === "string" ? err : (err as { message?: string })?.message;
-      if (msg) setErro(msg);
-      else if (resultado?.status === "requires_action")
-        setErro("O banco pediu autenticação adicional. Tente outro cartão.");
+      desfecho = desfechoDoCartao({
+        status: resultado?.status,
+        erro: tentativa.erro ?? textoDoErro(resultado?.error),
+        servidor: tentativa.resposta,
+      });
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Falha ao processar o cartão.");
-    } finally {
-      setEnviando(false);
+      desfecho = desfechoDoCartao({
+        status: "error",
+        erro: tentativa.erro ?? textoDoErro(e) ?? "Falha ao processar o cartão.",
+        servidor: tentativa.resposta,
+      });
+    }
+    setEnviando(false);
+    if (desfecho.tipo === "erro") {
+      // O iframe continua montado: e so corrigir o cartao (ou trocar) e tentar.
+      setErro(desfecho.bruto);
+      return;
+    }
+    if (tentativa.resposta) {
+      onSuccess({ ...tentativa.resposta, pending: desfecho.tipo === "pendente" });
     }
   }
 

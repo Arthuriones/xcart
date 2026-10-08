@@ -7,6 +7,7 @@ import {
   createSubscription,
   getOrCreateCustomer,
   getSubscription,
+  getTransaction,
   planoDoStatus,
   PagouError,
 } from "@/lib/billing/pagou";
@@ -17,6 +18,49 @@ export const runtime = "nodejs";
 
 const PROCESSANDO =
   "Seu pagamento anterior ainda está sendo processado. Tente de novo em alguns minutos.";
+
+const SEM_DESFECHO =
+  "Não deu para confirmar o pagamento agora. O plano libera assim que o banco confirmar.";
+
+/** O que o Payment Element precisa para resolver a 1a cobranca (3DS incluso). */
+interface TransacaoParaOSdk {
+  id: string;
+  status: string;
+  next_action: unknown;
+}
+
+/**
+ * A transacao da 1a cobranca de uma assinatura de cartao recem-criada, no
+ * formato que o Payment Element resolve. Contrato (developer.pagou.ai):
+ *  - o POST /v2/subscriptions NAO traz `transactions`: no schema da resposta
+ *    o campo e "Included on GET by id" (api-reference/subscriptions/create);
+ *  - o GET /v2/subscriptions/{id} traz `transactions`, "ordered by createdAt
+ *    descending", mas cada item so tem id/status/valores, sem next_action
+ *    (api-reference/subscriptions/get);
+ *  - o next_action (3DS) vem no GET /v2/transactions/{id}
+ *    (api-reference/transactions/get);
+ *  - o SDK quer o payload "without removing id, status, or next_action"
+ *    (frontend/payment-element/sdk-reference).
+ * A recem-criada so tem uma cobranca; [0] e a mais nova, a que esta em jogo.
+ * Sem transacao, ou a Pagou fora do ar: null -- quem chama responde pending.
+ */
+async function transacaoDaCobranca(subscriptionId: string): Promise<TransacaoParaOSdk | null> {
+  try {
+    const atual = await getSubscription(subscriptionId);
+    const txId = atual?.transactions?.[0]?.id;
+    if (!txId) return null;
+    const tx = await getTransaction(txId);
+    if (!tx?.id || !tx.status) return null;
+    return { id: tx.id, status: tx.status, next_action: tx.next_action ?? null };
+  } catch (e) {
+    console.error(
+      "[billing/subscribe] transacao da 1a cobranca",
+      subscriptionId,
+      e instanceof Error ? e.message : e
+    );
+    return null;
+  }
+}
 
 /**
  * A tentativa anterior ficou parada no primeiro pagamento ('incomplete': 3DS,
@@ -50,7 +94,10 @@ async function liberarTentativaAnterior(id: string, chave: string): Promise<Next
  *
  * Ao contrario do Stripe, nao ha checkout hospedado: o cartao ja vem
  * tokenizado do browser (Payment Element) e a assinatura nasce aqui. Por isso
- * a resposta nao e uma URL de redirect, e sim o estado da assinatura.
+ * a resposta nao e uma URL de redirect, e sim o estado da assinatura -- e, no
+ * cartao, `transaction` ({ id, status, next_action } da 1a cobranca), que o
+ * formulario devolve ao SDK para ele rodar o 3DS e ler o desfecho. Sem ela,
+ * `pending` + `mensagem`: o webhook confirma depois.
  */
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -154,17 +201,25 @@ export async function POST(request: NextRequest) {
       console.error("[billing/subscribe] perfil nao gravou", sub.id, gravado.error.message);
     }
 
+    // Devolvida ao Payment Element: e o objeto que ele sabe resolver
+    // (inclusive 3DS na primeira cobranca). So no cartao.
+    const transaction = cardToken ? await transacaoDaCobranca(sub.id) : null;
+    // Sem a transacao, o navegador nao tem o que resolver e decide pelo
+    // status da assinatura: "active" so vem depois da 1a cobranca aprovada
+    // (api-reference/subscriptions/create); o resto espera o webhook.
+    const semDesfecho =
+      !!cardToken && !transaction && !["active", "trialing"].includes(sub.status);
+
     return NextResponse.json({
       subscriptionId: sub.id,
       status: sub.status,
       currentPeriodEnd: sub.currentPeriodEnd || null,
       cardLast4: sub.cardLast4 || null,
-      // Devolvida ao Payment Element: e o objeto que ele sabe resolver
-      // (inclusive 3DS na primeira cobranca).
-      transaction: sub.transactions?.[0] || null,
+      transaction,
       // incomplete = a Pagou ainda esta processando a primeira cobranca;
       // o webhook confirma depois.
-      pending: sub.status === "incomplete",
+      pending: sub.status === "incomplete" || semDesfecho,
+      ...(semDesfecho ? { mensagem: SEM_DESFECHO } : {}),
     });
   } catch (error) {
     if (error instanceof PagouError) {
