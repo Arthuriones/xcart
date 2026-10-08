@@ -15,13 +15,13 @@ const PONTOS: { Icone: LucideIcon; titulo: string; texto: string }[] = [
   },
   {
     Icone: Activity,
-    titulo: "Rastreamento pelo servidor",
-    texto: "Cada compra enviada ao Meta e ao Google, com a saúde do pixel de cada loja.",
+    titulo: "Rastreamento de compras",
+    texto: "Cada compra no Meta e no TikTok pelo servidor, e no Google pela tag.",
   },
   {
     Icone: Bell,
     titulo: "Alertas com o caminho para resolver",
-    texto: "Gastou com anúncio e não vendeu, compra que não chegou ao Meta ou ao Google, pedidos ou gasto sem atualizar, também no Telegram.",
+    texto: "Gastou com anúncio e não vendeu, compra que não chegou ao Meta ou ao TikTok, pedidos ou gasto sem atualizar, também no Telegram.",
   },
 ];
 

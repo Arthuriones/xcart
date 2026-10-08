@@ -202,7 +202,13 @@ export function FormularioAcesso({
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password: senha,
-          options: { data: { has_password: true, full_name: nome.trim() } },
+          // Sem emailRedirectTo o link volta para a Site URL do Supabase: na
+          // landing (sem sessao) ou na raiz do app, que le o ?code= como
+          // instalacao da Shopify.
+          options: {
+            emailRedirectTo: `${window.location.origin}/callback?type=signup`,
+            data: { has_password: true, full_name: nome.trim() },
+          },
         });
         if (error) throw error;
         // Com "Confirm email" ligado, o signUp volta sem erro e sem sessao:
@@ -305,8 +311,8 @@ export function FormularioAcesso({
     <section aria-labelledby="acesso-titulo" className="flex flex-col gap-6">
       {aviso ? (
         <Callout
-          tom="warn"
-          role="alert"
+          tom={aviso.ok ? "ok" : "warn"}
+          role={aviso.ok ? "status" : "alert"}
           titulo={aviso.titulo}
           dispensar={
             <Button size="icon-sm" variant="ghost" aria-label="Fechar aviso" onClick={fecharAviso}>
@@ -316,7 +322,7 @@ export function FormularioAcesso({
         >
           <p>{aviso.texto}</p>
           {/* Embaixo do texto, nao ao lado: a coluna do formulario e estreita. */}
-          {pedeLink(modo) ? null : (
+          {aviso.ok || pedeLink(modo) ? null : (
             <Button size="sm" variant="secondary" className="mt-2" onClick={() => trocarModo("link")}>
               Pedir outro link
             </Button>

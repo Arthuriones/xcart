@@ -30,7 +30,7 @@ export function ConteudoGoogle({ d }: { d: DadosAnuncios }) {
         acao={
           <Link
             href="/campanhas"
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-t1 hover:bg-surface-elevated hover:text-white transition w-fit"
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-t1 hover:bg-surface-2 hover:text-ink transition w-fit"
           >
             <span>Ver campanhas</span>
             <span aria-hidden="true">&rarr;</span>
@@ -43,7 +43,7 @@ export function ConteudoGoogle({ d }: { d: DadosAnuncios }) {
           titulo="Conecte uma loja primeiro"
           descricao="O gasto de cada conta de anúncio entra no lucro de uma loja. Sem loja, não há onde ligar a conta."
           acao={
-            <Link href="/stores" className={buttonVariants()}>
+            <Link href="/stores?conectar=1" className={buttonVariants()}>
               Conectar loja
             </Link>
           }

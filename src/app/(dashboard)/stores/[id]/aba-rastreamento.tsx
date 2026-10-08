@@ -119,7 +119,7 @@ export function RastreamentoLoja({ r }: { r: RastreamentoDaLoja }) {
     return (
       <EmptyState
         titulo="Rastreamento desligado nesta loja"
-        descricao="Ligue em Rastreamento para mandar as vendas desta loja ao Meta (pelo servidor) e ao Google (pela tag no navegador)."
+        descricao="Ligue em Rastreamento para mandar as vendas desta loja ao Meta e ao TikTok (pelo servidor) e ao Google (pela tag no navegador)."
         acao={
           <Link href="/tracking" className={cn(buttonVariants({ variant: "primary" }))}>
             Abrir Rastreamento

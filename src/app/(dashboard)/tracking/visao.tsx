@@ -54,7 +54,7 @@ export function Visao({
       </div>
 
       <Link
-        href="/stores"
+        href="/stores?conectar=1"
         className="flex h-ctl-md items-center justify-center gap-1.5 rounded-card border border-border bg-surface text-dense font-medium text-ink hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
       >
         <Plus aria-hidden className="size-3.5" />

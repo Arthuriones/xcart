@@ -64,7 +64,7 @@ export function BarraFiltros({
   ];
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-border bg-[#11141c] p-4 text-ink shadow-sm">
+    <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-4 text-ink shadow-sm">
       {/* 1. Abas Superiores (Contas, Campanhas, Grupos, Anúncios) */}
       <div className="flex items-center justify-between border-b border-border/80 pb-3">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -79,7 +79,7 @@ export function BarraFiltros({
                 className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition cursor-pointer ${
                   ativa
                     ? "bg-brand/15 text-brand border border-brand/40 shadow-sm"
-                    : "text-t2 hover:bg-surface hover:text-white border border-transparent"
+                    : "text-t2 hover:bg-hover hover:text-ink border border-transparent"
                 }`}
               >
                 <Icone className={`h-4 w-4 ${ativa ? "text-brand" : "text-t3"}`} />
@@ -91,7 +91,7 @@ export function BarraFiltros({
 
         {/* Status do Rastreamento + Ação de Atualização */}
         <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-medium text-emerald-400">
+          <div className="hidden sm:flex items-center gap-1.5 rounded-full border border-ok-border bg-ok-bg px-3 py-1 text-[11px] font-medium text-ok">
             <CheckCircle2 className="h-3.5 w-3.5" />
             <span>Todas as vendas trackeadas</span>
           </div>
@@ -102,7 +102,7 @@ export function BarraFiltros({
               type="button"
               onClick={aoAtualizar}
               disabled={atualizando}
-              className="flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-brand-hover transition disabled:opacity-50 cursor-pointer"
+              className="flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-brand/90 transition disabled:opacity-50 cursor-pointer"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${atualizando ? "animate-spin" : ""}`} />
               <span>Atualizar</span>
@@ -121,7 +121,7 @@ export function BarraFiltros({
           <select
             value={plataforma}
             onChange={(e) => aoMudarPlataforma(e.target.value as PlataformaAds)}
-            className="rounded-lg border border-border bg-[#181d28] px-2.5 py-1.5 text-xs text-white outline-none focus:border-brand cursor-pointer"
+            className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-ink outline-none focus:border-brand cursor-pointer"
           >
             <option value="todas">Todas as plataformas</option>
             <option value="meta">Meta Ads</option>
@@ -142,7 +142,7 @@ export function BarraFiltros({
               placeholder="Filtrar por nome..."
               value={busca}
               onChange={(e) => aoMudarBusca(e.target.value)}
-              className="w-full rounded-lg border border-border bg-[#181d28] pl-8 pr-3 py-1.5 text-xs text-white placeholder-t3 outline-none focus:border-brand"
+              className="w-full rounded-lg border border-border bg-surface pl-8 pr-3 py-1.5 text-xs text-ink placeholder-t3 outline-none focus:border-brand"
             />
           </div>
         </div>
@@ -155,7 +155,7 @@ export function BarraFiltros({
           <select
             value={status}
             onChange={(e) => aoMudarStatus(e.target.value as StatusFiltro)}
-            className="rounded-lg border border-border bg-[#181d28] px-2.5 py-1.5 text-xs text-white outline-none focus:border-brand cursor-pointer"
+            className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-ink outline-none focus:border-brand cursor-pointer"
           >
             <option value="qualquer">Qualquer</option>
             <option value="ativa">Ativa</option>
@@ -171,7 +171,7 @@ export function BarraFiltros({
           <select
             value={periodo}
             onChange={(e) => aoMudarPeriodo(e.target.value as PeriodoFiltro)}
-            className="rounded-lg border border-border bg-[#181d28] px-2.5 py-1.5 text-xs text-white outline-none focus:border-brand cursor-pointer"
+            className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-ink outline-none focus:border-brand cursor-pointer"
           >
             <option value="hoje">Hoje</option>
             <option value="ontem">Ontem</option>
@@ -202,7 +202,7 @@ export function BarraFiltros({
           <select
             value={contaSelecionada}
             onChange={(e) => aoMudarConta(e.target.value)}
-            className="rounded-lg border border-border bg-[#181d28] px-2.5 py-1.5 text-xs text-white outline-none focus:border-brand cursor-pointer"
+            className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-ink outline-none focus:border-brand cursor-pointer"
           >
             <option value="todas">Todas as contas</option>
             {contasDisponiveis.map((c) => (

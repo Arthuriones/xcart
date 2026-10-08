@@ -17,7 +17,7 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "xcart",
   description:
-    "Lucro estimado de cada loja Shopify, já descontado o anúncio, e as compras enviadas ao Meta e ao Google pelo servidor.",
+    "Lucro estimado de cada loja Shopify, já descontado o anúncio, e as compras enviadas ao Meta e ao TikTok pelo servidor e ao Google pela tag.",
 };
 
 export default function RootLayout({

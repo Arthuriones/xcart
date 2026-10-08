@@ -16,6 +16,12 @@ export async function GET(request: Request) {
       }
       return NextResponse.redirect(`${origin}${APP_HOME}`);
     }
+    // Link do cadastro: o Supabase confirma o e-mail ANTES de mandar o
+    // codigo; a troca so falha porque o link abriu em outro navegador (sem o
+    // code verifier) ou de novo. A conta vale -- falta entrar com a senha.
+    if (type === "signup") {
+      return NextResponse.redirect(`${origin}/login?error=email_confirmado`);
+    }
     // Link expirado/reutilizado: sinaliza o motivo em vez de devolver um
     // formulario de login em branco, sem explicacao nenhuma.
     return NextResponse.redirect(

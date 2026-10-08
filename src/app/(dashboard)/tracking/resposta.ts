@@ -18,7 +18,11 @@ export async function respostaJson(r: Response, falha: string): Promise<Record<s
   }
   if (!r.ok) {
     const msg = typeof j.error === "string" ? j.error : typeof j.erro === "string" ? j.erro : "";
-    throw new Error(msg || falha);
+    // `detalhe`: a mensagem crua de quem respondeu (a Shopify), para o toast
+    // mostrar embaixo da frase em portugues.
+    throw Object.assign(new Error(msg || falha), {
+      detalhe: typeof j.detalhe === "string" ? j.detalhe : undefined,
+    });
   }
   return j;
 }

@@ -323,6 +323,17 @@ describe("o detalhe sempre mostra o motivo", () => {
       },
     ]);
   });
+
+  it("loja ligada sem pixel nenhum: o aviso abre o Adicionar pixel", () => {
+    const nova = loja({ destinos: [] });
+    expect(avisosDaLoja(nova, instalacaoDaLoja(nova, diag(), false)).map((a) => a.acao)).toContain(
+      "adicionar"
+    );
+    // Com pixel cadastrado e desativado, adicionar outro nao e o caminho.
+    const parada = loja({ destinos: [meta({ ativo: false })] });
+    const avisos = avisosDaLoja(parada, instalacaoDaLoja(parada, diag(), false));
+    expect(avisos).toContainEqual({ tom: "err", texto: "Nenhum pixel recebe a compra.", acao: null });
+  });
 });
 
 describe("pontos da lista", () => {

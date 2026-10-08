@@ -140,7 +140,10 @@ export function DetalheLoja({
       toast.success("Script gravado no tema");
       ajustarDiag({ temSnippet: true, snippetComId: true, ...(manter ? { temRemarketing: true } : {}) });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Não deu para gravar no tema.");
+      const detalhe = (e as { detalhe?: unknown } | null)?.detalhe;
+      toast.error(e instanceof Error ? e.message : "Não deu para gravar no tema.", {
+        description: typeof detalhe === "string" ? detalhe : undefined,
+      });
     } finally {
       setInstalando(false);
     }
@@ -279,6 +282,11 @@ export function DetalheLoja({
           {a.acao === "ligar" && (
             <Button size="sm" variant="secondary" onClick={() => alternarEnvio(true)}>
               Ligar
+            </Button>
+          )}
+          {a.acao === "adicionar" && (
+            <Button size="sm" variant="secondary" onClick={() => adicionarPixel("meta")}>
+              Adicionar pixel
             </Button>
           )}
           {a.acao === "conferir" && (

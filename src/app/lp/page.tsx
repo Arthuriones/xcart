@@ -414,7 +414,7 @@ export default function Landing() {
             id="como-comecar"
             sobretitulo="Como começar"
             titulo="Quatro passos até o primeiro lucro na tela"
-            descricao="O app guia cada um. Ninguém precisa mexer em código."
+            descricao="O app guia cada um e mostra o que copiar e onde colar."
           />
           <ol className="mt-10 grid gap-6 sm:grid-cols-2 md:mt-14 lg:grid-cols-4 lg:gap-8">
             {PASSOS.map((p, i) => (

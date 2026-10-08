@@ -162,7 +162,10 @@ export function Rastreamento({
             : "Conecte uma loja Shopify para rastrear as compras."
         }
         acao={
-          <Link href="/stores" className={buttonVariants({ variant: "primary" })}>
+          <Link
+            href={lojaEscolhida || ocultas > 0 ? "/stores" : "/stores?conectar=1"}
+            className={buttonVariants({ variant: "primary" })}
+          >
             {lojaEscolhida || ocultas > 0 ? "Ver em Lojas" : "Conectar loja"}
           </Link>
         }

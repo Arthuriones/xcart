@@ -69,7 +69,7 @@ export function ConteudoShopify({ lojas, agoraMs }: { lojas: LojaConexao[]; agor
           titulo="Nenhuma loja conectada"
           descricao="Conecte uma loja Shopify para o xcart ler os pedidos e calcular o lucro."
           acao={
-            <Link href="/stores" className={buttonVariants()}>
+            <Link href="/stores?conectar=1" className={buttonVariants()}>
               Conectar loja
             </Link>
           }

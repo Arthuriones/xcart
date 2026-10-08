@@ -104,11 +104,20 @@ export async function POST(request: NextRequest) {
     );
     return NextResponse.json({ ok: true, ...r, conteudo: undefined });
   } catch (e) {
-    // write_themes pode nao estar no app da loja; a mensagem da Shopify e o
-    // que diz isso, entao ela passa adiante em vez de virar "falhou".
+    // A mensagem da Shopify vem crua e em ingles ("Access denied for
+    // themeFilesUpsert..."): vira o que fazer, e o texto cru fica no detalhe.
+    const crua = e instanceof Error ? e.message : String(e);
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Falha ao gravar o tema." },
+      { error: erroDoTema(crua), detalhe: crua },
       { status: 500 }
     );
   }
+}
+
+/** Sem write_themes no app da loja a Shopify responde "access denied" (ou 403). */
+function erroDoTema(crua: string): string {
+  if (/access denied|write_themes|read_themes|\b403\b/i.test(crua)) {
+    return "Falta a permissão de tema no app da loja. Em dev.shopify.com, inclua write_themes nos escopos, lance o app de novo e reconecte em Lojas.";
+  }
+  return "Não deu para gravar no tema. Tente de novo.";
 }

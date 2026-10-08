@@ -255,7 +255,7 @@ export function instalacaoDaLoja(
 export interface AvisoLoja {
   tom: "err" | "warn";
   texto: string;
-  acao: "lojas" | "recarregar" | "conferir" | "ligar" | null;
+  acao: "lojas" | "recarregar" | "conferir" | "ligar" | "adicionar" | null;
 }
 
 /**
@@ -282,13 +282,22 @@ export function avisosDaLoja(
     });
   }
   // Com pixel e nenhum recebendo a compra (todos desativados, por exemplo),
-  // nenhum pixel sozinho diz que a loja inteira parou.
+  // nenhum pixel sozinho diz que a loja inteira parou. Loja sem pixel nenhum
+  // (a nova, logo depois de ligar): o botao abre o "Adicionar pixel".
   if (
     ligado &&
     aceitamCompra(loja).length === 0 &&
     tagComCompra(loja).length === 0
   ) {
-    avisos.push({ tom: "err", texto: "Nenhum pixel recebe a compra.", acao: null });
+    avisos.push(
+      loja.destinos.length === 0
+        ? {
+            tom: "err",
+            texto: "Nenhum pixel recebe a compra. Adicione o pixel do Meta ou do TikTok.",
+            acao: "adicionar",
+          }
+        : { tom: "err", texto: "Nenhum pixel recebe a compra.", acao: null }
+    );
   }
   if (inst.semConferir) {
     avisos.push({ tom: "warn", texto: "Não deu para conferir a loja na Shopify.", acao: "conferir" });

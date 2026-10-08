@@ -34,6 +34,9 @@ describe("modo inicial do /login", () => {
     // modo explicito vence
     expect(modoInicial("signup", "link_invalido")).toBe("criar");
   });
+  it("link do cadastro aberto em outro navegador abre em Entrar", () => {
+    expect(modoInicial(null, "email_confirmado")).toBe("entrar");
+  });
   it("link e esqueci a senha mandam o mesmo link", () => {
     expect(pedeLink("link")).toBe(true);
     expect(pedeLink("esqueci")).toBe(true);
@@ -167,6 +170,11 @@ describe("aviso de link que falhou", () => {
   it("outro erro do link", () => {
     expect(avisoDoLink(null, "#error=server_error")?.titulo).toBe("Não deu para entrar por este link");
     expect(avisoDoLink("outra_coisa", "")?.titulo).toBe("Não deu para entrar por este link");
+  });
+  it("cadastro confirmado sem sessao: aviso verde, sem pedir outro link", () => {
+    const a = avisoDoLink("email_confirmado", "");
+    expect(a?.titulo).toBe("E-mail confirmado");
+    expect(a?.ok).toBe(true);
   });
   it("sem erro, sem aviso", () => {
     expect(avisoDoLink(null, "")).toBeNull();

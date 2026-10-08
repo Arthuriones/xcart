@@ -15,6 +15,7 @@ export type Modo = "entrar" | "criar" | "link" | "esqueci";
 export function modoInicial(param: string | null | undefined, erroDaUrl?: string | null): Modo {
   if (param === "signup") return "criar";
   if (param === "link") return "link";
+  if (erroDaUrl === "email_confirmado") return "entrar";
   if (!param && erroDaUrl) return "link";
   return "entrar";
 }
@@ -254,7 +255,18 @@ export function erroDeAcesso(erro: unknown): ErroDeAcesso {
 // Volta de um link que nao funcionou
 // ---------------------------------------------------------------------------
 
-export type AvisoDoLink = { titulo: string; texto: string };
+export type AvisoDoLink = {
+  titulo: string;
+  texto: string;
+  /** Deu certo: aviso verde e sem "Pedir outro link". */
+  ok?: boolean;
+};
+
+const EMAIL_CONFIRMADO: AvisoDoLink = {
+  titulo: "E-mail confirmado",
+  texto: "Entre com sua senha.",
+  ok: true,
+};
 
 const LINK_EXPIRADO: AvisoDoLink = {
   titulo: "O link expirou ou já foi usado",
@@ -268,12 +280,16 @@ const LINK_FALHOU: AvisoDoLink = {
 
 /**
  * Dois caminhos trazem o aviso:
- * - ?error=link_invalido, que o /callback manda quando a troca do codigo falha;
+ * - ?error=link_invalido, que o /callback manda quando a troca do codigo falha
+ *   (e ?error=email_confirmado quando o link e o do cadastro: o Supabase ja
+ *   confirmou o e-mail antes de mandar o codigo, so a sessao nao abriu --
+ *   em geral o link foi aberto em outro navegador, sem o code verifier);
  * - #error=...&error_code=otp_expired, que o Supabase poe no endereco quando o
  *   link ja chega vencido. O /callback redireciona para /login e o navegador
  *   leva o trecho depois do # junto.
  */
 export function avisoDoLink(erroDaUrl: string | null | undefined, hash: string): AvisoDoLink | null {
+  if (erroDaUrl === "email_confirmado") return EMAIL_CONFIRMADO;
   if (erroDaUrl === "link_invalido") return LINK_EXPIRADO;
   const h = new URLSearchParams(hash.replace(/^#/, ""));
   const codigo = h.get("error_code");

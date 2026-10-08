@@ -42,7 +42,7 @@ async function Conteudo() {
         titulo="Conecte uma loja para ver os pedidos"
         descricao="Os pedidos da Shopify aparecem aqui com o lucro de cada um."
         acao={
-          <Link href="/stores" className={buttonVariants({})}>
+          <Link href="/stores?conectar=1" className={buttonVariants({})}>
             Conectar loja
           </Link>
         }

@@ -90,7 +90,7 @@ function SemLojas() {
       titulo="Conecte uma loja para lançar custos"
       descricao="O custo de cada produto e a taxa de pagamento entram no lucro de cada venda."
       acao={
-        <Link href="/stores" className={buttonVariants({})}>
+        <Link href="/stores?conectar=1" className={buttonVariants({})}>
           Conectar loja
         </Link>
       }

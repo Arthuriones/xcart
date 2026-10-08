@@ -131,7 +131,7 @@ function SemLojas() {
       titulo="Conecte uma loja para ver o lucro"
       descricao="Cruzamos os pedidos da Shopify com o gasto do Meta e do Google."
       acao={
-        <Link href="/stores" className={buttonVariants({})}>
+        <Link href="/stores?conectar=1" className={buttonVariants({})}>
           Conectar loja
         </Link>
       }

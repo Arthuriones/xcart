@@ -74,7 +74,7 @@ export function TabelaCampanhas({
       case "tipo":
         return <span className="font-mono text-t2">{linha.tipo || "CBO"}</span>;
       case "orcamento":
-        return <span className="font-medium text-white">{formatarMoeda(linha.orcamento)}</span>;
+        return <span className="font-medium text-ink">{formatarMoeda(linha.orcamento)}</span>;
       case "custo_produto":
         return <span className="text-t2">{formatarMoeda(linha.custoProduto)}</span>;
       case "cpa_desejado":
@@ -82,20 +82,20 @@ export function TabelaCampanhas({
       case "cpt":
       case "cpp":
       case "cpa":
-        return <span className="font-medium text-white">{formatarMoeda(linha.cpa)}</span>;
+        return <span className="font-medium text-ink">{formatarMoeda(linha.cpa)}</span>;
       case "vendas_totais":
       case "vendas":
-        return <span className="font-bold text-white">{formatarNumero(linha.vendas)}</span>;
+        return <span className="font-bold text-ink">{formatarNumero(linha.vendas)}</span>;
       case "vendas_pendentes":
-        return <span className="text-amber-400">{formatarNumero(linha.vendasPendentes || 0)}</span>;
+        return <span className="text-warn">{formatarNumero(linha.vendasPendentes || 0)}</span>;
       case "gastos":
-        return <span className="font-semibold text-rose-400">{formatarMoeda(linha.gastos)}</span>;
+        return <span className="font-semibold text-err">{formatarMoeda(linha.gastos)}</span>;
       case "faturamento":
-        return <span className="font-semibold text-emerald-400">{formatarMoeda(linha.faturamento)}</span>;
+        return <span className="font-semibold text-ok">{formatarMoeda(linha.faturamento)}</span>;
       case "lucro":
         const positivo = linha.lucro >= 0;
         return (
-          <span className={`font-bold ${positivo ? "text-emerald-400" : "text-rose-400"}`}>
+          <span className={`font-bold ${positivo ? "text-ok" : "text-err"}`}>
             {formatarMoeda(linha.lucro)}
           </span>
         );
@@ -103,7 +103,7 @@ export function TabelaCampanhas({
         return (
           <span
             className={`font-semibold ${
-              linha.roas >= 2 ? "text-emerald-400" : linha.roas >= 1 ? "text-amber-400" : "text-rose-400"
+              linha.roas >= 2 ? "text-ok" : linha.roas >= 1 ? "text-warn" : "text-err"
             }`}
           >
             {linha.roas.toFixed(2)}x
@@ -111,13 +111,13 @@ export function TabelaCampanhas({
         );
       case "margem":
         return (
-          <span className={linha.margem >= 0 ? "text-emerald-400" : "text-rose-400"}>
+          <span className={linha.margem >= 0 ? "text-ok" : "text-err"}>
             {formatarPorcentagem(linha.margem)}
           </span>
         );
       case "roi":
         return (
-          <span className={linha.roi >= 0 ? "text-emerald-400" : "text-rose-400"}>
+          <span className={linha.roi >= 0 ? "text-ok" : "text-err"}>
             {formatarPorcentagem(linha.roi)}
           </span>
         );
@@ -159,29 +159,29 @@ export function TabelaCampanhas({
       case "orcamento":
         return <span className="text-t3">—</span>;
       case "cpa":
-        return <span className="font-semibold text-white">{formatarMoeda(totais.cpaMedio)}</span>;
+        return <span className="font-semibold text-ink">{formatarMoeda(totais.cpaMedio)}</span>;
       case "vendas":
       case "vendas_totais":
-        return <span className="font-bold text-white">{formatarNumero(totais.vendas)}</span>;
+        return <span className="font-bold text-ink">{formatarNumero(totais.vendas)}</span>;
       case "gastos":
-        return <span className="font-bold text-rose-400">{formatarMoeda(totais.gastos)}</span>;
+        return <span className="font-bold text-err">{formatarMoeda(totais.gastos)}</span>;
       case "faturamento":
-        return <span className="font-bold text-emerald-400">{formatarMoeda(totais.faturamento)}</span>;
+        return <span className="font-bold text-ok">{formatarMoeda(totais.faturamento)}</span>;
       case "lucro":
         const pos = totais.lucro >= 0;
         return (
-          <span className={`font-bold ${pos ? "text-emerald-400" : "text-rose-400"}`}>
+          <span className={`font-bold ${pos ? "text-ok" : "text-err"}`}>
             {formatarMoeda(totais.lucro)}
           </span>
         );
       case "roas":
-        return <span className="font-bold text-white">{totais.roasMedio.toFixed(2)}x</span>;
+        return <span className="font-bold text-ink">{totais.roasMedio.toFixed(2)}x</span>;
       case "margem":
-        return <span className="font-semibold text-white">{formatarPorcentagem(totais.margemMedia)}</span>;
+        return <span className="font-semibold text-ink">{formatarPorcentagem(totais.margemMedia)}</span>;
       case "cliques":
-        return <span className="text-white">{formatarNumero(totais.cliques)}</span>;
+        return <span className="text-ink">{formatarNumero(totais.cliques)}</span>;
       case "impressoes":
-        return <span className="text-white">{formatarNumero(totais.impressoes)}</span>;
+        return <span className="text-ink">{formatarNumero(totais.impressoes)}</span>;
       default:
         return <span className="text-t3">—</span>;
     }
@@ -197,17 +197,17 @@ export function TabelaCampanhas({
           : "CAMPANHA";
 
   return (
-    <div className="flex flex-col rounded-xl border border-border bg-[#0d1017] shadow-lg overflow-hidden">
+    <div className="flex flex-col rounded-xl border border-border bg-surface shadow-lg overflow-hidden">
       {/* Container de Tabela com Scroll Horizontal Suave */}
       <div className="overflow-x-auto custom-scrollbar">
         <table className="w-full text-left text-xs whitespace-nowrap border-collapse">
           {/* Cabeçalho da Tabela */}
           <thead>
-            <tr className="border-b border-border/80 bg-[#121620] text-t3 uppercase font-semibold text-[10.5px] tracking-wider">
+            <tr className="border-b border-border/80 bg-surface-2 text-t3 uppercase font-semibold text-[10.5px] tracking-wider">
               <th className="w-10 px-3 py-3 text-center">
                 <input
                   type="checkbox"
-                  className="rounded border-border bg-[#181d28] cursor-pointer"
+                  className="rounded border-border bg-surface cursor-pointer"
                   aria-label="Selecionar todas"
                 />
               </th>
@@ -225,7 +225,7 @@ export function TabelaCampanhas({
             </tr>
 
             {/* Linha de Totais / Resumo Agregado */}
-            <tr className="border-b border-border bg-[#151a26]/90 font-semibold text-xs text-white">
+            <tr className="border-b border-border bg-surface-2 font-semibold text-xs text-ink">
               <td className="px-3 py-2.5 text-center text-t3">Σ</td>
               <td className="px-3 py-2.5 text-t3">TOTAL</td>
               <td className="px-3 py-2.5 text-brand font-semibold">
@@ -258,7 +258,7 @@ export function TabelaCampanhas({
                     <div className="rounded-full bg-surface p-3 text-t3">
                       <Layers className="h-6 w-6" />
                     </div>
-                    <span className="text-sm font-semibold text-white">Nenhum dado encontrado</span>
+                    <span className="text-sm font-semibold text-ink">Nenhum dado encontrado</span>
                     <p className="text-xs text-t3 text-balance">
                       Não encontramos nenhuma {nivel} com os filtros selecionados ou as contas ainda não
                       possuem dados veiculados no período.
@@ -272,12 +272,12 @@ export function TabelaCampanhas({
                 return (
                   <tr
                     key={linha.id}
-                    className="transition hover:bg-[#151a24] text-t1 hover:text-white group"
+                    className="transition hover:bg-hover text-t1 hover:text-ink group"
                   >
                     <td className="px-3 py-3 text-center">
                       <input
                         type="checkbox"
-                        className="rounded border-border bg-[#181d28] cursor-pointer"
+                        className="rounded border-border bg-surface cursor-pointer"
                       />
                     </td>
 
@@ -286,13 +286,13 @@ export function TabelaCampanhas({
                       <span
                         className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                           ativa
-                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                            ? "bg-ok-bg text-ok border border-ok-border"
                             : "bg-surface text-t3 border border-border"
                         }`}
                       >
                         <span
                           className={`h-1.5 w-1.5 rounded-full ${
-                            ativa ? "bg-emerald-400" : "bg-t3"
+                            ativa ? "bg-ok" : "bg-t3"
                           }`}
                         />
                         {ativa ? "Ativa" : "Pausada"}
@@ -302,7 +302,7 @@ export function TabelaCampanhas({
                     {/* Nome + Plataforma */}
                     <td className="px-3 py-3">
                       <div className="flex flex-col min-w-0 max-w-[280px]">
-                        <span className="truncate font-medium text-white group-hover:text-brand transition" title={linha.nome}>
+                        <span className="truncate font-medium text-ink group-hover:text-brand transition" title={linha.nome}>
                           {linha.nome}
                         </span>
                         <div className="flex items-center gap-1.5 text-[10.5px] text-t3 truncate">
@@ -330,13 +330,13 @@ export function TabelaCampanhas({
       </div>
 
       {/* Rodapé Informativo */}
-      <div className="flex items-center justify-between border-t border-border/80 bg-[#10131b] px-4 py-3 text-xs text-t3">
+      <div className="flex items-center justify-between border-t border-border/80 bg-surface-2 px-4 py-3 text-xs text-t3">
         <div className="flex items-center gap-1.5 hover:text-t2 transition cursor-pointer">
           <HelpCircle className="h-3.5 w-3.5" />
           <span>Por que as campanhas não estão aparecendo?</span>
         </div>
         <div>
-          Mostrando <span className="font-medium text-white">{linhas.length}</span> registros
+          Mostrando <span className="font-medium text-ink">{linhas.length}</span> registros
         </div>
       </div>
     </div>

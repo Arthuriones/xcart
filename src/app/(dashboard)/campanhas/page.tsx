@@ -107,7 +107,7 @@ export default async function CampanhasPage() {
       {/* Cabeçalho da Tela */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-overlay font-bold text-white tracking-tight">Campanhas</h1>
+          <h1 className="text-overlay font-bold text-ink tracking-tight">Campanhas</h1>
           <p className="text-dense text-t2">
             Métricas de performance de tráfego pago por conta, campanha, conjunto e criativo.
           </p>
@@ -116,7 +116,7 @@ export default async function CampanhasPage() {
         <div className="flex items-center gap-2">
           <Link
             href="/integracoes"
-            className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-t1 hover:bg-surface-elevated hover:text-white transition"
+            className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-t1 hover:bg-surface-2 hover:text-ink transition"
           >
             <Plug className="h-3.5 w-3.5" />
             <span>Gerenciar integrações</span>

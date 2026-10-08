@@ -59,7 +59,7 @@ async function Conteudo({ searchParams }: { searchParams: Busca }) {
           titulo="Nenhuma loja conectada"
           descricao="Conecte uma loja e ligue o rastreamento para ver os eventos chegando aqui."
           acao={
-            <Link href="/stores" className={buttonVariants()}>
+            <Link href="/stores?conectar=1" className={buttonVariants()}>
               Conectar loja
             </Link>
           }

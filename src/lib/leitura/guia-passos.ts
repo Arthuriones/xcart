@@ -254,8 +254,8 @@ function passoRastreamento(foto: FotoGuia, b: Base, caminho: CaminhoGuia): Passo
     titulo: "Ligue o rastreamento",
     texto:
       caminho === "vitrine"
-        ? "Envia cada compra ao Meta, ao Google e ao TikTok pelo servidor. Ligue na loja de checkout: é nela que o pedido nasce."
-        : "Envia cada compra ao Meta, ao Google e ao TikTok pelo servidor, sem depender do navegador do comprador.",
+        ? "Envia cada compra ao Meta e ao TikTok pelo servidor e ao Google pela tag. Ligue na loja de checkout: é nela que o pedido nasce."
+        : "Envia cada compra ao Meta e ao TikTok pelo servidor e ao Google pela tag.",
     href: "/tracking",
     cta: "Configurar rastreamento",
   };
