@@ -13,7 +13,10 @@ import { quandoFoi } from "@/lib/leitura/lojas-estado";
 //     loja de checkout. Os passos da rota vem antes dos mesmos quatro do fim.
 //
 // Nada aqui e marcado a mao: cada passo e uma pergunta ao que existe no banco
-// (ver guia-configuracao.ts). Leitura que falhou NAO vira "falta": o passo fica
+// (ver guia-configuracao.ts) -- e, no rastreamento, ao tema publicado da loja
+// (o script, conferido na Shopify e guardado por alguns minutos). O
+// rastreamento so fica feito com destino pronto, script no tema e pixel do
+// checkout visto. Leitura que falhou NAO vira "falta": o passo fica
 // "nao conferido" e nao entra na conta de feitos -- erro nunca vira zero.
 //
 // O menu lateral le daqui tambem (sidebar-data.tsx, via lerGuiaDaConta): o
@@ -86,16 +89,26 @@ export interface FotoGuia {
   /** Lojas com o interruptor do rastreamento ligado. */
   rastreamentoLigado: string[] | null;
   /**
-   * Lojas cujo pixel do checkout ja mandou evento alguma vez. A compra do
-   * Google so sai por ele. Ausente = nao lido (o Google conta como antes).
+   * Lojas ligadas cujo pixel do checkout ja mandou evento alguma vez
+   * (web_pixel_visto_em). Sem ele o checkout nao e rastreado e a compra do
+   * Google nao sai.
    */
-  pixelCheckoutVisto?: string[] | null;
+  pixelCheckoutVisto: string[] | null;
+  /**
+   * O script do xcart no tema publicado, por loja ligada (a mesma regra do
+   * temSnippet da tela de Rastreamento). true/false = conferido; null ou loja
+   * ausente = nao deu para conferir. null inteiro = a leitura falhou.
+   */
+  scriptNoTema: Record<string, boolean | null> | null;
   destinos: DestinoGuia[] | null;
   contas: ContaGuia[] | null;
   /** Lojas com taxa de pagamento gravada e lojas com custo (por SKU ou padrao). */
   custos: { comTaxa: string[]; comCusto: string[] } | null;
-  /** Ultima compra entregue ao Meta, ao Google ou ao TikTok. `em: null` = nenhuma. */
-  ultimaVenda: { em: string | null; plataforma: "meta" | "google" | "tiktok" | null } | null;
+  /**
+   * Ultima compra entregue ao Meta ou ao TikTok. O Google vai pela tag do
+   * navegador e nao deixa rastro no servidor. `em: null` = nenhuma.
+   */
+  ultimaVenda: { em: string | null; plataforma: "meta" | "tiktok" | null } | null;
   rotas: RotaGuia[] | null;
   /** Destinos de rota com produtos ligados por SKU (mapa nao vazio). */
   destinosComSku: number | null;
@@ -160,6 +173,21 @@ export interface Guia {
 
 export const ROTA_CONECTAR_LOJA = "/stores?conectar=1";
 const ROTA_ROTEAMENTO = "/clone/routed-checkout";
+
+/** O detalhe da loja na tela de Rastreamento, nao a lista. */
+export function rotaRastreamentoDaLoja(storeId: string): string {
+  return `/tracking?loja=${encodeURIComponent(storeId)}`;
+}
+
+/**
+ * Os proximos passos no aviso de loja conectada (stores/aviso-retorno.tsx),
+ * na ordem do guia: o rastreamento primeiro, porque e o foco do produto.
+ */
+export const PROXIMOS_DEPOIS_DA_LOJA: { href: string; rotulo: string }[] = [
+  { href: "/tracking", rotulo: "Ligar rastreamento" },
+  { href: "/financeiro/anuncios", rotulo: "Ligar contas de anúncio" },
+  { href: "/financeiro/custos", rotulo: "Cadastrar custos" },
+];
 
 /** "A", "A e B", "A, B e C", "A, B e mais 3". */
 export function listarNomes(nomes: string[], max = 3): string {
@@ -248,75 +276,142 @@ function passoLoja(foto: FotoGuia, b: Base): PassoGuia {
   return { ...passo, estado: "falta", detalhe: null };
 }
 
+/**
+ * Uma loja ligada e as tres pecas que fazem a compra sair: um destino pronto
+ * (Meta/TikTok com token, Google com rotulo, fora do modo teste), o script no
+ * tema e o pixel do checkout. Sem o script o clique do anuncio nao vira
+ * atribuicao; sem o pixel o checkout nao e rastreado e o Google nao recebe.
+ */
+interface SituacaoLoja {
+  storeId: string;
+  prontos: DestinoGuia[];
+  emTeste: DestinoGuia[];
+  /** null = nao deu para conferir. */
+  script: boolean | null;
+  pixel: boolean | null;
+}
+
+type Peca = "destino" | "teste" | "script" | "pixel";
+
+function situacaoDaLoja(foto: FotoGuia, storeId: string): SituacaoLoja {
+  const recebem = (foto.destinos ?? []).filter((d) => d.storeId === storeId && d.ativo && d.recebeCompra);
+  return {
+    storeId,
+    prontos: recebem.filter((d) => !d.modoTeste),
+    emTeste: recebem.filter((d) => d.modoTeste),
+    script: foto.scriptNoTema ? (foto.scriptNoTema[storeId] ?? null) : null,
+    pixel: foto.pixelCheckoutVisto ? foto.pixelCheckoutVisto.includes(storeId) : null,
+  };
+}
+
+/** O que falta, entre o que foi conferido. O que nao deu para conferir fica de fora. */
+function pecasFaltando(s: SituacaoLoja): Peca[] {
+  const f: Peca[] = [];
+  if (s.prontos.length === 0) f.push(s.emTeste.length > 0 ? "teste" : "destino");
+  if (s.script === false) f.push("script");
+  if (s.pixel === false) f.push("pixel");
+  return f;
+}
+
+const lojaPronta = (s: SituacaoLoja) => s.prontos.length > 0 && s.script === true && s.pixel === true;
+
+/** As lojas ligadas (e com acesso), cada uma com o que tem. null = leitura falhou. */
+function situacoesLigadas(foto: FotoGuia, b: Base): SituacaoLoja[] | null {
+  if (!foto.rastreamentoLigado || !foto.destinos || !b.ativas) return null;
+  const ativas = new Set(b.ativas.map((l) => l.id));
+  return [...new Set(foto.rastreamentoLigado)].filter((id) => ativas.has(id)).map((id) => situacaoDaLoja(foto, id));
+}
+
 function passoRastreamento(foto: FotoGuia, b: Base, caminho: CaminhoGuia): PassoGuia {
   const passo = {
     id: "rastreamento" as const,
     titulo: "Ligue o rastreamento",
     texto:
       caminho === "vitrine"
-        ? "Envia cada compra ao Meta e ao TikTok pelo servidor e ao Google pela tag. Ligue na loja de checkout: é nela que o pedido nasce."
-        : "Envia cada compra ao Meta e ao TikTok pelo servidor e ao Google pela tag.",
+        ? "Envia cada compra ao Meta e ao TikTok pelo servidor e ao Google pela tag. Precisa do script no tema e do pixel do checkout. Ligue na loja de checkout: é nela que o pedido nasce."
+        : "Envia cada compra ao Meta e ao TikTok pelo servidor e ao Google pela tag. Precisa do script no tema e do pixel do checkout.",
     href: "/tracking",
     cta: "Configurar rastreamento",
   };
-  if (!foto.rastreamentoLigado || !foto.destinos || !b.ativas) {
+  const situacoes = situacoesLigadas(foto, b);
+  if (!situacoes || !foto.destinos || !b.ativas) {
     return { ...passo, estado: "naoConferido", detalhe: "Não deu para conferir o rastreamento agora." };
   }
-  const ativas = new Set(b.ativas.map((l) => l.id));
-  const ligadas = new Set(foto.rastreamentoLigado.filter((id) => ativas.has(id)));
-  // A compra do Google so sai pelo pixel do checkout: com rotulo e sem pixel,
-  // nada chega ao Google.
-  const vistos = foto.pixelCheckoutVisto ? new Set(foto.pixelCheckoutVisto) : null;
-  const semPixel = (d: DestinoGuia) => d.plataforma === "google" && vistos !== null && !vistos.has(d.storeId);
-  const prontos = foto.destinos.filter(
-    (d) => d.ativo && d.recebeCompra && !d.modoTeste && ligadas.has(d.storeId) && !semPixel(d)
-  );
 
-  if (prontos.length > 0) {
-    const lojas = [...new Set(prontos.map((d) => d.storeId))];
+  const prontas = situacoes.filter(lojaPronta);
+  if (prontas.length > 0) {
     return {
       ...passo,
       estado: "feito",
-      detalhe: `Ligado em ${listarNomes(lojas.map(b.nomeDe))}: ${plataformas(prontos.map((d) => d.plataforma))}.`,
+      detalhe: `Ligado em ${listarNomes(prontas.map((s) => b.nomeDe(s.storeId)))}: ${plataformas(prontas.flatMap((s) => s.prontos.map((d) => d.plataforma)))}.`,
       cta: "Ver rastreamento",
     };
   }
 
-  const emTeste = foto.destinos.filter(
-    (d) => d.ativo && d.recebeCompra && d.modoTeste && ligadas.has(d.storeId)
-  );
-  if (emTeste.length > 0) {
+  if (situacoes.length > 0) {
+    // A loja mais perto de pronta: a com menos pecas faltando. O link vai
+    // direto para ela, nao para a lista.
+    const s = situacoes.reduce((a, c) => (pecasFaltando(c).length < pecasFaltando(a).length ? c : a));
+    const faltam = pecasFaltando(s);
+    const nome = b.nomeDe(s.storeId);
+    const href = rotaRastreamentoDaLoja(s.storeId);
+
+    if (faltam.length === 0) {
+      // Tudo o que deu para conferir esta certo; o resto nao respondeu.
+      const semResposta = [
+        s.script === null ? "o script no tema" : null,
+        s.pixel === null ? "o pixel do checkout" : null,
+      ].filter((x): x is string => x !== null);
+      return {
+        ...passo,
+        estado: "naoConferido",
+        detalhe: `Não deu para conferir ${listarNomes(semResposta)} de ${nome} agora.`,
+        href,
+        cta: "Ver rastreamento",
+      };
+    }
+
+    const emTeste = plataformas(s.emTeste.map((d) => d.plataforma));
+    if (faltam.length === 1 && faltam[0] === "teste") {
+      const varias = new Set(s.emTeste.map((d) => d.plataforma)).size > 1;
+      return {
+        ...passo,
+        estado: "atencao",
+        detalhe: `O ${emTeste} ${varias ? "estão" : "está"} em modo teste: a compra cai na aba de teste e não conta como conversão.`,
+        href,
+        cta: "Tirar do modo teste",
+      };
+    }
+
+    const PECA: Record<Peca, string> = {
+      destino: "um pixel do Meta/TikTok ou a conversão do Google",
+      teste: `tirar o ${emTeste} do modo teste`,
+      script: "o script no tema",
+      pixel: "o pixel do checkout",
+    };
+    const CTA: Record<Peca, string> = {
+      destino: "Configurar rastreamento",
+      teste: "Tirar do modo teste",
+      script: "Instalar o script",
+      pixel: "Instalar o pixel",
+    };
     return {
       ...passo,
       estado: "atencao",
-      detalhe: `O ${plataformas(emTeste.map((d) => d.plataforma))} ${new Set(emTeste.map((d) => d.plataforma)).size > 1 ? "estão" : "está"} em modo teste: a compra cai na aba de teste e não conta como conversão.`,
-      cta: "Tirar do modo teste",
+      detalhe: `${nome}: falta ${listarNomes(faltam.map((p) => PECA[p]))}.`,
+      href,
+      cta: CTA[faltam[0]],
     };
   }
-  const googleSemPixel = foto.destinos.some(
-    (d) => d.ativo && d.recebeCompra && ligadas.has(d.storeId) && semPixel(d)
-  );
-  if (googleSemPixel) {
+
+  const ativas = new Set(b.ativas.map((l) => l.id));
+  const cadastrado = foto.destinos.find((d) => d.ativo && ativas.has(d.storeId));
+  if (cadastrado) {
     return {
       ...passo,
       estado: "atencao",
-      detalhe: "Falta o pixel do checkout: sem ele a compra não chega ao Google.",
-      cta: "Instalar o pixel",
-    };
-  }
-  if (ligadas.size > 0) {
-    return {
-      ...passo,
-      estado: "atencao",
-      detalhe: `Ligado em ${listarNomes([...ligadas].map(b.nomeDe))}, mas nenhum pixel do Meta/TikTok ou conversão do Google está pronto para receber a compra.`,
-    };
-  }
-  const cadastrados = foto.destinos.filter((d) => d.ativo && ativas.has(d.storeId));
-  if (cadastrados.length > 0) {
-    return {
-      ...passo,
-      estado: "atencao",
-      detalhe: "Um pixel já está cadastrado, mas o rastreamento está desligado na loja.",
+      detalhe: `Um pixel já está cadastrado em ${b.nomeDe(cadastrado.storeId)}, mas o rastreamento está desligado.`,
+      href: rotaRastreamentoDaLoja(cadastrado.storeId),
       cta: "Ligar o rastreamento",
     };
   }
@@ -324,7 +419,15 @@ function passoRastreamento(foto: FotoGuia, b: Base, caminho: CaminhoGuia): Passo
     ...passo,
     estado: "falta",
     detalhe: b.ativas.length === 0 ? "Depois de conectar a loja." : null,
+    href: b.ativas.length === 1 ? rotaRastreamentoDaLoja(b.ativas[0].id) : passo.href,
   };
+}
+
+/** Uma loja pronta com Meta ou TikTok: so eles deixam a compra em Eventos ao vivo. */
+function servidorPronto(foto: FotoGuia, b: Base): boolean {
+  return (situacoesLigadas(foto, b) ?? []).some(
+    (s) => lojaPronta(s) && s.prontos.some((d) => d.plataforma !== "google")
+  );
 }
 
 function passoContas(foto: FotoGuia): PassoGuia {
@@ -421,14 +524,24 @@ function passoCustos(foto: FotoGuia, b: Base): PassoGuia {
   return { ...passo, estado: "falta", detalhe: null };
 }
 
-function passoVenda(foto: FotoGuia, b: Base, caminho: CaminhoGuia, rastreamentoPronto: boolean): PassoGuia {
+/**
+ * A prova e o que aparece em Eventos ao vivo: so Meta e TikTok, que saem pelo
+ * servidor. O Google vai pela tag do navegador e nao aparece la -- por isso
+ * nem e citado aqui.
+ */
+function passoVenda(
+  foto: FotoGuia,
+  b: Base,
+  caminho: CaminhoGuia,
+  rastreamento: { feito: boolean; servidor: boolean }
+): PassoGuia {
   const passo = {
     id: "venda" as const,
     titulo: "Primeira venda rastreada",
     texto:
       caminho === "vitrine"
-        ? "Marca sozinho quando a primeira compra chegar ao Meta, ao Google ou ao TikTok. Com vitrine, a compra chega sem a origem do anúncio: o pedido nasce na loja de checkout."
-        : "Marca sozinho quando a primeira compra chegar ao Meta, ao Google ou ao TikTok.",
+        ? "Marca sozinho quando a primeira compra chegar ao Meta ou ao TikTok. Com vitrine, a compra chega sem a origem do anúncio: o pedido nasce na loja de checkout."
+        : "Marca sozinho quando a primeira compra chegar ao Meta ou ao TikTok.",
     href: "/tracking/eventos",
     cta: "Ver eventos ao vivo",
   };
@@ -444,14 +557,20 @@ function passoVenda(foto: FotoGuia, b: Base, caminho: CaminhoGuia, rastreamentoP
       detalhe: quando ? `Última compra enviada${onde} ${quando}.` : `Compra enviada${onde}.`,
     };
   }
-  if (rastreamentoPronto) {
+  if (rastreamento.servidor) {
     return {
       ...passo,
       estado: "aguardando",
       detalhe: "Tudo pronto. A próxima venda aparece em Eventos ao vivo em segundos.",
     };
   }
-  return { ...passo, estado: "falta", detalhe: "Depois de ligar o rastreamento." };
+  return {
+    ...passo,
+    estado: "falta",
+    detalhe: rastreamento.feito
+      ? "Depois de ligar o Meta ou o TikTok no rastreamento."
+      : "Depois de ligar o rastreamento.",
+  };
 }
 
 // --- Passos da rota (so no caminho com vitrine) -----------------------------
@@ -673,7 +792,10 @@ export function montarGuia(foto: FotoGuia, caminho: CaminhoGuia, agora: Date): G
     rastreamento,
     passoContas(foto),
     passoCustos(foto, b),
-    passoVenda(foto, b, caminho, rastreamento.estado === "feito"),
+    passoVenda(foto, b, caminho, {
+      feito: rastreamento.estado === "feito",
+      servidor: rastreamento.estado === "feito" && servidorPronto(foto, b),
+    }),
   ];
   const passos: PassoGuia[] =
     caminho === "vitrine"

@@ -1,10 +1,12 @@
 import "server-only";
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { estadoConexao } from "@/lib/leitura/lojas-estado";
+import { checarSnippet } from "@/lib/tracking/diagnostico";
 import {
   COOKIE_GUIA_CAMINHO,
   COOKIE_GUIA_DISPENSADO,
@@ -20,10 +22,13 @@ import {
 } from "@/lib/leitura/guia-passos";
 
 // ============================================================================
-// Leitura nova do Guia de configuracao. So SELECT, nada de API externa, e
-// tudo pela sessao (RLS) -- menos a EXISTENCIA do token do Meta, que mora numa
-// tabela sem policy nenhuma: ali entra o admin, so com ids de destino que a
-// sessao acabou de ler (do proprio usuario), e o valor do token nunca sai.
+// Leitura nova do Guia de configuracao. So SELECT e tudo pela sessao (RLS) --
+// menos a EXISTENCIA do token do Meta, que mora numa tabela sem policy
+// nenhuma: ali entra o admin, so com ids de destino que a sessao acabou de ler
+// (do proprio usuario), e o valor do token nunca sai.
+//
+// A unica ida a Shopify e o script no tema (lerScriptNoTema): so para loja com
+// rastreamento ligado, e guardada por 10 minutos.
 //
 // Le: stores, fin_sync_state, tracking_configs, tracking_destinations (+ a
 // existencia do segredo), ad_accounts, fin_store_settings, product_costs,
@@ -39,6 +44,8 @@ type Cliente = Awaited<ReturnType<typeof createClient>>;
 const VAZIA: FotoGuia = {
   lojas: [],
   rastreamentoLigado: [],
+  pixelCheckoutVisto: [],
+  scriptNoTema: {},
   destinos: [],
   contas: [],
   custos: { comTaxa: [], comCusto: [] },
@@ -116,6 +123,10 @@ export const lerFotoGuia = cache(async (): Promise<FotoGuia> => {
   }
   const idsLojas = (lojas ?? []).map((l) => l.id);
   const idsAtivas = (lojas ?? []).filter((l) => !l.semAcesso).map((l) => l.id);
+  // Ligadas e com acesso: so nelas o script no tema decide alguma coisa.
+  const idsLigadas = ligadoRes.error
+    ? []
+    : (ligadoRes.data ?? []).map((c) => String(c.store_id)).filter((id) => idsAtivas.includes(id));
 
   // --- Rotas ----------------------------------------------------------------
   if (rotasRes.error) log("rotas", rotasRes.error);
@@ -129,7 +140,7 @@ export const lerFotoGuia = cache(async (): Promise<FotoGuia> => {
   const idsComToken = (destinosBrutos ?? []).filter((d) => comToken(d.plataforma)).map((d) => String(d.id));
 
   // Segunda ida: o que depende das lojas, das rotas e dos destinos.
-  const [segredos, custosPorLoja, alvos, comSku, script, roteado, venda] = await Promise.all([
+  const [segredos, custosPorLoja, alvos, comSku, script, roteado, venda, scriptNoTema] = await Promise.all([
     idsComToken.length > 0 ? lerTokens(idsComToken) : Promise.resolve(new Set<string>()),
     lerLojasComCusto(supabase, idsAtivas),
     idsRotas.length > 0
@@ -156,6 +167,8 @@ export const lerFotoGuia = cache(async (): Promise<FotoGuia> => {
           .in("store_id", idsLojas)
           .eq("event_name", "Purchase")
           .eq("status", "enviado")
+          // So o que aparece em Eventos ao vivo: o Google vai pela tag.
+          .in("destination", ["meta", "tiktok"])
           // 'enviado' sem sent_at fechou sem sair (teste, sem clique no
           // Google): nao e venda que chegou na plataforma.
           .not("sent_at", "is", null)
@@ -163,6 +176,7 @@ export const lerFotoGuia = cache(async (): Promise<FotoGuia> => {
           .limit(1)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
+    lerScriptNoTema(idsLigadas),
   ]);
 
   // --- Rastreamento ---------------------------------------------------------
@@ -258,6 +272,7 @@ export const lerFotoGuia = cache(async (): Promise<FotoGuia> => {
     pixelCheckoutVisto: ligadoRes.error
       ? null
       : (ligadoRes.data ?? []).filter((c) => c.web_pixel_visto_em).map((c) => String(c.store_id)),
+    scriptNoTema,
     destinos,
     contas,
     custos,
@@ -266,9 +281,7 @@ export const lerFotoGuia = cache(async (): Promise<FotoGuia> => {
       : {
           em: vendaLinha ? vendaLinha.sent_at || vendaLinha.created_at : null,
           plataforma:
-            vendaLinha?.destination === "meta" ||
-            vendaLinha?.destination === "google" ||
-            vendaLinha?.destination === "tiktok"
+            vendaLinha?.destination === "meta" || vendaLinha?.destination === "tiktok"
               ? vendaLinha.destination
               : null,
         },
@@ -295,6 +308,66 @@ async function lerTokens(ids: string[]): Promise<Set<string> | null> {
     return null;
   }
   return new Set((data ?? []).map((s) => String(s.destination_id)));
+}
+
+/** A etiqueta do script no tema de uma loja: a rota que instala a tag a invalida. */
+export function tagScriptNoTema(storeId: string): string {
+  return `guia-script-tema-${storeId}`;
+}
+
+/** Acima disto a tela segue sem a resposta (nao conferido); a conferencia termina e fica guardada. */
+const TETO_TEMA_MS = 8_000;
+
+/**
+ * O script do xcart esta no tema publicado? A MESMA regra do temSnippet da
+ * tela de Rastreamento (checarSnippet), mas guardada por 10 minutos: o menu
+ * lateral le o guia a cada navegacao e nao pode ir a Shopify toda vez. Quem
+ * instala ou remove a tag (api/tracking/snippet) invalida a etiqueta da loja.
+ *
+ * A credencial e lida pelo admin so com ids que a sessao acabou de ler (do
+ * proprio usuario), e so o booleano sai daqui. null = nao deu para conferir.
+ */
+function scriptNoTemaDaLoja(storeId: string): Promise<boolean | null> {
+  return unstable_cache(
+    async (): Promise<boolean | null> => {
+      const { data: l } = await createAdminClient()
+        .from("stores")
+        .select("shop_domain, client_id, client_secret, access_token")
+        .eq("id", storeId)
+        .maybeSingle();
+      if (!l?.client_id || !l.client_secret) return null;
+      const r = await checarSnippet({
+        shopDomain: l.shop_domain,
+        clientId: l.client_id,
+        clientSecret: l.client_secret,
+        accessToken: l.access_token,
+      });
+      return r ? r.tem : null;
+    },
+    ["guia-script-no-tema", storeId],
+    { revalidate: 600, tags: [tagScriptNoTema(storeId)] }
+  )();
+}
+
+/** O script no tema de cada loja ligada. Uma loja que falha vira null so nela. */
+async function lerScriptNoTema(ids: string[]): Promise<Record<string, boolean | null>> {
+  const respostas = await Promise.all(
+    ids.map(async (id) => {
+      let relogio: ReturnType<typeof setTimeout> | undefined;
+      const teto = new Promise<null>((resolver) => {
+        relogio = setTimeout(() => resolver(null), TETO_TEMA_MS);
+      });
+      try {
+        return await Promise.race([scriptNoTemaDaLoja(id), teto]);
+      } catch (e) {
+        log(`o script no tema (${id})`, e);
+        return null;
+      } finally {
+        clearTimeout(relogio);
+      }
+    })
+  );
+  return Object.fromEntries(ids.map((id, i) => [id, respostas[i]]));
 }
 
 /**

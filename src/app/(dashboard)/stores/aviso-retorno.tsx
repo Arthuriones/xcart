@@ -5,6 +5,7 @@ import Link from "next/link";
 import { XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
+import { PROXIMOS_DEPOIS_DA_LOJA } from "@/lib/leitura/guia-passos";
 import { MENSAGEM_CONEXAO_PADRAO, mensagemConexao } from "@/lib/leitura/lojas-estado";
 import { useConectarLoja } from "./conectar-loja";
 
@@ -86,15 +87,11 @@ export function AvisoRetorno({ instalado, erro }: { instalado: boolean; erro: st
         passos:
       </p>
       <p className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
-        <Link href="/financeiro/anuncios" className={LINK}>
-          Ligar contas de anúncio
-        </Link>
-        <Link href="/financeiro/custos" className={LINK}>
-          Cadastrar custos
-        </Link>
-        <Link href="/tracking" className={LINK}>
-          Ligar rastreamento
-        </Link>
+        {PROXIMOS_DEPOIS_DA_LOJA.map((p) => (
+          <Link key={p.href} href={p.href} className={LINK}>
+            {p.rotulo}
+          </Link>
+        ))}
       </p>
     </Callout>
   );

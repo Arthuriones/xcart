@@ -4,6 +4,7 @@ import {
   listarNomes,
   montarGuia,
   porcentagem,
+  PROXIMOS_DEPOIS_DA_LOJA,
   quandoNaFrase,
   resumoDoFluxo,
   type FotoGuia,
@@ -16,6 +17,8 @@ const AGORA = new Date("2026-10-03T18:00:00Z");
 const VAZIA: FotoGuia = {
   lojas: [],
   rastreamentoLigado: [],
+  pixelCheckoutVisto: [],
+  scriptNoTema: {},
   destinos: [],
   contas: [],
   custos: { comTaxa: [], comCusto: [] },
@@ -35,6 +38,8 @@ const ARTHUR: FotoGuia = {
     { id: "goto", nome: "Gotoku", semAcesso: true },
   ],
   rastreamentoLigado: ["lash"],
+  pixelCheckoutVisto: ["lash"],
+  scriptNoTema: { lash: true },
   destinos: [
     { storeId: "lash", plataforma: "meta", ativo: true, recebeCompra: true, modoTeste: false },
     { storeId: "lash", plataforma: "google", ativo: true, recebeCompra: true, modoTeste: false },
@@ -129,6 +134,29 @@ describe("caminho direto", () => {
     expect(passo(foto, "rastreamento").estado).toBe("atencao");
   });
 
+  it("so fica feito com destino pronto, script no tema e pixel do checkout", () => {
+    expect(passo(ARTHUR, "rastreamento").estado).toBe("feito");
+
+    // Sem o pixel do checkout: nem o Meta conta, e o link vai direto para a loja.
+    const semPixel = passo({ ...ARTHUR, pixelCheckoutVisto: [] }, "rastreamento");
+    expect(semPixel.estado).toBe("atencao");
+    expect(semPixel.detalhe).toBe("Lash Bestie: falta o pixel do checkout.");
+    expect(semPixel.href).toBe("/tracking?loja=lash");
+    expect(semPixel.cta).toBe("Instalar o pixel");
+
+    // Sem o script no tema.
+    const semScript = passo({ ...ARTHUR, scriptNoTema: { lash: false } }, "rastreamento");
+    expect(semScript.estado).toBe("atencao");
+    expect(semScript.detalhe).toBe("Lash Bestie: falta o script no tema.");
+    expect(semScript.href).toBe("/tracking?loja=lash");
+    expect(semScript.cta).toBe("Instalar o script");
+
+    // Os dois: uma frase so, na ordem de instalar.
+    const semNada = passo({ ...ARTHUR, scriptNoTema: { lash: false }, pixelCheckoutVisto: [] }, "rastreamento");
+    expect(semNada.detalhe).toBe("Lash Bestie: falta o script no tema e o pixel do checkout.");
+    expect(semNada.cta).toBe("Instalar o script");
+  });
+
   it("Google sem o pixel do checkout nao conta como pronto", () => {
     const google = { storeId: "lash", plataforma: "google" as const, ativo: true, recebeCompra: true, modoTeste: false };
     const semPixel = { ...ARTHUR, destinos: [google], pixelCheckoutVisto: [] };
@@ -136,8 +164,46 @@ describe("caminho direto", () => {
     expect(p.estado).toBe("atencao");
     expect(p.detalhe).toMatch(/pixel do checkout/);
     expect(passo({ ...semPixel, pixelCheckoutVisto: ["lash"] }, "rastreamento").estado).toBe("feito");
-    // O Meta sai pelo servidor: nao depende do pixel.
-    expect(passo({ ...ARTHUR, pixelCheckoutVisto: [] }, "rastreamento").estado).toBe("feito");
+  });
+
+  it("script que nao deu para conferir: nao conferido, nunca feito nem falta", () => {
+    const semResposta: FotoGuia["scriptNoTema"][] = [null, {}, { lash: null }];
+    for (const scriptNoTema of semResposta) {
+      const p = passo({ ...ARTHUR, scriptNoTema }, "rastreamento");
+      expect(p.estado).toBe("naoConferido");
+      expect(p.detalhe).toBe("Não deu para conferir o script no tema de Lash Bestie agora.");
+      expect(p.href).toBe("/tracking?loja=lash");
+    }
+    // O que deu para conferir e falta continua aparecendo.
+    const p = passo({ ...ARTHUR, scriptNoTema: null, pixelCheckoutVisto: [] }, "rastreamento");
+    expect(p.estado).toBe("atencao");
+    expect(p.detalhe).toBe("Lash Bestie: falta o pixel do checkout.");
+  });
+
+  it("uma loja pronta basta, mesmo com outra pela metade", () => {
+    const foto = {
+      ...ARTHUR,
+      rastreamentoLigado: ["lash", "soft"],
+      destinos: [...ARTHUR.destinos!, { storeId: "soft", plataforma: "tiktok" as const, ativo: true, recebeCompra: true, modoTeste: false }],
+      scriptNoTema: { lash: true, soft: false },
+    };
+    const p = passo(foto, "rastreamento");
+    expect(p.estado).toBe("feito");
+    expect(p.detalhe).toBe("Ligado em Lash Bestie: Meta e Google.");
+  });
+
+  it("sem loja pronta, aponta a mais perto de pronta", () => {
+    const foto = {
+      ...ARTHUR,
+      rastreamentoLigado: ["lash", "soft"],
+      destinos: [{ storeId: "soft", plataforma: "meta" as const, ativo: true, recebeCompra: true, modoTeste: false }],
+      scriptNoTema: { lash: false, soft: true },
+      pixelCheckoutVisto: [],
+    };
+    const p = passo(foto, "rastreamento");
+    expect(p.estado).toBe("atencao");
+    expect(p.detalhe).toBe("Softnook: falta o pixel do checkout.");
+    expect(p.href).toBe("/tracking?loja=soft");
   });
 
   it("destino cadastrado com o interruptor desligado pede atencao", () => {
@@ -145,6 +211,40 @@ describe("caminho direto", () => {
     const p = passo(foto, "rastreamento");
     expect(p.estado).toBe("atencao");
     expect(p.cta).toBe("Ligar o rastreamento");
+    expect(p.href).toBe("/tracking?loja=lash");
+  });
+
+  it("ligado sem destino que receba a compra diz o que falta, na loja", () => {
+    const foto = { ...ARTHUR, destinos: [], scriptNoTema: { lash: false } };
+    const p = passo(foto, "rastreamento");
+    expect(p.estado).toBe("atencao");
+    expect(p.detalhe).toBe("Lash Bestie: falta um pixel do Meta/TikTok ou a conversão do Google e o script no tema.");
+    expect(p.cta).toBe("Configurar rastreamento");
+    expect(p.href).toBe("/tracking?loja=lash");
+  });
+
+  it("primeira venda: so Meta e TikTok, sem citar o Google, com o link de Eventos ao vivo", () => {
+    for (const caminho of ["direto", "vitrine"] as const) {
+      const p = passo(ARTHUR, "venda", caminho);
+      expect(p.texto).toMatch(/Meta ou ao TikTok/);
+      expect(`${p.texto} ${p.detalhe}`).not.toMatch(/Google/);
+      expect(p.href).toBe("/tracking/eventos");
+    }
+    // Pronto so pelo Google (tag): nada vai aparecer em Eventos ao vivo.
+    const google = { storeId: "lash", plataforma: "google" as const, ativo: true, recebeCompra: true, modoTeste: false };
+    const soGoogle = { ...ARTHUR, destinos: [google], ultimaVenda: { em: null, plataforma: null } };
+    expect(passo(soGoogle, "rastreamento").estado).toBe("feito");
+    const v = passo(soGoogle, "venda");
+    expect(v.estado).toBe("falta");
+    expect(v.detalhe).not.toMatch(/Google/);
+  });
+
+  it("aviso de loja conectada: rastreamento primeiro", () => {
+    expect(PROXIMOS_DEPOIS_DA_LOJA.map((p) => p.href)).toEqual([
+      "/tracking",
+      "/financeiro/anuncios",
+      "/financeiro/custos",
+    ]);
   });
 
   it("contas so sem loja: o gasto nao entra, atencao", () => {

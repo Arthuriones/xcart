@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
+import { tagScriptNoTema } from "@/lib/leitura/guia-configuracao";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { aplicarSnippet } from "@/lib/tracking/snippet-tema";
@@ -102,6 +104,10 @@ export async function POST(request: NextRequest) {
       },
       { storeId: loja.id, remarketing, idTemplate, remover: corpo.remover }
     );
+    // O guia de configuracao guarda o "script no tema" por 10 minutos: sem
+    // isto, o passo do rastreamento seguiria acusando a falta logo depois de
+    // instalar.
+    revalidateTag(tagScriptNoTema(loja.id), { expire: 0 });
     return NextResponse.json({ ok: true, ...r, conteudo: undefined });
   } catch (e) {
     // A mensagem da Shopify vem crua e em ingles ("Access denied for

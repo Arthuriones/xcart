@@ -184,7 +184,12 @@ async function checarWebhook(creds: Creds): Promise<boolean | null> {
   }
 }
 
-async function checarSnippet(
+/**
+ * O snippet esta no theme.liquid publicado? Exportada para o guia de
+ * configuracao (guia-configuracao.ts) usar a MESMA regra desta tela.
+ * null = nao deu para ler o tema.
+ */
+export async function checarSnippet(
   creds: Creds
 ): Promise<{ tem: boolean; comId: boolean; remarketing: boolean } | null> {
   try {
