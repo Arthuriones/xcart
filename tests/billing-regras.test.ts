@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ERRO_PADRAO,
+  MUDAR_PLANO,
   contagem,
   dataCurta,
   formaDaCompra,
@@ -175,6 +176,25 @@ describe("situacaoDoPlano", () => {
   });
 });
 
+describe("situacaoDoPlano com os 3 planos", () => {
+  it("o título diz o plano; o Pro antigo continua Plano Pro", () => {
+    expect(situacaoDoPlano({ ...CARTAO, tier: "lojas3" }, AGORA).titulo).toBe("Plano 3 Lojas");
+    expect(situacaoDoPlano({ ...PIX, tier: "ilimitado" }, AGORA).titulo).toBe("Plano Ilimitado");
+    expect(situacaoDoPlano({ ...CARTAO, tier: null }, AGORA).titulo).toBe("Plano Pro");
+  });
+
+  it("diz como mudar de plano: suporte no cartão, outro plano no próximo Pix", () => {
+    expect(situacaoDoPlano({ ...CARTAO, tier: "loja1" }, AGORA).mudarPlano).toBe(MUDAR_PLANO.cartao);
+    expect(situacaoDoPlano({ ...PIX, tier: "loja1" }, AGORA).mudarPlano).toBe(MUDAR_PLANO.pix);
+    expect(situacaoDoPlano(FREE, AGORA).mudarPlano).toBeNull();
+  });
+
+  it("o Pix de 30 dias no histórico leva o nome do plano", () => {
+    const base = { credits: 20, method: "pix", provider: "pagou", status: "paid" };
+    expect(rotuloCompra({ ...base, kind: "pro_month", plano: "lojas3" })).toBe("Plano 3 Lojas · 30 dias");
+  });
+});
+
 describe("motivoDoBloqueio (paywall)", () => {
   it("clonagem gratuita usada", () => {
     expect(motivoDoBloqueio({ ...FREE, usouClonagemGratis: true }, AGORA)).toBe(
@@ -185,7 +205,7 @@ describe("motivoDoBloqueio (paywall)", () => {
     expect(motivoDoBloqueio({ ...PIX, fimPeriodo: "2026-09-30T12:00:00Z" }, AGORA)).toContain("30/09/2026");
   });
   it("sem perfil: frase generica, sem inventar motivo", () => {
-    expect(motivoDoBloqueio(null, AGORA)).toBe("Para continuar usando o xcart, assine o Pro.");
+    expect(motivoDoBloqueio(null, AGORA)).toBe("Para continuar usando o xcart, assine um plano.");
   });
   it("quem tem acesso nao ve motivo (null)", () => {
     expect(motivoDoBloqueio(CARTAO, AGORA)).toBeNull();

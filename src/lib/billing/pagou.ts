@@ -260,6 +260,8 @@ export async function createSubscription(params: {
   amountCents: number;
   currency: string;
   userId: string;
+  /** O tier cobrado, guardado no metadata para o webhook conferir. */
+  plano?: string;
   cardToken?: string;
   billingDayOfMonth?: number;
   idempotencyKey: string;
@@ -271,7 +273,7 @@ export async function createSubscription(params: {
     amount: params.amountCents,
     currency: params.currency,
     failure_policy: "retry_then_cancel",
-    metadata: { user_id: params.userId },
+    metadata: { user_id: params.userId, ...(params.plano ? { plano: params.plano } : {}) },
     idempotency_key: params.idempotencyKey,
   };
 

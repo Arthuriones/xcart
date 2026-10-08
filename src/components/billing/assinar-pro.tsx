@@ -7,11 +7,12 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import type { CobrancaPix } from "@/components/billing/pix-dialog";
-import { PRO_PRICE_CENTS } from "@/lib/billing/plans";
+import { GARANTIA, planoEmDestaque, planoPorId, type PlanoId } from "@/lib/billing/plans";
 import { cpfValido, digitos } from "@/lib/billing/documento";
 import { BENEFICIOS_PRO } from "@/components/billing/beneficios";
 import { CampoCpf } from "@/components/billing/campo-cpf";
 import { Escolha } from "@/components/billing/escolha";
+import { EscolhaDePlano } from "@/components/billing/escolha-plano";
 import { ERRO_PADRAO, brl, mensagemDeErro, type ErroNaTela } from "@/components/billing/regras";
 
 // So aparecem depois de escolher a forma de pagamento. Somados sao 16 KB que
@@ -26,14 +27,16 @@ const PixDialog = dynamic(
 );
 
 // ============================================================================
-// Assinar o Pro. Usado na Assinatura e no paywall.
+// Assinar um dos planos. Usado na Assinatura e no paywall.
 //
-// Dois caminhos, porque o processador nao tem um so que sirva para todo mundo:
+// Primeiro o plano (1 Loja, 3 Lojas, Ilimitado: o mesmo catalogo da landing),
+// depois a forma de pagamento. Dois caminhos, porque o processador nao tem um
+// so que sirva para todo mundo:
 //  - Cartao: assinatura de verdade, renova sozinha.
 //  - Pix: cobranca avulsa que libera 30 dias. Nao renova (a recorrencia so
 //    existe no cartao).
-// Os corpos das chamadas sao os de antes: { packId: "pro_month", document? }
-// para o Pix e o token do cartao em /api/billing/subscribe.
+// Corpos: { packId: "pro_month", plano, document? } para o Pix e
+// { cardToken, plano } em /api/billing/subscribe. O valor sai do servidor.
 // ============================================================================
 
 type Via = "cartao" | "pix";
@@ -43,16 +46,21 @@ export function AssinarPro({
   somentePix = false,
   temDocumento,
   mostrarResumo = true,
+  planoInicial,
 }: {
   /** Pagamento confirmado (cartao aceito ou Pix pago). */
   onPronto: () => void;
+  /** O plano marcado de partida (o atual, ao renovar). Sem ele, o em destaque. */
+  planoInicial?: PlanoId | null;
   /** So o Pix: renovar quem ja paga por Pix (os dias se somam). */
   somentePix?: boolean;
   /** O CPF ja esta salvo? undefined = nao se sabe (pede so se o servidor pedir). */
   temDocumento?: boolean;
-  /** Resumo com preco e o que inclui. */
+  /** A lista do que todo plano inclui. */
   mostrarResumo?: boolean;
 }) {
+  const [planoId, setPlanoId] = useState<PlanoId>(planoInicial ?? planoEmDestaque().id);
+  const plano = planoPorId(planoId) ?? planoEmDestaque();
   const [via, setVia] = useState<Via | null>(somentePix ? "pix" : null);
   const [cpf, setCpf] = useState("");
   const [pedirCpf, setPedirCpf] = useState(temDocumento === false);
@@ -81,6 +89,7 @@ export function AssinarPro({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           packId: "pro_month",
+          plano: plano.id,
           ...(cpf.trim() ? { document: cpf } : {}),
         }),
       });
@@ -100,6 +109,7 @@ export function AssinarPro({
         credits: data.credits,
         amountCents: data.amountCents,
         kind: "pro_month",
+        nomePlano: plano.nome,
         pix: data.pix,
       });
     } catch {
@@ -113,16 +123,22 @@ export function AssinarPro({
     // @container: os cartoes de forma de pagamento ficam lado a lado so quando
     // o bloco e largo (Assinatura), e empilhados na coluna estreita do paywall.
     <div className="@container flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        <p className="text-dense font-medium text-ink">Escolha o plano</p>
+        <EscolhaDePlano
+          valor={planoId}
+          onValor={(v) => {
+            setPlanoId(v);
+            setErro(null);
+          }}
+          desabilitado={busy}
+        />
+      </div>
+
       {mostrarResumo ? (
-        <div className="flex flex-col gap-3 rounded-card border border-border bg-surface-2 p-4">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <span className="text-section text-ink">Plano Pro</span>
-            <span className="flex items-baseline gap-1">
-              <span className="num text-page text-ink">{brl(PRO_PRICE_CENTS)}</span>
-              <span className="text-dense text-t2">por mês</span>
-            </span>
-          </div>
-          <ul aria-label="O que o Pro inclui" className="flex flex-col gap-1.5 border-t border-border-subtle pt-3">
+        <div className="flex flex-col gap-2 rounded-card border border-border bg-surface-2 p-4">
+          <span className="text-dense font-semibold text-ink">Todos os planos incluem</span>
+          <ul aria-label="O que todos os planos incluem" className="flex flex-col gap-1.5">
             {BENEFICIOS_PRO.map((item) => (
               <li key={item} className="flex items-start gap-2 text-dense text-t1">
                 <Check aria-hidden className="mt-0.5 size-3.5 shrink-0 text-ok" strokeWidth={2} />
@@ -166,12 +182,13 @@ export function AssinarPro({
 
       {via === "cartao" ? (
         <PagouCardForm
+          plano={plano.id}
           // O botao diz o que acontece e quanto custa, em vez de um
           // "Assinar agora" que esconde o valor.
-          labelBotao={`Assinar por ${brl(PRO_PRICE_CENTS)} por mês`}
+          labelBotao={`Assinar o ${plano.nome} por ${brl(plano.precoCentavos)} por mês`}
           onSuccess={(dados) => {
             const pendente = (dados as { pending?: boolean } | null)?.pending === true;
-            if (pendente) toast.info("Pagamento em processamento. O Pro libera assim que o banco confirmar.");
+            if (pendente) toast.info("Pagamento em processamento. O plano libera assim que o banco confirmar.");
             else toast.success("Assinatura confirmada.");
             onPronto();
           }}
@@ -204,15 +221,19 @@ export function AssinarPro({
           ) : null}
           <Button size="lg" className="w-full" onClick={gerarPix} pending={busy}>
             {busy ? null : <QrCode aria-hidden />}
-            Gerar Pix de {brl(PRO_PRICE_CENTS)}
+            Gerar Pix de {brl(plano.precoCentavos)}
           </Button>
           <p className="text-center text-label text-t2">
             {somentePix
-              ? "Mais 30 dias de Pro, somados aos que ainda faltam. Não renova sozinho."
-              : "Libera 30 dias de Pro assim que o pagamento cair. Não renova sozinho: quando acabar, é só pagar de novo."}
+              ? `Mais 30 dias do plano ${plano.nome}, somados aos que ainda faltam.${
+                  planoInicial && planoInicial !== plano.id ? " O plano novo vale assim que o Pix cair." : ""
+                } Não renova sozinho.`
+              : `Libera 30 dias do plano ${plano.nome} assim que o pagamento cair. Não renova sozinho: quando acabar, é só pagar de novo.`}
           </p>
         </div>
       ) : null}
+
+      {!somentePix ? <p className="text-center text-label text-t2">{GARANTIA.longa}</p> : null}
 
       {pix ? (
         <PixDialog

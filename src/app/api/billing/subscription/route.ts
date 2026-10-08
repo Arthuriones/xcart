@@ -7,6 +7,8 @@ import {
   planoDoStatus,
   PagouError,
 } from "@/lib/billing/pagou";
+import { planoDoValor } from "@/lib/billing/plans";
+import { atualizarPerfil } from "@/lib/billing/limites";
 
 export const runtime = "nodejs";
 
@@ -56,17 +58,17 @@ export async function GET() {
   try {
     const sub = await getSubscription(profile.pagou_subscription_id);
 
-    // Mantem o profile em dia mesmo se algum webhook tiver se perdido.
-    await admin
-      .from("profiles")
-      .update({
-        subscription_status: sub.status,
-        plan: planoDoStatus(sub.status),
-        current_period_end: sub.currentPeriodEnd || null,
-        cancel_at_period_end: sub.cancelAtPeriodEnd === true,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", user.id);
+    // Mantem o profile em dia mesmo se algum webhook tiver se perdido. O tier
+    // sai do valor cobrado; valor desconhecido (o R$ 89 antigo) nao mexe nele.
+    const plano = planoDoValor(sub.amount);
+    await atualizarPerfil(admin, user.id, {
+      subscription_status: sub.status,
+      plan: planoDoStatus(sub.status),
+      ...(plano ? { plano } : {}),
+      current_period_end: sub.currentPeriodEnd || null,
+      cancel_at_period_end: sub.cancelAtPeriodEnd === true,
+      updated_at: new Date().toISOString(),
+    });
 
     return NextResponse.json({
       provider: "pagou",

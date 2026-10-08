@@ -449,8 +449,17 @@ function AdicionarLojas({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ routeId: rotaId, sourceStoreId: vitrineId, targetStoreId: loja.id, createRoute: false }),
         });
-        const d = (await r.json().catch(() => ({}))) as { safeToEnable?: boolean; coveragePercent?: number };
-        if (!r.ok) {
+        const d = (await r.json().catch(() => ({}))) as {
+          safeToEnable?: boolean;
+          coveragePercent?: number;
+          error?: string;
+          code?: string;
+        };
+        if (!r.ok && d.code === "limite_do_plano") {
+          // Limite de lojas do plano: as proximas da fila tambem nao cabem.
+          saida.push({ nome: loja.nome, ok: false, entrou: false, texto: `não entrou. ${d.error ?? ""}`.trim() });
+          break;
+        } else if (!r.ok) {
           saida.push({ nome: loja.nome, ok: false, entrou: false, texto: "não entrou: a Shopify não respondeu ou nenhum SKU casou." });
         } else if (d.safeToEnable === false) {
           saida.push({

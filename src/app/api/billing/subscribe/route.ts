@@ -7,14 +7,17 @@ import {
   planoDoStatus,
   PagouError,
 } from "@/lib/billing/pagou";
-import { CURRENCY, PRO_PRICE_CENTS } from "@/lib/billing/plans";
+import { CURRENCY, ehPlanoId, planoDoValor, planoPorId } from "@/lib/billing/plans";
+import { atualizarPerfil } from "@/lib/billing/limites";
 
 export const runtime = "nodejs";
 
 /**
- * POST -> cria a assinatura do plano Pro na Pagou.
+ * POST -> cria a assinatura de um dos planos na Pagou.
  *
- * Body: { cardToken } para cartao, ou { method: "pix_automatic", billingDay }.
+ * Body: { plano, cardToken } para cartao, ou { plano, method: "pix_automatic",
+ * billingDay }. `plano` e obrigatorio ('loja1' | 'lojas3' | 'ilimitado'): o
+ * valor cobrado sai de plans.ts pelo tier, nunca do corpo.
  *
  * Ao contrario do Stripe, nao ha checkout hospedado: o cartao ja vem
  * tokenizado do browser (Payment Element) e a assinatura nasce aqui. Por isso
@@ -30,6 +33,10 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => ({}));
+  const plano = ehPlanoId(body.plano) ? planoPorId(body.plano)! : null;
+  if (!plano) {
+    return NextResponse.json({ error: "Escolha um plano." }, { status: 400 });
+  }
   const cardToken = typeof body.cardToken === "string" ? body.cardToken.trim() : "";
   const usarPix = body.method === "pix_automatic";
 
@@ -69,12 +76,17 @@ export async function POST(request: NextRequest) {
   try {
     const customerId = await getOrCreateCustomer(user.id, user.email, null);
 
-    // Chave estavel por usuario+dia: um duplo clique nao gera duas assinaturas.
-    const idempotencyKey = `sub_${user.id}_${new Date().toISOString().slice(0, 10)}`;
+    // Chave estavel por usuario+dia+plano: um duplo clique nao gera duas
+    // assinaturas. O plano entra na chave porque a Pagou devolve a assinatura
+    // da primeira chamada para a mesma chave -- sem ele, quem trocasse de
+    // plano no mesmo dia (cartao recusado, tenta de novo com outro) receberia
+    // a assinatura do valor antigo.
+    const idempotencyKey = `sub_${user.id}_${new Date().toISOString().slice(0, 10)}_${plano.id}`;
 
     const sub = await createSubscription({
       customerId,
-      amountCents: PRO_PRICE_CENTS,
+      amountCents: plano.precoCentavos,
+      plano: plano.id,
       currency: CURRENCY,
       userId: user.id,
       cardToken: cardToken || undefined,
@@ -84,19 +96,18 @@ export async function POST(request: NextRequest) {
       idempotencyKey,
     });
 
-    await admin
-      .from("profiles")
-      .update({
-        pagou_customer_id: customerId,
-        pagou_subscription_id: sub.id,
-        payment_provider: "pagou",
-        subscription_status: sub.status,
-        plan: planoDoStatus(sub.status),
-        current_period_end: sub.currentPeriodEnd || null,
-        cancel_at_period_end: sub.cancelAtPeriodEnd === true,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", user.id);
+    await atualizarPerfil(admin, user.id, {
+      pagou_customer_id: customerId,
+      pagou_subscription_id: sub.id,
+      payment_provider: "pagou",
+      subscription_status: sub.status,
+      plan: planoDoStatus(sub.status),
+      // O valor que a Pagou devolve manda; o pedido so cobre resposta sem valor.
+      plano: planoDoValor(sub.amount) ?? plano.id,
+      current_period_end: sub.currentPeriodEnd || null,
+      cancel_at_period_end: sub.cancelAtPeriodEnd === true,
+      updated_at: new Date().toISOString(),
+    });
 
     return NextResponse.json({
       subscriptionId: sub.id,

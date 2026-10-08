@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   CREDIT_PACKS,
+  PLANOS as PLANOS_COBRADOS,
   PRO_INCLUDED_CREDITS,
-  PRO_PRICE_CENTS,
 } from "@/lib/billing/plans";
 import { BENEFICIOS_PRO } from "@/components/billing/beneficios";
-import { PACOTES, POLITICA_TESTE, PRECO_PRO } from "@/app/lp/plano";
+import { PACOTES, PLANOS, POLITICA_TESTE, PRECO_A_PARTIR } from "@/app/lp/plano";
 import {
   COMPARACAO,
   CONECTA_COM,
@@ -25,11 +25,28 @@ import {
 const NBSP = / /g;
 const limpo = (s: string) => s.replace(NBSP, " ");
 
+const emReais = (c: number) => `${Math.floor(c / 100)},${String(c % 100).padStart(2, "0")}`;
+
 describe("preço na landing", () => {
-  it("sai do plano que cobra, com centavos e no formato do Brasil", () => {
-    const reais = Math.floor(PRO_PRICE_CENTS / 100);
-    const centavos = String(PRO_PRICE_CENTS % 100).padStart(2, "0");
-    expect(limpo(PRECO_PRO)).toBe(`R$ ${reais},${centavos}`);
+  it("os três planos saem do catálogo que cobra, com centavos e no formato do Brasil", () => {
+    expect(PLANOS.map((p) => p.id)).toEqual(PLANOS_COBRADOS.map((p) => p.id));
+    for (const [i, p] of PLANOS.entries()) {
+      const cobrado = PLANOS_COBRADOS[i];
+      expect(p.nome).toBe(cobrado.nome);
+      expect(p.valor).toBe(emReais(cobrado.precoCentavos));
+      expect(p.selo ?? null).toBe(cobrado.selo);
+    }
+    expect(PLANOS.map((p) => p.valor)).toEqual(["79,90", "119,90", "169,90"]);
+    expect(limpo(PRECO_A_PARTIR)).toBe("R$ 79,90");
+  });
+
+  it("cada cartão abre com os limites reais de loja", () => {
+    expect(PLANOS.map((p) => p.itens.slice(0, 2))).toEqual([
+      ["1 loja com rastreamento.", "Até 6 lojas no roteamento."],
+      ["3 lojas com rastreamento.", "Até 12 lojas no roteamento."],
+      ["Rastreamento sem limite de lojas.", "Roteamento sem limite de lojas."],
+    ]);
+    for (const p of PLANOS) expect(p.itens.join(" ")).not.toMatch(/loja disponível|lojas disponíveis/);
   });
 
   it("mostra todos os pacotes, na mesma ordem, com centavos", () => {

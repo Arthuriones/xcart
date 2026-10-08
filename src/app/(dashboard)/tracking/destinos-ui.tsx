@@ -144,6 +144,9 @@ export function FormularioDestino({
               ? "1 evento que tinha falhado vai ser reenviado."
               : `${total} eventos que tinham falhado vão ser reenviados.`,
         });
+      } else if (typeof j.aviso === "string" && j.aviso) {
+        // Salvo, mas a loja nao ligou (limite do plano).
+        toast.warning(j.aviso);
       } else {
         toast.success(editando ? "Destino atualizado" : "Destino adicionado");
       }

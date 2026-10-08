@@ -583,6 +583,10 @@ export function erroNaTela(
   if (status === 401) {
     return { ...base, texto: "Sua sessão expirou. Entre de novo para continuar." };
   }
+  if (codigo === "limite_do_plano") {
+    // A frase do servidor ja diz o que o plano cobre e para onde ir.
+    return { detalhe: null, plano: true, texto: cru || "O limite de lojas do seu plano foi atingido." };
+  }
   if (status === 402 || codigo === "subscribe_required") {
     return {
       ...base,

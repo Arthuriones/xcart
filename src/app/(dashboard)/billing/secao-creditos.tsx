@@ -33,12 +33,12 @@ export function SecaoCreditos({
     // E o que o aviso de renovacao faz hoje (reset_ai_credits): o saldo VOLTA
     // para o incluso, nao soma. Dito aqui para ninguem achar que acumula.
     notas.push(
-      `O Pro inclui ${creditos(PRO_INCLUDED_CREDITS)} por mês. Na renovação do cartão, o saldo volta para ${PRO_INCLUDED_CREDITS}.`
+      `O plano inclui ${creditos(PRO_INCLUDED_CREDITS)} por mês. Na renovação do cartão, o saldo volta para ${PRO_INCLUDED_CREDITS}.`
     );
   } else if (pro && forma === "pix") {
-    notas.push(`Cada Pix de 30 dias do Pro soma ${creditos(PRO_INCLUDED_CREDITS)} ao saldo.`);
+    notas.push(`Cada Pix de 30 dias do plano soma ${creditos(PRO_INCLUDED_CREDITS)} ao saldo.`);
   } else if (pro) {
-    notas.push(`O Pro inclui ${creditos(PRO_INCLUDED_CREDITS)} por mês.`);
+    notas.push(`O plano inclui ${creditos(PRO_INCLUDED_CREDITS)} por mês.`);
   }
   if (!cobrancaLigada) notas.push("Por enquanto, neutralizar imagens não desconta créditos do saldo.");
 

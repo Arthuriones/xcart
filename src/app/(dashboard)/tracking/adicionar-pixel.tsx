@@ -128,8 +128,9 @@ export function AdicionarPixel({
     }
     setSalvando(true);
     try {
+      let aviso: string | null = null;
       if (plat !== "google") {
-        await criarPixel({
+        aviso = await criarPixel({
           storeId: loja.storeId,
           plataforma: plat,
           nome: v.nome.trim(),
@@ -139,7 +140,7 @@ export function AdicionarPixel({
         });
       } else if (modo === "existente") {
         const o = outros[escolhido].d;
-        await criarPixel({
+        aviso = await criarPixel({
           storeId: loja.storeId,
           plataforma: "google",
           nome: o.nome ?? "",
@@ -147,7 +148,7 @@ export function AdicionarPixel({
           labels: o.labels,
         });
       } else if (lidos && !("erro" in lidos)) {
-        await criarPixel({
+        aviso = await criarPixel({
           storeId: loja.storeId,
           plataforma: "google",
           nome: v.nome.trim(),
@@ -155,7 +156,9 @@ export function AdicionarPixel({
           labels: lidos.labels,
         });
       }
-      toast.success("Pixel adicionado");
+      // Salvo, mas a loja nao ligou (limite do plano): o aviso diz por que.
+      if (aviso) toast.warning(aviso);
+      else toast.success("Pixel adicionado");
       onFechar();
       aoSalvar();
     } catch (e) {

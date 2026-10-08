@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { PRO_PRICE_BRL, USD_BRL_REPORTING } from "@/lib/billing/plans";
+import { USD_BRL_REPORTING, precoMensalCentavos } from "@/lib/billing/plans";
 
 export const runtime = "nodejs";
 
@@ -39,7 +39,7 @@ export async function GET() {
     admin
       .from("profiles")
       .select(
-        "id, plan, subscription_status, ai_credits, current_period_end, created_at, access_granted, is_admin"
+        "id, plan, plano, subscription_status, ai_credits, current_period_end, created_at, access_granted, is_admin"
       ),
     admin.from("stores").select("id, user_id, shop_domain, name"),
     admin
@@ -121,8 +121,9 @@ export async function GET() {
 
   const creditoMesBrl = soma(noMes);
   const creditoTotalBrl = soma(todasCompras);
-  // Receita em BRL (Pagou); custo de IA em USD (Gemini). Nao somar.
-  const mrrBrl = proUsers * PRO_PRICE_BRL;
+  // Receita em BRL (Pagou); custo de IA em USD (Gemini). Nao somar. Cada Pro
+  // pelo preco do proprio plano; o Pro antigo (sem tier) pelos R$ 89.
+  const mrrBrl = (profiles || []).reduce((t, p) => t + precoMensalCentavos(p), 0) / 100;
   const custoMes = Number(totalCostUsd.toFixed(2));
 
   const recentPurchases = todasCompras.slice(0, 12).map((c) => ({

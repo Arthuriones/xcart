@@ -37,6 +37,7 @@ import {
   isShoplazzaStore,
 } from "@/lib/import/shoplazza";
 import { createClient } from "@/lib/supabase/server";
+import { conferirRoteamento, corpoDoBloqueio } from "@/lib/billing/limites";
 import { lojaDoUsuario } from "@/lib/stores/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { translateProductVariantOptionsToPortuguese } from "@/lib/products/variant-translation";
@@ -529,12 +530,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Você já usou sua clonagem gratuita. Assine o Pro para clonar mais lojas.",
+            "Você já usou sua clonagem gratuita. Assine um plano para clonar mais lojas.",
           code: "subscribe_required",
         },
         { status: 402 }
       );
     }
+  }
+
+  // A rota que o clone cria no fim passa pelo limite de lojas no roteamento
+  // do plano -- conferido antes de clonar, para nao copiar tudo e barrar no fim.
+  if (action === "apply" && createRoutingConfig && sourceStoreId && targetStoreId) {
+    const limite = await conferirRoteamento(await createClient(), userId, {
+      adicionar: [sourceStoreId, targetStoreId],
+    });
+    if (!limite.ok) return NextResponse.json(corpoDoBloqueio(limite), { status: limite.status });
   }
 
   try {

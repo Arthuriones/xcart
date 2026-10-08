@@ -10,6 +10,8 @@ import { Section } from "@/components/ui/section";
 import { Spinner } from "@/components/ui/spinner";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { AssinarPro } from "@/components/billing/assinar-pro";
+import type { PlanoId } from "@/lib/billing/plans";
+import type { UsoDoPlano } from "@/lib/leitura/assinatura";
 import {
   ERRO_PADRAO,
   dataCurta,
@@ -42,10 +44,16 @@ export function SecaoPlano({
   situacao,
   noBanco,
   temDocumento,
+  uso,
+  planoAtual,
 }: {
   situacao: SituacaoPlano;
   noBanco: PlanoNoBanco;
   temDocumento: boolean;
+  /** Lojas usadas x limite do plano. null = nao deu para ler. */
+  uso: UsoDoPlano | null;
+  /** O tier de agora, para o Pix de renovacao ja vir marcado nele. */
+  planoAtual: PlanoId | null;
 }) {
   const router = useRouter();
   const [, iniciar] = useTransition();
@@ -118,11 +126,11 @@ export function SecaoPlano({
         situacao.podeCancelar ? (
           <ConfirmDialog
             gatilho={<Button variant="destructive">Cancelar assinatura</Button>}
-            titulo="Cancelar a assinatura do Pro?"
+            titulo="Cancelar a assinatura?"
             descricao={
               fim
-                ? `O cartão não será mais cobrado. Você continua com o Pro até ${fim}; depois disso, a conta fica sem assinatura.`
-                : "O cartão não será mais cobrado. Você continua com o Pro até o fim do período já pago; depois disso, a conta fica sem assinatura."
+                ? `O cartão não será mais cobrado. Você continua com o plano até ${fim}; depois disso, a conta fica sem assinatura.`
+                : "O cartão não será mais cobrado. Você continua com o plano até o fim do período já pago; depois disso, a conta fica sem assinatura."
             }
             confirmar="Cancelar assinatura"
             cancelar="Manter assinatura"
@@ -141,6 +149,13 @@ export function SecaoPlano({
         {cartaoFinal && situacao.forma === "cartao" ? (
           <p className="num text-label text-t2">Cartão final {cartaoFinal}</p>
         ) : null}
+        {uso ? <p className="num text-dense text-t1">{uso.resumo}</p> : null}
+        {uso?.acima ? (
+          <p className="text-label text-warn">
+            Acima do limite do plano: o que já está ligado continua, mas não dá para ligar mais lojas.
+          </p>
+        ) : null}
+        {situacao.mudarPlano ? <p className="text-label text-t2">{situacao.mudarPlano}</p> : null}
       </div>
 
       {situacao.aviso ? (
@@ -168,7 +183,7 @@ export function SecaoPlano({
               Conferindo o pagamento…
             </p>
             <p className="text-dense text-t1">
-              O Pro libera assim que o banco confirmar. Não precisa pagar de novo.
+              O plano libera assim que o banco confirmar. Não precisa pagar de novo.
             </p>
             <Button variant="secondary" size="sm" onClick={atualizar}>
               Conferir de novo
@@ -192,6 +207,7 @@ export function SecaoPlano({
             <AssinarPro
               somentePix
               mostrarResumo={false}
+              planoInicial={planoAtual}
               temDocumento={temDocumento}
               onPronto={() => {
                 setRenovando(false);

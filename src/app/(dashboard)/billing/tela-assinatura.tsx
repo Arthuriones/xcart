@@ -1,4 +1,4 @@
-import { CREDIT_PACKS } from "@/lib/billing/plans";
+import { CREDIT_PACKS, PLANO_BASE, ehPlanoId } from "@/lib/billing/plans";
 import type { LeituraAssinatura } from "@/lib/leitura/assinatura";
 import { pacotesComPreco, situacaoDoPlano } from "@/components/billing/regras";
 import { ComprarCreditos } from "./comprar-creditos";
@@ -22,6 +22,9 @@ export function TelaAssinatura({ d }: { d: LeituraAssinatura }) {
         <SecaoPlano
           situacao={situacao}
           temDocumento={perfil.temDocumento}
+          uso={d.uso}
+          // Pro antigo (sem tier) renova no plano com os mesmos limites.
+          planoAtual={ehPlanoId(perfil.tier) ? perfil.tier : PLANO_BASE}
           noBanco={{
             status: perfil.status,
             cancelaNoFim: perfil.cancelaNoFim,

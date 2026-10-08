@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ehPlanoId } from "@/lib/billing/plans";
 
 export const runtime = "nodejs";
 
@@ -141,6 +142,8 @@ export async function PATCH(
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (body.plan === "free" || body.plan === "pro") update.plan = body.plan;
+  // Tier (limite de lojas): "loja1" | "lojas3" | "ilimitado", ou null (Pro antigo).
+  if (body.plano === null || ehPlanoId(body.plano)) update.plano = body.plano;
   if (typeof body.aiCredits === "number") {
     update.ai_credits = Math.max(0, Math.floor(body.aiCredits));
   }

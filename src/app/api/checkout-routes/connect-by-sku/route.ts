@@ -8,6 +8,7 @@ import {
 import { normalizarSkus } from "@/lib/shopify/sku-stamp";
 import { createClient } from "@/lib/supabase/server";
 import { lojaDoUsuario } from "@/lib/stores/authorize";
+import { conferirRoteamento, corpoDoBloqueio } from "@/lib/billing/limites";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -120,6 +121,16 @@ export async function POST(request: NextRequest) {
       { error: "Uma das lojas nao foi encontrada." },
       { status: 404 }
     );
+  }
+
+  // Limite de lojas no roteamento, ANTES de qualquer escrita (o carimbo de SKU
+  // abaixo grava na vitrine). Criar rota traz as duas lojas; adicionar destino
+  // traz a loja de checkout nova. So casar, sem gravar rota, nao conta.
+  if (routeId || createRoute) {
+    const limite = await conferirRoteamento(supabase, user.id, {
+      adicionar: [sourceStoreId, targetStoreId],
+    });
+    if (!limite.ok) return NextResponse.json(corpoDoBloqueio(limite), { status: limite.status });
   }
 
   const sourceCreds: ShopifyCredentials = {

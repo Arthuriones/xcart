@@ -10,27 +10,33 @@ import {
 import {
   CREDIT_PACKS,
   CURRENCY,
+  ehPlanoId,
   getCreditPack,
+  planoPorId,
   PRO_INCLUDED_CREDITS,
-  PRO_PRICE_CENTS,
 } from "@/lib/billing/plans";
+import { semColunaPlano } from "@/lib/billing/limites";
 import { digitos, normalizarDocumento } from "@/lib/billing/documento";
 
 export const runtime = "nodejs";
 
-// Um mes de Pro pago por Pix, tratado como se fosse um pacote. A Pagou so faz
+// Um mes de plano pago por Pix, tratado como se fosse um pacote. A Pagou so faz
 // recorrencia por cartao (pix_automatic vem UNSUPPORTED nesta conta), entao
 // este e o caminho para quem nao quer usar cartao. Nao renova sozinho.
+// O tier vem em `plano` e o valor sai de plans.ts, nunca do corpo.
 export const PRO_PIX_ID = "pro_month";
 
-function itemDe(packId: string) {
+function itemDe(packId: string, planoId: unknown) {
   if (packId === PRO_PIX_ID) {
+    const plano = ehPlanoId(planoId) ? planoPorId(planoId)! : null;
+    if (!plano) return null;
     return {
       id: PRO_PIX_ID,
       kind: "pro_month" as const,
+      plano: plano.id,
       credits: PRO_INCLUDED_CREDITS,
-      amountCents: PRO_PRICE_CENTS,
-      nome: "xcart Pro — 30 dias",
+      amountCents: plano.precoCentavos,
+      nome: `xcart ${plano.nome} — 30 dias`,
     };
   }
   const pack = getCreditPack(packId);
@@ -38,6 +44,7 @@ function itemDe(packId: string) {
   return {
     id: pack.id,
     kind: "credits" as const,
+    plano: null,
     credits: pack.credits,
     amountCents: pack.amountCents,
     nome: `xcart — ${pack.label}`,
@@ -50,9 +57,10 @@ export async function GET() {
 }
 
 /**
- * POST { packId, document? } -> gera uma cobranca Pix.
+ * POST { packId, plano?, document? } -> gera uma cobranca Pix.
  *
- * packId pode ser um pacote de creditos ou "pro_month" (30 dias de Pro).
+ * packId pode ser um pacote de creditos ou "pro_month" (30 dias de um plano,
+ * com `plano` = 'loja1' | 'lojas3' | 'ilimitado').
  *
  * O Pix e assincrono: a compra nasce PENDENTE e so e aplicada quando a Pagou
  * confirmar (webhook ou o PATCH abaixo). Nunca creditamos na criacao.
@@ -67,9 +75,13 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const item = itemDe(typeof body.packId === "string" ? body.packId : "");
+  const packId = typeof body.packId === "string" ? body.packId : "";
+  const item = itemDe(packId, body.plano);
   if (!item) {
-    return NextResponse.json({ error: "Pacote inválido." }, { status: 400 });
+    return NextResponse.json(
+      { error: packId === PRO_PIX_ID ? "Escolha um plano." : "Pacote inválido." },
+      { status: 400 }
+    );
   }
 
   const admin = createAdminClient();
@@ -129,8 +141,9 @@ export async function POST(request: NextRequest) {
       metadata: externalRef,
     });
 
-    // Registro pendente. A aplicacao acontece em apply_paid_purchase().
-    const { error: insErr } = await admin.from("credit_purchases").insert({
+    // Registro pendente. A aplicacao acontece em apply_paid_purchase(), que
+    // grava o tier no perfil quando o Pix cai.
+    const linha = {
       user_id: user.id,
       pagou_transaction_id: tx.id,
       provider: "pagou",
@@ -141,7 +154,17 @@ export async function POST(request: NextRequest) {
       amount_cents: item.amountCents,
       currency: CURRENCY.toLowerCase(),
       status: "pending",
-    });
+      ...(item.plano ? { plano: item.plano } : {}),
+    };
+    let { error: insErr } = await admin.from("credit_purchases").insert(linha);
+    // Coluna `plano` ainda nao existe (migration 064 pendente): o Pix ja foi
+    // gerado, entao registra sem o tier -- o pagamento cai como Pro legado em
+    // vez de se perder.
+    if (semColunaPlano(insErr) && "plano" in linha) {
+      const resto: Record<string, unknown> = { ...linha };
+      delete resto.plano;
+      ({ error: insErr } = await admin.from("credit_purchases").insert(resto));
+    }
     if (insErr) {
       console.error("[billing/credits] falha ao registrar cobranca", insErr);
       return NextResponse.json(
@@ -154,6 +177,7 @@ export async function POST(request: NextRequest) {
       transactionId: tx.id,
       status: tx.status,
       kind: item.kind,
+      plano: item.plano,
       credits: item.credits,
       amountCents: item.amountCents,
       pix: {

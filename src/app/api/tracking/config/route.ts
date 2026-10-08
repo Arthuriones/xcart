@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { conferirLigarRastreamento, corpoDoBloqueio } from "@/lib/billing/limites";
 
 export const runtime = "nodejs";
 
@@ -53,6 +54,13 @@ export async function POST(request: NextRequest) {
   }
 
   const ligar = Boolean(corpo.enabled);
+
+  // Limite de lojas com rastreamento do plano. So barra LIGAR: desligar passa
+  // sempre, e loja que ja esta ligada (mesmo acima do limite) segue ligada.
+  if (ligar) {
+    const limite = await conferirLigarRastreamento(admin, user.id, loja.id);
+    if (!limite.ok) return NextResponse.json(corpoDoBloqueio(limite), { status: limite.status });
+  }
 
   // Ligar exige ao menos um destino que de fato ENVIE.
   //

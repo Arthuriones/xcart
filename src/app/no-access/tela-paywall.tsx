@@ -2,7 +2,7 @@ import Link from "next/link";
 import { LogoXcart } from "@/components/layout/logo";
 import { buttonVariants } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
-import { PRO_INCLUDED_CREDITS } from "@/lib/billing/plans";
+import { GARANTIA_DIAS, PLANOS, PRO_INCLUDED_CREDITS, resumoDosLimites } from "@/lib/billing/plans";
 import { APP_HOME } from "@/lib/app-home";
 import { AssinarNoPaywall, BotaoSair } from "./assinar-paywall";
 
@@ -21,20 +21,27 @@ import { AssinarNoPaywall, BotaoSair } from "./assinar-paywall";
 // credito por imagem). Nada de teste gratis nem preco inventado.
 const PERGUNTAS: { p: string; r: string }[] = [
   {
+    p: "O que muda entre os planos?",
+    r:
+      "Só o número de lojas. " +
+      PLANOS.map((pl) => `${pl.nome}: ${resumoDosLimites(pl.limites).toLowerCase().replace(" · ", " e ")}.`).join(" ") +
+      " Os recursos e os créditos de IA são os mesmos nos três.",
+  },
+  {
     p: "Quando o acesso libera?",
     r: "Na hora em que o cartão é aprovado ou o Pix é confirmado. Você entra no xcart sem precisar fazer login de novo.",
   },
   {
     p: "Posso cancelar quando quiser?",
-    r: "Sim. No cartão, o cancelamento fica em Assinatura e créditos, e o acesso continua até o fim do período já pago. O Pix não renova sozinho, então não há o que cancelar.",
+    r: `Sim. No cartão, o cancelamento fica em Assinatura e créditos, e o acesso continua até o fim do período já pago. O Pix não renova sozinho, então não há o que cancelar. Nos primeiros ${GARANTIA_DIAS} dias, se não gostar, fale com o suporte e o dinheiro volta.`,
   },
   {
     p: "Como funciona o pagamento por Pix?",
-    r: "Cada Pix libera 30 dias de Pro. Se pagar antes de acabar, os dias novos se somam aos que ainda faltam.",
+    r: "Cada Pix libera 30 dias do plano escolhido. Se pagar antes de acabar, os dias novos se somam aos que ainda faltam.",
   },
   {
     p: "O que é um crédito de IA?",
-    r: `Um crédito neutraliza uma imagem com IA. O Pro inclui ${PRO_INCLUDED_CREDITS} por mês, e dá para comprar mais por Pix dentro do app. Neutralizar texto não usa crédito.`,
+    r: `Um crédito neutraliza uma imagem com IA. Todo plano inclui ${PRO_INCLUDED_CREDITS} por mês, e dá para comprar mais por Pix dentro do app. Neutralizar texto não usa crédito.`,
   },
 ];
 
@@ -68,7 +75,7 @@ export function TelaPaywall({
         ) : (
           <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:grid-rows-[auto_1fr] lg:items-start lg:gap-x-12">
             <header className="flex flex-col gap-2">
-              <h1 className="text-page text-ink">Assine o Pro para continuar</h1>
+              <h1 className="text-page text-ink">Assine um plano para continuar</h1>
               <p className="max-w-[60ch] text-body text-t1">{motivo}</p>
               <p className="max-w-[60ch] text-body text-t1">
                 Suas lojas, custos e configurações continuam salvos: assim que o pagamento for

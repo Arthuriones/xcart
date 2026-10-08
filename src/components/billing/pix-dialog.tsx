@@ -33,6 +33,8 @@ export interface CobrancaPix {
   credits: number;
   amountCents: number;
   kind?: "credits" | "pro_month";
+  /** Nome do plano do Pix de 30 dias ("3 Lojas"). */
+  nomePlano?: string;
   pix: { qrCode: string | null; expiresAt: string | null };
 }
 
@@ -149,7 +151,8 @@ export function PixDialog({
     else onFechar();
   }
 
-  const oQue = ehPro ? "Plano Pro por 30 dias" : creditos(cobranca.credits);
+  const nomePlano = `Plano ${cobranca.nomePlano ?? "Pro"}`;
+  const oQue = ehPro ? `${nomePlano} por 30 dias` : creditos(cobranca.credits);
 
   return (
     <Dialog
@@ -171,7 +174,7 @@ export function PixDialog({
             <DialogTitle>Pagamento confirmado</DialogTitle>
             <DialogDescription>
               {ehPro
-                ? "O Plano Pro está ativo por mais 30 dias."
+                ? `O ${nomePlano} está ativo por mais 30 dias.`
                 : `${creditos(cobranca.credits)} entraram no seu saldo.`}
             </DialogDescription>
             <Button className="mt-1 w-full" onClick={onFechar}>

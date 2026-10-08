@@ -7,6 +7,8 @@
 // src/lib/billing/plans.ts e o estado vem do banco. Isto so traduz para a tela.
 // ============================================================================
 
+import { planoPorId } from "@/lib/billing/plans";
+
 export type TomSelo = "ok" | "warn" | "err" | "info" | "neutral" | "run";
 
 const FUSO = "America/Sao_Paulo";
@@ -124,6 +126,8 @@ export function precoPorCredito(centavos: number): string {
 export interface PerfilAssinatura {
   /** profiles.plan: "pro" ou "free". */
   plano: string | null;
+  /** profiles.plano: o tier ("loja1", "lojas3", "ilimitado"). null = Pro antigo. */
+  tier?: string | null;
   /** profiles.subscription_status, como o provedor devolve. */
   status: string | null;
   fimPeriodo: string | null;
@@ -150,7 +154,19 @@ export interface SituacaoPlano {
   podeCancelar: boolean;
   podeAssinar: boolean;
   podeRenovarPix: boolean;
+  /** Como mudar de plano, numa frase. null quando nao se aplica. */
+  mudarPlano: string | null;
 }
+
+/**
+ * Trocar o plano de quem ja paga. A Pagou nao muda o valor de uma assinatura
+ * existente (ver src/lib/billing/pagou.ts), entao no cartao a troca e pelo
+ * suporte; no Pix e so escolher outro plano no proximo pagamento.
+ */
+export const MUDAR_PLANO = {
+  cartao: "Para mudar de plano, fale com o suporte.",
+  pix: "Para mudar de plano, escolha outro no próximo Pix.",
+} as const;
 
 /** Quantos dias antes do fim o Pro por Pix passa a avisar. */
 export const AVISO_PIX_DIAS = 7;
@@ -177,9 +193,10 @@ export function situacaoDoPlano(p: PerfilAssinatura, agora: number): SituacaoPla
   const pixVencido = forma === "pix" && temFim && fimMs < agora;
   const pro = p.plano === "pro" && !pixVencido;
 
+  const nomeDoTier = planoPorId(p.tier)?.nome;
   const base: SituacaoPlano = {
     pro,
-    titulo: "Plano Pro",
+    titulo: nomeDoTier ? `Plano ${nomeDoTier}` : "Plano Pro",
     selo: { tom: "ok", texto: "Ativa" },
     forma: pro ? forma : null,
     linha: null,
@@ -187,6 +204,7 @@ export function situacaoDoPlano(p: PerfilAssinatura, agora: number): SituacaoPla
     podeCancelar: false,
     podeAssinar: false,
     podeRenovarPix: false,
+    mudarPlano: null,
   };
 
   if (!pro) {
@@ -239,7 +257,7 @@ export function situacaoDoPlano(p: PerfilAssinatura, agora: number): SituacaoPla
         tom: "info",
         titulo: "Assinatura feita no sistema de pagamento anterior",
         texto:
-          "Ela continua sendo cobrada normalmente. Para trocar o cartão ou cancelar, fale com o suporte.",
+          "Ela continua sendo cobrada normalmente. Para trocar o cartão, mudar de plano ou cancelar, fale com o suporte.",
       },
     };
   }
@@ -266,10 +284,12 @@ export function situacaoDoPlano(p: PerfilAssinatura, agora: number): SituacaoPla
           }
         : null,
       podeRenovarPix: true,
+      mudarPlano: MUDAR_PLANO.pix,
     };
   }
 
   // Cartao (ou Pro sem forma conhecida, liberado direto no banco).
+  base.mudarPlano = forma === "cartao" ? MUDAR_PLANO.cartao : null;
   if (cancelado) {
     return {
       ...base,
@@ -321,7 +341,7 @@ export function motivoDoBloqueio(
   p: (PerfilAssinatura & { usouClonagemGratis?: boolean }) | null,
   agora: number
 ): string | null {
-  const generico = "Para continuar usando o xcart, assine o Pro.";
+  const generico = "Para continuar usando o xcart, assine um plano.";
   if (!p) return generico;
   const s = situacaoDoPlano(p, agora);
   if (s.pro || p.acessoLiberado) return null;
@@ -343,8 +363,11 @@ export interface CompraBase {
 }
 
 /** "200 créditos" ou "Plano Pro · 30 dias". */
-export function rotuloCompra(c: CompraBase): string {
-  if (c.kind === "pro_month") return "Plano Pro · 30 dias";
+export function rotuloCompra(c: CompraBase & { plano?: string | null }): string {
+  if (c.kind === "pro_month") {
+    const nome = planoPorId(c.plano)?.nome;
+    return nome ? `Plano ${nome} · 30 dias` : "Plano Pro · 30 dias";
+  }
   return creditos(c.credits);
 }
 
@@ -395,6 +418,7 @@ const MENSAGENS_NOSSAS = new Set([
   "Pacote inválido.",
   "Cobrança criada, mas não foi registrada. Fale com o suporte.",
   "Você já tem uma assinatura ativa.",
+  "Escolha um plano.",
   "Token de cartão inválido.",
   "Esta assinatura foi criada no provedor anterior. Fale com o suporte para cancelar.",
   "Nenhuma assinatura ativa.",

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Spinner } from "@/components/ui/spinner";
 import { ERRO_PADRAO, mensagemDeErro } from "@/components/billing/regras";
+import type { PlanoId } from "@/lib/billing/plans";
 
 // ============================================================================
 // Payment Element da Pagou.
@@ -112,9 +113,12 @@ function aparenciaDoTema(): {
 export function PagouCardForm({
   onSuccess,
   labelBotao,
+  plano,
 }: {
   onSuccess: (dados: unknown) => void;
   labelBotao: string;
+  /** O plano escolhido: vai no corpo, e o servidor cobra o valor dele. */
+  plano: PlanoId;
 }) {
   const [pronto, setPronto] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -170,7 +174,7 @@ export function PagouCardForm({
           const res = await fetch("/api/billing/subscribe", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ cardToken: tokenData.token }),
+            body: JSON.stringify({ cardToken: tokenData.token, plano }),
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || "Falha ao assinar.");

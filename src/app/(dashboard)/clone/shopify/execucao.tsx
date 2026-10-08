@@ -178,12 +178,22 @@ export function PainelExecucao({
           tom="err"
           titulo="A rota não foi gravada"
           acao={
-            <Link href="/clone/routed-checkout" className={buttonVariants({ variant: "secondary", size: "sm" })}>
-              Abrir Roteamento
-            </Link>
+            e.rotaErro?.plano ? (
+              <Link href="/billing" className={buttonVariants({ variant: "secondary", size: "sm" })}>
+                Ver planos
+              </Link>
+            ) : (
+              <Link href="/clone/routed-checkout" className={buttonVariants({ variant: "secondary", size: "sm" })}>
+                Abrir Roteamento
+              </Link>
+            )
           }
         >
-          <p>Os produtos foram criados, mas a ligação com a vitrine falhou. Dá para criar a rota no Roteamento.</p>
+          <p>
+            {e.rotaErro?.plano
+              ? `Os produtos foram criados. ${e.rotaErro.texto}`
+              : "Os produtos foram criados, mas a ligação com a vitrine falhou. Dá para criar a rota no Roteamento."}
+          </p>
           <DetalheSuporte detalhe={e.rotaErro?.detalhe ?? null} />
         </Callout>
       ) : null}

@@ -47,7 +47,10 @@ export async function conferirLoja(storeId: string): Promise<DiagnosticoLoja | n
   return (j.diagnostico ?? null) as DiagnosticoLoja | null;
 }
 
-/** Um pixel novo na loja (POST /api/tracking/destinos). */
+/**
+ * Um pixel novo na loja (POST /api/tracking/destinos). Devolve o aviso do
+ * servidor quando o pixel foi salvo mas a loja nao ligou (limite do plano).
+ */
 export async function criarPixel(
   dados:
     | {
@@ -59,7 +62,7 @@ export async function criarPixel(
         teste: string;
       }
     | { storeId: string; plataforma: "google"; nome: string; conta: string; labels: MapaDeRotulos }
-): Promise<void> {
+): Promise<string | null> {
   const corpo =
     dados.plataforma === "google"
       ? { labels: dados.labels }
@@ -75,7 +78,8 @@ export async function criarPixel(
       conta: dados.conta,
     }),
   });
-  await respostaJson(r, "Não deu para adicionar o pixel.");
+  const j = await respostaJson(r, "Não deu para adicionar o pixel.");
+  return typeof j.aviso === "string" && j.aviso ? j.aviso : null;
 }
 
 /** Ativa ou desativa um pixel (o historico fica). */

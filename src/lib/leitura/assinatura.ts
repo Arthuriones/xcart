@@ -2,6 +2,14 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { billingEnforced } from "@/lib/billing/credits";
+import {
+  acimaDoLimite,
+  lerUso,
+  limitesDoPerfil,
+  resumoDoUso,
+  semColunaPlano,
+  type OrigemDoLimite,
+} from "@/lib/billing/limites";
 import type { PerfilAssinatura } from "@/components/billing/regras";
 
 // ============================================================================
@@ -22,11 +30,22 @@ export interface CompraDoHistorico {
   id: string;
   criadaEm: string;
   kind: string | null;
+  /** Tier do Pix de 30 dias. */
+  plano: string | null;
   credits: number;
   amountCents: number;
   method: string | null;
   provider: string | null;
   status: string | null;
+}
+
+/** Limite de lojas do plano e o uso de agora, ja em frase. */
+export interface UsoDoPlano {
+  origem: OrigemDoLimite;
+  /** "1/1 lojas com rastreamento · 2/6 no roteamento" */
+  resumo: string;
+  /** Ja passou de algum limite (o que esta ligado continua). */
+  acima: boolean;
 }
 
 export interface LeituraAssinatura {
@@ -45,11 +64,13 @@ export interface LeituraAssinatura {
   /** Primeiro dia do mes contado, "2026-10-01". */
   inicioDoMes: string;
   compras: CompraDoHistorico[] | null;
+  /** Limite de lojas e uso. null = nao lido (paywall) ou a leitura falhou. */
+  uso: UsoDoPlano | null;
   /** O debito de credito esta ligado nesta instalacao. */
   cobrancaDeCreditoLigada: boolean;
   /** Instante da leitura (ms): base de "vence em N dias" sem divergir na hidratacao. */
   agora: number;
-  erros: { perfil: string | null; uso: string | null; compras: string | null };
+  erros: { perfil: string | null; uso: string | null; compras: string | null; lojas: string | null };
 }
 
 /** Quantas compras o historico mostra (as mais recentes). */
@@ -64,6 +85,7 @@ function mensagem(e: unknown): string {
 
 interface LinhaPerfil {
   plan: string | null;
+  plano?: string | null;
   subscription_status: string | null;
   ai_credits: number | null;
   current_period_end: string | null;
@@ -80,6 +102,7 @@ interface LinhaCompra {
   id: string;
   created_at: string;
   kind: string | null;
+  plano?: string | null;
   credits: number | null;
   amount_cents: number | null;
   method: string | null;
@@ -101,9 +124,10 @@ export async function lerAssinatura(opcoes: { completo?: boolean } = {}): Promis
     usadosNoMes: null,
     inicioDoMes: mes.toISOString().slice(0, 10),
     compras: null,
+    uso: null,
     cobrancaDeCreditoLigada: billingEnforced(),
     agora,
-    erros: { perfil: null, uso: null, compras: null },
+    erros: { perfil: null, uso: null, compras: null, lojas: null },
   };
 
   let user;
@@ -145,22 +169,46 @@ export async function lerAssinatura(opcoes: { completo?: boolean } = {}): Promis
     return { total: null, erro: "uso do mês acima do limite de leitura" };
   };
 
-  const [perfil, uso, compras] = await Promise.all([
-    supabase
+  const COLUNAS_PERFIL =
+    "plan, subscription_status, ai_credits, current_period_end, cancel_at_period_end, payment_provider, pagou_subscription_id, access_granted, is_admin, document_number, free_clone_store_id";
+  const COLUNAS_COMPRA = "id, created_at, kind, credits, amount_cents, method, provider, status";
+
+  // `plano` e da migration 064. Sem a coluna, le sem ela: a conta aparece como
+  // Pro antigo em vez de a tela inteira dar erro.
+  const lerPerfil = async () => {
+    const r = await supabase
       .from("profiles")
-      .select(
-        "plan, subscription_status, ai_credits, current_period_end, cancel_at_period_end, payment_provider, pagou_subscription_id, access_granted, is_admin, document_number, free_clone_store_id"
-      )
+      .select(`${COLUNAS_PERFIL}, plano`)
       .eq("id", userId)
-      .maybeSingle(),
+      .maybeSingle();
+    if (!semColunaPlano(r.error)) return r;
+    return supabase.from("profiles").select(COLUNAS_PERFIL).eq("id", userId).maybeSingle();
+  };
+  const lerCompras = async () => {
+    const r = await supabase
+      .from("credit_purchases")
+      .select(`${COLUNAS_COMPRA}, plano`)
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(LIMITE_COMPRAS);
+    if (!semColunaPlano(r.error)) return r;
+    return supabase
+      .from("credit_purchases")
+      .select(COLUNAS_COMPRA)
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(LIMITE_COMPRAS);
+  };
+
+  const [perfil, uso, compras, lojas] = await Promise.all([
+    lerPerfil(),
     completo ? somarUso().catch((e) => ({ total: null, erro: mensagem(e) })) : null,
+    completo ? lerCompras() : null,
     completo
-      ? supabase
-          .from("credit_purchases")
-          .select("id, created_at, kind, credits, amount_cents, method, provider, status")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(LIMITE_COMPRAS)
+      ? lerUso(supabase, userId).then(
+          (u) => ({ u, erro: null }),
+          (e) => ({ u: null, erro: mensagem(e) })
+        )
       : null,
   ]);
 
@@ -173,6 +221,7 @@ export async function lerAssinatura(opcoes: { completo?: boolean } = {}): Promis
     const p = perfil.data as LinhaPerfil;
     leitura.perfil = {
       plano: p.plan,
+      tier: p.plano ?? null,
       status: p.subscription_status,
       fimPeriodo: p.current_period_end,
       cancelaNoFim: p.cancel_at_period_end === true,
@@ -190,6 +239,20 @@ export async function lerAssinatura(opcoes: { completo?: boolean } = {}): Promis
     leitura.erros.uso = uso.erro;
   }
 
+  if (lojas && perfil.data) {
+    if (lojas.u) {
+      const limites = limitesDoPerfil(perfil.data as LinhaPerfil);
+      const contagem = { rastreamento: lojas.u.rastreamento.size, roteamento: lojas.u.roteamento.size };
+      leitura.uso = {
+        origem: limites.origem,
+        resumo: resumoDoUso(limites, contagem),
+        acima: acimaDoLimite(limites, contagem),
+      };
+    } else {
+      leitura.erros.lojas = lojas.erro;
+    }
+  }
+
   if (compras) {
     if (compras.error) leitura.erros.compras = compras.error.message;
     else
@@ -197,6 +260,7 @@ export async function lerAssinatura(opcoes: { completo?: boolean } = {}): Promis
         id: c.id,
         criadaEm: c.created_at,
         kind: c.kind,
+        plano: c.plano ?? null,
         credits: Number(c.credits) || 0,
         amountCents: Number(c.amount_cents) || 0,
         method: c.method,

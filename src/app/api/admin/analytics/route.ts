@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { PRO_PRICE_BRL, USD_BRL_REPORTING } from "@/lib/billing/plans";
+import { USD_BRL_REPORTING, precoMensalCentavos } from "@/lib/billing/plans";
 
 export const runtime = "nodejs";
 
@@ -45,7 +45,7 @@ export async function GET() {
         .from("credit_purchases")
         .select("amount_cents, created_at")
         .gte("created_at", since6m.toISOString()),
-      admin.from("profiles").select("plan"),
+      admin.from("profiles").select("plan, plano"),
       admin.from("profiles").select("created_at").gte("created_at", since6m.toISOString()),
     ]);
 
@@ -87,10 +87,10 @@ export async function GET() {
     }))
     .sort((a, b) => b.costUsd - a.costUsd);
 
-  const proUsers = (profiles || []).filter((p) => p.plan === "pro").length;
   // Receita em BRL (Pagou). O custo de IA fica em USD: o Gemini cobra em
   // dolar. Sao moedas diferentes e nao devem ser somadas.
-  const mrrBrl = proUsers * PRO_PRICE_BRL;
+  // Cada Pro pelo preco do proprio plano; o Pro antigo (sem tier), R$ 89.
+  const mrrBrl = (profiles || []).reduce((t, p) => t + precoMensalCentavos(p), 0) / 100;
 
   // Credit sales + new signups grouped by month (last 6 months)
   const monthlyMap = new Map<string, { revenueBrl: number; newUsers: number }>();

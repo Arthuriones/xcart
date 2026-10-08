@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createClient } from "@/lib/supabase/server";
 import { usuarioPossuiLojas } from "@/lib/stores/authorize";
+import { conferirRoteamento, corpoDoBloqueio } from "@/lib/billing/limites";
 
 async function getUserAndClient() {
   const supabase = await createClient();
@@ -107,6 +108,13 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Limite de lojas no roteamento do plano: a rota nova pode trazer a vitrine
+  // e a loja de checkout para a conta.
+  const limite = await conferirRoteamento(supabase, user.id, {
+    adicionar: [sourceStoreId, targetStoreId],
+  });
+  if (!limite.ok) return NextResponse.json(corpoDoBloqueio(limite), { status: limite.status });
+
   const { data, error } = await supabase
     .from("routed_checkout_configs")
     .insert({
@@ -177,6 +185,13 @@ export async function PATCH(request: NextRequest) {
       { status: 403 }
     );
   }
+
+  // Trocar a vitrine ou a loja de checkout de uma rota tambem pode trazer loja
+  // nova para o roteamento.
+  const limite = await conferirRoteamento(supabase, user.id, {
+    trocarRota: { id, source_store_id: sourceStoreId, target_store_id: targetStoreId },
+  });
+  if (!limite.ok) return NextResponse.json(corpoDoBloqueio(limite), { status: limite.status });
 
   const { data, error } = await supabase
     .from("routed_checkout_configs")

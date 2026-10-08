@@ -114,4 +114,14 @@ Every AI call receives `StoreContext` (name, niche, target_audience, brand_voice
   seria um token opaco no permalink, resolvido so no nosso servidor (nao o id da
   rota, que era o que existia antes e foi removido de proposito). Fica anotado,
   nao feito.
+- **Planos (08/10/2026): 1 Loja, 3 Lojas, Ilimitado.** Catalogo unico em
+  `src/lib/billing/plans.ts` (preco, limites, selo): o checkout cobra dali e a
+  landing, o paywall e a Assinatura mostram dali. Os tres sao `plan = 'pro'`;
+  o tier mora em `profiles.plano` (migration 064; null = Pro antigo de R$ 89 ou
+  sem plano, limites do 1 Loja). **Toda rota que liga rastreamento ou poe loja
+  no roteamento passa por `conferirLigarRastreamento`/`conferirRoteamento` de
+  `src/lib/billing/limites.ts`** -- rota nova de escrita tambem. So barra
+  ativacao NOVA: nada ligado acima do limite e desligado. Admin e
+  `access_granted` nao tem limite. A Pagou nao muda o valor de assinatura
+  existente: trocar de plano no cartao e pelo suporte.
 - Funcao nova em `public` vira endpoint em `/rest/v1/rpc/`. Se for SECURITY DEFINER, **revogue de `public, anon, authenticated`** e conceda so a `service_role` — sao DOIS caminhos de privilegio (o grant a PUBLIC e o explicito que o default-privileges do Supabase cria), e tirar um deixa o outro. Confira com `has_function_privilege`: o comando responde sucesso sem ter revogado nada. Ver migration 027.

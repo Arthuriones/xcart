@@ -6,7 +6,8 @@ import {
   getTransaction,
   planoDoStatus,
 } from "@/lib/billing/pagou";
-import { PRO_INCLUDED_CREDITS } from "@/lib/billing/plans";
+import { PRO_INCLUDED_CREDITS, planoDoValor } from "@/lib/billing/plans";
+import { atualizarPerfil } from "@/lib/billing/limites";
 
 export const runtime = "nodejs";
 
@@ -176,19 +177,22 @@ async function tratarAssinatura(id: string | null) {
     .eq("id", userId)
     .single();
 
-  await admin
-    .from("profiles")
-    .update({
-      pagou_subscription_id: sub.id,
-      pagou_customer_id: sub.customerId,
-      payment_provider: "pagou",
-      subscription_status: sub.status,
-      plan: planoDoStatus(sub.status),
-      current_period_end: sub.currentPeriodEnd || null,
-      cancel_at_period_end: sub.cancelAtPeriodEnd === true,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", userId);
+  // O tier sai do VALOR que a API diz que cobra (7990, 11990 ou 16990). O
+  // R$ 89 antigo e qualquer outro valor nao mexem no plano gravado: o webhook
+  // nunca rebaixa nem apaga o tier. Assinatura cancelada vira plan = 'free' e
+  // o tier fica guardado, sem efeito (o limite de quem nao tem Pro e o base).
+  const plano = planoDoValor(sub.amount);
+  await atualizarPerfil(admin, userId, {
+    pagou_subscription_id: sub.id,
+    pagou_customer_id: sub.customerId,
+    payment_provider: "pagou",
+    subscription_status: sub.status,
+    plan: planoDoStatus(sub.status),
+    ...(plano ? { plano } : {}),
+    current_period_end: sub.currentPeriodEnd || null,
+    cancel_at_period_end: sub.cancelAtPeriodEnd === true,
+    updated_at: new Date().toISOString(),
+  });
 
   // Renovacao: o periodo avancou e a assinatura esta em dia -> repoe creditos.
   // Comparar o fim do periodo evita repor duas vezes no mesmo ciclo.

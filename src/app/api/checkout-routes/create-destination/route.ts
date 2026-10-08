@@ -20,6 +20,7 @@ import { translateProductVariantOptionsToPortuguese } from "@/lib/products/varia
 import { AI_COST, logAiUsage } from "@/lib/billing/usage";
 import { createClient } from "@/lib/supabase/server";
 import { lojaDoUsuario } from "@/lib/stores/authorize";
+import { conferirRoteamento, corpoDoBloqueio } from "@/lib/billing/limites";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -475,6 +476,18 @@ export async function POST(request: NextRequest) {
       { error: "Uma das lojas selecionadas nao foi encontrada." },
       { status: 404 }
     );
+  }
+
+  // Limite de lojas no roteamento: esta copia existe para virar rota. Barrar
+  // so na hora de ligar (connect-by-sku) deixaria o lojista copiar o catalogo
+  // inteiro -- e gastar credito de IA -- para descobrir no fim que nao cabe.
+  // Confere no primeiro lote; os seguintes so continuam, e a contagem (que a
+  // tela usa para estimar creditos) nao grava nada.
+  if (!cursor && body.countOnly !== true) {
+    const limite = await conferirRoteamento(supabase, userId, {
+      adicionar: [sourceStoreId, targetStoreId],
+    });
+    if (!limite.ok) return NextResponse.json(corpoDoBloqueio(limite), { status: limite.status });
   }
 
   const sourceCreds = {

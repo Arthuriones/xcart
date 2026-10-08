@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { conferirLigarRastreamento } from "@/lib/billing/limites";
 import { apenasNumeroDaConversao } from "@/lib/tracking/normalizar";
 import {
   chaveDoEvento,
@@ -555,14 +556,34 @@ export async function POST(request: NextRequest) {
   const recebeCompra =
     (corpo.ativo ?? true) &&
     (vaiPeloServidor(corpo.plataforma) ? Boolean(v.token) : Boolean(v.labels.purchase));
+
+  // Nascer ligado tambem e LIGAR: passa pelo limite de lojas do plano. Acima
+  // dele, o pixel fica salvo e a loja nasce desligada, com o aviso de por que.
+  let ligar = recebeCompra;
+  let aviso: string | null = null;
+  if (recebeCompra) {
+    const { data: jaTem } = await admin
+      .from("tracking_configs")
+      .select("store_id")
+      .eq("store_id", loja.id)
+      .maybeSingle();
+    if (!jaTem) {
+      const limite = await conferirLigarRastreamento(admin, loja.user_id, loja.id);
+      if (!limite.ok) {
+        ligar = false;
+        aviso = `Pixel salvo, mas o rastreamento desta loja ficou desligado. ${limite.mensagem}`;
+      }
+    }
+  }
+
   await admin
     .from("tracking_configs")
     .upsert(
-      { store_id: loja.id, user_id: loja.user_id, ...(recebeCompra ? { enabled: true } : {}) },
+      { store_id: loja.id, user_id: loja.user_id, ...(ligar ? { enabled: true } : {}) },
       { onConflict: "store_id", ignoreDuplicates: true }
     );
 
-  return NextResponse.json({ ok: true, id: criado?.id ?? null });
+  return NextResponse.json({ ok: true, id: criado?.id ?? null, ...(aviso ? { aviso } : {}) });
 }
 
 // ---------------------------------------------------------------------------
