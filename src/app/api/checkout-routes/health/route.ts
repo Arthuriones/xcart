@@ -8,6 +8,7 @@ import {
 import { verificarParDaRota } from "@/lib/shopify/store-health";
 import { createClient } from "@/lib/supabase/server";
 import { marketProfileFor } from "@/lib/gemini/market-profile";
+import { lerAjusteDeMercado } from "@/lib/checkout-routes/mercado";
 
 interface ShippingZone {
   name?: string;
@@ -175,7 +176,7 @@ export async function POST(request: NextRequest) {
 
   const { data: todosAlvos } = await supabase
     .from("routed_checkout_targets")
-    .select("id, target_store_id, sku_map, enabled")
+    .select("id, target_store_id, sku_map, enabled, settings")
     .eq("route_id", routeId)
     .order("position", { ascending: true })
     .order("id", { ascending: true });
@@ -328,14 +329,16 @@ export async function POST(request: NextRequest) {
       (f) => !EVENTOS_DE_SUCESSO.has(f.reason)
     );
 
-    // Pais efetivo do checkout: override da rota, senao derivado do idioma da
-    // loja de destino.
-    const routeSettings = (config.settings || {}) as {
-      checkout_country?: string;
-    };
+    // Pais efetivo do checkout desta loja: o ajuste do DESTINO (o que o
+    // resolve usa; rota legada sem linha le o da rota), senao o do idioma da
+    // loja. "Pais do comprador" nao tem pais: confere so se ha alguma tarifa.
+    const ajuste = lerAjusteDeMercado(alvo ? alvo.settings : config.settings);
     const marketCountry =
-      routeSettings.checkout_country?.toUpperCase() ||
-      countryFromLanguage(targetStore.target_language);
+      ajuste.modo === "fixo"
+        ? (ajuste.country ?? null)
+        : ajuste.modo === "comprador"
+          ? null
+          : countryFromLanguage(targetStore.target_language);
     const shipping = await checkShipping(targetCreds, marketCountry);
 
     const ok =

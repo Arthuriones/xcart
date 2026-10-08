@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dominioDeDestino } from "@/lib/net/url-guard";
+import { mercadoDoDestino } from "@/lib/checkout-routes/mercado";
 
 export const runtime = "edge";
 
@@ -37,13 +38,10 @@ export async function GET(
     dominioDeDestino(settings.checkout_domain) ||
     dominioDeDestino(target?.shop_domain) ||
     "";
-  let country = settings.checkout_country || "";
-  let locale = settings.checkout_locale || "";
-  if (!country && target?.target_language) {
-    const [, region] = String(target.target_language).split("-");
-    country = region ? region.toUpperCase() : "";
-    locale = target.target_language;
-  }
+  // Mesma regra do resolve e do embed-config ("auto" nunca vira country=auto).
+  const market = mercadoDoDestino(settings, target?.target_language);
+  const country = market.country || "";
+  const locale = market.locale || "";
 
   const rawSkuMap = (config.sku_map || {}) as Record<string, string | number>;
   const skuMap: Record<string, string> = {};

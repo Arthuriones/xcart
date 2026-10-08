@@ -62,10 +62,21 @@ describe("permalink de checkout nao carrega rastro da vitrine", () => {
     );
     expect(loader).not.toContain("attributes[");
 
-    // Os unicos searchParams que o loader pode setar na URL de destino.
+    // Os unicos searchParams que o loader pode setar na URL de destino. O
+    // cupom (`discount`) e o codigo que o comprador aplicou, criado pelo
+    // lojista nas duas lojas: nao identifica rota, vitrine nem comprador.
     const setados = [...loader.matchAll(/url\.searchParams\.set\(\s*"([^"]+)"/g)].map(
       (m) => m[1]
     );
-    expect(setados.sort()).toEqual(["country", "locale"]);
+    expect(setados.sort()).toEqual(["country", "discount", "locale"]);
+  });
+
+  it("com cupom, o servidor acrescenta so o discount", () => {
+    const url = new URL(
+      buildCartPermalink("checkout.exemplo.com", linhas, { country: "CL", locale: "es" }, {
+        discountCodes: ["BEMVINDO10"],
+      })
+    );
+    expect([...url.searchParams.keys()].sort()).toEqual(["country", "discount", "locale"]);
   });
 });

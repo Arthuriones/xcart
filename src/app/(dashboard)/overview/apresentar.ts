@@ -2,6 +2,7 @@ import { mapaVelho, targetState } from "@/components/routed-checkout/target-stat
 import { quandoFoi } from "@/lib/leitura/lojas-estado";
 import { hrefRota } from "@/app/(dashboard)/clone/routed-checkout/logica";
 import { repartirCem } from "@/lib/sales/share";
+import { avisoDeMoeda, lerCarrinhoLevado } from "@/lib/checkout-routes/carrinho-levado";
 // So tipos: o modulo de leitura e do servidor e nao entra aqui.
 import type { DestinoDaRota, EventoDaRota, RotaDaLista } from "@/lib/leitura/visao-rota";
 
@@ -309,7 +310,8 @@ export function eventoNaTela(ev: EventoDaRota, destinos: DestinoNaTela[]): Event
     descricao: "",
   };
   // Script antigo nao grava a loja do evento: o dominio do detalhe acha ela.
-  const dominio = /->\s*([a-z0-9.-]+)\s*$/i.exec(ev.detalhe ?? "")?.[1]?.toLowerCase();
+  // O detalhe pode terminar no sufixo de moeda (ver carrinho-levado.ts).
+  const dominio = lerCarrinhoLevado(ev.detalhe).dominio?.toLowerCase();
   const destino =
     (ev.destinoId ? destinos.find((d) => d.id === ev.destinoId) : undefined) ??
     (dominio ? destinos.find((d) => d.dominio.toLowerCase() === dominio) : undefined);
@@ -320,7 +322,7 @@ export function eventoNaTela(ev: EventoDaRota, destinos: DestinoNaTela[]): Event
     const itens = /^\s*(\d+)\s+itens?/i.exec(ev.detalhe ?? "");
     const para = loja?.nome ?? dominio ?? null;
     const qtd = itens ? plural(Number(itens[1]), "item", "itens") : "Carrinho";
-    descricao = para ? `${qtd} para ${para}.` : `${qtd} para a loja de checkout.`;
+    descricao = (para ? `${qtd} para ${para}.` : `${qtd} para a loja de checkout.`) + avisoDeMoeda(ev.detalhe);
   }
   return { id: ev.id, rotulo: tipo.rotulo, tom: tipo.tom, descricao, em: ev.em, loja };
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
+import { buildCartPermalink } from "@/lib/shopify/cart-routing";
 
 /**
  * O loader roda no tema da vitrine, e dois buracos dele mandavam o comprador
@@ -270,6 +271,8 @@ interface Opcoes {
   carrinho?: Carrinho;
   /** Monta o tema ANTES do loader rodar (ele liga os botoes no init). */
   tema: (h: Harness) => void;
+  /** Config embutido (data-config): com ele o loader resolve inline. */
+  config?: unknown;
 }
 
 type Harness = ReturnType<typeof criarVitrine>;
@@ -277,6 +280,8 @@ type Harness = ReturnType<typeof criarVitrine>;
 type Carrinho = {
   item_count: number;
   items: { id: number; variant_id: number; sku: string; quantity: number }[];
+  currency?: string;
+  discount_codes?: { code: string; applicable: boolean }[];
 };
 
 const CARRINHO: Carrinho = {
@@ -288,7 +293,13 @@ function criarVitrine(opcoes: Opcoes) {
   const caminho = opcoes.caminho ?? "/products/wander-matelasse";
   const navegacoes: string[] = [];
   const buscas: string[] = [];
-  const beacons: { reason: string; detail: string; targetDomain: string }[] = [];
+  const beacons: {
+    reason: string;
+    detail: string;
+    targetDomain: string;
+    moeda?: string;
+    paisCheckout?: string;
+  }[] = [];
   const submitsNativos: { action: string | null; botao: string | null }[] = [];
   const doTema: string[] = [];
   const pendentesRota: {
@@ -302,7 +313,10 @@ function criarVitrine(opcoes: Opcoes) {
   /** O que cada /cart/add.js mandou (o add.js de verdade SOMA na linha). */
   const adicionados: { id: number; quantidade: number }[] = [];
   /** Corpo de cada chamada ao /resolve. */
-  const corposRota: { lines: { sourceVariantId: string; quantity: number }[] }[] = [];
+  const corposRota: {
+    lines: { sourceVariantId: string; quantity: number }[];
+    discountCodes?: string[];
+  }[] = [];
 
   // Relogio de mentira: os timers so andam quando o teste manda.
   let agora = 0;
@@ -350,7 +364,10 @@ function criarVitrine(opcoes: Opcoes) {
     body,
     currentScript: {
       src: "https://user.xcart.app/routed-checkout-loader.js",
-      dataset: { token: "tok-norah" } as Record<string, string>,
+      dataset: {
+        token: "tok-norah",
+        ...(opcoes.config ? { config: JSON.stringify(opcoes.config) } : {}),
+      } as Record<string, string>,
       getAttribute: () => null,
     },
     createElement: (tag: string) => el(tag),
@@ -1081,5 +1098,95 @@ describe("carteiras e botao dinamico (shadow DOM fechado)", () => {
     expect(regras[0].split("{")[0].split(",").map((s) => s.trim())).not.toContain(
       "shopify-accelerated-checkout"
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// O que vai junto com o carrinho: o cupom no permalink e a moeda na
+// telemetria, pelos dois caminhos (inline e API).
+// ---------------------------------------------------------------------------
+
+const CARRINHO_COM_CUPOM: Carrinho = {
+  ...CARRINHO,
+  currency: "EUR",
+  discount_codes: [
+    { code: "SAVE10", applicable: true },
+    { code: "NAOVALE", applicable: false },
+  ],
+};
+
+const DESTINO_INLINE = {
+  id: "11111111-1111-4111-8111-111111111111",
+  domain: "tdicbr-3u.myshopify.com",
+  weight: 1,
+  skuMap: { "xc-abc": "987" },
+  variantMap: {},
+};
+
+function gavetaCom(opcoes: { carrinho?: Carrinho; config?: unknown }) {
+  let partes!: ReturnType<typeof gavetaShrine>;
+  const h = criarVitrine({ ...opcoes, tema: (v) => (partes = gavetaShrine(v)) });
+  return { h, ...partes };
+}
+
+describe("o que vai junto com o carrinho", () => {
+  it("pela API: o cupom aplicado vai no corpo do /resolve e a moeda no routed_ok", async () => {
+    const { h, rotulo } = gavetaCom({ carrinho: CARRINHO_COM_CUPOM });
+    h.tocar(rotulo);
+    await esvaziar();
+    expect(h.corposRota[0].discountCodes).toEqual(["SAVE10"]);
+
+    h.responderRota("https://tdicbr-3u.myshopify.com/cart/987:1?country=US&locale=en-US&discount=SAVE10");
+    await esvaziar();
+    const ok = h.beacons.find((b) => b.reason === "routed_ok")!;
+    expect(ok.moeda).toBe("EUR");
+    expect(ok.paisCheckout).toBe("US");
+    // O detalhe continua no formato que a tela le.
+    expect(ok.detail).toBe("1 itens -> tdicbr-3u.myshopify.com");
+  });
+
+  it("inline com pais fixo: a mesma URL que o servidor montaria", async () => {
+    const { h, rotulo } = gavetaCom({
+      carrinho: CARRINHO_COM_CUPOM,
+      config: { targets: [{ ...DESTINO_INLINE, country: "CL", locale: "es-CL" }] },
+    });
+    h.tocar(rotulo);
+    await esvaziar();
+    expect(h.corposRota).toEqual([]);
+    expect(h.navegacoes).toEqual([
+      buildCartPermalink(
+        "tdicbr-3u.myshopify.com",
+        [{ variantId: "987", quantity: 1 }],
+        { country: "CL", locale: "es-CL" },
+        { discountCodes: ["SAVE10"] }
+      ),
+    ]);
+    expect(h.beacons.find((b) => b.reason === "routed_ok")?.paisCheckout).toBe("CL");
+  });
+
+  it("inline com pais do comprador: sem country, e a telemetria diz que foi automatico", async () => {
+    const { h, rotulo } = gavetaCom({
+      carrinho: CARRINHO_COM_CUPOM,
+      config: { targets: [{ ...DESTINO_INLINE, country: "", locale: "" }] },
+    });
+    h.tocar(rotulo);
+    await esvaziar();
+    expect(h.navegacoes).toEqual(["https://tdicbr-3u.myshopify.com/cart/987:1?discount=SAVE10"]);
+    const ok = h.beacons.find((b) => b.reason === "routed_ok")!;
+    expect(ok.moeda).toBe("EUR");
+    expect(ok.paisCheckout).toBe("");
+  });
+
+  it("carrinho sem cupom e sem moeda: URL e corpo como antes", async () => {
+    const { h, rotulo } = gavetaCom({});
+    h.tocar(rotulo);
+    await esvaziar();
+    expect(h.corposRota[0].discountCodes).toEqual([]);
+    h.responderRota();
+    await esvaziar();
+    expect(h.navegacoes).toEqual(["https://tdicbr-3u.myshopify.com/cart/987:1"]);
+    const ok = h.beacons.find((b) => b.reason === "routed_ok")!;
+    expect(ok.moeda).toBeUndefined();
+    expect(ok.paisCheckout).toBe("");
   });
 });

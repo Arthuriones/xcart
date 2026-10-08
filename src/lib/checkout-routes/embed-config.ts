@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { mercadoDoDestino } from "@/lib/checkout-routes/mercado";
 import { normalizeRotation, type RouteTarget } from "@/lib/checkout-routes/rotation";
 import { destinosParaRotear } from "@/lib/checkout-routes/targets";
 
@@ -42,13 +43,11 @@ export function toEmbedTarget(target: RouteTarget): EmbedTarget {
     if (key) variantMap[key] = String(value);
   }
 
-  let country = target.settings.checkout_country || "";
-  let locale = target.settings.checkout_locale || "";
-  if (!country && target.targetLanguage) {
-    const [, region] = String(target.targetLanguage).split("-");
-    country = region ? region.toUpperCase() : "";
-    locale = String(target.targetLanguage);
-  }
+  // Mesma regra do /resolve: o comprador abre no mesmo mercado pelos dois
+  // caminhos. "Pais do comprador" sai com country vazio, e o loader nao manda.
+  const market = mercadoDoDestino(target.settings, target.targetLanguage);
+  const country = market.country || "";
+  const locale = market.locale || "";
 
   return {
     id: target.id.startsWith("legacy:") ? null : target.id,

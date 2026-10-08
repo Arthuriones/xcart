@@ -23,6 +23,7 @@ import { Segmented } from "@/components/ui/segmented";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { BotaoConectar } from "@/app/(dashboard)/stores/conectar-loja";
 import type { GraphTarget } from "@/lib/checkout-routes/graph";
+import { mercadoDoPais, type CheckoutDoDestino } from "@/lib/checkout-routes/mercado";
 import { Instalador } from "./instalar";
 import {
   ESTRATEGIAS,
@@ -39,11 +40,25 @@ import {
   type Estrategia,
 } from "./logica";
 
-// O dialogo de imagens so existe depois de um clique: fora do download da aba.
+// Os dialogos so existem depois de um clique: fora do download da aba.
 const SwapImagesDialog = dynamic(
   () => import("@/components/routed-checkout/swap-images-dialog").then((m) => m.SwapImagesDialog),
   { ssr: false }
 );
+const CheckoutSettingsDialog = dynamic(
+  () => import("@/components/routed-checkout/checkout-settings-dialog").then((m) => m.CheckoutSettingsDialog),
+  { ssr: false }
+);
+
+/** O ajuste de checkout na linha da loja; o padrao nao aparece. */
+function textoDoCheckout(c: CheckoutDoDestino): string {
+  if (c.modo === "comprador") return " · checkout no país do comprador";
+  if (c.modo === "fixo" && c.pais) {
+    const m = mercadoDoPais(c.pais);
+    return ` · checkout em ${m ? `${m.nome} (${m.moeda})` : c.pais}`;
+  }
+  return "";
+}
 
 export interface LojaNaRota {
   id: string;
@@ -62,6 +77,10 @@ export interface LojaNaRota {
   legacy: boolean;
   /** Ultimo conserto nesta loja: o selo mostra "Pausada pela Shopify" etc. */
   conserto?: GraphTarget["conserto"];
+  /** Pais/moeda e dominio do checkout desta loja (settings do destino). */
+  checkout: CheckoutDoDestino;
+  /** Idioma da loja de checkout: de onde sai o pais no modo padrao. */
+  idiomaDaLoja: string | null;
 }
 
 type Props = {
@@ -157,6 +176,7 @@ function EditorLojas({
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [tirar, setTirar] = useState<LojaNaRota | null>(null);
   const [imagens, setImagens] = useState<LojaNaRota | null>(null);
+  const [ajuste, setAjuste] = useState<LojaNaRota | null>(null);
   const idSoma = useId();
 
   const ligadas = lojas.filter((l) => l.enabled && !l.legacy);
@@ -267,6 +287,7 @@ function EditorLojas({
                     <span className="font-mono">{l.dominio || "—"}</span> ·{" "}
                     {l.mappedSkuCount === 1 ? "1 SKU ligado" : `${l.mappedSkuCount.toLocaleString("pt-BR")} SKUs ligados`}
                     {l.dailyLimit != null ? ` · ${l.orders24h}/${l.dailyLimit} pedidos hoje` : ""}
+                    {textoDoCheckout(l.checkout)}
                   </span>
                 </div>
                 <StatusBadge tom={selo.tom} texto={selo.texto} />
@@ -324,6 +345,9 @@ function EditorLojas({
                       <MoreHorizontalIcon aria-hidden />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuItem disabled={l.legacy} onClick={() => setAjuste(l)}>
+                        País e moeda do checkout…
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setImagens(l)}>Refazer imagens sem marca…</DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
@@ -421,6 +445,24 @@ function EditorLojas({
           onOpenChange={(v) => !v && setImagens(null)}
           storeId={imagens.storeId}
           storeLabel={imagens.nome}
+        />
+      ) : null}
+      {ajuste ? (
+        <CheckoutSettingsDialog
+          open
+          onOpenChange={(v) => !v && setAjuste(null)}
+          rotaId={rotaId}
+          destino={{
+            id: ajuste.id,
+            nome: ajuste.nome,
+            dominioLoja: ajuste.dominio,
+            idiomaDaLoja: ajuste.idiomaDaLoja,
+            checkout: ajuste.checkout,
+          }}
+          onSaved={(tema) => {
+            aoMudar(tema);
+            atualizar();
+          }}
         />
       ) : null}
     </Section>

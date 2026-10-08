@@ -1,4 +1,5 @@
 import { formatarDinheiro } from "@/lib/financeiro/tipos";
+import { avisoDeMoeda, lerCarrinhoLevado } from "@/lib/checkout-routes/carrinho-levado";
 
 // ============================================================================
 // Regras puras da tela Atividade: o que cada linha do banco vira na linha do
@@ -301,14 +302,11 @@ function nomeOuNull(ctx: Contexto, id: string | null | undefined): string | null
   return id ? (ctx.nomes.get(id) ?? null) : null;
 }
 
-/** "3 itens -> loja.myshopify.com" (o script da vitrine manda assim) -> partes. */
-export function lerCarrinhoLevado(detalhe: string | null | undefined): { itens: number | null; dominio: string | null } {
-  const m = /^\s*(\d*)\s*itens\s*->\s*(\S+)\s*$/i.exec(String(detalhe || ""));
-  if (!m) return { itens: null, dominio: null };
-  const itens = m[1] ? Number(m[1]) : null;
-  const dominio = m[2] && m[2] !== "?" ? m[2] : null;
-  return { itens: Number.isFinite(itens) ? itens : null, dominio };
-}
+/**
+ * "3 itens -> loja.myshopify.com [moeda=EUR pais=US]" -> partes. O formato
+ * (e o sufixo de moeda) mora em lib/checkout-routes/carrinho-levado.ts.
+ */
+export { lerCarrinhoLevado };
 
 function itensTexto(n: number): string {
   return n === 1 ? "1 item" : `${n} itens`;
@@ -415,9 +413,10 @@ function eventoCarrinho(c: LinhaCarrinho, ctx: Contexto): EventoAtividade | null
         tom: "ok",
         selo: null,
         titulo: "Carrinho levado ao checkout",
-        descricao: n
-          ? `${itensTexto(n)}${deOnde} ${n === 1 ? "foi" : "foram"} para ${para}.`
-          : `O carrinho${deOnde} foi para ${para}.`,
+        descricao:
+          (n
+            ? `${itensTexto(n)}${deOnde} ${n === 1 ? "foi" : "foram"} para ${para}.`
+            : `O carrinho${deOnde} foi para ${para}.`) + avisoDeMoeda(c.detail),
         href: hrefRota(rotaId),
         destino: "Abrir a rota",
       };

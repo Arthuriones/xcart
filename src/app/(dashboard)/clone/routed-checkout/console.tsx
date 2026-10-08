@@ -166,6 +166,8 @@ export function ConsoleView({
                   orders24h: t.orders24h,
                   legacy: t.legacy,
                   conserto: t.conserto,
+                  checkout: t.checkout,
+                  idiomaDaLoja: lojas.get(t.storeId)?.targetLanguage ?? null,
                 }))}
                 disponiveis={lojasCandidatasACheckout(grafo.stores, rota, grafo.routes).map((s) => ({
                   id: s.id,

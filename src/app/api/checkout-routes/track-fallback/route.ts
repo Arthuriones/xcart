@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sufixoDaMoeda } from "@/lib/checkout-routes/carrinho-levado";
 
 export const runtime = "nodejs";
 
@@ -44,8 +45,15 @@ export async function POST(request: NextRequest) {
   const token = typeof body.token === "string" ? body.token.trim() : "";
   const reason =
     typeof body.reason === "string" ? body.reason.slice(0, 200) : "desconhecido";
-  const detail =
+  const detalheBruto =
     typeof body.detail === "string" ? body.detail.slice(0, 500) : null;
+  // Carrinho levado: a moeda da vitrine e o pais do permalink vao no fim do
+  // detalhe, escritos AQUI a partir de campos validados (o texto do navegador
+  // nunca vira chave=valor). Formato e leitura em carrinho-levado.ts.
+  const detail =
+    reason === "routed_ok" && detalheBruto !== null
+      ? detalheBruto.replace(/\s+[a-z]+=\S*/gi, "") + sufixoDaMoeda(body.moeda, body.paisCheckout)
+      : detalheBruto;
   const pageUrl =
     typeof body.pageUrl === "string" ? body.pageUrl.slice(0, 500) : null;
   // Com rodizio, saber que "a rota falhou" nao basta: o que interessa e qual

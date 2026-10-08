@@ -36,6 +36,7 @@ function alvo(over: Partial<{ id: string; enabled: boolean; weight: number; shar
     orders24h: 0,
     legacy: false,
     conserto: null,
+    checkout: { modo: "idioma" as const, pais: null, dominio: null },
     ...over,
   };
 }

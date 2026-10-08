@@ -12,6 +12,7 @@ export interface RotationConfig {
 
 export interface RouteTargetSettings {
   checkout_domain?: string;
+  /** "XX" fixo, "auto" = pais do comprador, ausente = do idioma (mercado.ts). */
   checkout_country?: string;
   checkout_locale?: string;
 }

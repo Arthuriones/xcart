@@ -722,6 +722,88 @@
     });
   }
 
+  // ==========================================================================
+  // Cupom do carrinho da vitrine vai junto para a loja de checkout.
+  //
+  // O comprador aplicava o cupom no carrinho da vitrine (campo do tema, link
+  // /discount/CODIGO) e o perdia no redirect: o checkout abria sem desconto.
+  // Agora o CODIGO vai no permalink (?discount=, documentado pela Shopify em
+  // create-cart-permalinks) -- nunca o valor: quem calcula e a loja de
+  // checkout, com o cupom dela. Cupom que nao existe la nao vale (a Shopify
+  // nao aplica); o lojista cria o mesmo codigo nas duas lojas.
+  //
+  // De onde o codigo sai no /cart.js:
+  //   - discount_codes: [{ code, applicable }] (carrinho recente). Cupom com
+  //     applicable false fica: nao e "o cupom aplicado";
+  //   - cart_level_discount_applications e
+  //     items[].line_level_discount_allocations[].discount_application com
+  //     type "discount_code": o title delas e o proprio codigo.
+  //
+  // MESMA regra de normalizarCupons em src/lib/shopify/cart-routing.ts,
+  // comparada por tests/roteamento-carrinho-levado.test.ts.
+  // ==========================================================================
+  var MAX_CUPONS = 5;
+  var MAX_CUPOM = 64;
+
+  function cupomValido(codigo) {
+    return typeof codigo === "string" &&
+      codigo.length > 0 &&
+      codigo.length <= MAX_CUPOM &&
+      codigo.trim() === codigo &&
+      codigo.indexOf(",") === -1 &&
+      !/[\u0000-\u001f\u007f]/.test(codigo);
+  }
+
+  function cuponsDoCarrinho(cart) {
+    var saida = [];
+    var vistos = {};
+    function guardar(bruto) {
+      if (saida.length >= MAX_CUPONS) return;
+      var codigo = typeof bruto === "string" ? bruto.trim() : bruto;
+      if (!cupomValido(codigo)) return;
+      // Prefixo na chave: "constructor" e "__proto__" sao cupons possiveis.
+      var chave = "c:" + codigo.toLowerCase();
+      if (vistos[chave]) return;
+      vistos[chave] = true;
+      saida.push(codigo);
+    }
+    function daAplicacao(aplicacao) {
+      if (aplicacao && aplicacao.type === "discount_code") guardar(aplicacao.title);
+    }
+    try {
+      var codigos = (cart && cart.discount_codes) || [];
+      for (var i = 0; i < codigos.length; i++) {
+        if (codigos[i] && codigos[i].applicable !== false) guardar(codigos[i].code);
+      }
+      var doCarrinho = (cart && cart.cart_level_discount_applications) || [];
+      for (var j = 0; j < doCarrinho.length; j++) daAplicacao(doCarrinho[j]);
+      var itens = (cart && cart.items) || [];
+      for (var k = 0; k < itens.length; k++) {
+        var alocacoes = (itens[k] && itens[k].line_level_discount_allocations) || [];
+        for (var m = 0; m < alocacoes.length; m++) {
+          daAplicacao(alocacoes[m] && alocacoes[m].discount_application);
+        }
+      }
+    } catch (e) {}
+    return saida;
+  }
+
+  // Moeda em que o comprador viu o carrinho na vitrine (cart.js "currency").
+  function moedaDoCarrinho(cart) {
+    var moeda = cart && typeof cart.currency === "string" ? cart.currency.toUpperCase() : "";
+    return /^[A-Z]{3}$/.test(moeda) ? moeda : "";
+  }
+
+  // country que foi no permalink ("" = a Shopify escolhe pelo comprador).
+  function paisDoDestino(url) {
+    try {
+      var pais = new URL(url).searchParams.get("country") || "";
+      return /^[A-Z]{2}$/.test(pais) ? pais : "";
+    } catch (e) {
+      return "";
+    }
+  }
+
   function readProductFormLine(target) {
     if (!target || !target.closest) return null;
     var form = target.closest("form") || findProductForm(target);
@@ -811,7 +893,8 @@
   }
 
   // Resolucao inline: usa o mapa embutido no script tag, sem chamada de API.
-  function resolveInlineUrl(lines) {
+  // cupons: codigos ja validados (cuponsDoCarrinho).
+  function resolveInlineUrl(lines, cupons) {
     // Destino com teto de pedidos por dia: so o servidor sabe quantos pedidos
     // a loja ja fez, entao o sorteio nao pode ser inline. Cai na API.
     if (inlineConfig) {
@@ -834,15 +917,18 @@
     var hostOk = dominioSeguro(pick.target.domain);
     if (!hostOk) return null;
     var url = new URL("https://" + hostOk + "/cart/" + cartPath);
+    // country vazio = "pais do comprador" no destino: a Shopify geolocaliza.
     if (pick.target.country) url.searchParams.set("country", pick.target.country);
     if (pick.target.locale) url.searchParams.set("locale", pick.target.locale);
+    // Mesma montagem de buildCartPermalink no servidor (ordem inclusive).
+    if (cupons && cupons.length) url.searchParams.set("discount", cupons.join(","));
     lastRoutedTarget = pick.target;
     return url.toString();
   }
 
-  async function resolveCheckoutLines(lines) {
+  async function resolveCheckoutLines(lines, cupons) {
     // 1. Tenta resolucao inline (instantaneo, sem API, funciona offline)
-    var inlineUrl = resolveInlineUrl(lines);
+    var inlineUrl = resolveInlineUrl(lines, cupons);
     if (inlineUrl) return inlineUrl;
 
     // 2. Fallback para API (cobre SKUs novos ainda nao embutidos no script)
@@ -853,6 +939,7 @@
         token: token,
         lines: lines,
         rotationKey: rotationKey,
+        discountCodes: cupons || [],
       }),
     });
 
@@ -869,7 +956,7 @@
   }
 
   async function resolveCheckout(cart) {
-    return resolveCheckoutLines(toRouteLines(cart));
+    return resolveCheckoutLines(toRouteLines(cart), cuponsDoCarrinho(cart));
   }
 
   // Envia um evento de telemetria. Best-effort: nunca atrasa nem bloqueia o
@@ -888,7 +975,8 @@
   // justamente no evento que interessa.
   //
   // O servidor le o corpo como texto e faz o parse (ver track-fallback).
-  function enviarEvento(reason, detail) {
+  // extra: so no routed_ok -- { moeda, paisCheckout } (ver routeCartCheckout).
+  function enviarEvento(reason, detail, extra) {
     try {
       var payload = JSON.stringify({
         token: token,
@@ -897,6 +985,8 @@
         pageUrl: window.location.href,
         targetId: (lastRoutedTarget && lastRoutedTarget.id) || null,
         targetDomain: (lastRoutedTarget && lastRoutedTarget.domain) || "",
+        moeda: (extra && extra.moeda) || undefined,
+        paisCheckout: extra ? extra.paisCheckout || "" : undefined,
       });
       var url = appUrl.replace(/\/$/, "") + "/api/checkout-routes/track-fallback";
       var tipo = "text/plain;charset=UTF-8";
@@ -929,8 +1019,8 @@
   // Sem isto ficamos cegos: quando o loader nao roteia, nao ha codigo nosso
   // rodando para contar. Comparando "loader_ready" com "routed_ok" da para
   // saber se o problema e o loader nao carregar ou nao interceptar.
-  function report(reason, detail) {
-    enviarEvento(reason, detail);
+  function report(reason, detail, extra) {
+    enviarEvento(reason, detail, extra);
   }
 
   // Uma vez por sessao, so em pagina onde faz sentido comprar.
@@ -980,10 +1070,15 @@
       }
 
       var destino = await resolveCheckout(cart);
+      // Moeda do carrinho na vitrine e o country que foi no permalink. O
+      // loader nao sabe em que moeda a loja de checkout vai cobrar (depende
+      // dos mercados dela); a tela compara a moeda da vitrine com a do pais
+      // do checkout e avisa quando difere. Nada do comprador vai junto.
       report(
         "routed_ok",
         String(cart.item_count || "") + " itens -> " +
-          ((lastRoutedTarget && lastRoutedTarget.domain) || "?")
+          ((lastRoutedTarget && lastRoutedTarget.domain) || "?"),
+        { moeda: moedaDoCarrinho(cart), paisCheckout: paisDoDestino(destino) }
       );
       // A trava NAO cai aqui: o comprador ainda esta nesta pagina ate a loja
       // de checkout responder, e um toque nesse meio cancelava a navegacao.

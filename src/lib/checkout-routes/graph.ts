@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/supabase/current-user";
 import { deriveStoreRoles, type StoreRole } from "@/lib/checkout-routes/store-roles";
 import { contarPedidos24h } from "@/lib/checkout-routes/pedidos-24h";
 import { lerConsertoDoDestino, type ConsertoDoDestino } from "@/lib/checkout-routes/loja-fora-do-ar";
+import { checkoutDoDestino, type CheckoutDoDestino } from "@/lib/checkout-routes/mercado";
 
 interface TargetRow {
   id: string;
@@ -16,7 +17,7 @@ interface TargetRow {
   position: number | null;
   last_healed_at: string | null;
   sku_map: Record<string, unknown> | null;
-  settings?: { last_heal?: unknown } | null;
+  settings?: Record<string, unknown> | null;
 }
 
 export interface GraphStore {
@@ -47,6 +48,8 @@ export interface GraphTarget {
    * loja fora do ar, preco diferente da vitrine, variante que nao vende.
    */
   conserto: ConsertoDoDestino | null;
+  /** Pais/idioma/dominio com que o checkout desta loja abre. */
+  checkout: CheckoutDoDestino;
 }
 
 export interface GraphRoute {
@@ -181,8 +184,8 @@ export const getRouteGraph = cache(async (): Promise<RouteGraph> => {
                 position: 0,
                 last_healed_at: route.last_healed_at,
                 sku_map: route.sku_map,
-                // Sem linha de destino, o conserto guarda tudo na rota.
-                settings: { last_heal: (route.settings as { last_heal?: unknown } | null)?.last_heal },
+                // O destino legado le o ajuste da propria rota.
+                settings: route.settings as Record<string, unknown> | null,
               },
             ]
           : [];
@@ -232,6 +235,7 @@ export const getRouteGraph = cache(async (): Promise<RouteGraph> => {
           dailyLimit: target.daily_limit ?? null,
           orders24h: pedidos24h[target.target_store_id] || 0,
           conserto: lerConsertoDoDestino(target.settings?.last_heal),
+          checkout: checkoutDoDestino(target.settings),
           sharePercent:
             active && totalWeight > 0 ? Math.round((weight / totalWeight) * 100) : 0,
         };

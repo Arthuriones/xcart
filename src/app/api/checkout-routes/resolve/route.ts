@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { normalizarLinhas } from "@/lib/checkout-routes/linhas";
-import {
-  buildCartPermalink,
-  marketParamsFromLanguage,
-} from "@/lib/shopify/cart-routing";
+import { buildCartPermalink, normalizarCupons } from "@/lib/shopify/cart-routing";
+import { mercadoDoDestino } from "@/lib/checkout-routes/mercado";
 import {
   computeCoverage,
   normalizeRotation,
@@ -43,6 +41,9 @@ export async function POST(request: NextRequest) {
   // vier, o sorteio e aleatorio (nao da para prender o comprador sem chave).
   const rotationKey =
     typeof body.rotationKey === "string" ? body.rotationKey.slice(0, 64) : "";
+  // Cupom aplicado no carrinho da vitrine. So o codigo, validado (curto, sem
+  // virgula, ate 5); nao entra no sorteio nem na cobertura.
+  const discountCodes = normalizarCupons(body.discountCodes);
 
   if (!token || lines.length === 0) {
     return NextResponse.json(
@@ -124,15 +125,14 @@ export async function POST(request: NextRequest) {
         quantity: line.quantity,
       }));
 
-    const market = target.settings.checkout_country
-      ? {
-          country: target.settings.checkout_country,
-          locale: target.settings.checkout_locale,
-        }
-      : marketParamsFromLanguage(target.targetLanguage);
+    // Pais/idioma do DESTINO sorteado (settings dele), igual ao embed-config.
+    const market = mercadoDoDestino(target.settings, target.targetLanguage);
 
     // Sem atributos de carrinho aqui de proposito -- ver buildCartPermalink.
-    const redirectUrl = buildCartPermalink(target.domain, resolvedLines, market);
+    // O cupom vai: e o codigo, nao o valor (buildCartPermalink revalida).
+    const redirectUrl = buildCartPermalink(target.domain, resolvedLines, market, {
+      discountCodes,
+    });
 
     return NextResponse.json(
       {

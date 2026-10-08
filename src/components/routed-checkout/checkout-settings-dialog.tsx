@@ -1,170 +1,196 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Loader2, Settings2 } from "lucide-react";
+import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  MERCADOS,
+  PAIS_DO_COMPRADOR,
+  mercadoDoPais,
+  type CheckoutDoDestino,
+} from "@/lib/checkout-routes/mercado";
+import { marketParamsFromLanguage } from "@/lib/shopify/cart-routing";
 
-interface CheckoutSettings {
-  checkout_domain?: string;
-  checkout_country?: string;
-  checkout_locale?: string;
+/** O Select nao aceita value "": "idioma" e o padrao (nada gravado). */
+const PELO_IDIOMA = "idioma";
+
+type Tema = { estado?: string } | undefined;
+
+export interface DestinoDoAjuste {
+  id: string;
+  nome: string;
+  /** Dominio .myshopify.com da loja conectada. */
+  dominioLoja: string;
+  idiomaDaLoja: string | null;
+  checkout: CheckoutDoDestino;
 }
 
-interface CheckoutSettingsDialogProps {
+interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  routeId: string;
-  routeName: string;
-  settings?: CheckoutSettings;
-  onSaved?: () => void;
+  rotaId: string;
+  destino: DestinoDoAjuste;
+  onSaved?: (tema: Tema) => void;
 }
 
-// País -> { country, locale } para forçar a moeda do checkout (Shopify Markets).
-// "auto" = sem override (deriva do idioma da loja). O Select nao aceita value "".
-const AUTO = "auto";
-const MARKETS: Record<string, { label: string; locale: string }> = {
-  [AUTO]: { label: "Automático (idioma da loja)", locale: "" },
-  CL: { label: "Chile (peso chileno)", locale: "es-CL" },
-  MX: { label: "México (peso mexicano)", locale: "es-MX" },
-  AR: { label: "Argentina (peso argentino)", locale: "es-AR" },
-  CO: { label: "Colômbia (peso colombiano)", locale: "es-CO" },
-  ES: { label: "España (euro)", locale: "es-ES" },
-  BR: { label: "Brasil (real)", locale: "pt-BR" },
-  US: { label: "Estados Unidos (dólar)", locale: "en-US" },
-  JP: { label: "Japão (iene)", locale: "ja-JP" },
-};
+function valorInicial(c: CheckoutDoDestino): string {
+  if (c.modo === "comprador") return PAIS_DO_COMPRADOR;
+  if (c.modo === "fixo" && c.pais) return c.pais;
+  return PELO_IDIOMA;
+}
 
-export function CheckoutSettingsDialog({
-  open,
-  onOpenChange,
-  routeId,
-  routeName,
-  settings,
-  onSaved,
-}: CheckoutSettingsDialogProps) {
-  const [domain, setDomain] = useState("");
-  const [country, setCountry] = useState(AUTO);
-  const [saving, setSaving] = useState(false);
+function nomeDoPais(pais: string | null | undefined): string | null {
+  if (!pais) return null;
+  const m = mercadoDoPais(pais);
+  return m ? `${m.nome} (${m.moeda})` : pais;
+}
 
-  // Preenche o formulario quando o dialog abre, ajustando no RENDER.
-  //
-  // Era um efeito com [open, settings]. Alem do render extra a cada abertura,
-  // ele tinha um efeito colateral pior: `settings` e um objeto vindo do pai,
-  // entao qualquer re-render do pai que criasse um objeto novo reexecutava o
-  // efeito e APAGAVA o que a pessoa tinha acabado de digitar, com o dialog
-  // aberto. Comparar `open` com o valor do render anterior resolve os dois:
-  // so repovoa na transicao fechado -> aberto.
-  const [abertoAntes, setAbertoAntes] = useState(open);
-  if (open !== abertoAntes) {
-    setAbertoAntes(open);
-    if (open) {
-      setDomain(settings?.checkout_domain || "");
-      setCountry(settings?.checkout_country || AUTO);
-    }
-  }
+/**
+ * Pais/moeda e dominio do checkout de UMA loja de checkout da rota.
+ *
+ * Montado so quando aberto (como o de imagens): o formulario nasce do dado
+ * atual, sem efeito para repovoar.
+ */
+export function CheckoutSettingsDialog({ open, onOpenChange, rotaId, destino, onSaved }: Props) {
+  const idPais = useId();
+  const idDominio = useId();
+  const [valor, setValor] = useState(() => valorInicial(destino.checkout));
+  const [dominio, setDominio] = useState(destino.checkout.dominio ?? "");
+  const [salvando, setSalvando] = useState(false);
+  const [moedas, setMoedas] = useState<{ moeda: string; carrinhos: number }[] | null>(null);
 
-  async function handleSave() {
-    setSaving(true);
+  // Em que moeda os carrinhos desta loja chegaram (ultimos 30 dias): e o que
+  // ajuda a escolher entre pais fixo e o do comprador.
+  useEffect(() => {
+    let vivo = true;
+    const url = `/api/checkout-routes/settings?id=${encodeURIComponent(rotaId)}&targetId=${encodeURIComponent(destino.id)}`;
+    fetch(url)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (vivo) setMoedas(Array.isArray(d?.moedas) ? d.moedas : []);
+      })
+      .catch(() => {
+        if (vivo) setMoedas([]);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [rotaId, destino.id]);
+
+  const paisDoIdioma = marketParamsFromLanguage(destino.idiomaDaLoja).country ?? null;
+  const rotuloIdioma = `Pelo idioma da loja: ${nomeDoPais(paisDoIdioma) ?? "mercado principal"}`;
+  // Pais fixo gravado que a lista nao tem continua escolhivel.
+  const extra = valor.length === 2 && !mercadoDoPais(valor) ? [valor] : [];
+
+  const rotulo = (v: string) =>
+    v === PELO_IDIOMA
+      ? rotuloIdioma
+      : v === PAIS_DO_COMPRADOR
+        ? "Automático (país do comprador)"
+        : (nomeDoPais(v) ?? v);
+
+  const ajuda =
+    valor === PAIS_DO_COMPRADOR
+      ? "A Shopify abre o checkout no país do comprador, na moeda dele. A loja de checkout precisa ter esses mercados ativos."
+      : valor === PELO_IDIOMA
+        ? paisDoIdioma
+          ? `Todo comprador abre o checkout em ${nomeDoPais(paisDoIdioma)}, venha de onde vier.`
+          : "Sem país no idioma da loja: a Shopify decide pelo mercado principal."
+        : `Todo comprador abre o checkout em ${nomeDoPais(valor)}. A loja de checkout precisa ter esse mercado ativo.`;
+
+  async function salvar() {
+    setSalvando(true);
     try {
       const res = await fetch("/api/checkout-routes/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: routeId,
-          checkoutDomain: domain.trim(),
-          checkoutCountry: country === AUTO ? "" : country,
-          checkoutLocale: country === AUTO ? "" : MARKETS[country]?.locale || "",
+          id: rotaId,
+          targetId: destino.id,
+          checkoutDomain: dominio.trim(),
+          checkoutCountry: valor === PELO_IDIOMA ? "" : valor,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Falha ao salvar.");
-      toast.success("Configurações do checkout salvas.");
-      onSaved?.();
+      const data = (await res.json().catch(() => ({}))) as { error?: string; tema?: Tema };
+      if (!res.ok) throw new Error(data.error || "Não deu para salvar.");
+      toast.success(`Checkout de ${destino.nome} salvo.`);
+      onSaved?.(data.tema);
       onOpenChange(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Falha ao salvar.");
+      toast.error(error instanceof Error ? error.message : "Não deu para salvar.");
     } finally {
-      setSaving(false);
+      setSalvando(false);
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent>
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Settings2 className="h-4 w-4 text-primary" />
-            Configurar checkout
-          </DialogTitle>
-          <DialogDescription>
-            Rota <span className="font-medium text-foreground">{routeName}</span>
-          </DialogDescription>
+          <DialogTitle>Checkout de {destino.nome}</DialogTitle>
+          <DialogDescription>Em que país e moeda o checkout desta loja abre.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="checkout-domain" className="text-xs">
-              Domínio de checkout (loja checkout)
-            </Label>
-            <Input
-              id="checkout-domain"
-              value={domain}
-              onChange={(event) => setDomain(event.target.value)}
-              placeholder="ex.: norvex.myshopify.com"
-              className="bg-background/70 text-sm"
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Use o domínio <span className="font-medium">.myshopify.com</span>{" "}
-              (não muda quando você troca o domínio público). Deixe vazio para
-              usar o da loja conectada.
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={idPais}>País e moeda</Label>
+          <Select value={valor} onValueChange={(v) => setValor(typeof v === "string" && v ? v : PELO_IDIOMA)}>
+            <SelectTrigger id={idPais} aria-describedby={`${idPais}-ajuda`}>
+              <SelectValue>{(v: string) => rotulo(v)}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={PELO_IDIOMA}>{rotuloIdioma}</SelectItem>
+              <SelectItem value={PAIS_DO_COMPRADOR}>Automático (país do comprador)</SelectItem>
+              {[...extra, ...MERCADOS.map((m) => m.pais)].map((pais) => (
+                <SelectItem key={pais} value={pais}>
+                  {nomeDoPais(pais)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p id={`${idPais}-ajuda`} className="text-label text-t2">
+            {ajuda}
+          </p>
+          {moedas && moedas.length > 0 ? (
+            <p className="text-label text-t2">
+              Carrinhos dos últimos 30 dias:{" "}
+              {moedas.map((m) => `${m.carrinhos.toLocaleString("pt-BR")} em ${m.moeda}`).join(" · ")}.
             </p>
-          </div>
+          ) : null}
+        </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs">País / moeda do checkout</Label>
-            <Select
-              value={country}
-              onValueChange={(value) => setCountry(value || "")}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent align="start">
-                {Object.entries(MARKETS).map(([code, info]) => (
-                  <SelectItem key={code} value={code}>
-                    {info.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-[11px] text-muted-foreground">
-              Força a moeda via Shopify Markets. A loja checkout precisa ter esse
-              mercado/moeda configurado.
-            </p>
-          </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={idDominio}>Domínio do checkout</Label>
+          <Input
+            id={idDominio}
+            value={dominio}
+            onChange={(e) => setDominio(e.target.value)}
+            placeholder={destino.dominioLoja || "loja.myshopify.com"}
+            aria-describedby={`${idDominio}-ajuda`}
+            className="font-mono"
+          />
+          <p id={`${idDominio}-ajuda`} className="text-label text-t2">
+            Vazio usa o da loja conectada. Prefira o .myshopify.com: ele não muda quando o domínio público muda.
+          </p>
+        </div>
 
-          <Button className="w-full" onClick={handleSave} disabled={saving}>
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+        <DialogFooter>
+          <DialogClose render={<Button variant="secondary" disabled={salvando} />}>Cancelar</DialogClose>
+          <Button pending={salvando} onClick={salvar}>
             Salvar
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

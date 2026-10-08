@@ -11,7 +11,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { lojaDoUsuario } from "@/lib/stores/authorize";
 import { conferirRoteamento, corpoDoBloqueio } from "@/lib/billing/limites";
-import { garantirDestinoPrimario } from "@/lib/checkout-routes/destino-primario";
+import { garantirDestinoPrimario, settingsDoDestino } from "@/lib/checkout-routes/destino-primario";
+import { linhaDoDestinoConectado } from "@/lib/checkout-routes/destino-conectado";
 import { sincronizarTemaDaRota, type ResultadoTema } from "@/lib/checkout-routes/tema-vitrine";
 import {
   COBERTURA_MINIMA_PARA_ENTRAR,
@@ -158,15 +159,18 @@ export async function POST(request: NextRequest) {
   // Modo "adicionar destino": a rota e os destinos que ela ja tem. Lidos
   // antes do carimbo pelo mesmo motivo -- recusar sem ter escrito nada.
   let rotaExistente: { id: string; public_token: string; source_store_id: string } | null = null;
+  // weight e settings: loja que ja estava e casada de novo os mantem.
   let destinosDaRota: {
     target_store_id: string;
     position: number | null;
     variant_map: Record<string, unknown> | null;
+    weight: number | null;
+    settings: Record<string, unknown> | null;
   }[] = [];
   if (routeId) {
     const { data: existing } = await supabase
       .from("routed_checkout_configs")
-      .select("id, public_token, source_store_id, target_store_id, variant_map")
+      .select("id, public_token, source_store_id, target_store_id, variant_map, settings")
       .eq("id", routeId)
       .eq("user_id", user.id)
       .single();
@@ -185,18 +189,23 @@ export async function POST(request: NextRequest) {
     rotaExistente = existing;
     const { data: linhas } = await supabase
       .from("routed_checkout_targets")
-      .select("target_store_id, position, variant_map")
+      .select("target_store_id, position, variant_map, weight, settings")
       .eq("route_id", existing.id);
     destinosDaRota = (linhas || []) as typeof destinosDaRota;
     // Rota antiga sem linha: o destino legado (as colunas da rota) vira linha
     // na posicao 0 logo abaixo, e o mapa dele conta para decidir quem fica com
-    // SKU repetido.
+    // SKU repetido. O ajuste de checkout dele e o da rota.
     if (destinosDaRota.length === 0) {
       destinosDaRota = [
         {
           target_store_id: (existing.target_store_id as string | null) || "",
           position: 0,
           variant_map: (existing.variant_map || {}) as Record<string, unknown>,
+          weight: 1,
+          settings: settingsDoDestino(
+            existing.settings as Record<string, unknown> | null,
+            "connect_by_sku"
+          ),
         },
       ];
     }
@@ -415,22 +424,22 @@ export async function POST(request: NextRequest) {
         destinosDaRota.reduce((maior, d) => Math.max(maior, d.position ?? 0), -1) + 1;
 
       // Destino novo entra com peso 0 quando a cobertura esta ruim: fica
-      // configurado e visivel, mas fora do rodizio ate o dono revisar.
+      // configurado e visivel, mas fora do rodizio ate o dono revisar. Loja
+      // que ja estava mantem peso e ajustes de checkout (destino-conectado.ts).
       // Gravacao pelo service role: a sessao nao insere mais destino (064). A
       // rota foi lida pela sessao com o user_id, e as lojas sao do usuario.
       const { data: target, error: targetError } = await admin
         .from("routed_checkout_targets")
         .upsert(
-          {
-            route_id: rotaExistente.id,
-            target_store_id: targetStoreId,
-            weight: seguro ? 1 : 0,
-            enabled: true,
-            sku_map: skuMap,
-            variant_map: variantMap,
-            settings: { generatedBy: "connect_by_sku" },
+          linhaDoDestinoConectado({
+            routeId: rotaExistente.id,
+            targetStoreId,
+            seguro,
+            skuMap,
+            variantMap,
             position,
-          },
+            existente: jaNaRota ?? null,
+          }),
           { onConflict: "route_id,target_store_id" }
         )
         .select("id")

@@ -96,6 +96,59 @@ export function marketParamsFromLanguage(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Cupom do carrinho da vitrine -> `?discount=` do permalink.
+//
+// Documentado em shopify.dev/docs/apps/build/checkout/create-cart-permalinks:
+// `discount=CODIGO`, varios separados por virgula -- por isso codigo com
+// virgula nao passa (a doc diz que nao da para mandar). So o CODIGO viaja,
+// nunca valor: quem calcula o desconto e a loja de checkout, com o cupom
+// dela. Codigo que nao existe na loja de checkout nao vale la (a Shopify nao
+// aplica); o lojista precisa criar o mesmo cupom nas duas lojas.
+//
+// A MESMA regra vive no loader (cupomValido / cuponsDoCarrinho em
+// public/routed-checkout-loader.js) -- tests/roteamento-carrinho-levado.test.ts
+// compara as duas. Mudou uma, muda a outra.
+// ---------------------------------------------------------------------------
+
+/** A Shopify aceita ate 5 codigos combinados num carrinho. */
+export const MAX_CUPONS = 5;
+/** Codigo de cupom de verdade e curto; o teto so barra lixo. */
+export const MAX_CUPOM = 64;
+
+/** Codigo aceito: ja aparado, 1..64, sem virgula e sem caractere de controle. */
+export function cupomValido(codigo: unknown): codigo is string {
+  return (
+    typeof codigo === "string" &&
+    codigo.length > 0 &&
+    codigo.length <= MAX_CUPOM &&
+    codigo.trim() === codigo &&
+    codigo.indexOf(",") === -1 &&
+    !/[\u0000-\u001f\u007f]/.test(codigo)
+  );
+}
+
+/**
+ * Lista de codigos vinda de fora (corpo do /resolve, publico). Nunca lanca:
+ * entrada torta vira lista vazia. Apara, descarta o invalido e repete so uma
+ * vez (cupom da Shopify nao diferencia maiuscula).
+ */
+export function normalizarCupons(entrada: unknown): string[] {
+  if (!Array.isArray(entrada)) return [];
+  const vistos = new Set<string>();
+  const saida: string[] = [];
+  for (const bruto of entrada.slice(0, 20)) {
+    const codigo = typeof bruto === "string" ? bruto.trim() : bruto;
+    if (!cupomValido(codigo)) continue;
+    const chave = codigo.toLowerCase();
+    if (vistos.has(chave)) continue;
+    vistos.add(chave);
+    saida.push(codigo);
+    if (saida.length >= MAX_CUPONS) break;
+  }
+  return saida;
+}
+
 /**
  * NAO acrescente `attributes[...]` aqui.
  *
@@ -110,11 +163,15 @@ export function marketParamsFromLanguage(
  * do `targetId` que o loader manda no corpo da requisicao. E o caminho inline
  * do loader (o mais usado) ja montava a URL sem eles, entao os dois caminhos
  * produziam URLs diferentes para o mesmo carrinho.
+ *
+ * O cupom (`discount`) pode: e o codigo que o comprador digitou, criado pelo
+ * lojista nas duas lojas -- nao identifica rota, vitrine nem comprador.
  */
 export function buildCartPermalink(
   targetDomain: string,
   lines: { variantId: string; quantity: number }[],
-  market?: { country?: string; locale?: string }
+  market?: { country?: string; locale?: string },
+  extras?: { discountCodes?: unknown }
 ) {
   // Parser, nao regex: normalizeShopDomain aprovava "//evil.com", "ftp://evil.com/x"
   // e "evil.com." -- e o retorno desta funcao e a URL para onde o comprador vai.
@@ -132,9 +189,14 @@ export function buildCartPermalink(
   const url = new URL(`https://${domain}/cart/${cartPath}`);
 
   // country/locale fazem o checkout abrir no mercado/moeda certos (Shopify
-  // Markets). Sem isso, cai na moeda base da loja (ex.: USD).
+  // Markets). Sem country, a Shopify decide pelo comprador (geolocalizacao)
+  // -- e o modo "pais do comprador" do destino (ver mercado.ts, que tambem
+  // explica o que a doc confirma destes dois parametros).
   if (market?.country) url.searchParams.set("country", market.country);
   if (market?.locale) url.searchParams.set("locale", market.locale);
+
+  const cupons = normalizarCupons(extras?.discountCodes);
+  if (cupons.length > 0) url.searchParams.set("discount", cupons.join(","));
 
   return url.toString();
 }
