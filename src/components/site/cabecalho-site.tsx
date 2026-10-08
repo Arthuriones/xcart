@@ -14,7 +14,7 @@ import { SECOES_LANDING, URL_CRIAR_CONTA, URL_ENTRAR } from "./links";
  */
 export function CabecalhoSite({ base = "" }: { base?: string }) {
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-surface">
+    <header className="sticky top-0 z-40 border-b border-border bg-surface/92 backdrop-blur-md backdrop-saturate-150">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-2 px-4 sm:px-6">
         <Link
           href="/"

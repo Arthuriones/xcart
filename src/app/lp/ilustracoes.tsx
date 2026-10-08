@@ -37,20 +37,24 @@ function Janela({
   contexto?: string[];
   children: ReactNode;
 }) {
+  // A moldura cinza em volta da janela e a do design v2: separa a "tela" do
+  // fundo da pagina sem sombra.
   return (
-    <div className="overflow-hidden rounded-card border border-border-strong bg-bg">
-      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface px-3 py-2.5">
-        <span className="mr-1 text-dense font-semibold text-ink">{tela}</span>
-        {contexto.map((c) => (
-          <span
-            key={c}
-            className="inline-flex h-6 items-center rounded-control border border-border bg-surface-2 px-2 text-label text-t1"
-          >
-            {c}
-          </span>
-        ))}
+    <div className="rounded-overlay bg-track p-2.5 sm:p-5">
+      <div className="overflow-hidden rounded-card border border-border-strong bg-bg">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface px-3 py-2.5">
+          <span className="mr-1 text-dense font-semibold text-ink">{tela}</span>
+          {contexto.map((c) => (
+            <span
+              key={c}
+              className="inline-flex h-6 items-center rounded-control border border-border bg-surface-2 px-2 text-label text-t1"
+            >
+              {c}
+            </span>
+          ))}
+        </div>
+        <div className="flex flex-col gap-2 p-2 sm:p-3">{children}</div>
       </div>
-      <div className="flex flex-col gap-2 p-2 sm:p-3">{children}</div>
     </div>
   );
 }
@@ -188,7 +192,14 @@ export function PreviaComposicao() {
                 key={c.rotulo}
                 className="grid grid-cols-[minmax(0,8.5rem)_1fr] items-center gap-3"
               >
-                <span className="truncate text-label text-t1">{c.rotulo}</span>
+                <span
+                  className={cn(
+                    "truncate text-label",
+                    c.rotulo === "Lucro estimado" ? "font-semibold text-ink" : "text-t1"
+                  )}
+                >
+                  {c.rotulo}
+                </span>
                 <span className="relative block h-3 rounded-full bg-track">
                   <span className={cn("absolute inset-y-0 rounded-full", c.barra)} />
                 </span>
@@ -203,22 +214,24 @@ export function PreviaComposicao() {
 
 // ---------------------------------------------------------- Rastreamento
 
+// So Meta e TikTok: os Eventos ao vivo listam o que sai do servidor. O Google
+// vai pela tag do Google no navegador e nao passa pela fila.
 const EVENTOS: {
   evento: string;
-  plataforma: "Meta" | "Google";
+  plataforma: "Meta" | "TikTok";
   tom: "ok" | "run" | "err";
   texto: string;
 }[] = [
   { evento: "Compra", plataforma: "Meta", tom: "ok", texto: "Enviado" },
-  { evento: "Compra", plataforma: "Google", tom: "ok", texto: "Enviado" },
+  { evento: "Compra", plataforma: "TikTok", tom: "ok", texto: "Enviado" },
   { evento: "Iniciar checkout", plataforma: "Meta", tom: "ok", texto: "Enviado" },
-  { evento: "Adicionar ao carrinho", plataforma: "Google", tom: "run", texto: "Na fila" },
+  { evento: "Adicionar ao carrinho", plataforma: "TikTok", tom: "run", texto: "Na fila" },
   { evento: "Ver produto", plataforma: "Meta", tom: "err", texto: "Falhou" },
 ];
 
 export function PreviaRastreamento() {
   return (
-    <Figura legenda="Ilustração dos Eventos ao vivo: cada envio ao Meta e ao Google, com o estado de cada um.">
+    <Figura legenda="Ilustração dos Eventos ao vivo: cada envio do servidor ao Meta e ao TikTok, com o estado de cada um.">
       <Janela tela="Eventos ao vivo" contexto={["Todas as lojas"]}>
         <Cartao>
           <ul className="divide-y divide-border-subtle">
@@ -299,7 +312,7 @@ function Caixa({ titulo, texto, destaque }: { titulo: string; texto: string; des
     <div
       className={cn(
         "flex min-w-0 flex-col gap-0.5 rounded-card border px-3 py-2.5",
-        destaque ? "border-transparent bg-solid text-on-solid" : "border-border bg-surface text-ink"
+        destaque ? "border-transparent bg-solid text-on-solid" : "border-border bg-surface-2 text-ink"
       )}
     >
       <span className="text-dense font-semibold">{titulo}</span>
@@ -320,7 +333,7 @@ function Seta() {
 export function DiagramaRota() {
   return (
     <Figura legenda="A vitrine recebe o tráfego; o carrinho vai, pelo SKU, para uma das lojas de checkout.">
-      <div className="flex flex-col gap-2 rounded-card border border-border-strong bg-bg p-3 sm:flex-row sm:items-center sm:p-4">
+      <div className="flex flex-col gap-2.5 rounded-overlay border border-border-strong bg-bg p-3.5 sm:flex-row sm:items-center sm:p-5">
         <div className="sm:flex-1">
           <Caixa titulo="Vitrine" texto="Recebe o tráfego do anúncio" />
         </div>

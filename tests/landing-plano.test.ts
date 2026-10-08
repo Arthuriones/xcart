@@ -7,10 +7,16 @@ import {
 import { BENEFICIOS_PRO } from "@/components/billing/beneficios";
 import { PACOTES, POLITICA_TESTE, PRECO_PRO } from "@/app/lp/plano";
 import {
+  COMPARACAO,
+  CONECTA_COM,
   OUTROS_RECURSOS,
+  PASSOS,
   PERGUNTAS,
+  PROBLEMAS,
+  PROBLEMA_FECHO,
   PROVAS,
   RECURSOS_PRINCIPAIS,
+  ROTEAMENTO,
 } from "@/app/lp/conteudo";
 
 // A landing nao escreve numero a mao: preco, creditos e pacotes saem do
@@ -61,6 +67,11 @@ describe("texto da landing", () => {
     ...RECURSOS_PRINCIPAIS.flatMap((r) => [r.titulo, r.resumo, ...r.pontos]),
     ...OUTROS_RECURSOS.flatMap((r) => [r.titulo, r.texto]),
     ...PERGUNTAS.flatMap((p) => [p.pergunta, p.resposta]),
+    ...PROBLEMAS.flatMap((p) => [p.origem, p.titulo, p.texto]),
+    PROBLEMA_FECHO,
+    ...COMPARACAO.map((l) => l.item),
+    ...PASSOS.flatMap((p) => [p.titulo, p.texto]),
+    ...ROTEAMENTO,
     POLITICA_TESTE.curta,
     POLITICA_TESTE.longa,
   ];
@@ -79,6 +90,10 @@ describe("texto da landing", () => {
       expect(t).not.toMatch(/\(s\)/);
       expect(t).not.toMatch(/\$\s?\d|US\$|USD/);
     }
+  });
+
+  it("cita o TikTok Ads entre as integrações", () => {
+    expect(CONECTA_COM).toContain("TikTok Ads");
   });
 
   it("não inventa prova social", () => {

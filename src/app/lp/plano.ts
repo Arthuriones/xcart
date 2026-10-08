@@ -19,6 +19,16 @@ import {
 /** "R$ 89,00" */
 export const PRECO_PRO = formatBRL(PRO_PRICE_CENTS);
 
+/**
+ * O mesmo preco em duas partes, para o cartao do plano por "R$" pequeno ao
+ * lado do valor grande. Se o formato mudar e o corte falhar, o valor inteiro
+ * vai no lugar e a moeda some -- nunca um numero diferente do cobrado.
+ */
+export const PRECO_PRO_PARTES: { moeda: string; valor: string } = (() => {
+  const m = PRECO_PRO.match(/^(\D*?)\s*([\d.,]+)$/);
+  return m ? { moeda: m[1], valor: m[2] } : { moeda: "", valor: PRECO_PRO };
+})();
+
 export const CREDITOS_INCLUSOS = PRO_INCLUDED_CREDITS;
 
 export interface PacoteNaTela {

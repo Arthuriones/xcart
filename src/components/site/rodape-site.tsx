@@ -6,14 +6,17 @@ import { DOCUMENTOS_LEGAIS, URL_ENTRAR, type DocumentoLegal } from "./links";
 /**
  * Rodape do site publico: os documentos legais (exigidos pela Shopify e pelo
  * Meta), Entrar e a troca de tema. `atual` marca o documento aberto.
+ *
+ * Escuro nos dois temas (design v2): a classe `dark` troca a paleta so aqui
+ * dentro, e a logo de texto branco aparece sozinha.
  */
 export function RodapeSite({ atual }: { atual?: DocumentoLegal }) {
   return (
-    <footer className="border-t border-border bg-surface">
+    <footer className="dark border-t border-border bg-bg text-ink">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 md:flex-row md:items-center md:justify-between">
         <div className="flex flex-col gap-2">
           <LogoXcart altura={20} />
-          <p className="text-label text-t2">© {new Date().getFullYear()} xcart</p>
+          <p className="text-label text-t3">© {new Date().getFullYear()} xcart</p>
         </div>
 
         <nav aria-label="Documentos e acesso">
