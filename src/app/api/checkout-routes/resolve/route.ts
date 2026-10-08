@@ -8,6 +8,7 @@ import {
   computeCoverage,
   normalizeRotation,
   pickTarget,
+  type RouteTarget,
 } from "@/lib/checkout-routes/rotation";
 import { destinosParaRotear, RouteTargetsLoadError } from "@/lib/checkout-routes/targets";
 import { createAdminClient } from "@/lib/supabase/admin";

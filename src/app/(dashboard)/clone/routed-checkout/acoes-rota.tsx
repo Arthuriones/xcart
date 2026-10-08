@@ -91,7 +91,7 @@ export function AcoesRota({ id, nome, ligada }: { id: string; nome: string; liga
         onOpenChange={setPausar}
         tom="normal"
         titulo={`Pausar a rota “${nome}”?`}
-        descricao="O comprador da vitrine volta a cair no checkout da própria vitrine, que não cobra. As lojas e os produtos ligados ficam guardados para quando você ligar de novo."
+        descricao="Com a rota pausada, o checkout da vitrine fica travado: o comprador vê um aviso e não finaliza a compra. As lojas e os produtos ligados ficam guardados para quando você ligar de novo."
         confirmar="Pausar rota"
         mensagemErro="Não deu para pausar a rota. Nada mudou; tente de novo."
         onConfirmar={confirmarPausa}

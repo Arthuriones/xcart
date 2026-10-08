@@ -951,7 +951,13 @@
       var el = document.createElement("div");
       el.id = "routed-checkout-error";
       el.style.cssText = "position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:99999;background:#ef4444;color:#fff;padding:12px 20px;border-radius:8px;font-size:14px;font-family:sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.25);max-width:90vw;text-align:center";
-      el.textContent = "Erro ao carregar checkout. Tente novamente.";
+      // Na lingua da loja: a maioria das vitrines vende em ingles.
+      var lingua = (document.documentElement.getAttribute("lang") || "").toLowerCase();
+      el.textContent = lingua.indexOf("pt") === 0
+        ? "Erro ao carregar o checkout. Tente novamente."
+        : lingua.indexOf("es") === 0
+          ? "Error al cargar el checkout. Inténtalo de nuevo."
+          : "Couldn’t open checkout. Please try again.";
       document.body.appendChild(el);
       setTimeout(function () { el.remove(); }, 4000);
     } catch (e) {}
