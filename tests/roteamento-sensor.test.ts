@@ -266,14 +266,15 @@ describe("falhas seguidas do conserto", () => {
     expect(proximoUltimoConserto(antigo, { at: ha(1), ok: false }).falhas).toBe(2);
   });
 
-  it("credencial revogada alerta na primeira passada", () => {
+  it("credencial revogada e loja fora do ar: nao entra no contador (tem alerta proprio)", () => {
     const u = proximoUltimoConserto(null, {
       at: ha(1),
       ok: false,
       message: "Loja vitrine (x.myshopify.com): As credenciais dessa loja foram revogadas ou expiraram. Reconecte a loja em Lojas.",
     });
     expect(credencialRevogada(u)).toBe(true);
-    expect(consertoFalhando(u)).toBe(true);
+    expect(lojaForaNoConserto(u)).toBe(true);
+    expect(consertoFalhando({ ...u, falhas: 9 })).toBe(false);
     expect(motivoDaFalha("O app foi removido de x.myshopify.com. Reinstale para voltar a rotear.")).toBe("sem_app");
   });
 

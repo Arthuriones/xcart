@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { fakeSupabase } from "./_fake-supabase";
 
-// Alertas do roteamento (avaliar.ts R8-R10): script que sumiu da vitrine,
-// carrinhos caindo no checkout da vitrine e conserto falhando. Nada para
-// rota desligada ou com as lojas de checkout pausadas.
+// Alertas do roteamento (avaliar.ts R8-R12): script que sumiu da vitrine,
+// carrinhos caindo no checkout da vitrine, conserto falhando (falha comum,
+// 3 seguidas) e loja fora do ar (alerta proprio, na primeira passada). Nada
+// para rota desligada ou com as lojas de checkout pausadas.
 
 vi.mock("server-only", () => ({}));
 
@@ -12,6 +13,7 @@ import {
   consertoFalhandoNaRota,
   escapesDemais,
   janelasDeComparacao,
+  lojasForaDoArNaRota,
   rotaRecebendo,
   scriptSumiu,
   valeContarJanelas,
@@ -134,13 +136,13 @@ describe("script do roteamento sumiu", () => {
     expect(await condicoes({ sinais: SUMIU, ligada: false })).toHaveLength(0);
     expect(await condicoes({ sinais: SUMIU, destinos: [{ route_id: ROTA, enabled: false, weight: 1 }] })).toHaveLength(0);
     expect(await condicoes({ sinais: SUMIU, destinos: [{ route_id: ROTA, enabled: true, weight: 0 }] })).toHaveLength(0);
-    // A vitrine pausada na Shopify: o alerta certo e o do conserto (falhas < 3 aqui, entao nenhum).
-    expect(
-      await condicoes({
-        sinais: SUMIU,
-        lastHeal: { at: ha(1), ok: false, falhas: 1, motivo: "loja_pausada", lado: "vitrine", message: "Loja vitrine (x): pausada ou sem plano" },
-      })
-    ).toHaveLength(0);
+    // A vitrine pausada na Shopify: o script sumir e consequencia; o alerta
+    // certo e o de loja fora do ar, que diz o motivo.
+    const pausada = await condicoes({
+      sinais: SUMIU,
+      lastHeal: { at: ha(1), ok: false, falhas: 1, motivo: "loja_pausada", lado: "vitrine", message: "Loja vitrine (x): pausada ou sem plano" },
+    });
+    expect(pausada.map((x) => x.regra)).toEqual(["roteamento_loja_fora_do_ar"]);
     expect(await condicoes({ sinais: SUMIU, desinstalada: true })).toHaveLength(0);
   });
 
@@ -227,21 +229,12 @@ describe("conserto da rota falhando", () => {
     ).toHaveLength(0);
   });
 
-  it("credencial revogada: na hora", async () => {
+  it("loja fora do ar nao entra no contador, por mais passadas que tenha", async () => {
     const c = await condicoes({
       sinais: [1],
-      destinos: [
-        destino(CK_A, {
-          at: ha(1),
-          ok: false,
-          falhas: 1,
-          message:
-            "Loja vitrine (wa0jv9-jn.myshopify.com): As credenciais dessa loja foram revogadas ou expiraram. Reconecte a loja em Lojas.",
-        }),
-      ],
+      destinos: [destino(CK_A, { at: ha(1), ok: false, falhas: 7, motivo: "loja_pausada", lado: "checkout", message: "x" })],
     });
-    expect(c).toHaveLength(1);
-    expect(c[0].titulo).toBe("Rota sem acesso a uma das lojas");
+    expect(c.map((x) => x.regra)).toEqual(["roteamento_loja_fora_do_ar"]);
   });
 
   it("rota antiga sem linha de destino usa o last_heal da rota", async () => {
@@ -256,6 +249,105 @@ describe("conserto da rota falhando", () => {
         destinos: [destino(CK_A, { at: ha(1), ok: false, falhas: 9, motivo: "sem_app", message: "x" })],
       })
     ).toHaveLength(0);
+  });
+});
+
+describe("loja da rota fora do ar", () => {
+  const ok = { at: ha(1), ok: true, falhas: 0 };
+
+  it("credencial revogada na loja de checkout: critico na primeira passada", async () => {
+    const c = await condicoes({
+      sinais: [1],
+      destinos: [
+        destino(CK_A, {
+          at: ha(1),
+          ok: false,
+          falhas: 1,
+          motivo: "sem_app",
+          lado: "checkout",
+          proximaTentativa: ha(-11),
+          message: "A loja de checkout tdicbr-3u.myshopify.com não dá mais acesso ao xcart (app removido ou credencial revogada). Reconecte a loja em Lojas.",
+        }),
+      ],
+    });
+    expect(c).toHaveLength(1);
+    expect(c[0]).toMatchObject({
+      regra: "roteamento_loja_fora_do_ar",
+      chave: ROTA,
+      severidade: "critico",
+      titulo: "Rota sem acesso a uma das lojas",
+    });
+    expect(c[0].detalhe).toContain("Reconecte a loja");
+  });
+
+  it("credencial da vitrine revogada (registro antigo, sem motivo): sai pela mensagem", async () => {
+    const c = await condicoes({
+      sinais: [1],
+      lastHeal: {
+        at: ha(1),
+        ok: false,
+        falhas: 1,
+        message:
+          "Loja vitrine (wa0jv9-jn.myshopify.com): As credenciais dessa loja foram revogadas ou expiraram. Reconecte a loja em Lojas.",
+      },
+    });
+    expect(c.map((x) => [x.regra, x.titulo])).toEqual([["roteamento_loja_fora_do_ar", "Rota sem acesso a uma das lojas"]]);
+  });
+
+  it("loja de checkout pausada no rodizio: critico com o nome da loja", async () => {
+    const c = await condicoes({
+      sinais: [1],
+      lastHeal: ok,
+      destinos: [
+        destino(CK_A, ok),
+        destino(CK_B, {
+          at: ha(2),
+          ok: false,
+          falhas: 1,
+          motivo: "loja_pausada",
+          lado: "checkout",
+          message: "A loja de checkout feajgp-be.myshopify.com está pausada ou sem plano na Shopify.",
+        }),
+      ],
+    });
+    expect(c).toHaveLength(1);
+    expect(c[0]).toMatchObject({ regra: "roteamento_loja_fora_do_ar", titulo: "Loja da rota pausada pela Shopify" });
+    expect(c[0].detalhe).toContain("loja Stepz");
+  });
+
+  it("vitrine com senha: aviso (avisa uma vez), sem o critico nem o script sumido", async () => {
+    const c = await condicoes({
+      sinais: SUMIU,
+      lastHeal: {
+        at: ha(1),
+        ok: false,
+        falhas: 2,
+        motivo: "vitrine_fechada",
+        lado: "vitrine",
+        message: "A vitrine r0pxre-p6.myshopify.com está com senha: o xcart não consegue ler os produtos dela.",
+      },
+    });
+    expect(c).toHaveLength(1);
+    expect(c[0]).toMatchObject({
+      regra: "roteamento_vitrine_com_senha",
+      severidade: "aviso",
+      titulo: "Vitrine da rota com senha",
+    });
+  });
+
+  it("a vitrine voltou: o destino que ainda espera as 12 h dele nao segura o alerta", async () => {
+    const c = await condicoes({
+      sinais: [1],
+      lastHeal: ok,
+      destinos: [destino(CK_A, { at: ha(5), ok: false, falhas: 1, motivo: "vitrine_fechada", lado: "vitrine", message: "x" })],
+    });
+    expect(c).toHaveLength(0);
+  });
+
+  it("loja fora do rodizio ou rota pausada: nada", async () => {
+    const pausada = { at: ha(1), ok: false, falhas: 1, motivo: "loja_pausada", lado: "checkout", message: "x" };
+    expect(await condicoes({ sinais: [1], destinos: [destino(CK_A, ok), destino(CK_B, pausada, { weight: 0 })] })).toHaveLength(0);
+    expect(await condicoes({ ligada: false, destinos: [destino(CK_A, pausada)] })).toHaveLength(0);
   });
 });
 
@@ -284,7 +376,7 @@ describe("regras puras", () => {
     expect(valeContarJanelas(null, t)).toBe(false);
   });
 
-  it("o destino que mais falha vence; credencial revogada antes de tudo", () => {
+  it("o destino que mais falha vence; loja fora do ar fica de fora do contador", () => {
     const d = (nome: string, u: Linha | null, over: Linha = {}) => ({
       enabled: true,
       weight: 1,
@@ -296,7 +388,12 @@ describe("regras puras", () => {
     const cinco = { at: ha(1), ok: false, falhas: 5, message: "b" };
     const revogada = { at: ha(1), ok: false, falhas: 1, motivo: "sem_app", message: "c" };
     expect(consertoFalhandoNaRota([d("A", tres), d("B", cinco)], null)?.nome).toBe("B");
-    expect(consertoFalhandoNaRota([d("A", cinco), d("B", revogada)], null)?.nome).toBe("B");
+    expect(consertoFalhandoNaRota([d("A", tres), d("B", revogada)], null)?.nome).toBe("A");
+    expect(consertoFalhandoNaRota([d("B", revogada)], null)).toBeNull();
+    // ...e vai para o alerta proprio.
+    expect(lojasForaDoArNaRota([d("A", tres), d("B", revogada)], null).map((f) => [f.nome, f.motivo])).toEqual([
+      ["B", "sem_app"],
+    ]);
     expect(consertoFalhandoNaRota([d("A", null), d("B", { at: ha(1), ok: true, falhas: 0 })], cinco as never)).toBeNull();
     expect(consertoFalhandoNaRota([], cinco as never)?.conserto.message).toBe("b");
   });

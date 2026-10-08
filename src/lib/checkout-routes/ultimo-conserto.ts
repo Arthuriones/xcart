@@ -132,23 +132,32 @@ function motivoDe(u: UltimoConserto): MotivoForaDoAr | undefined {
   return u.motivo || motivoDaFalha(u.message);
 }
 
+/**
+ * Por que a ultima passada parou numa loja fora do ar (pausada, sem app,
+ * vitrine com senha, fechada); undefined = passou, ou foi falha comum.
+ */
+export function motivoForaDoAr(u: UltimoConserto | null): MotivoForaDoAr | undefined {
+  if (!u || u.ok) return undefined;
+  return motivoDe(u);
+}
+
 /** A ultima passada parou porque uma das lojas nao esta no ar para o app. */
 export function lojaForaNoConserto(u: UltimoConserto | null): boolean {
-  if (!u || u.ok) return false;
-  return Boolean(motivoDe(u));
+  return Boolean(motivoForaDoAr(u));
 }
 
 /**
  * De que lado veio a falha. Registro sem `lado` (antigo) sai pelo comeco da
  * mensagem do verificarParDaRota ("Loja vitrine (...)" / "Loja de checkout
- * (...)"); sem isso, nao se sabe.
+ * (...)") ou do mensagemForaDoAr ("A vitrine ..." / "A loja de checkout
+ * ..."); sem isso, nao se sabe.
  */
 export function ladoDaFalha(u: UltimoConserto | null): LadoDaRota | undefined {
   if (!u || u.ok) return undefined;
   if (u.lado) return u.lado;
   const m = String(u.message || "");
-  if (/^Loja vitrine \(/.test(m)) return "vitrine";
-  if (/^Loja de checkout \(/.test(m)) return "checkout";
+  if (/^Loja vitrine \(|^A vitrine /.test(m)) return "vitrine";
+  if (/^Loja de checkout \(|^A loja de checkout /.test(m)) return "checkout";
   return undefined;
 }
 
@@ -157,13 +166,19 @@ export function vitrineForaNoConserto(u: UltimoConserto | null): boolean {
   return lojaForaNoConserto(u) && ladoDaFalha(u) === "vitrine";
 }
 
-/** App removido ou credencial recusada: nao melhora sozinho, alerta na hora. */
+/** App removido ou credencial recusada: nao melhora sozinho. */
 export function credencialRevogada(u: UltimoConserto | null): boolean {
-  if (!u || u.ok) return false;
-  return motivoDe(u) === "sem_app";
+  return motivoForaDoAr(u) === "sem_app";
 }
 
+/**
+ * Falha COMUM em passadas seguidas (produto que nao cria, Shopify errando):
+ * o "Conserto da rota falhando". Loja fora do ar nao entra aqui: ela tem o
+ * alerta proprio, aberto na primeira passada (alertas/roteamento.ts). O
+ * contador dela andaria 1 a cada 12 h (a espera do cron), o "3 seguidas"
+ * levaria um dia e meio e o alerta nao diria o que fazer.
+ */
 export function consertoFalhando(u: UltimoConserto | null): boolean {
-  if (!u || u.ok) return false;
-  return credencialRevogada(u) || (u.falhas ?? 1) >= FALHAS_PARA_ALERTAR;
+  if (!u || u.ok || lojaForaNoConserto(u)) return false;
+  return (u.falhas ?? 1) >= FALHAS_PARA_ALERTAR;
 }

@@ -345,12 +345,23 @@ async function gravarStatus(
   status: Omit<UltimoConserto, "falhas">,
   targetId: string | null
 ) {
+  // Relido na hora (o lido no comeco so se a leitura falhar): a falha da
+  // vitrine cai depois de minutos lendo os catalogos, e o sensor grava o
+  // webhook_vitrine no mesmo jsonb.
+  const { data } = await admin
+    .from("routed_checkout_configs")
+    .select("settings")
+    .eq("id", routeId)
+    .maybeSingle();
+  const atual = ((data as { settings?: Record<string, unknown> | null } | null)?.settings ??
+    settings ??
+    {}) as Record<string, unknown>;
   await admin
     .from("routed_checkout_configs")
     .update({
       settings: {
-        ...(settings || {}),
-        last_heal: proximoUltimoConserto(lerUltimoConserto(settings), status),
+        ...atual,
+        last_heal: proximoUltimoConserto(lerUltimoConserto(atual), status),
       },
     })
     .eq("id", routeId);
@@ -537,7 +548,7 @@ async function executarConserto(
   // Qual destino desta rota vai ser consertado.
   let targetQuery = admin
     .from("routed_checkout_targets")
-    .select("id, target_store_id, sku_map, variant_map, weight, enabled, settings")
+    .select("id, target_store_id, sku_map, variant_map, weight, enabled")
     .eq("route_id", config.id);
   if (input.targetId) targetQuery = targetQuery.eq("id", input.targetId);
   else targetQuery = targetQuery.eq("enabled", true);

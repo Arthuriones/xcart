@@ -18,16 +18,19 @@ import { enviarTelegram, tokenDoBot } from "@/lib/alertas/telegram";
 import { RE_DESINSTALADO } from "@/lib/leitura/lojas-estado";
 import {
   consertoFalhandoNaRota,
-  credencialRevogada,
   escapesDemais,
   haQuanto,
   janelasDeComparacao,
+  lojasForaDoArNaRota,
   rotaRecebendo,
   scriptSumiu,
+  tituloLojaForaDoAr,
   valeContarJanelas,
   vitrineFora,
   type DestinoNoAlerta,
+  type LojaForaNaRota,
 } from "@/lib/alertas/roteamento";
+import { ROTULO_FORA_DO_AR } from "@/lib/checkout-routes/loja-fora-do-ar";
 import { MOTIVO_ESCAPE } from "@/lib/checkout-routes/sensor";
 import { lerUltimoConserto, type UltimoConserto } from "@/lib/checkout-routes/ultimo-conserto";
 
@@ -768,25 +771,72 @@ export async function coletarCondicoesDetalhado(
     }
   });
 
+  // O nome da loja de checkout so quando ha mais de uma e a mensagem nao o traz.
+  const daLoja = (r: RotaAlerta, nome: string | null, mensagem: string) =>
+    nome && r.destinos.length > 1 && !mensagem.includes(nome) ? `, loja ${nome}` : "";
+
   await rodar("roteamento_conserto_falhando", async () => {
     for (const r of await lerRotasLigadas()) {
       // Por loja de checkout: com rodizio, a loja quebrada nao se esconde
-      // atras da boa (ver consertoFalhandoNaRota).
+      // atras da boa (ver consertoFalhandoNaRota). So falha COMUM: loja fora
+      // do ar e o alerta de baixo.
       const falha = consertoFalhandoNaRota(r.destinos, r.ultimoConserto);
       if (!falha) continue;
-      const semAcesso = credencialRevogada(falha.conserto);
       const mensagem = cortar(falha.conserto.message, 200) || "a última checagem não terminou";
-      // O nome da loja so quando ha mais de uma e a mensagem nao o traz.
-      const daLoja =
-        falha.nome && r.destinos.length > 1 && !mensagem.includes(falha.nome) ? `, loja ${falha.nome}` : "";
       condicoes.push({
         user_id: r.user_id,
         store_id: String(r.source_store_id),
         regra: "roteamento_conserto_falhando",
         chave: String(r.id),
         severidade: "critico",
-        titulo: semAcesso ? "Rota sem acesso a uma das lojas" : "Conserto automático da rota falhando",
-        detalhe: `Rota ${nomeDaRota(r)}${daLoja}: ${mensagem}`,
+        titulo: "Conserto automático da rota falhando",
+        detalhe: `Rota ${nomeDaRota(r)}${daLoja(r, falha.nome, mensagem)}: ${mensagem}`,
+      });
+    }
+  });
+
+  // Loja fora do ar (loja-fora-do-ar.ts): abre na PRIMEIRA passada que a
+  // acha, sem o contador de falhas, e fica um alerta so por rota enquanto
+  // durar -- o cron nem tenta a loja antes de 12 h, e o anti-spam de
+  // regras.ts nao reabre o que esta aberto. A frase gravada pelo conserto ja
+  // traz a loja e o que fazer.
+  const detalheForaDoAr = (r: RotaAlerta, f: LojaForaNaRota) => {
+    const mensagem = cortar(f.conserto.message, 200) || ROTULO_FORA_DO_AR[f.motivo];
+    return `Rota ${nomeDaRota(r)}${daLoja(r, f.lado === "vitrine" ? null : f.nome, mensagem)}: ${mensagem}`;
+  };
+
+  // Pausada pela Shopify, app removido/credencial revogada, loja fechada: o
+  // checkout nao cobra (ou a rota apodrece sem conserto) ate o lojista agir.
+  await rodar("roteamento_loja_fora_do_ar", async () => {
+    for (const r of await lerRotasLigadas()) {
+      const f = lojasForaDoArNaRota(r.destinos, r.ultimoConserto).find((x) => x.motivo !== "vitrine_fechada");
+      if (!f) continue;
+      condicoes.push({
+        user_id: r.user_id,
+        store_id: String(r.source_store_id),
+        regra: "roteamento_loja_fora_do_ar",
+        chave: String(r.id),
+        severidade: "critico",
+        titulo: tituloLojaForaDoAr(f.motivo),
+        detalhe: detalheForaDoAr(r, f),
+      });
+    }
+  });
+
+  // Vitrine com senha: aviso (so na abertura). Pode ser de proposito -- loja
+  // ainda nao lancada -- e um critico renotificaria a cada 6 h.
+  await rodar("roteamento_vitrine_com_senha", async () => {
+    for (const r of await lerRotasLigadas()) {
+      const f = lojasForaDoArNaRota(r.destinos, r.ultimoConserto).find((x) => x.motivo === "vitrine_fechada");
+      if (!f) continue;
+      condicoes.push({
+        user_id: r.user_id,
+        store_id: String(r.source_store_id),
+        regra: "roteamento_vitrine_com_senha",
+        chave: String(r.id),
+        severidade: "aviso",
+        titulo: tituloLojaForaDoAr(f.motivo),
+        detalhe: detalheForaDoAr(r, f),
       });
     }
   });

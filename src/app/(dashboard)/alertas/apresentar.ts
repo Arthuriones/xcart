@@ -228,6 +228,8 @@ const DESTINOS: Record<RegraAlerta, Destino> = {
   roteamento_script_sumiu: { href: "/clone/routed-checkout", tela: "Rotas" },
   roteamento_escape_vitrine: { href: "/clone/routed-checkout", tela: "Rotas" },
   roteamento_conserto_falhando: { href: "/clone/routed-checkout", tela: "Rotas" },
+  roteamento_loja_fora_do_ar: { href: "/clone/routed-checkout", tela: "Rotas" },
+  roteamento_vitrine_com_senha: { href: "/clone/routed-checkout", tela: "Rotas" },
 };
 
 /** Para qual aba da rota cada alerta de roteamento leva. */
@@ -235,6 +237,9 @@ const ABA_DO_ROTEAMENTO: Partial<Record<RegraAlerta, string>> = {
   roteamento_script_sumiu: "instalacao",
   roteamento_escape_vitrine: "diagnostico",
   roteamento_conserto_falhando: "diagnostico",
+  // A Visao diz qual loja esta fora e o que fazer.
+  roteamento_loja_fora_do_ar: "visao",
+  roteamento_vitrine_com_senha: "visao",
 };
 
 /**
@@ -357,9 +362,24 @@ export function regrasNaTela(gastoMinimo: number): RegraNaTela[] {
     {
       regra: "roteamento_conserto_falhando",
       titulo: "Conserto da rota falhando",
-      explicacao: "A checagem automática falhou seguidas vezes numa loja de checkout, ou perdeu o acesso a uma das lojas.",
+      explicacao: "A checagem automática falhou seguidas vezes numa loja de checkout.",
       severidade: "critico",
-      quando: "Na 3ª falha seguida, ou na hora sem acesso",
+      quando: "Na 3ª falha seguida",
+    },
+    {
+      regra: "roteamento_loja_fora_do_ar",
+      titulo: "Loja da rota fora do ar",
+      explicacao:
+        "Uma loja da rota foi pausada pela Shopify, perdeu o acesso do xcart (app removido ou credencial revogada) ou fechou: o checkout não cobra, ou a rota para de ser consertada.",
+      severidade: "critico",
+      quando: "Na primeira checagem que acha a loja fora",
+    },
+    {
+      regra: "roteamento_vitrine_com_senha",
+      titulo: "Vitrine da rota com senha",
+      explicacao: "A vitrine está com senha: o comprador não entra e o xcart não lê os produtos.",
+      severidade: "aviso",
+      quando: "Na primeira checagem com senha (avisa uma vez)",
     },
     {
       regra: "pedidos_sync_erro",

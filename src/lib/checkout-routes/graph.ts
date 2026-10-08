@@ -6,6 +6,7 @@ import { deriveStoreRoles, type StoreRole } from "@/lib/checkout-routes/store-ro
 import { contarPedidos24h } from "@/lib/checkout-routes/pedidos-24h";
 import { lerConsertoDoDestino, type ConsertoDoDestino } from "@/lib/checkout-routes/loja-fora-do-ar";
 import { checkoutDoDestino, type CheckoutDoDestino } from "@/lib/checkout-routes/mercado";
+import { lerUltimoConserto, type UltimoConserto } from "@/lib/checkout-routes/ultimo-conserto";
 
 interface TargetRow {
   id: string;
@@ -58,15 +59,12 @@ export interface GraphRoute {
   enabled: boolean;
   mode: string | null;
   publicToken: string;
-  lastHeal: {
-    at: string;
-    ok: boolean;
-    message?: string;
-    mappedCount?: number;
-    /** Loja fora do ar (loja-fora-do-ar.ts): o motivo tipado e de qual lado. */
-    motivo?: string;
-    lado?: string;
-  } | null;
+  /**
+   * Ultima passada do conserto, de qualquer destino (settings.last_heal da
+   * rota, no formato de ultimo-conserto.ts): falha, falhas seguidas e, com
+   * loja fora do ar, o motivo tipado e de qual lado.
+   */
+  lastHeal: UltimoConserto | null;
   /**
    * Ultimo reenvio do xcart-config.json ao tema da vitrine (settings.theme_sync,
    * gravado por src/lib/checkout-routes/tema-vitrine.ts).
@@ -202,7 +200,6 @@ export const getRouteGraph = cache(async (): Promise<RouteGraph> => {
     // Resultado da ultima passada do auto-conserto. E o unico sinal de saude
     // que existe sem o usuario pedir, entao o console mostra ele direto.
     const settings = (route.settings || {}) as {
-      last_heal?: GraphRoute["lastHeal"];
       theme_sync?: { at: string; estado: string; mensagem?: string };
     };
 
@@ -212,7 +209,7 @@ export const getRouteGraph = cache(async (): Promise<RouteGraph> => {
       enabled: route.enabled !== false,
       mode: route.mode,
       publicToken: route.public_token,
-      lastHeal: settings.last_heal ?? null,
+      lastHeal: lerUltimoConserto(route.settings),
       themeSync: settings.theme_sync
         ? {
             at: settings.theme_sync.at,

@@ -376,7 +376,9 @@ export type RegraAlerta =
   | "rastreamento_parado"
   | "roteamento_script_sumiu"
   | "roteamento_escape_vitrine"
-  | "roteamento_conserto_falhando";
+  | "roteamento_conserto_falhando"
+  | "roteamento_loja_fora_do_ar"
+  | "roteamento_vitrine_com_senha";
 
 export const ROTULO_REGRA: Record<RegraAlerta, string> = {
   ads_sync_atrasado: "Gasto de anúncio sem atualizar",
@@ -390,6 +392,8 @@ export const ROTULO_REGRA: Record<RegraAlerta, string> = {
   roteamento_script_sumiu: "Script do roteamento sumiu",
   roteamento_escape_vitrine: "Carrinhos caindo no checkout da vitrine",
   roteamento_conserto_falhando: "Conserto da rota falhando",
+  roteamento_loja_fora_do_ar: "Loja da rota fora do ar",
+  roteamento_vitrine_com_senha: "Vitrine da rota com senha",
 };
 
 export interface AlertaRow {

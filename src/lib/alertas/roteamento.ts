@@ -1,10 +1,12 @@
 import {
   consertoFalhando,
-  credencialRevogada,
   FALHAS_PARA_ALERTAR,
+  ladoDaFalha,
+  motivoForaDoAr,
   vitrineForaNoConserto,
   type UltimoConserto,
 } from "@/lib/checkout-routes/ultimo-conserto";
+import type { LadoDaRota, MotivoForaDoAr } from "@/lib/checkout-routes/loja-fora-do-ar";
 
 // ============================================================================
 // Regras de alerta do roteamento, puras (o avaliar.ts le o banco e monta a
@@ -18,8 +20,14 @@ import {
 //   caindo na vitrine -- checkouts criados NA vitrine (webhook
 //                        checkouts/create, ver sensor.ts).
 //   conserto falhando -- uma loja de checkout recebendo com last_heal
-//                        ok=false em passadas seguidas, ou sem acesso (nao
-//                        melhora sozinho).
+//                        ok=false em 3 passadas seguidas, por falha COMUM.
+//   loja fora do ar   -- pausada pela Shopify, sem o app (credencial
+//                        revogada) ou fechada: o lojista precisa agir, entao
+//                        abre na PRIMEIRA passada, sem contador. Um alerta
+//                        por rota; nao reabre nem conta a cada passada -- o
+//                        cron nem tenta a loja de novo antes de 12 h.
+//   vitrine com senha -- aviso, uma vez: pode ser de proposito (loja ainda
+//                        nao lancada), e o aviso nao renotifica.
 // ============================================================================
 
 const HORA = 3_600_000;
@@ -116,10 +124,10 @@ export interface DestinoNoAlerta {
 }
 
 /**
- * O destino recebendo comprador com o conserto falhando: credencial revogada
- * primeiro, depois o de mais falhas seguidas. As falhas sao POR DESTINO -- com
- * rodizio, o contador da rota ia 0,1,0,1 entre a loja boa e a quebrada e o
- * alerta nunca abria, com o comprador sorteado para a quebrada caindo num
+ * O destino recebendo comprador com o conserto falhando (falha comum, ver
+ * consertoFalhando): o de mais falhas seguidas. As falhas sao POR DESTINO --
+ * com rodizio, o contador da rota ia 0,1,0,1 entre a loja boa e a quebrada e
+ * o alerta nunca abria, com o comprador sorteado para a quebrada caindo num
  * checkout morto. Rota antiga sem linha de destino usa o last_heal da rota.
  */
 export function consertoFalhandoNaRota(
@@ -131,7 +139,7 @@ export function consertoFalhandoNaRota(
       ? [{ conserto: daRota, nome: null }]
       : destinos.filter(recebe).map((d) => ({ conserto: d.ultimoConserto, nome: d.nome }));
   let pior: { conserto: UltimoConserto; nome: string | null } | null = null;
-  const peso = (u: UltimoConserto) => (credencialRevogada(u) ? Infinity : (u.falhas ?? FALHAS_PARA_ALERTAR));
+  const peso = (u: UltimoConserto) => u.falhas ?? FALHAS_PARA_ALERTAR;
   for (const c of candidatos) {
     if (!c.conserto || !consertoFalhando(c.conserto)) continue;
     if (!pior || peso(c.conserto) > peso(pior.conserto)) pior = { conserto: c.conserto, nome: c.nome };
@@ -139,7 +147,64 @@ export function consertoFalhandoNaRota(
   return pior;
 }
 
-export { consertoFalhando, credencialRevogada };
+export { consertoFalhando };
+
+export interface LojaForaNaRota {
+  conserto: UltimoConserto;
+  motivo: MotivoForaDoAr;
+  lado: LadoDaRota | undefined;
+  /** A loja de checkout (null = a vitrine, ou rota antiga sem destino). */
+  nome: string | null;
+}
+
+function foraDe(conserto: UltimoConserto | null, nome: string | null): LojaForaNaRota | null {
+  const motivo = motivoForaDoAr(conserto);
+  if (!conserto || !motivo) return null;
+  return { conserto, motivo, lado: ladoDaFalha(conserto), nome };
+}
+
+/**
+ * As lojas da rota que a ultima passada achou fora do ar, a vitrine primeiro.
+ *
+ * Vitrine: pelo last_heal da ROTA. A vitrine e a mesma para todo destino e
+ * toda passada a confere primeiro, entao a ultima passada (de qualquer
+ * destino) e quem sabe se ela voltou -- o last_heal de um destino que ainda
+ * espera as 12 h dele diria "vitrine fora" depois de ela voltar.
+ * Loja de checkout: pelo last_heal de cada destino recebendo comprador (peso
+ * 0 ou pausado nao recebe; o lojista pode ter tirado justamente por isso).
+ * Rota antiga sem linha de destino: o da rota, de qualquer lado.
+ */
+export function lojasForaDoArNaRota(
+  destinos: readonly DestinoNoAlerta[],
+  daRota: UltimoConserto | null
+): LojaForaNaRota[] {
+  if (destinos.length === 0) {
+    const f = foraDe(daRota, null);
+    return f ? [f] : [];
+  }
+  const fora: LojaForaNaRota[] = [];
+  const vitrine = foraDe(daRota, null);
+  if (vitrine && vitrine.lado === "vitrine") fora.push(vitrine);
+  for (const d of destinos.filter(recebe)) {
+    const f = foraDe(d.ultimoConserto, d.nome);
+    if (f && f.lado !== "vitrine") fora.push(f);
+  }
+  return fora;
+}
+
+/** O titulo do alerta de loja fora do ar. */
+export function tituloLojaForaDoAr(motivo: MotivoForaDoAr): string {
+  switch (motivo) {
+    case "sem_app":
+      return "Rota sem acesso a uma das lojas";
+    case "loja_pausada":
+      return "Loja da rota pausada pela Shopify";
+    case "loja_fechada":
+      return "Loja da rota fechada na Shopify";
+    case "vitrine_fechada":
+      return "Vitrine da rota com senha";
+  }
+}
 
 /** "7 h", "3 dias". */
 export function haQuanto(iso: string | null, agora: number): string {
