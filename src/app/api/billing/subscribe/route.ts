@@ -10,6 +10,7 @@ import {
   getTransaction,
   planoDoStatus,
   PagouError,
+  respostaDoErroPagou,
 } from "@/lib/billing/pagou";
 import { CURRENCY, ehPlanoId, planoDoValor, planoPorId } from "@/lib/billing/plans";
 import { atualizarPerfil } from "@/lib/billing/limites";
@@ -224,10 +225,8 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof PagouError) {
       console.error("[billing/subscribe] Pagou", error.status, error.code, error.message);
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.status >= 400 && error.status < 500 ? error.status : 502 }
-      );
+      const { status, error: mensagem } = respostaDoErroPagou(error);
+      return NextResponse.json({ error: mensagem }, { status });
     }
     console.error("[billing/subscribe]", error);
     return NextResponse.json(

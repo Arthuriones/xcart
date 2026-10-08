@@ -145,10 +145,11 @@ export async function POST(request: NextRequest) {
       { headers: corsHeaders }
     );
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Falha ao resolver checkout.";
+    // Endpoint publico: a mensagem crua (erro do banco, da Shopify) fica no
+    // log; o navegador do comprador so precisa saber que falhou.
+    console.error("[checkout-routes/resolve]", error);
     return NextResponse.json(
-      { error: message },
+      { error: "Falha ao resolver checkout." },
       { status: 500, headers: corsHeaders }
     );
   }

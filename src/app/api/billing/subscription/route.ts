@@ -6,6 +6,7 @@ import {
   getSubscription,
   planoDoStatus,
   PagouError,
+  respostaDoErroPagou,
 } from "@/lib/billing/pagou";
 import { atualizarPerfil, lerComPlano } from "@/lib/billing/limites";
 import { decidirAviso } from "@/lib/billing/evento-assinatura";
@@ -166,7 +167,9 @@ export async function DELETE() {
     });
   } catch (error) {
     if (error instanceof PagouError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      console.error("[billing/subscription] DELETE Pagou", error.status, error.code, error.message);
+      const { status, error: mensagem } = respostaDoErroPagou(error);
+      return NextResponse.json({ error: mensagem }, { status });
     }
     console.error("[billing/subscription] DELETE", error);
     return NextResponse.json({ error: "Falha ao cancelar." }, { status: 500 });

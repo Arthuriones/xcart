@@ -6,6 +6,7 @@ import {
   getOrCreateCustomer,
   getTransaction,
   PagouError,
+  respostaDoErroPagou,
 } from "@/lib/billing/pagou";
 import {
   CREDIT_PACKS,
@@ -201,10 +202,8 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof PagouError) {
       console.error("[billing/credits] Pagou", error.status, error.code, error.message);
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.status >= 400 && error.status < 500 ? error.status : 502 }
-      );
+      const { status, error: mensagem } = respostaDoErroPagou(error);
+      return NextResponse.json({ error: mensagem }, { status });
     }
     console.error("[billing/credits]", error);
     return NextResponse.json({ error: "Falha ao gerar cobrança." }, { status: 500 });

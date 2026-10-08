@@ -26,6 +26,21 @@ export class PagouError extends Error {
   }
 }
 
+export const PAGOU_RECUSOU = "A Pagou recusou a operação. Tente de novo em instantes.";
+
+/**
+ * O que vai ao navegador quando a Pagou falha. 401/403 dela sao a NOSSA chave
+ * (revogada, sem permissao), nunca a sessao do lojista -- e o cliente le 401
+ * do nosso servidor como "Sua sessao expirou". Por isso viram 502, como 5xx.
+ */
+export function respostaDoErroPagou(error: PagouError): { status: number; error: string } {
+  if (error.status === 401 || error.status === 403) {
+    return { status: 502, error: PAGOU_RECUSOU };
+  }
+  const status = error.status >= 400 && error.status < 500 ? error.status : 502;
+  return { status, error: error.message };
+}
+
 function token(): string {
   const t = process.env.PAGOU_SECRET_KEY;
   if (!t) throw new Error("PAGOU_SECRET_KEY nao configurada.");
