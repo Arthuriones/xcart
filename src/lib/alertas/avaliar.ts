@@ -15,6 +15,7 @@ import {
   type CondicaoAlerta,
 } from "@/lib/alertas/regras";
 import { enviarTelegram, tokenDoBot } from "@/lib/alertas/telegram";
+import { ehPedidoCod } from "@/lib/financeiro/contra-entrega";
 import { RE_DESINSTALADO } from "@/lib/leitura/lojas-estado";
 import {
   consertoFalhandoNaRota,
@@ -581,6 +582,21 @@ export async function coletarCondicoesDetalhado(
         .limit(1);
       if (e3) throw new Error(e3.message);
       if ((vendas || []).length > 0) continue;
+
+      // Contra entrega nasce sem pagamento (e pode nunca ser marcado como
+      // pago): pedido COD de hoje, nao cancelado, tambem e venda.
+      const { data: abertos, error: e4 } = await admin
+        .from("fin_orders")
+        .select("gateways")
+        .eq("store_id", storeId)
+        .eq("tipo", "venda")
+        .is("cancelado_em", null)
+        .eq("dia_local", hojeDaLoja)
+        .limit(200);
+      if (e4) throw new Error(e4.message);
+      if (((abertos || []) as { gateways: string[] | null }[]).some((p) => ehPedidoCod({ gateways: p.gateways ?? [] }))) {
+        continue;
+      }
 
       const valor = formatarDinheiro(acima.total, acima.moeda);
       condicoes.push({

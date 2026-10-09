@@ -9,10 +9,12 @@
 // receita e custo; dado pessoal aqui so aumentaria o que vaza se o banco vazar.
 // ============================================================================
 
+import { gatewayEhCod, tagEhCod, tagEhRecusa } from "./contra-entrega";
 import {
   chaveSku,
   diaNoFuso,
   paraNumero,
+  type EntregaPedido,
   type FinOrderRow,
   type LinhaPedido,
   type TipoPedido,
@@ -65,6 +67,21 @@ export interface NoPedidoShopify {
   totalRefundedSet?: MoneyBag | null;
   netPaymentSet?: MoneyBag | null;
   lineItems?: { nodes?: NoLinhaPedidoShopify[] | null } | null;
+  /** Enum OrderReturnStatus. */
+  returnStatus?: string | null;
+  /** Lidas so para o sim/nao de COD e de recusa: NUNCA gravadas. */
+  tags?: string[] | null;
+  fulfillments?: NoEntregaShopify[] | null;
+}
+
+/** Um fulfillment do pedido (o envio), sem rastreio nem endereco. */
+export interface NoEntregaShopify {
+  /** FulfillmentStatus: SUCCESS, CANCELLED, ERROR, FAILURE, OPEN, PENDING. */
+  status?: string | null;
+  /** FulfillmentDisplayStatus: IN_TRANSIT, DELIVERED, FAILURE, NOT_DELIVERED... */
+  displayStatus?: string | null;
+  createdAt?: string | null;
+  deliveredAt?: string | null;
 }
 
 /** Uma pagina da query FinPedidos, como shopifyGraphQL devolve (json.data). */
@@ -111,6 +128,58 @@ export function mapearLinhas(no: NoPedidoShopify): LinhaPedido[] {
   });
 }
 
+/** Envio que nao saiu: pedido de envio recusado, cancelado, etiqueta anulada. */
+const ENVIO_DESFEITO = new Set(["CANCELLED", "ERROR", "FAILURE"]);
+const EXIBICAO_DESFEITA = new Set(["CANCELED", "LABEL_VOIDED"]);
+const EXIBICAO_FALHOU = new Set(["FAILURE", "NOT_DELIVERED"]);
+const EXIBICAO_ENTREGUE = new Set(["DELIVERED", "PICKED_UP"]);
+
+function instante(iso: string | null | undefined): number {
+  const ms = iso ? Date.parse(iso) : Number.NaN;
+  return Number.isFinite(ms) ? ms : Number.NaN;
+}
+
+/**
+ * Os envios do pedido em tres campos: a situacao da entrega (falhou vence,
+ * entregue so quando TODOS os envios foram entregues), o primeiro envio e a
+ * ultima entrega. Sem envio valido: tudo null.
+ */
+export function resumirEntregas(fs: readonly NoEntregaShopify[] | null | undefined): {
+  entrega: EntregaPedido | null;
+  enviado_em: string | null;
+  entregue_em: string | null;
+} {
+  const validos = (Array.isArray(fs) ? fs : []).filter(
+    (f) =>
+      f &&
+      !ENVIO_DESFEITO.has(String(f.status ?? "").toUpperCase()) &&
+      !EXIBICAO_DESFEITA.has(String(f.displayStatus ?? "").toUpperCase())
+  );
+  if (validos.length === 0) return { entrega: null, enviado_em: null, entregue_em: null };
+
+  let primeiro = Number.POSITIVE_INFINITY;
+  let ultimaEntrega = Number.NEGATIVE_INFINITY;
+  let falhou = false;
+  let entregues = 0;
+  for (const f of validos) {
+    const exibicao = String(f.displayStatus ?? "").toUpperCase();
+    const criado = instante(f.createdAt);
+    if (criado < primeiro) primeiro = criado;
+    if (EXIBICAO_FALHOU.has(exibicao)) falhou = true;
+    const entregueEm = instante(f.deliveredAt);
+    if (Number.isFinite(entregueEm) || EXIBICAO_ENTREGUE.has(exibicao)) {
+      entregues += 1;
+      if (entregueEm > ultimaEntrega) ultimaEntrega = entregueEm;
+    }
+  }
+  const tudoEntregue = !falhou && entregues === validos.length;
+  return {
+    entrega: falhou ? "falhou" : tudoEntregue ? "entregue" : "em_transito",
+    enviado_em: Number.isFinite(primeiro) ? new Date(primeiro).toISOString() : null,
+    entregue_em: tudoEntregue && Number.isFinite(ultimaEntrega) ? new Date(ultimaEntrega).toISOString() : null,
+  };
+}
+
 function tipoDoPedido(no: NoPedidoShopify, totalBruto: number): TipoPedido {
   if (no.test) return "teste";
   if ((no.sourceName ?? "").toLowerCase() === "pos") return "pdv";
@@ -126,6 +195,9 @@ export function mapearPedido(
   const processadoEm = no.processedAt || no.createdAt;
   const totalBruto = valor(no.totalPriceSet);
   const totalCliente = no.currentTotalPriceSet?.presentmentMoney?.amount;
+  const gateways = Array.isArray(no.paymentGatewayNames) ? no.paymentGatewayNames : [];
+  const tags = Array.isArray(no.tags) ? no.tags : [];
+  const envios = resumirEntregas(no.fulfillments);
 
   return {
     store_id: ctx.storeId,
@@ -154,9 +226,44 @@ export function mapearPedido(
     reembolsado: valor(no.totalRefundedSet),
     liquido_pago: valor(no.netPaymentSet),
     total_cliente: totalCliente == null ? null : paraNumero(totalCliente),
-    gateways: Array.isArray(no.paymentGatewayNames) ? no.paymentGatewayNames : [],
+    gateways,
     linhas: mapearLinhas(no),
+    // 068. shopify-pedidos.ts tira estes campos se a coluna ainda nao existe.
+    cod: gateways.some(gatewayEhCod) || tags.some(tagEhCod),
+    status_envio: no.displayFulfillmentStatus ?? null,
+    entrega: envios.entrega,
+    enviado_em: envios.enviado_em,
+    entregue_em: envios.entregue_em,
+    devolucao: no.returnStatus && no.returnStatus !== "NO_RETURN" ? no.returnStatus : null,
+    marca_recusa: tags.some(tagEhRecusa),
   };
+}
+
+/** Os campos da 068 no FinOrderRow: sem a migration, o upsert vai sem eles. */
+export const CAMPOS_ENVIO = [
+  "cod",
+  "status_envio",
+  "entrega",
+  "enviado_em",
+  "entregue_em",
+  "devolucao",
+  "marca_recusa",
+] as const;
+
+export function semCamposDeEnvio(linha: FinOrderRow): FinOrderRow {
+  const copia: Record<string, unknown> = { ...linha };
+  for (const c of CAMPOS_ENVIO) delete copia[c];
+  return copia as unknown as FinOrderRow;
+}
+
+/**
+ * Coluna que o banco nao conhece: a migration ainda nao foi aplicada.
+ * Escrita pelo PostgREST da PGRST204; leitura, 42703 do Postgres.
+ */
+export function ehColunaAusente(e: { code?: string | null; message?: string | null } | null | undefined): boolean {
+  if (!e) return false;
+  if (e.code === "PGRST204" || e.code === "42703") return true;
+  return /column .* does not exist|Could not find the '.*' column/i.test(String(e.message ?? ""));
 }
 
 function mensagemDe(erro: unknown): string {
@@ -180,8 +287,9 @@ export function ehCustoExcedido(erro: unknown): boolean {
 
 /**
  * Pedidos por pagina. O custo exato da query nao foi verificado: pela tabela
- * linear da doc, cada pedido vale ~99 pontos (dez MoneyBag + 25 linhas), entao
- * 8 por pagina fica perto de 800, abaixo do teto de 1000. Se a Shopify recusar
+ * linear da doc, cada pedido vale ~99 pontos (dez MoneyBag + 25 linhas), mais
+ * ~5 dos envios (068), entao 8 por pagina fica perto de 850, abaixo do teto
+ * de 1000. Se a Shopify recusar
  * com MAX_COST_EXCEEDED, a mesma pagina e pedida de novo com metade.
  */
 export const PEDIDOS_POR_PAGINA = 8;

@@ -44,7 +44,14 @@ const ITENS: { titulo: string; texto: string }[] = [
   },
 ];
 
-export function ComoCalculamos() {
+const CONTRA_ENTREGA = {
+  titulo: "Contra entrega",
+  texto:
+    "Pedido contra entrega é reconhecido pelo gateway. Recebido é só o que foi pago: o contra entrega entra quando é marcado como pago na Shopify. A receber é o contra entrega ainda sem pagamento. Previsto soma o recebido, os entregues a receber e o resto do a receber vezes a taxa de entrega da loja (a padrão, até ela ter 20 pedidos finalizados). Produto e frete contam só do que foi enviado; recusado enviado custa também a devolução.",
+};
+
+export function ComoCalculamos({ contraEntrega = false }: { contraEntrega?: boolean }) {
+  const itens = contraEntrega ? [ITENS[0], CONTRA_ENTREGA, ...ITENS.slice(1)] : ITENS;
   return (
     <section
       id="como-calculamos"
@@ -54,7 +61,7 @@ export function ComoCalculamos() {
       <h2 id="como-calculamos-t" className="border-b border-border-subtle px-4 py-3.5 text-section text-ink">
         Como calculamos
       </h2>
-      {ITENS.map((item) => (
+      {itens.map((item) => (
         <details key={item.titulo} className="group border-b border-border-subtle last:border-b-0">
           <summary className="flex min-h-ctl-lg cursor-pointer list-none items-center gap-2.5 px-4 text-dense font-medium text-ink hover:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus [&::-webkit-details-marker]:hidden">
             <ChevronRight

@@ -1,5 +1,18 @@
 import { TAXAS_BRL } from "@/lib/sales/cambio";
 import {
+  aReceberCod,
+  chanceDeReceber,
+  ehPedidoCod,
+  foiEnviado,
+  situacaoCod,
+  situacaoViva,
+  taxaDeEntrega,
+  unidadesEnviadas,
+  type AmostraEntrega,
+  type SituacaoCod,
+  type TaxaEntrega,
+} from "@/lib/financeiro/contra-entrega";
+import {
   chaveSku,
   custoVigente,
   diasDoIntervalo,
@@ -15,6 +28,7 @@ import {
   type FinStoreSettingsRow,
   type FxRateRow,
   type Intervalo,
+  type LinhaPedido,
   type LojaDoSeletor,
   type MoedaRelatorio,
   type ProductCostRow,
@@ -30,6 +44,11 @@ import {
 // Valores chegam na moeda ORIGINAL (a da loja para pedido e custo, a da conta
 // para gasto) e so viram a moeda do relatorio aqui, pela cotacao do dia de
 // cada valor. Converter na gravacao congelaria a cotacao errada.
+//
+// Contra entrega (contra-entrega.ts): o pedido COD tem situacao propria. O
+// realizado continua nos campos de sempre (receita = so o que foi pago); o
+// que ainda pode entrar e o previsto ficam em Totais.cod. Pedido online passa
+// pela mesma conta de antes -- tests/financeiro-contra-entrega.test.ts trava.
 // ============================================================================
 
 /**
@@ -46,10 +65,13 @@ export type Semaforo = "verde" | "amarelo" | "vermelho" | "cinza";
 
 export interface Totais {
   pedidos: number;
+  /** O que entrou. Na loja em contra entrega, e o "Recebido". */
   receita: number;
   /** Custo de produtos: produto + frete do fornecedor. */
   cmv: number;
   taxas: number;
+  /** Custo de devolucao dos contra entrega recusados que foram enviados. 0 sem COD. */
+  devolucoes: number;
   gastoMeta: number;
   gastoGoogle: number;
   gasto: number;
@@ -62,6 +84,41 @@ export interface Totais {
   reenvios: number;
   /** Fracao (0..1) do valor vendido que tem custo cadastrado. */
   coberturaCusto: number | null;
+  /** A visao contra entrega. Sem pedido COD, o previsto e o realizado. */
+  cod: TotaisCod;
+}
+
+/**
+ * Contra entrega (src/lib/financeiro/contra-entrega.ts). O realizado e o de
+ * Totais (receita = Recebido, lucro = Lucro realizado); aqui fica o que ainda
+ * pode entrar e o previsto.
+ */
+export interface TotaisCod {
+  /** Online pagos + contra entrega que nao foi cancelado antes do envio. */
+  gerados: number;
+  /** Contra entrega vivos: aguardando envio, em transito, entregue a receber. */
+  abertos: number;
+  /** Contra entrega recusados ou devolvidos. */
+  recusados: number;
+  /** Contra entrega cancelados antes do envio. */
+  cancelados: number;
+  /** Valor dos vivos que ainda nao entrou. */
+  aReceber: number;
+  /** Recebido + entregues a receber + aguardando e em transito x taxa de entrega. */
+  previsto: number;
+  /** A taxa de entrega que o Previsto usou nos nao entregues. null = nenhum. */
+  taxaEntrega: number | null;
+  /** cmv + o custo dos que ainda vao ser enviados. */
+  custoPrevisto: number;
+  /** devolucoes + custo de devolucao x (1 - chance de receber) dos vivos. */
+  devolucoesPrevistas: number;
+  /** taxas + a taxa de pagamento sobre o que se espera receber. */
+  taxasPrevistas: number;
+  lucroPrevisto: number;
+  roasPrevisto: number | null;
+  roasEquilibrioPrevisto: number | null;
+  /** Gasto por pedido gerado (nao so os pagos). */
+  cpa: number | null;
 }
 
 export type LinhaLoja = Totais & {
@@ -91,6 +148,18 @@ export interface ResultadoFinanceiro {
   porLoja: LinhaLoja[];
   porDia: LinhaDia[];
   avisos: Avisos;
+  /** Lojas do filtro marcadas "Contra entrega": o Dashboard troca os cartoes. */
+  lojasContraEntrega: string[];
+  entrega: ResumoEntrega;
+}
+
+export interface ResumoEntrega {
+  /** A taxa de cada loja do filtro (a da amostra, ou a padrao). */
+  porLoja: Record<string, TaxaEntrega>;
+  /** Uma loja: a dela. Varias: a media das lojas em contra entrega. */
+  taxa: number | null;
+  fonte: TaxaEntrega["fonte"] | "misto" | null;
+  amostra: number;
 }
 
 export type LojaFinanceira = LojaDoSeletor & { fuso: string | null; moeda: string | null };
@@ -107,6 +176,11 @@ export interface EntradaFinanceiro {
   moeda: MoedaRelatorio;
   /** "Hoje" no fuso do relatorio: o dia que ainda esta acontecendo. */
   hoje: string;
+  /**
+   * Contra entrega finalizados dos ultimos 60 dias, por loja (a taxa de
+   * entrega). Ausente = taxa padrao de cada loja.
+   */
+  amostraEntrega?: Record<string, AmostraEntrega>;
 }
 
 // ---------------------------------------------------------------------------
@@ -179,12 +253,27 @@ interface Acumulador {
   receita: number;
   cmv: number;
   taxas: number;
+  devolucoes: number;
   gastoMeta: number;
   gastoGoogle: number;
   reenvios: number;
   baseComCusto: number;
   baseEstimado: number;
   baseSemCusto: number;
+  // Contra entrega
+  gerados: number;
+  codAbertos: number;
+  codRecusados: number;
+  codCancelados: number;
+  aReceber: number;
+  /** Soma de a receber x chance de receber (entregue = 1). */
+  esperado: number;
+  /** A receber dos que ainda nao foram entregues, e ele x taxa: a taxa efetiva. */
+  aReceberPendente: number;
+  esperadoPendente: number;
+  custoAEnviar: number;
+  devolucoesEsperadas: number;
+  taxasEsperadas: number;
 }
 
 function acumuladorVazio(): Acumulador {
@@ -193,12 +282,24 @@ function acumuladorVazio(): Acumulador {
     receita: 0,
     cmv: 0,
     taxas: 0,
+    devolucoes: 0,
     gastoMeta: 0,
     gastoGoogle: 0,
     reenvios: 0,
     baseComCusto: 0,
     baseEstimado: 0,
     baseSemCusto: 0,
+    gerados: 0,
+    codAbertos: 0,
+    codRecusados: 0,
+    codCancelados: 0,
+    aReceber: 0,
+    esperado: 0,
+    aReceberPendente: 0,
+    esperadoPendente: 0,
+    custoAEnviar: 0,
+    devolucoesEsperadas: 0,
+    taxasEsperadas: 0,
   };
 }
 
@@ -210,14 +311,22 @@ function somarEm(alvo: Acumulador, parte: Partial<Acumulador>) {
 
 function totaisDe(a: Acumulador): Totais {
   const gasto = a.gastoMeta + a.gastoGoogle;
-  const lucro = a.receita - a.cmv - a.taxas - gasto;
-  const cm2 = a.receita - a.cmv - a.taxas;
+  // devolucoes e 0 sem contra entrega: a conta online fica a de sempre.
+  const lucro = a.receita - a.cmv - a.taxas - a.devolucoes - gasto;
+  const cm2 = a.receita - a.cmv - a.taxas - a.devolucoes;
   const baseTotal = a.baseComCusto + a.baseEstimado + a.baseSemCusto;
+
+  const previsto = a.receita + a.esperado;
+  const custoPrevisto = a.cmv + a.custoAEnviar;
+  const devolucoesPrevistas = a.devolucoes + a.devolucoesEsperadas;
+  const taxasPrevistas = a.taxas + a.taxasEsperadas;
+  const cm2Previsto = previsto - custoPrevisto - devolucoesPrevistas - taxasPrevistas;
   return {
     pedidos: a.pedidos,
     receita: a.receita,
     cmv: a.cmv,
     taxas: a.taxas,
+    devolucoes: a.devolucoes,
     gastoMeta: a.gastoMeta,
     gastoGoogle: a.gastoGoogle,
     gasto,
@@ -229,6 +338,22 @@ function totaisDe(a: Acumulador): Totais {
     ticket: a.pedidos > 0 ? a.receita / a.pedidos : null,
     reenvios: a.reenvios,
     coberturaCusto: baseTotal > 0 ? a.baseComCusto / baseTotal : null,
+    cod: {
+      gerados: a.gerados,
+      abertos: a.codAbertos,
+      recusados: a.codRecusados,
+      cancelados: a.codCancelados,
+      aReceber: a.aReceber,
+      previsto,
+      taxaEntrega: a.aReceberPendente > 0 ? a.esperadoPendente / a.aReceberPendente : null,
+      custoPrevisto,
+      devolucoesPrevistas,
+      taxasPrevistas,
+      lucroPrevisto: cm2Previsto - gasto,
+      roasPrevisto: gasto > 0 ? previsto / gasto : null,
+      roasEquilibrioPrevisto: cm2Previsto > 0 ? previsto / cm2Previsto : null,
+      cpa: a.gerados > 0 && gasto > 0 ? gasto / a.gerados : null,
+    },
   };
 }
 
@@ -250,6 +375,19 @@ export function rotuloLoja(l: Pick<LojaDoSeletor, "nome" | "dominio">): string {
 
 function dentro(dia: string, i: Intervalo): boolean {
   return dia >= i.desde && dia <= i.ate;
+}
+
+/** A taxa do filtro: a da loja, ou a media das lojas de referencia. */
+function resumirEntrega(porLoja: Record<string, TaxaEntrega>, ids: string[]): ResumoEntrega {
+  const taxas = ids.map((id) => porLoja[id]).filter((t): t is TaxaEntrega => Boolean(t));
+  if (taxas.length === 0) return { porLoja, taxa: null, fonte: null, amostra: 0 };
+  const fontes = new Set(taxas.map((t) => t.fonte));
+  return {
+    porLoja,
+    taxa: taxas.reduce((s, t) => s + t.taxa, 0) / taxas.length,
+    fonte: fontes.size === 1 ? taxas[0].fonte : "misto",
+    amostra: taxas.reduce((s, t) => s + t.amostra, 0),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -283,6 +421,13 @@ export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
   const moedasSemCotacao = new Set<string>();
   const lojasSemTaxa = new Set<string>();
   const lojasSemCustoPadraoComFalta = new Set<string>();
+
+  // Taxa de entrega de cada loja: a da amostra, ou a padrao de Custos e taxas.
+  const taxaPorLoja: Record<string, TaxaEntrega> = {};
+  for (const l of e.lojas) {
+    taxaPorLoja[l.id] = taxaDeEntrega(e.amostraEntrega?.[l.id], configPorLoja.get(l.id)?.cod_taxa_entrega);
+  }
+  const taxaDaLoja = (id: string): TaxaEntrega => taxaPorLoja[id] ?? taxaDeEntrega(null, null);
 
   /** Soma `parte` no periodo certo, e (so no atual) na loja e no dia. */
   const lancar = (storeId: string, dia: string, parte: Partial<Acumulador>) => {
@@ -322,12 +467,25 @@ export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
     const conta = pedidoConta(p);
     const cfg = configPorLoja.get(p.store_id);
     if (!cfg) lojasSemTaxa.add(rotuloLoja(loja));
-    const taxas =
-      conta && cfg
-        ? (paraNumero(p.recebido) * paraNumero(cfg.taxa_pct)) / 100 + paraNumero(cfg.taxa_fixa)
-        : 0;
+
+    // Contra entrega: a situacao decide o que ja entrou e o que pode entrar.
+    // Pedido online passa por aqui com situacao null e a conta de sempre.
+    const situacao: SituacaoCod | null = p.tipo === "venda" && ehPedidoCod(p) ? situacaoCod(p) : null;
+    // Valor fixo (moeda da loja) na moeda do pedido. O Releasit cria o pedido
+    // na moeda do cliente (CZK numa loja em USD): sem isto a taxa fixa e a
+    // devolucao sairiam em coroa. Online fica como sempre, sem converter.
+    const fixo = (v: number): number => {
+      if (situacao === null || v === 0) return v;
+      const c = converter(v, String(loja.moeda || moedaPedido), moedaPedido, dia);
+      if (!c) return v;
+      if (c.aproximado) cambioAproximado = true;
+      return c.valor;
+    };
+    const taxaFixa = fixo(paraNumero(cfg?.taxa_fixa));
+    const taxas = conta && cfg ? (paraNumero(p.recebido) * paraNumero(cfg.taxa_pct)) / 100 + taxaFixa : 0;
 
     let cmv = 0;
+    let custoAEnviar = 0;
     let baseComCusto = 0;
     let baseEstimado = 0;
     let baseSemCusto = 0;
@@ -336,15 +494,8 @@ export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
         cfg && cfg.custo_padrao_pct !== null && cfg.custo_padrao_pct !== undefined
           ? paraNumero(cfg.custo_padrao_pct)
           : null;
-      for (const l of Array.isArray(p.linhas) ? p.linhas : []) {
-        // recebido, nao liquido_pago: pago e reembolsado depois tem liquido 0
-        // e o custo dele e real.
-        const q = qtdParaCusto(
-          l,
-          Boolean(p.cancelado_em),
-          p.tipo === "venda" && paraNumero(p.recebido) <= 0
-        );
-        if (q <= 0) continue;
+      /** Custo de `q` unidades da linha, moeda do pedido. `aviso` = entra nos avisos e na cobertura. */
+      const custoDe = (l: LinhaPedido, q: number, aviso: boolean): number => {
         const base = paraNumero(l.preco) * q;
         const versao = custoVigente(
           custosPorSku.get(`${p.store_id}\u0000${chaveSku(l.sku)}`) ?? [],
@@ -355,20 +506,59 @@ export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
           const c = converter(bruto, versao.moeda, moedaPedido, dia);
           if (c) {
             if (c.aproximado) cambioAproximado = true;
-            cmv += c.valor;
-            baseComCusto += base;
-            continue;
+            if (aviso) baseComCusto += base;
+            return c.valor;
           }
           // Custo numa moeda sem cotacao: vale como "sem custo", com aviso.
-          moedasSemCotacao.add(String(versao.moeda).toUpperCase());
+          if (aviso) moedasSemCotacao.add(String(versao.moeda).toUpperCase());
         }
         if (pctPadrao !== null) {
-          cmv += (base * pctPadrao) / 100;
-          baseEstimado += base;
-        } else {
+          if (aviso) baseEstimado += base;
+          return (base * pctPadrao) / 100;
+        }
+        if (aviso) {
           baseSemCusto += base;
           lojasSemCustoPadraoComFalta.add(rotuloLoja(loja));
         }
+        return 0;
+      };
+      // Recusado que voltou ao estoque: as linhas dizem "nada enviado", mas o
+      // envio registrado diz que saiu. O produto e o frete foram gastos.
+      // Recusado sem envio nenhum (tag de recusa na confirmacao) nao custa.
+      const voltouAoEstoque = situacao === "recusado" && unidadesEnviadas(p.linhas) === 0 && foiEnviado(p);
+      for (const l of Array.isArray(p.linhas) ? p.linhas : []) {
+        // recebido, nao liquido_pago: pago e reembolsado depois tem liquido 0
+        // e o custo dele e real.
+        const q = voltouAoEstoque
+          ? paraNumero(l.qtd)
+          : qtdParaCusto(l, Boolean(p.cancelado_em), p.tipo === "venda" && paraNumero(p.recebido) <= 0);
+        if (q > 0) cmv += custoDe(l, q, true);
+        // Aguardando envio: o custo vem quando sair. So no previsto.
+        if (situacao === "aguardando_envio") {
+          const aEnviar = qtdParaCusto(l, false, false);
+          if (aEnviar > 0) custoAEnviar += custoDe(l, aEnviar, false);
+        }
+      }
+    }
+
+    let devolucao = 0;
+    let aReceber = 0;
+    let esperado = 0;
+    let pendente = 0;
+    let devolucaoEsperada = 0;
+    let taxasEsperadas = 0;
+    let taxaUsada = 0;
+    if (situacao !== null) {
+      const custoDevolucao = fixo(paraNumero(cfg?.cod_custo_devolucao));
+      if (situacao === "recusado" && foiEnviado(p)) devolucao = custoDevolucao;
+      if (situacaoViva(situacao)) {
+        taxaUsada = taxaDaLoja(p.store_id).taxa;
+        const chance = chanceDeReceber(situacao, taxaUsada);
+        aReceber = aReceberCod(p, situacao);
+        esperado = aReceber * chance;
+        if (situacao !== "entregue") pendente = aReceber;
+        devolucaoEsperada = custoDevolucao * (1 - chance);
+        taxasEsperadas = cfg ? ((aReceber * paraNumero(cfg.taxa_pct)) / 100 + taxaFixa) * chance : 0;
       }
     }
 
@@ -379,9 +569,21 @@ export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
       receita: receita * k,
       cmv: cmv * k,
       taxas: taxas * k,
+      devolucoes: devolucao * k,
       baseComCusto: baseComCusto * k,
       baseEstimado: baseEstimado * k,
       baseSemCusto: baseSemCusto * k,
+      gerados: situacao === null ? (conta ? 1 : 0) : situacao === "cancelado" ? 0 : 1,
+      codAbertos: situacao !== null && situacaoViva(situacao) ? 1 : 0,
+      codRecusados: situacao === "recusado" ? 1 : 0,
+      codCancelados: situacao === "cancelado" ? 1 : 0,
+      aReceber: aReceber * k,
+      esperado: esperado * k,
+      aReceberPendente: pendente * k,
+      esperadoPendente: pendente * taxaUsada * k,
+      custoAEnviar: custoAEnviar * k,
+      devolucoesEsperadas: devolucaoEsperada * k,
+      taxasEsperadas: taxasEsperadas * k,
     });
   }
 
@@ -444,6 +646,10 @@ export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
     parcial: dia === e.hoje,
   }));
 
+  const lojasContraEntrega = e.lojas
+    .filter((l) => configPorLoja.get(l.id)?.contra_entrega === true)
+    .map((l) => l.id);
+
   return {
     moeda: e.moeda,
     intervalos: e.intervalos,
@@ -451,6 +657,11 @@ export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
     anterior: totaisDe(totAnterior),
     porLoja: linhasLoja,
     porDia: linhasDia,
+    lojasContraEntrega,
+    entrega: resumirEntrega(
+      taxaPorLoja,
+      lojasContraEntrega.length > 0 ? lojasContraEntrega : e.lojas.map((l) => l.id)
+    ),
     avisos: {
       cambioAproximado,
       moedasSemCotacao: [...moedasSemCotacao].filter(Boolean).sort(),

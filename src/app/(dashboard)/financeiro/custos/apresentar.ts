@@ -14,6 +14,7 @@ import {
   type ProductCostRow,
 } from "@/lib/financeiro/tipos";
 import { plural } from "@/lib/leitura/lojas-estado";
+import { DIAS_SUGESTAO, TAXA_ENTREGA_PADRAO, type SugestaoCod } from "@/lib/financeiro/contra-entrega";
 import type { DadosCustos, SkuVendido } from "@/lib/financeiro/custos-queries";
 
 // ============================================================================
@@ -381,6 +382,67 @@ export function taxasMudaram(f: FormTaxas, base: FormTaxas): boolean {
   return (
     !mesmoNumero(f.pct, base.pct, 0) || !mesmoNumero(f.fixa, base.fixa, 0) || !mesmoNumero(f.padrao, base.padrao, null)
   );
+}
+
+// ---------------------------------------------------------------------------
+// Como a loja recebe (contra entrega)
+// ---------------------------------------------------------------------------
+
+export type ModoRecebimento = "online" | "cod";
+
+export interface FormRecebimento {
+  modo: ModoRecebimento;
+  /** Taxa de entrega padrao (%). Vazio = 70. */
+  entrega: string;
+  /** Custo por recusado enviado, moeda da loja. Vazio = 0. */
+  devolucao: string;
+}
+
+export interface CorpoRecebimento {
+  contra_entrega: boolean;
+  cod_taxa_entrega: number;
+  cod_custo_devolucao: number;
+}
+
+export function formRecebimentoDe(
+  cfg: Pick<FinStoreSettingsRow, "contra_entrega" | "cod_taxa_entrega" | "cod_custo_devolucao"> | null
+): FormRecebimento {
+  return {
+    modo: cfg?.contra_entrega === true ? "cod" : "online",
+    entrega: paraCampo(cfg?.cod_taxa_entrega ?? TAXA_ENTREGA_PADRAO),
+    devolucao: paraCampo(cfg?.cod_custo_devolucao ?? 0),
+  };
+}
+
+/** Os limites sao os da rota (que repete os CHECK da 068). */
+export function validarRecebimento(f: FormRecebimento): {
+  erros: Partial<Record<"entrega" | "devolucao", string>>;
+  corpo: CorpoRecebimento | null;
+} {
+  const entrega = numeroDaTaxa(f.entrega, TAXA_ENTREGA_PADRAO, (n) => n >= 0 && n <= 100, "Use um número de 0 a 100");
+  const devolucao = numeroDaTaxa(f.devolucao, 0, (n) => n >= 0 && n <= 10000, "Use um número de 0 a 10.000");
+  const erros: Partial<Record<"entrega" | "devolucao", string>> = {};
+  if (!entrega.ok) erros.entrega = entrega.erro;
+  if (!devolucao.ok) erros.devolucao = devolucao.erro;
+  if (!entrega.ok || !devolucao.ok) return { erros, corpo: null };
+  return {
+    erros,
+    corpo: { contra_entrega: f.modo === "cod", cod_taxa_entrega: entrega.valor, cod_custo_devolucao: devolucao.valor },
+  };
+}
+
+export function recebimentoMudou(f: FormRecebimento, base: FormRecebimento): boolean {
+  return (
+    f.modo !== base.modo ||
+    !mesmoNumero(f.entrega, base.entrega, TAXA_ENTREGA_PADRAO) ||
+    !mesmoNumero(f.devolucao, base.devolucao, 0)
+  );
+}
+
+/** "4 de 5 pedidos dos últimos 7 dias foram contra entrega." null = nada a sugerir. */
+export function textoSugestaoCod(s: SugestaoCod, modo: ModoRecebimento): string | null {
+  if (modo === "cod" || !s.sugere) return null;
+  return `${s.cod} de ${plural(s.total, "pedido", "pedidos")} dos últimos ${DIAS_SUGESTAO} dias ${s.cod === 1 ? "foi" : "foram"} contra entrega.`;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,3 +1,4 @@
+import { ROTULO_SITUACAO_COD, SITUACOES_COD, type SituacaoCod } from "@/lib/financeiro/contra-entrega";
 import { arredondar } from "@/lib/financeiro/tipos";
 // So tipos do modulo de leitura: o calculo nao entra no bundle do navegador.
 import type { EstadoEnvio, PedidoTela, TomPedido } from "@/lib/leitura/pedidos";
@@ -7,20 +8,36 @@ import type { EstadoEnvio, PedidoTela, TomPedido } from "@/lib/leitura/pedidos";
 // tests/pedidos-tela.test.ts; a tela (pedidos-tela.tsx) so chama.
 // ============================================================================
 
-export type FiltroId = "todos" | "meta" | "google" | "falha" | "reembolsos";
+export type FiltroId = "todos" | "meta" | "google" | "falha" | "reembolsos" | "contra_entrega";
 
+/** "Contra entrega" so aparece quando o periodo tem pedido contra entrega. */
 export const FILTROS: { id: FiltroId; rotulo: string }[] = [
   { id: "todos", rotulo: "Todos" },
   { id: "meta", rotulo: "Meta Ads" },
   { id: "google", rotulo: "Google Ads" },
   { id: "falha", rotulo: "Não chegou na plataforma" },
   { id: "reembolsos", rotulo: "Reembolsos" },
+  { id: "contra_entrega", rotulo: "Contra entrega" },
+];
+
+/** Dentro de "Contra entrega": a situacao do pedido. */
+export type FiltroCod = "todos" | SituacaoCod;
+
+export const FILTROS_COD: { id: FiltroCod; rotulo: string }[] = [
+  { id: "todos", rotulo: "Todos" },
+  ...SITUACOES_COD.map((s) => ({ id: s, rotulo: ROTULO_SITUACAO_COD[s] })),
 ];
 
 export const POR_PAGINA = 25;
 
-export function passaNoFiltro(p: Pick<PedidoTela, "origem" | "meta" | "status">, f: FiltroId): boolean {
+export function passaNoFiltroCod(p: Pick<PedidoTela, "cod">, f: FiltroCod): boolean {
+  return f === "todos" ? p.cod !== null : p.cod === f;
+}
+
+export function passaNoFiltro(p: Pick<PedidoTela, "origem" | "meta" | "status"> & Partial<Pick<PedidoTela, "cod">>, f: FiltroId): boolean {
   switch (f) {
+    case "contra_entrega":
+      return p.cod != null;
     case "meta":
       return p.origem.id === "meta";
     case "google":
@@ -111,12 +128,27 @@ export function jornadaDoPedido(p: PedidoTela, dinheiro: (v: number) => string):
   } else if (o.id === "sem_dado") {
     j.push({ titulo: "Origem sem dado", detalhe: o.pista, hora: "", tom: "neutral" });
   }
-  j.push({
-    titulo: p.pago ? "Compra paga" : "Pedido criado",
-    detalhe: p.pago ? (p.gateway ?? "Pagamento") : "Sem pagamento recebido",
-    hora: p.quando,
-    tom: p.pago ? "ok" : "neutral",
-  });
+  if (p.cod) {
+    // Contra entrega: o pagamento vem na entrega, nao na compra.
+    j.push({
+      titulo: "Pedido contra entrega",
+      detalhe: p.pago ? "Pago" : p.cod === "cancelado" ? "Cancelado antes do envio" : "Paga na entrega",
+      hora: p.quando,
+      tom: p.pago ? "ok" : "neutral",
+    });
+    if (p.enviado) j.push({ titulo: "Enviado", detalhe: "Saiu para entrega", hora: p.enviado, tom: "info" });
+    if (p.entregue) j.push({ titulo: "Entregue", detalhe: p.pago ? "Pago" : "Pagamento ainda não marcado na Shopify", hora: p.entregue, tom: p.pago ? "ok" : "info" });
+    if (p.cod === "recusado") {
+      j.push({ titulo: "Recusado ou devolvido", detalhe: "Sem pagamento: custa o envio e a devolução", hora: "", tom: "err" });
+    }
+  } else {
+    j.push({
+      titulo: p.pago ? "Compra paga" : "Pedido criado",
+      detalhe: p.pago ? (p.gateway ?? "Pagamento") : "Sem pagamento recebido",
+      hora: p.quando,
+      tom: p.pago ? "ok" : "neutral",
+    });
+  }
   for (const ev of p.envios) {
     const sufixo = ev.destino ? ` · ${ev.destino}` : "";
     if (ev.status === "teste") {

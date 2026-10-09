@@ -117,6 +117,7 @@ Every AI call receives `StoreContext` (name, niche, target_audience, brand_voice
   seria um token opaco no permalink, resolvido so no nosso servidor (nao o id da
   rota, que era o que existia antes e foi removido de proposito). Fica anotado,
   nao feito.
+- **Contra entrega (COD) e POR PEDIDO, pelo gateway** (`src/lib/financeiro/contra-entrega.ts`, migration 068): loja mista funciona. O pedido COD tem situacao (aguardando envio, em transito, entregue a receber, pago, recusado/devolvido, cancelado); Recebido e so o que foi pago (marcar pago e opcional no COD), A receber sao os vivos, Previsto = recebido + entregues a receber + o resto x taxa de entrega (a padrao da loja ate 20 COD finalizados nos 60 dias, sem a ultima semana). `fin_store_settings.contra_entrega` so troca os cartoes do Dashboard. Valor fixo (taxa fixa, devolucao) vem na moeda da loja e e convertido: o Releasit cria o pedido na moeda do CLIENTE (CZK numa loja USD). Sync e leitura funcionam sem a 068 (gravam/leem sem as colunas novas). Pedido online nao muda: os testes antigos do financeiro passam sem mexer no esperado.
 - **Planos (08/10/2026): 1 Loja, 3 Lojas, Ilimitado.** Catalogo unico em
   `src/lib/billing/plans.ts` (preco, limites, selo): o checkout cobra dali e a
   landing, o paywall e a Assinatura mostram dali. Os tres sao `plan = 'pro'`;

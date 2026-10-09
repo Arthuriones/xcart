@@ -21,6 +21,8 @@ export interface PontoDia {
   receita: number;
   cmv: number;
   taxas: number;
+  /** Devolucao de contra entrega recusado (0 sem COD). */
+  devolucoes?: number;
   gastoMeta: number;
   gastoGoogle: number;
 }
@@ -45,6 +47,7 @@ export function pontoDeLinha(l: LinhaDia): PontoDia {
     receita: l.receita,
     cmv: l.cmv,
     taxas: l.taxas,
+    devolucoes: l.devolucoes,
     gastoMeta: l.gastoMeta,
     gastoGoogle: l.gastoGoogle,
   };

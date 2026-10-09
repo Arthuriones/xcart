@@ -266,7 +266,26 @@ export interface FinOrderRow {
   gateways: string[];
   linhas: LinhaPedido[];
   sincronizado_em?: string;
+  // Envio e entrega (migration 068). Opcionais: linha gravada antes da 068
+  // (ou leitura com a 068 por aplicar) nao traz -- quem le cai no que as
+  // linhas do pedido dizem.
+  /** Contra entrega pelo gateway ou pela tag do app de COD (a tag nao e gravada). */
+  cod?: boolean | null;
+  /** displayFulfillmentStatus da Shopify. */
+  status_envio?: string | null;
+  /** Resumo das entregas (fulfillments): null = nada enviado. */
+  entrega?: EntregaPedido | null;
+  /** Primeiro envio (fulfillment.createdAt). */
+  enviado_em?: string | null;
+  /** Ultima entrega (fulfillment.deliveredAt), so quando tudo foi entregue. */
+  entregue_em?: string | null;
+  /** returnStatus da Shopify (NO_RETURN, IN_PROGRESS, RETURNED...). */
+  devolucao?: string | null;
+  /** Alguma tag de recusa/devolucao (as tags em si nao sao gravadas). */
+  marca_recusa?: boolean | null;
 }
+
+export type EntregaPedido = "em_transito" | "entregue" | "falhou";
 
 export interface FinSyncStateRow {
   store_id: string;
@@ -296,6 +315,12 @@ export interface FinStoreSettingsRow {
   taxa_pct: number;
   taxa_fixa: number;
   custo_padrao_pct: number | null;
+  /** 068. Ausente sem a migration: vale "pagamento online". */
+  contra_entrega?: boolean | null;
+  /** 068. Taxa de entrega padrao (%), usada ate a loja ter amostra. */
+  cod_taxa_entrega?: number | null;
+  /** 068. Custo por pedido recusado que foi enviado, moeda da loja. */
+  cod_custo_devolucao?: number | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -521,6 +546,19 @@ export interface ConfigFinanceiraCorpo {
   taxa_pct: number;
   taxa_fixa: number;
   custo_padrao_pct: number | null;
+}
+
+/**
+ * POST ROTAS.apiConfigFinanceira, so o recebimento ("Como a loja recebe"):
+ * sem os campos de taxa, a rota grava so estes.
+ */
+export interface ConfigRecebimentoCorpo {
+  store_id: string;
+  contra_entrega: boolean;
+  /** % de 0 a 100. */
+  cod_taxa_entrega: number;
+  /** Moeda da loja, por recusado enviado. */
+  cod_custo_devolucao: number;
 }
 
 /** GET ROTAS.apiEventos?loja=&antes= -> { eventos: EventoFeed[] } */

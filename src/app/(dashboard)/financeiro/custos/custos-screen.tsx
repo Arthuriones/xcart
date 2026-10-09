@@ -12,17 +12,21 @@ import type { DadosCustos } from "@/lib/financeiro/custos-queries";
 import type { EstadoConexao } from "@/lib/leitura/lojas-estado";
 import {
   edicaoInicial,
+  formRecebimentoDe,
   formTaxasDe,
   mudou,
   plural,
+  recebimentoMudou,
   semMyshopify,
   taxasMudaram,
   type Edicao,
+  type FormRecebimento,
   type FormTaxas,
   type Situacao,
 } from "./apresentar";
 import { useAvisoAoSair } from "./aviso-ao-sair";
 import { PainelPlanilha } from "./painel-planilha";
+import { SecaoRecebimento } from "./secao-recebimento";
 import { SecaoSkus } from "./secao-skus";
 import { SecaoTaxas } from "./secao-taxas";
 
@@ -61,6 +65,10 @@ export function CustosScreen({
   const [taxas, setTaxas] = useState<FormTaxas>(taxasBase);
   const [configurada, setConfigurada] = useState(Boolean(dados.config));
 
+  // Como a loja recebe (contra entrega): o mesmo esquema, com save proprio.
+  const [recebimentoBase, setRecebimentoBase] = useState<FormRecebimento>(() => formRecebimentoDe(dados.config));
+  const [recebimento, setRecebimento] = useState<FormRecebimento>(recebimentoBase);
+
   // Tabela: so as linhas tocadas; a que nao foi tocada usa o valor inicial.
   const [edicoes, setEdicoes] = useState<Record<string, Edicao>>({});
   const iniciais = useMemo(
@@ -82,9 +90,11 @@ export function CustosScreen({
   const [planilhaAberta, setPlanilhaAberta] = useState(false);
 
   const taxasSujas = taxasMudaram(taxas, taxasBase);
+  const recebimentoSujo = recebimentoMudou(recebimento, recebimentoBase);
   const partes = [
     alterados.length > 0 ? plural(alterados.length, "custo alterado", "custos alterados") : null,
     taxasSujas ? "a taxa de pagamento" : null,
+    recebimentoSujo ? "o modo de recebimento" : null,
     planilha.trim() ? "uma planilha não importada" : null,
   ].filter((p): p is string => Boolean(p));
   const sujo = partes.length > 0;
@@ -148,6 +158,19 @@ export function CustosScreen({
           custos que você lançar continuam valendo para os pedidos já lidos.
         </Callout>
       ) : null}
+
+      <SecaoRecebimento
+        storeId={dados.storeId}
+        moedaLoja={moeda}
+        sugestao={dados.sugestaoCod}
+        form={recebimento}
+        sujo={recebimentoSujo}
+        onMudar={setRecebimento}
+        onSalvo={(gravado) => {
+          setRecebimentoBase(gravado);
+          setRecebimento(gravado);
+        }}
+      />
 
       <SecaoTaxas
         storeId={dados.storeId}

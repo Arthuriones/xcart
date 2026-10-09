@@ -1,5 +1,15 @@
 import { criarConversor, rotuloLoja, type Conversor, type EntradaFinanceiro } from "@/lib/financeiro/calculo";
 import {
+  ROTULO_SITUACAO_COD,
+  aReceberCod,
+  ehPedidoCod,
+  foiEnviado,
+  gatewayEhCod,
+  situacaoCod,
+  unidadesEnviadas,
+  type SituacaoCod,
+} from "@/lib/financeiro/contra-entrega";
+import {
   chaveSku,
   custoVigente,
   diaNoFuso,
@@ -215,14 +225,55 @@ export function naoChegou(estado: EstadoEnvio): boolean {
 export type TomPedido = "ok" | "warn" | "err" | "info" | "neutral";
 
 export interface StatusPedido {
-  id: "cancelado" | "reembolsado" | "reembolso_parcial" | "aguardando_pagamento" | "enviado" | "parcial" | "nao_enviado";
+  id:
+    | "cancelado"
+    | "reembolsado"
+    | "reembolso_parcial"
+    | "aguardando_pagamento"
+    | "enviado"
+    | "parcial"
+    | "nao_enviado"
+    | `cod_${SituacaoCod}`;
   rotulo: string;
   tom: TomPedido;
 }
 
+const TOM_COD: Record<SituacaoCod, TomPedido> = {
+  aguardando_envio: "neutral",
+  em_transito: "info",
+  entregue: "info",
+  pago: "ok",
+  recusado: "err",
+  cancelado: "neutral",
+};
+
+export function statusCod(s: SituacaoCod): StatusPedido {
+  return { id: `cod_${s}`, rotulo: ROTULO_SITUACAO_COD[s], tom: TOM_COD[s] };
+}
+
+type CamposCod = Partial<
+  Pick<
+    FinOrderRow,
+    "gateways" | "status_financeiro" | "cod" | "status_envio" | "entrega" | "enviado_em" | "devolucao" | "marca_recusa"
+  >
+>;
+
+/** Situacao do contra entrega, ou null para pedido online (e reenvio). */
+export function situacaoDoPedido(
+  p: Pick<FinOrderRow, "cancelado_em" | "reembolsado" | "recebido" | "tipo" | "linhas"> & CamposCod
+): SituacaoCod | null {
+  const gateways = p.gateways ?? [];
+  if (p.tipo !== "venda" || !ehPedidoCod({ gateways, cod: p.cod })) return null;
+  return situacaoCod({ ...p, gateways, status_financeiro: p.status_financeiro ?? null });
+}
+
 export function statusDoPedido(
-  p: Pick<FinOrderRow, "cancelado_em" | "reembolsado" | "liquido_pago" | "recebido" | "tipo" | "linhas">
+  p: Pick<FinOrderRow, "cancelado_em" | "reembolsado" | "liquido_pago" | "recebido" | "tipo" | "linhas"> & CamposCod
 ): StatusPedido {
+  // Contra entrega tem a situacao propria: "aguardando pagamento" nao diz se
+  // o pedido ainda vai sair, esta na rua ou ja foi entregue.
+  const cod = situacaoDoPedido(p);
+  if (cod) return statusCod(cod);
   if (p.cancelado_em) return { id: "cancelado", rotulo: "Cancelado", tom: "err" };
   if (paraNumero(p.reembolsado) > 0) {
     return paraNumero(p.liquido_pago) <= 0
@@ -275,7 +326,11 @@ export interface ValoresPedido {
   /** A loja tem taxa de pagamento cadastrada. */
   temTaxa: boolean;
   reembolso: number;
-  /** receita - cmv - taxa. null quando algum item nao tem custo nem custo padrao. */
+  /** Contra entrega vivo: o que falta entrar. 0 nos outros. */
+  aReceber: number;
+  /** Custo de devolucao do contra entrega recusado que foi enviado. */
+  devolucao: number;
+  /** receita - cmv - taxa - devolucao. null quando algum item nao tem custo nem custo padrao. */
   lucro: number | null;
   /** O lucro como o Dashboard soma (item sem custo entra com custo 0). */
   lucroComoDashboard: number;
@@ -288,6 +343,8 @@ export interface ContextoValores {
   cfg: FinStoreSettingsRow | undefined;
   /** Versoes de custo da loja do pedido, por chaveSku. */
   custosPorSku: Map<string, ProductCostRow[]>;
+  /** Moeda da loja: os valores fixos do contra entrega vem nela. */
+  moedaLoja?: string | null;
 }
 
 /**
@@ -310,8 +367,20 @@ export function valoresDoPedido(
   const receita = receitaDoPedido(p);
   const conta = pedidoConta(p);
   const cfg = ctx.cfg;
+  const situacao = situacaoDoPedido(p);
+  // Como no calculo: valor fixo do contra entrega convertido da moeda da loja.
+  const fixo = (v: number): number => {
+    if (situacao === null || v === 0) return v;
+    const c = ctx.converter(v, String(ctx.moedaLoja || moedaPedido), moedaPedido, dia);
+    if (!c) return v;
+    if (c.aproximado) aproximado = true;
+    return c.valor;
+  };
   const taxa =
-    conta && cfg ? (paraNumero(p.recebido) * paraNumero(cfg.taxa_pct)) / 100 + paraNumero(cfg.taxa_fixa) : 0;
+    conta && cfg ? (paraNumero(p.recebido) * paraNumero(cfg.taxa_pct)) / 100 + fixo(paraNumero(cfg.taxa_fixa)) : 0;
+  const voltouAoEstoque = situacao === "recusado" && unidadesEnviadas(linhas) === 0 && foiEnviado(p);
+  const devolucao = situacao === "recusado" && foiEnviado(p) ? fixo(paraNumero(cfg?.cod_custo_devolucao)) : 0;
+  const aReceber = situacao === null ? 0 : aReceberCod(p, situacao);
   const pctPadrao =
     cfg && cfg.custo_padrao_pct !== null && cfg.custo_padrao_pct !== undefined
       ? paraNumero(cfg.custo_padrao_pct)
@@ -328,7 +397,9 @@ export function valoresDoPedido(
       custoTipo: "nenhuma_unidade",
     };
     if (!pedidoTemCusto(p)) return item;
-    const q = qtdParaCusto(l, Boolean(p.cancelado_em), p.tipo === "venda" && paraNumero(p.recebido) <= 0);
+    const q = voltouAoEstoque
+      ? paraNumero(l.qtd)
+      : qtdParaCusto(l, Boolean(p.cancelado_em), p.tipo === "venda" && paraNumero(p.recebido) <= 0);
     if (q <= 0) {
       item.custo = 0;
       return item;
@@ -361,7 +432,7 @@ export function valoresDoPedido(
   if (k === null) return { valores: null, itens, aproximado: false };
 
   const reembolso = p.tipo === "venda" ? paraNumero(p.reembolsado) : 0;
-  const lucro = receita - cmv - taxa;
+  const lucro = receita - cmv - taxa - devolucao;
   return {
     valores: {
       produtos: linhas.reduce((s, l) => s + paraNumero(l.preco) * paraNumero(l.qtd), 0) * k,
@@ -373,6 +444,8 @@ export function valoresDoPedido(
       taxa: taxa * k,
       temTaxa: Boolean(cfg),
       reembolso: reembolso * k,
+      aReceber: aReceber * k,
+      devolucao: devolucao * k,
       lucro: semCusto ? null : lucro * k,
       lucroComoDashboard: lucro * k,
       semCusto,
@@ -408,9 +481,12 @@ const GATEWAYS: Record<string, string> = {
 export function nomeGateway(gateways: readonly string[] | null | undefined): string | null {
   const cru = (Array.isArray(gateways) ? gateways : []).map((g) => String(g || "").trim()).filter(Boolean);
   if (!cru.length) return null;
-  return [...new Set(cru)]
-    .map((g) => GATEWAYS[g.toLowerCase()] ?? g.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase()))
-    .join(" + ");
+  const nomes = cru.map((g) =>
+    gatewayEhCod(g)
+      ? "Contra entrega"
+      : (GATEWAYS[g.toLowerCase()] ?? g.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase()))
+  );
+  return [...new Set(nomes)].join(" + ");
 }
 
 /** "14:22" no fuso; fuso invalido cai em UTC. */
@@ -480,6 +556,11 @@ export interface PedidoTela {
   meta: EstadoEnvio;
   google: EstadoEnvio;
   status: StatusPedido;
+  /** Contra entrega: a situacao. null = pedido online. */
+  cod: SituacaoCod | null;
+  /** Contra entrega: primeiro envio e entrega, no fuso da loja. */
+  enviado: string | null;
+  entregue: string | null;
   gateway: string | null;
   /** Recebeu pagamento. */
   pago: boolean;
@@ -523,8 +604,11 @@ export interface ResumoPedidos {
   pedidos: number;
   /** Receita do Dashboard. */
   faturamento: number;
-  /** receita - cmv - taxas do periodo, como o Dashboard soma. */
+  /** receita - cmv - taxas - devolucoes do periodo, como o Dashboard soma. */
   lucro: number;
+  /** Contra entrega vivo: o que falta entrar, e quantos. */
+  aReceber: number;
+  codAbertos: number;
   /** Pedidos com item sem custo (o lucro deles fica "—" na linha). */
   semCusto: number;
   /** Fracao com Purchase enviado, entre os que deviam ir ao Meta. null = nenhum. */
@@ -573,6 +657,7 @@ export function montarPedidos(e: EntradaPedidos): { pedidos: PedidoTela[]; resum
   const intervalo = entrada.intervalos.atual;
   const lojaPorId = new Map(e.lojas.map((l) => [l.id, l]));
   const configPorLoja = new Map(entrada.configs.map((c) => [c.store_id, c]));
+  const moedaPorLoja = new Map(entrada.lojas.map((l) => [l.id, l.moeda]));
   const ligadas = new Set(e.lojasLigadas);
 
   // Hora no fuso da LOJA do pedido: o periodo e o Dashboard contam o dia pelo
@@ -628,6 +713,8 @@ export function montarPedidos(e: EntradaPedidos): { pedidos: PedidoTela[]; resum
     pedidos: 0,
     faturamento: 0,
     lucro: 0,
+    aReceber: 0,
+    codAbertos: 0,
     semCusto: 0,
     rastreadas: null,
     semCotacao: 0,
@@ -651,11 +738,15 @@ export function montarPedidos(e: EntradaPedidos): { pedidos: PedidoTela[]; resum
       converter,
       cfg: configPorLoja.get(p.store_id),
       custosPorSku: custosPorLoja.get(p.store_id) ?? new Map(),
+      moedaLoja: moedaPorLoja.get(p.store_id) ?? null,
     });
+    const cod = situacaoDoPedido(p);
     if (valores) {
       if (pedidoConta(p)) resumo.pedidos += 1;
       resumo.faturamento += valores.receita;
       resumo.lucro += valores.lucroComoDashboard;
+      resumo.aReceber += valores.aReceber;
+      if (cod === "aguardando_envio" || cod === "em_transito" || cod === "entregue") resumo.codAbertos += 1;
       if (valores.semCusto) resumo.semCusto += 1;
       if (aproximado) resumo.cambioAproximado = true;
     } else {
@@ -730,6 +821,9 @@ export function montarPedidos(e: EntradaPedidos): { pedidos: PedidoTela[]; resum
         meta,
         google,
         status: statusDoPedido(p),
+        cod,
+        enviado: cod && p.enviado_em ? quando.curto(p.enviado_em) : null,
+        entregue: cod && p.entregue_em ? quando.curto(p.entregue_em) : null,
         gateway: nomeGateway(p.gateways),
         pago: paraNumero(p.recebido) > 0,
         motivo,

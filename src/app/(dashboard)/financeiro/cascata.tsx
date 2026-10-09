@@ -21,14 +21,24 @@ export const COR_PARTE = {
 
 const pct0 = new Intl.NumberFormat("pt-BR", { style: "percent", maximumFractionDigits: 0 });
 
-export function Cascata({ atual, moeda }: { atual: Totais; moeda: string }) {
-  const total = atual.cmv + atual.taxas + atual.gasto;
+export function Cascata({
+  atual,
+  moeda,
+  contraEntrega = false,
+}: {
+  atual: Totais;
+  moeda: string;
+  /** Loja em contra entrega: mostra a linha de devolucoes, mesmo zerada. */
+  contraEntrega?: boolean;
+}) {
+  const total = atual.cmv + atual.taxas + atual.gasto + atual.devolucoes;
   const linhas: [string, number, string][] = [
     ["Produto + frete", atual.cmv, COR_PARTE.cmv],
     ["Meta Ads", atual.gastoMeta, COR_PARTE.gasto],
     ["Google Ads", atual.gastoGoogle, "bg-chart-4"],
     ["Taxas de pagamento", atual.taxas, COR_PARTE.taxas],
   ];
+  if (contraEntrega || atual.devolucoes > 0) linhas.push(["Devoluções", atual.devolucoes, COR_PARTE.cmv]);
 
   return (
     <section

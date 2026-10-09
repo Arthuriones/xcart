@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { sugerirContraEntrega, type SugestaoCod } from "@/lib/financeiro/contra-entrega";
 import {
   chaveSku,
   custoVigente,
@@ -52,6 +53,8 @@ export interface DadosCustos {
   config: FinStoreSettingsRow | null;
   skus: SkuVendido[];
   unidadesSemSku: number;
+  /** A maioria dos pedidos dos ultimos 7 dias e contra entrega? */
+  sugestaoCod: SugestaoCod;
 }
 
 function linhaDeCusto(r: Record<string, unknown>): ProductCostRow {
@@ -78,11 +81,8 @@ export async function carregarCustos(storeId: string): Promise<DadosCustos> {
       .select("moeda, fuso, carga_inicial_ok, ultimo_sync_ok_em")
       .eq("store_id", storeId)
       .maybeSingle(),
-    supabase
-      .from("fin_store_settings")
-      .select("store_id, user_id, taxa_pct, taxa_fixa, custo_padrao_pct, created_at, updated_at")
-      .eq("store_id", storeId)
-      .maybeSingle(),
+    // "*": as colunas de contra entrega (068) vem quando existem, sem quebrar antes.
+    supabase.from("fin_store_settings").select("*").eq("store_id", storeId).maybeSingle(),
   ]);
   if (estado.error) throw new Error(`Falha ao ler a sincronização de pedidos: ${estado.error.message}`);
   if (ajustes.error) throw new Error(`Falha ao ler as taxas da loja: ${ajustes.error.message}`);
@@ -117,23 +117,25 @@ export async function carregarCustos(storeId: string): Promise<DadosCustos> {
   // Pedidos da janela. So as colunas que a agregacao usa: a linha inteira traz
   // valores que esta tela nao mostra.
   const desde = somarDias(hoje, -DIAS_JANELA);
-  const pedidos: { tipo: string; cancelado_em: string | null; recebido: number | null; linhas: unknown }[] = [];
+  const pedidos: {
+    tipo: string;
+    cancelado_em: string | null;
+    recebido: number | null;
+    linhas: unknown;
+    dia_local: string;
+    gateways: string[] | null;
+  }[] = [];
   for (let i = 0; ; i += PAGINA) {
     const { data, error } = await supabase
       .from("fin_orders")
-      .select("tipo, cancelado_em, recebido, linhas")
+      .select("tipo, cancelado_em, recebido, linhas, dia_local, gateways")
       .eq("store_id", storeId)
       .gte("dia_local", desde)
       .order("dia_local", { ascending: true })
       .order("shopify_order_id", { ascending: true })
       .range(i, i + PAGINA - 1);
     if (error) throw new Error(`Falha ao ler os pedidos: ${error.message}`);
-    const lote = (data || []) as {
-      tipo: string;
-      cancelado_em: string | null;
-      recebido: number | null;
-      linhas: unknown;
-    }[];
+    const lote = (data || []) as typeof pedidos;
     pedidos.push(...lote);
     if (lote.length < PAGINA) break;
   }
@@ -205,6 +207,13 @@ export async function carregarCustos(storeId: string): Promise<DadosCustos> {
           cfg.custo_padrao_pct === null || cfg.custo_padrao_pct === undefined
             ? null
             : paraNumero(cfg.custo_padrao_pct),
+        contra_entrega: cfg.contra_entrega === true,
+        cod_taxa_entrega:
+          cfg.cod_taxa_entrega === null || cfg.cod_taxa_entrega === undefined ? null : paraNumero(cfg.cod_taxa_entrega),
+        cod_custo_devolucao:
+          cfg.cod_custo_devolucao === null || cfg.cod_custo_devolucao === undefined
+            ? null
+            : paraNumero(cfg.cod_custo_devolucao),
         created_at: cfg.created_at ? String(cfg.created_at) : undefined,
         updated_at: cfg.updated_at ? String(cfg.updated_at) : undefined,
       }
@@ -219,5 +228,13 @@ export async function carregarCustos(storeId: string): Promise<DadosCustos> {
     config,
     skus,
     unidadesSemSku,
+    sugestaoCod: sugerirContraEntrega(
+      pedidos.map((p) => ({
+        tipo: p.tipo as TipoPedido,
+        dia_local: p.dia_local,
+        gateways: Array.isArray(p.gateways) ? p.gateways : [],
+      })),
+      hoje
+    ),
   };
 }

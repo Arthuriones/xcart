@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 import {
+  CalendarClock,
   CircleDollarSign,
+  HandCoins,
+  Hourglass,
   Megaphone,
   Package,
   Percent,
@@ -9,15 +12,19 @@ import {
   Target,
   Ticket,
   TrendingUp,
+  Truck,
+  Undo2,
   UserPlus,
   Landmark,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import clsx from "clsx";
 import { Delta } from "@/components/ui/delta";
 import { Dica } from "@/components/ui/dica";
 import { calcularVariacao, type BomQuando, type FormatoVariacao } from "@/components/ui/variacao";
-import type { Totais } from "@/lib/financeiro/calculo";
+import type { ResumoEntrega, Totais } from "@/lib/financeiro/calculo";
+import { AMOSTRA_MINIMA } from "@/lib/financeiro/contra-entrega";
 import { METRICAS, dinheiro, formatarMetrica, inteiro, porcento, valorComSinal, vezes, type IdMetrica } from "./lucro-dados";
 
 // ============================================================================
@@ -26,6 +33,8 @@ import { METRICAS, dinheiro, formatarMetrica, inteiro, porcento, valorComSinal, 
 //     totais, Taxas e Margem.
 //   - IndicadoresKpi: Anuncios, CPA, ROAS real, ROAS de equilibrio, Custo de
 //     produto, Pedidos (com o selo de cobertura de custo) e Ticket medio.
+//   - IndicadoresTopoCod / IndicadoresKpiCod: a loja em "Contra entrega"
+//     (Lucro previsto, Recebido, A receber, Previsto, Taxa de entrega...).
 // Server components: a variacao contra o periodo anterior sai pronta daqui.
 // ============================================================================
 
@@ -37,6 +46,8 @@ export interface BaseIndicadores {
   compara: boolean;
   /** Avisos que so explicam um numero, na Dica do cartao afetado. */
   dicas: Partial<Record<IdMetrica, string[]>>;
+  /** Taxa de entrega do filtro: so os cartoes de contra entrega usam. */
+  entrega?: ResumoEntrega;
 }
 
 interface Cartao {
@@ -222,6 +233,185 @@ export function IndicadoresKpi(b: BaseIndicadores) {
     }),
     // Ultimo da grade de 4: fecha a 2a linha em vez de deixar um buraco.
     daMetrica(b, "ticket", Ticket, (x) => x.ticket, { classe: "lg:col-span-2" }),
+  ];
+  return (
+    <section aria-label="Indicadores do período" className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+      {cartoes.map((c) => (
+        <CartaoKpi key={c.id} c={c} />
+      ))}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Contra entrega: o mesmo visual, com Recebido, A receber e Previsto.
+// O realizado e o de sempre (receita = Recebido, lucro = Lucro realizado).
+// ---------------------------------------------------------------------------
+
+type Formato = "dinheiro" | "vezes" | "numero";
+
+function cartaoCod(
+  b: BaseIndicadores,
+  id: string,
+  rotulo: string,
+  icone: LucideIcon,
+  valor: (t: Totais) => number | null,
+  formato: Formato,
+  definicao: string,
+  extra?: Partial<Cartao>
+): Cartao {
+  const v = valor(b.atual);
+  const texto = formato === "dinheiro" ? dinheiro(v, b.moeda) : formato === "vezes" ? vezes(v) : inteiro(v);
+  return {
+    id,
+    rotulo,
+    icone,
+    valor: v,
+    texto,
+    variacao: variacaoDe(b, v, valor(b.anterior)),
+    bom: "subir",
+    definicao,
+    ...extra,
+  };
+}
+
+/** A taxa que o Previsto usou: a efetiva dos nao entregues, ou a da loja. */
+function taxaUsada(b: BaseIndicadores): number | null {
+  return b.atual.cod.taxaEntrega ?? b.entrega?.taxa ?? null;
+}
+
+function origemDaTaxa(e: ResumoEntrega | undefined): string | undefined {
+  if (!e || e.fonte === null) return undefined;
+  if (e.fonte === "historico") return `Da loja · ${inteiro(e.amostra)} pedidos`;
+  if (e.fonte === "misto") return "Média das lojas";
+  return e.amostra > 0 ? `Padrão · ${inteiro(e.amostra)} de ${AMOSTRA_MINIMA} pedidos` : "Padrão";
+}
+
+export function IndicadoresTopoCod(b: BaseIndicadores) {
+  const t = b.atual;
+  const taxa = taxaUsada(b);
+  const lucro = cartaoCod(
+    b,
+    "lucroPrevisto",
+    "Lucro previsto",
+    CircleDollarSign,
+    (x) => x.cod.lucroPrevisto,
+    "dinheiro",
+    "Previsto menos produto, frete, taxas, devoluções esperadas e anúncios.",
+    { notas: b.dicas.lucro }
+  );
+  const cartoes: Cartao[] = [
+    cartaoCod(
+      b,
+      "recebido",
+      "Recebido",
+      HandCoins,
+      (x) => x.receita,
+      "dinheiro",
+      "Pedidos pagos: os online e os contra entrega marcados como pagos na Shopify.",
+      { detalhe: `${inteiro(t.pedidos)} ${t.pedidos === 1 ? "pago" : "pagos"}` }
+    ),
+    cartaoCod(
+      b,
+      "aReceber",
+      "A receber",
+      Hourglass,
+      (x) => x.cod.aReceber,
+      "dinheiro",
+      "Contra entrega ainda sem pagamento: aguardando envio, em trânsito ou entregue.",
+      { bom: "neutro", detalhe: `${inteiro(t.cod.abertos)} em aberto` }
+    ),
+    cartaoCod(
+      b,
+      "previsto",
+      "Previsto",
+      CalendarClock,
+      (x) => x.cod.previsto,
+      "dinheiro",
+      "Recebido, mais os entregues a receber, mais o que ainda vai ser entregue vezes a taxa de entrega.",
+      { detalhe: taxa !== null ? `Com ${porcento(taxa)} de entrega` : undefined }
+    ),
+    cartaoCod(
+      b,
+      "lucroRealizado",
+      "Lucro realizado",
+      Wallet,
+      (x) => x.lucro,
+      "dinheiro",
+      "Recebido menos produto e frete do que já foi enviado, taxas, devoluções e anúncios."
+    ),
+  ];
+  return (
+    <section aria-label="Resumo do período" className="grid grid-cols-2 gap-3.5 lg:grid-cols-5">
+      <CartaoKpi c={{ ...lucro, classe: "col-span-2 lg:col-span-1" }} destaque={t.cod.lucroPrevisto < 0 ? "err" : "ok"} />
+      {cartoes.map((c) => (
+        <CartaoKpi key={c.id} c={c} />
+      ))}
+    </section>
+  );
+}
+
+export function IndicadoresKpiCod(b: BaseIndicadores) {
+  const t = b.atual;
+  const taxa = taxaUsada(b);
+  const cartoes: Cartao[] = [
+    {
+      id: "taxaEntrega",
+      rotulo: "Taxa de entrega",
+      icone: Truck,
+      valor: taxa,
+      texto: porcento(taxa),
+      bom: "neutro",
+      definicao: `Dos contra entrega finalizados nos últimos 60 dias (sem a última semana), quantos foram entregues. Com menos de ${AMOSTRA_MINIMA}, vale a taxa padrão de Custos e taxas.`,
+      detalhe: origemDaTaxa(b.entrega),
+    },
+    daMetrica(b, "gasto", Megaphone, (x) => x.gasto, {
+      rotulo: "Anúncios",
+      detalhe: `Meta ${dinheiro(t.gastoMeta, b.moeda)} · Google ${dinheiro(t.gastoGoogle, b.moeda)}`,
+    }),
+    cartaoCod(b, "roasPrevisto", "ROAS previsto", TrendingUp, (x) => x.cod.roasPrevisto, "vezes", "Previsto dividido pelo gasto em anúncios.", {
+      detalhe: `Realizado ${vezes(t.roas)}`,
+    }),
+    {
+      id: "equilibrio",
+      rotulo: "ROAS de equilíbrio",
+      icone: Target,
+      valor: t.cod.roasEquilibrioPrevisto,
+      texto: vezes(t.cod.roasEquilibrioPrevisto),
+      bom: "neutro",
+      definicao:
+        "O ROAS previsto em que o lucro fica em zero: previsto dividido pelo que sobra depois de produto, frete, taxas e devoluções.",
+    },
+    cartaoCod(
+      b,
+      "pedidosCod",
+      "Pedidos",
+      Receipt,
+      (x) => x.cod.gerados,
+      "numero",
+      "Pedidos gerados: online pagos e contra entrega que não foi cancelado antes do envio.",
+      {
+        detalhe: `${inteiro(t.pedidos)} ${t.pedidos === 1 ? "pago" : "pagos"} · ${inteiro(t.cod.abertos)} em aberto · ${inteiro(t.cod.recusados)} ${t.cod.recusados === 1 ? "recusado" : "recusados"}`,
+        selo: seloCobertura(t.coberturaCusto),
+      }
+    ),
+    cartaoCod(b, "cpaCod", "CPA", UserPlus, (x) => x.cod.cpa, "dinheiro", "Gasto em anúncios dividido pelos pedidos gerados. Quanto menor, melhor.", {
+      bom: "descer",
+    }),
+    daMetrica(b, "custo", Package, (x) => x.cmv, {
+      definicao: "Produto mais frete do fornecedor do que já foi enviado, pelo custo cadastrado em Custos.",
+      detalhe: `Previsto ${dinheiro(t.cod.custoPrevisto, b.moeda)}`,
+    }),
+    cartaoCod(
+      b,
+      "devolucoes",
+      "Devoluções",
+      Undo2,
+      (x) => x.devolucoes,
+      "dinheiro",
+      "Custo por devolução (Custos e taxas) vezes os recusados que foram enviados.",
+      { bom: "descer", detalhe: `Previsto ${dinheiro(t.cod.devolucoesPrevistas, b.moeda)}` }
+    ),
   ];
   return (
     <section aria-label="Indicadores do período" className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">

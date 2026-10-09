@@ -41,12 +41,15 @@ export function GraficoFaturamento({
   pontos,
   moeda,
   contexto,
+  rotuloReceita = "Faturamento",
 }: {
   /** Periodo atual, do dia mais antigo para o mais novo. */
   pontos: PontoDia[];
   moeda: string;
   /** "Todas as lojas · Últimos 30 dias · BRL": para o leitor de tela. */
   contexto: string;
+  /** "Recebido" na loja em contra entrega: a barra e so o que ja entrou. */
+  rotuloReceita?: string;
 }) {
   const [tipo, setTipo] = useState<Tipo>("barra");
   const [granEscolhida, setGran] = useState<Granularidade>("dia");
@@ -59,14 +62,16 @@ export function GraficoFaturamento({
   const barras: Barra[] = agrupar(pontos, dias, gran).map((g) => {
     const s = g.soma ?? { pedidos: 0, receita: 0, cmv: 0, taxas: 0, gastoMeta: 0, gastoGoogle: 0 };
     const gasto = s.gastoMeta + s.gastoGoogle;
+    // Devolucao de contra entrega e frete de volta: vai junto do produto + frete.
+    const cmv = s.cmv + (s.devolucoes ?? 0);
     return {
       rotulo: g.rotulo,
       parcial: g.parcial,
       receita: s.receita,
       gasto,
-      cmv: s.cmv,
+      cmv,
       taxas: s.taxas,
-      lucro: s.receita - s.cmv - s.taxas - gasto,
+      lucro: s.receita - cmv - s.taxas - gasto,
     };
   });
 
@@ -93,7 +98,7 @@ export function GraficoFaturamento({
 
   const legenda: [string, string][] =
     tipo === "total"
-      ? [["Faturamento", COR_PARTE.receita]]
+      ? [[rotuloReceita, COR_PARTE.receita]]
       : [
           ["Lucro", COR_PARTE.lucro],
           ["Anúncios", COR_PARTE.gasto],
@@ -104,7 +109,7 @@ export function GraficoFaturamento({
   const hv = hov !== null ? barras[hov] : undefined;
   const linhasTip: [string, number, string][] = hv
     ? [
-        ["Faturamento", hv.receita, COR_PARTE.receita],
+        [rotuloReceita, hv.receita, COR_PARTE.receita],
         ["Lucro", hv.lucro, hv.lucro < 0 ? COR_PARTE.prejuizo : COR_PARTE.lucro],
         ["Anúncios", hv.gasto, COR_PARTE.gasto],
         ["Produto + frete", hv.cmv, COR_PARTE.cmv],
@@ -124,7 +129,7 @@ export function GraficoFaturamento({
     >
       <div className="flex flex-wrap items-center gap-2.5">
         <h2 id="grafico-lucro-t" className="flex-1 text-overlay">
-          Faturamento
+          {rotuloReceita}
         </h2>
         {n > 1 && pontos.length > 7 && (
           <Segmented rotulo="Agrupar por" valor={gran} onValorChange={setGran} opcoes={opcoesGran} />
@@ -133,7 +138,7 @@ export function GraficoFaturamento({
           {(
             [
               ["barra", "Barras empilhadas", BarChart3],
-              ["total", "Só faturamento", IconeTotal],
+              ["total", `Só ${rotuloReceita.toLowerCase()}`, IconeTotal],
             ] as const
           ).map(([id, rotulo, Icone]) => (
             <button
@@ -188,7 +193,7 @@ export function GraficoFaturamento({
               </div>
               <div
                 role="img"
-                aria-label={`Faturamento ${porGran}, dividido em lucro, anúncios, produto e taxas, ${contexto}`}
+                aria-label={`${rotuloReceita} ${porGran}, dividido em lucro, anúncios, produto e taxas, ${contexto}`}
                 className={clsx("relative flex flex-1 items-end", gap)}
               >
                 {barras.map((b, i) => (
@@ -198,7 +203,7 @@ export function GraficoFaturamento({
                     onMouseEnter={() => setHov(i)}
                     onFocus={() => setHov(i)}
                     onBlur={() => setHov(null)}
-                    aria-label={`${b.rotulo}: faturamento ${dinheiro(b.receita, moeda)}, lucro ${dinheiro(b.lucro, moeda)}`}
+                    aria-label={`${b.rotulo}: ${rotuloReceita.toLowerCase()} ${dinheiro(b.receita, moeda)}, lucro ${dinheiro(b.lucro, moeda)}`}
                     className={clsx(
                       "flex h-full flex-1 cursor-pointer flex-col justify-end outline-none focus-visible:ring-2 focus-visible:ring-focus",
                       hov !== null && hov !== i && "opacity-55"

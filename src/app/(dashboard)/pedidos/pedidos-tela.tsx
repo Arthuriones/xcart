@@ -27,14 +27,17 @@ import { Logo } from "../tracking/logos";
 import {
   CABECALHO_CSV,
   FILTROS,
+  FILTROS_COD,
   POR_PAGINA,
   buscaCasa,
   corEnvio,
   jornadaDoPedido,
   linhaCsv,
   passaNoFiltro,
+  passaNoFiltroCod,
   textoCsv,
   textoEnvio,
+  type FiltroCod,
   type FiltroId,
 } from "./filtros";
 
@@ -78,6 +81,7 @@ export function PedidosTela({
   arquivoCsv: string;
 }) {
   const [filtro, setFiltro] = useState<FiltroId>("todos");
+  const [filtroCod, setFiltroCod] = useState<FiltroCod>("todos");
   const [busca, setBusca] = useState("");
   const [pagina, setPagina] = useState(0);
   // O painel fecha sem limpar `aberto`: o conteudo fica durante a saida.
@@ -91,10 +95,23 @@ export function PedidosTela({
     for (const f of FILTROS) c[f.id] = pedidos.filter((p) => passaNoFiltro(p, f.id)).length;
     return c;
   }, [pedidos]);
+  const contagemCod = useMemo(() => {
+    const c = {} as Record<FiltroCod, number>;
+    for (const f of FILTROS_COD) c[f.id] = pedidos.filter((p) => passaNoFiltroCod(p, f.id)).length;
+    return c;
+  }, [pedidos]);
+  // Sem contra entrega no periodo, o filtro nem aparece.
+  const filtros = FILTROS.filter((f) => f.id !== "contra_entrega" || contagem.contra_entrega > 0);
 
   const lista = useMemo(
-    () => pedidos.filter((p) => passaNoFiltro(p, filtro) && buscaCasa(p, busca)),
-    [pedidos, filtro, busca]
+    () =>
+      pedidos.filter(
+        (p) =>
+          passaNoFiltro(p, filtro) &&
+          (filtro !== "contra_entrega" || passaNoFiltroCod(p, filtroCod)) &&
+          buscaCasa(p, busca)
+      ),
+    [pedidos, filtro, filtroCod, busca]
   );
   const paginas = Math.max(1, Math.ceil(lista.length / POR_PAGINA));
   const atual = Math.min(pagina, paginas - 1);
@@ -109,11 +126,13 @@ export function PedidosTela({
 
   function escolher(f: FiltroId) {
     setFiltro(f);
+    setFiltroCod("todos");
     setPagina(0);
   }
 
   function limpar() {
     setFiltro("todos");
+    setFiltroCod("todos");
     setBusca("");
     setPagina(0);
   }
@@ -150,7 +169,15 @@ export function PedidosTela({
       rotulo: "Faturamento",
       valor: dinheiro(resumo.faturamento),
       icone: <DollarSign />,
-      detalhe: avisoFaturamento || undefined,
+      detalhe:
+        [
+          resumo.codAbertos > 0
+            ? `+ ${dinheiro(resumo.aReceber)} a receber (${resumo.codAbertos} contra entrega)`
+            : null,
+          avisoFaturamento || null,
+        ]
+          .filter(Boolean)
+          .join(" · ") || undefined,
     },
     {
       rotulo: "Lucro antes do anúncio",
@@ -223,7 +250,7 @@ export function PedidosTela({
             aria-label="Filtrar"
             className="flex max-w-full gap-0.5 overflow-x-auto rounded-card border border-border bg-surface-2 p-0.75 [scrollbar-width:none]"
           >
-            {FILTROS.map((f) => {
+            {filtros.map((f) => {
               const on = filtro === f.id;
               return (
                 <button
@@ -241,6 +268,30 @@ export function PedidosTela({
               );
             })}
           </div>
+          {filtro === "contra_entrega" && (
+            <div role="group" aria-label="Situação do contra entrega" className="flex w-full flex-wrap gap-1.5">
+              {FILTROS_COD.filter((f) => f.id === "todos" || contagemCod[f.id] > 0 || filtroCod === f.id).map((f) => {
+                const on = filtroCod === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => {
+                      setFiltroCod(f.id);
+                      setPagina(0);
+                    }}
+                    className={cn(
+                      "h-7 whitespace-nowrap rounded-control border px-2.5 text-label focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus",
+                      on ? "border-ink bg-surface font-semibold text-ink" : "border-border text-t2 hover:text-ink"
+                    )}
+                  >
+                    {f.rotulo} <span className="num">{contagemCod[f.id]}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {lista.length === 0 ? (
@@ -513,6 +564,7 @@ function DetalhePedido({ p, dinheiro }: { p: PedidoTela; dinheiro: (v: number | 
                   />
                 )}
                 <Linha rotulo="Valor pago" valor={dinheiro(v.valorPago)} forte />
+                {v.aReceber > 0 && <Linha rotulo="A receber na entrega" valor={dinheiro(v.aReceber)} cor="text-t1" />}
                 {v.reembolso > 0 && <Linha rotulo="Reembolso" valor={menos(v.reembolso)} cor="text-err" />}
                 <Linha rotulo="Produto + frete do fornecedor" valor={menos(v.cmv)} cor="text-t1" />
                 <Linha
@@ -524,6 +576,7 @@ function DetalhePedido({ p, dinheiro }: { p: PedidoTela; dinheiro: (v: number | 
                   valor={menos(v.taxa)}
                   cor="text-t1"
                 />
+                {v.devolucao > 0 && <Linha rotulo="Devolução" valor={menos(v.devolucao)} cor="text-t1" />}
                 <Linha
                   rotulo="Lucro estimado"
                   valor={v.lucro === null ? "— (SKU sem custo)" : dinheiro(v.lucro)}

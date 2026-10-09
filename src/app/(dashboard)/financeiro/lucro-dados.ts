@@ -203,6 +203,8 @@ export interface Soma {
   receita: number;
   cmv: number;
   taxas: number;
+  /** Devolucao de contra entrega (ausente = 0). */
+  devolucoes?: number;
   gastoMeta: number;
   gastoGoogle: number;
 }
@@ -213,7 +215,7 @@ export interface Soma {
  */
 export function derivar(s: Soma): Record<IdMetrica, number | null> {
   const gasto = s.gastoMeta + s.gastoGoogle;
-  const lucro = s.receita - s.cmv - s.taxas - gasto;
+  const lucro = s.receita - s.cmv - s.taxas - (s.devolucoes ?? 0) - gasto;
   return {
     receita: s.receita,
     gasto,
@@ -228,12 +230,13 @@ export function derivar(s: Soma): Record<IdMetrica, number | null> {
 }
 
 function somar(lista: Soma[]): Soma {
-  const t: Soma = { pedidos: 0, receita: 0, cmv: 0, taxas: 0, gastoMeta: 0, gastoGoogle: 0 };
+  const t: Soma = { pedidos: 0, receita: 0, cmv: 0, taxas: 0, devolucoes: 0, gastoMeta: 0, gastoGoogle: 0 };
   for (const s of lista) {
     t.pedidos += s.pedidos;
     t.receita += s.receita;
     t.cmv += s.cmv;
     t.taxas += s.taxas;
+    t.devolucoes = (t.devolucoes ?? 0) + (s.devolucoes ?? 0);
     t.gastoMeta += s.gastoMeta;
     t.gastoGoogle += s.gastoGoogle;
   }

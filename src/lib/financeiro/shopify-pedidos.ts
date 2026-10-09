@@ -4,9 +4,11 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 import { shopifyGraphQL } from "@/lib/shopify/client";
 import type { FinOrderRow, FinSyncStateRow } from "./tipos";
 import {
+  ehColunaAusente,
   mapearPedido,
   maiorAtualizado,
   paginarPedidos,
+  semCamposDeEnvio,
   type PaginaPedidos,
 } from "./mapear-pedido";
 
@@ -37,6 +39,10 @@ export interface LojaParaSync {
  * Sem customer, email, endereco ou telefone. O custo exato nao foi verificado
  * (a doc so da a tabela por tipo); `$n` comeca em 8 e cai pela metade se a
  * Shopify responder MAX_COST_EXCEEDED -- ver paginarPedidos.
+ *
+ * `tags` e `fulfillments` servem ao contra entrega (068): das tags sai so o
+ * sim/nao de COD e de recusa (elas nao sao gravadas); dos envios, a situacao
+ * da entrega e as datas, sem rastreio nem endereco.
  */
 const QUERY_PEDIDOS = `query FinPedidos($busca: String!, $cursor: String, $n: Int!) {
   shop { ianaTimezone currencyCode }
@@ -63,6 +69,8 @@ const QUERY_PEDIDOS = `query FinPedidos($busca: String!, $cursor: String, $n: In
           originalUnitPriceSet { shopMoney { amount } }
         }
       }
+      returnStatus tags
+      fulfillments(first: 5) { status displayStatus createdAt deliveredAt }
     }
   }
 }`;
@@ -111,6 +119,9 @@ export async function sincronizarLoja(
 
   let cursorGravado = estado?.cursor_atualizado ?? null;
   let pedidos = 0;
+  // Sem a 068, as colunas de envio nao existem: a primeira gravacao recusada
+  // por isso marca e o resto da rodada grava sem elas (o sync nao para).
+  let semColunasDeEnvio = false;
 
   const r = await paginarPedidos({
     maxPaginas,
@@ -131,9 +142,14 @@ export async function sincronizarLoja(
       }));
 
       for (let i = 0; i < linhas.length; i += LOTE_UPSERT) {
-        const { error } = await admin
-          .from("fin_orders")
-          .upsert(linhas.slice(i, i + LOTE_UPSERT), { onConflict: "store_id,shopify_order_id" });
+        const lote = linhas.slice(i, i + LOTE_UPSERT);
+        const gravar = (l: FinOrderRow[]) =>
+          admin.from("fin_orders").upsert(l, { onConflict: "store_id,shopify_order_id" });
+        let { error } = await gravar(semColunasDeEnvio ? lote.map(semCamposDeEnvio) : lote);
+        if (error && !semColunasDeEnvio && ehColunaAusente(error)) {
+          semColunasDeEnvio = true;
+          ({ error } = await gravar(lote.map(semCamposDeEnvio)));
+        }
         if (error) throw new Error(`gravar pedidos: ${error.message}`);
       }
       pedidos += linhas.length;

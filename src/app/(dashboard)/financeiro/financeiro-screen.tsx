@@ -8,7 +8,13 @@ import { Cascata } from "./cascata";
 import { ComoCalculamos } from "./como-calculamos";
 import { DetalharPor } from "./detalhar-por";
 import { GraficoFaturamento } from "./grafico-faturamento";
-import { IndicadoresKpi, IndicadoresTopo, type BaseIndicadores } from "./indicadores";
+import {
+  IndicadoresKpi,
+  IndicadoresKpiCod,
+  IndicadoresTopo,
+  IndicadoresTopoCod,
+  type BaseIndicadores,
+} from "./indicadores";
 import { montarDicas, nomeDaLoja, situacaoDasLojas, temMovimento } from "./lucro-dados";
 import { PorLoja } from "./por-loja";
 
@@ -80,17 +86,26 @@ export function FinanceiroScreen({
     anterior: r.anterior,
     compara: comparando && !semBase,
     dicas: montarDicas(r.avisos, r.atual.coberturaCusto),
+    entrega: r.entrega,
   };
+  // Loja marcada "Contra entrega" em Custos e taxas (ou, com todas as lojas,
+  // alguma delas): Recebido, A receber e Previsto no lugar do Faturamento.
+  const contraEntrega = r.lojasContraEntrega.length > 0;
 
   return (
     <div data-largura="total" className="flex flex-col gap-6">
       <div className="flex flex-col gap-3.5">
-        <IndicadoresTopo {...base} />
+        {contraEntrega ? <IndicadoresTopoCod {...base} /> : <IndicadoresTopo {...base} />}
         <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1fr)_300px]">
-          <GraficoFaturamento pontos={pontos} moeda={moeda} contexto={contexto} />
-          <Cascata atual={r.atual} moeda={moeda} />
+          <GraficoFaturamento
+            pontos={pontos}
+            moeda={moeda}
+            contexto={contexto}
+            rotuloReceita={contraEntrega ? "Recebido" : undefined}
+          />
+          <Cascata atual={r.atual} moeda={moeda} contraEntrega={contraEntrega} />
         </div>
-        <IndicadoresKpi {...base} />
+        {contraEntrega ? <IndicadoresKpiCod {...base} /> : <IndicadoresKpi {...base} />}
         {mostrarLoja && <PorLoja lojas={r.porLoja} moeda={moeda} />}
       </div>
 
@@ -111,7 +126,7 @@ export function FinanceiroScreen({
         erroExtras={erroExtras}
       />
 
-      <ComoCalculamos />
+      <ComoCalculamos contraEntrega={contraEntrega} />
     </div>
   );
 }
