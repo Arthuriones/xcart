@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { calcularFinanceiro, type EntradaFinanceiro, type Totais } from "@/lib/financeiro/calculo";
+import { montarPorProduto } from "@/lib/leitura/por-produto";
+import { montarPedidos } from "@/lib/leitura/pedidos";
 import {
   AMOSTRA_MINIMA,
+  DIAS_SEM_RETORNO,
   aReceberCod,
   contarAmostra,
   ehPedidoCod,
@@ -26,11 +29,12 @@ import type {
 } from "@/lib/financeiro/tipos";
 import {
   formRecebimentoDe,
+  mensagemDeFalha,
   recebimentoMudou,
   textoSugestaoCod,
   validarRecebimento,
 } from "../src/app/(dashboard)/financeiro/custos/apresentar";
-import { derivar } from "../src/app/(dashboard)/financeiro/lucro-dados";
+import { derivar, montarDicas } from "../src/app/(dashboard)/financeiro/lucro-dados";
 
 // ---------------------------------------------------------------------------
 // Fixtures no molde de tests/financeiro-calculo.test.ts
@@ -280,9 +284,33 @@ describe("taxa de entrega", () => {
         cod({ dia_local: "2026-10-05", recebido: 100, liquido_pago: 100 }), // ultima semana: fora
         pedido({ dia_local: "2026-09-20" }), // online: fora
       ],
-      janela
+      janela,
+      "2026-10-09"
     );
-    expect(conta).toEqual({ [LOJA]: { entregues: 2, recusados: 1 } });
+    expect(conta).toEqual({ [LOJA]: { entregues: 2, recusados: 1, semRetorno: 0 } });
+  });
+
+  it(`recusa que ninguem marcou: em aberto ha mais de ${DIAS_SEM_RETORNO} dias conta como nao entregue`, () => {
+    const hoje = "2026-10-09";
+    const janela = intervaloDaAmostra(hoje);
+    const pedidos = [
+      // 20 pagos e 30 enviados que nunca voltaram como pagos nem recusados.
+      ...Array.from({ length: 20 }, () =>
+        cod({ dia_local: "2026-09-01", recebido: 100, liquido_pago: 100, linhas: [linha("SKU-1", 1, 100)] })
+      ),
+      ...Array.from({ length: 30 }, () => cod({ dia_local: "2026-09-01", linhas: [linha("SKU-1", 1, 100)] })),
+      cod({ dia_local: "2026-09-02" }), // nunca saiu, nem foi cancelado: nao entregue
+      cod({ dia_local: "2026-09-02", entrega: "entregue", linhas: [linha("SKU-1", 1, 100)] }), // entregue a receber: entregue
+      cod({ dia_local: "2026-09-25", linhas: [linha("SKU-1", 1, 100)] }), // em transito ha 14 dias: ainda nao conta
+    ];
+    const conta = contarAmostra(pedidos, janela, hoje);
+    expect(conta[LOJA]).toEqual({ entregues: 21, recusados: 0, semRetorno: 31 });
+    const taxa = taxaDeEntrega(conta[LOJA], 70);
+    expect(taxa.fonte).toBe("historico");
+    expect(taxa.amostra).toBe(52);
+    expect(taxa.taxa).toBeCloseTo(21 / 52);
+    // Antes: so os 21 entregues no denominador, taxa 100%.
+    expect(taxa.taxa).toBeLessThan(0.5);
   });
 });
 
@@ -549,6 +577,95 @@ describe("calculo contra entrega", () => {
   });
 });
 
+describe("custo do previsto sem custo cadastrado", () => {
+  it("loja so COD com nada enviado: avisa o SKU sem custo e a cobertura do previsto e zero", () => {
+    const r = calcularFinanceiro(entrada({ custos: [], pedidos: [cod(), cod()], gastos: [gasto(10)] }));
+    expect(r.atual.cmv).toBe(0);
+    expect(r.atual.cod.custoPrevisto).toBe(0);
+    // O realizado nao tem base (nada saiu); o previsto tem, e sem custo.
+    expect(r.atual.coberturaCusto).toBeNull();
+    expect(r.atual.cod.coberturaCusto).toBe(0);
+    expect(r.avisos.lojasSemCustoPadraoComFalta).toEqual(["AmpleStep · qkgknv-w3"]);
+    const dicas = montarDicas(r.avisos, r.atual.cod.coberturaCusto, true);
+    expect(dicas.lucro).toEqual(["Produto sem custo cadastrado entrou como zero em AmpleStep · qkgknv-w3."]);
+    // A tela online nao ganha a nota nova.
+    expect(montarDicas(r.avisos, r.atual.coberturaCusto)).toEqual({});
+  });
+
+  it("com custo cadastrado ou custo padrao, a cobertura do previsto conta os que vao sair", () => {
+    const comCusto = calcularFinanceiro(entrada({ pedidos: [cod(), cod({ linhas: [linha("SKU-1", 1, 100)] })] }));
+    expect(comCusto.atual.cod.coberturaCusto).toBe(1);
+    expect(comCusto.avisos.lojasSemCustoPadraoComFalta).toEqual([]);
+    const estimado = calcularFinanceiro(
+      entrada({ custos: [], pedidos: [cod()], configs: [config({ contra_entrega: true, custo_padrao_pct: 40 })] })
+    );
+    expect(estimado.atual.cod.custoPrevisto).toBe(40);
+    expect(estimado.atual.cod.coberturaCusto).toBe(0);
+    expect(estimado.avisos.lojasSemCustoPadraoComFalta).toEqual([]);
+  });
+});
+
+describe("a mesma conta no Dashboard, no Pedidos e no por produto", () => {
+  it("COD em CZK numa loja em USD: taxa fixa convertida e recusado que voltou ao estoque custa", () => {
+    const cambio: FxRateRow[] = [{ data: "2026-09-28", moeda: "CZK", por_usd: 20, fonte: "frankfurter" }];
+    const custos: ProductCostRow[] = [{ ...CUSTO, sku: "X", custo_unitario: 2, frete_unitario: 1, moeda: "USD" }];
+    const e = entrada({
+      lojas: [{ id: LOJA, nome: "AmpleStep", dominio: "qkgknv-w3.myshopify.com", fuso: "America/Sao_Paulo", moeda: "USD" }],
+      custos,
+      configs: [config({ contra_entrega: true, taxa_pct: 5, taxa_fixa: 0.5, cod_custo_devolucao: 2 })],
+      contas: [],
+      cambio,
+      moeda: "USD",
+      pedidos: [
+        // Recusado que voltou ao estoque: linhas zeradas, mas o envio saiu.
+        cod({
+          moeda: "CZK",
+          total_atual: 1460,
+          entrega: "falhou",
+          enviado_em: "2026-09-29T20:00:00Z",
+          status_envio: "RESTOCKED",
+          linhas: [linha("X", 2, 730, { qtd_atual: 0, qtd_nao_enviada: 2 })],
+        }),
+        // Pago na entrega.
+        cod({
+          moeda: "CZK",
+          total_atual: 730,
+          recebido: 730,
+          liquido_pago: 730,
+          status_financeiro: "PAID",
+          linhas: [linha("X", 1, 730)],
+        }),
+      ],
+    });
+    const r = calcularFinanceiro(e);
+    // 3 unidades x US$ 3; taxa: 5% de 730 CZK + US$ 0,50 (10 CZK), em USD.
+    expect(r.atual.cmv).toBeCloseTo(9);
+    expect(r.atual.taxas).toBeCloseTo((730 * 0.05 + 10) / 20);
+    expect(r.atual.devolucoes).toBeCloseTo(2);
+
+    const produtos = montarPorProduto(e);
+    const somaCusto = produtos.linhas.reduce((s, l) => s + (l.custo ?? 0), 0);
+    const somaTaxas = produtos.linhas.reduce((s, l) => s + l.taxas, 0);
+    expect(somaCusto).toBeCloseTo(r.atual.cmv);
+    expect(somaTaxas).toBeCloseTo(r.atual.taxas);
+
+    const { pedidos } = montarPedidos({
+      entrada: e,
+      lojas: e.lojas,
+      fuso: "America/Sao_Paulo",
+      eventos: [],
+      destinos: [],
+      lojasLigadas: [],
+      agoraMs: Date.parse("2026-09-30T12:00:00Z"),
+    });
+    const soma = (f: (v: NonNullable<(typeof pedidos)[number]["valores"]>) => number) =>
+      pedidos.reduce((s, p) => s + (p.valores ? f(p.valores) : 0), 0);
+    expect(soma((v) => v.cmv)).toBeCloseTo(r.atual.cmv);
+    expect(soma((v) => v.taxa)).toBeCloseTo(r.atual.taxas);
+    expect(soma((v) => v.devolucao)).toBeCloseTo(r.atual.devolucoes);
+  });
+});
+
 describe("loja online nao muda", () => {
   const online = () => [
     pedido(),
@@ -614,6 +731,12 @@ describe("formulario Como a loja recebe", () => {
     const r = validarRecebimento({ modo: "online", entrega: "120", devolucao: "abc" });
     expect(r.corpo).toBeNull();
     expect(r.erros).toEqual({ entrega: "Use um número de 0 a 100", devolucao: "Não é um número" });
+  });
+
+  it("loja sem taxa salva: a recusa da rota aparece como veio", () => {
+    expect(mensagemDeFalha(409, { error: "Salve a taxa de pagamento primeiro." })).toBe(
+      "Salve a taxa de pagamento primeiro."
+    );
   });
 
   it("alteracao compara o valor", () => {

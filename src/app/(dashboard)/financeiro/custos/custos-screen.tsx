@@ -163,6 +163,7 @@ export function CustosScreen({
         storeId={dados.storeId}
         moedaLoja={moeda}
         sugestao={dados.sugestaoCod}
+        taxaConfigurada={configurada}
         form={recebimento}
         sujo={recebimentoSujo}
         onMudar={setRecebimento}

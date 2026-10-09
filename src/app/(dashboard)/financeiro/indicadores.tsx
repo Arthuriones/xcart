@@ -24,7 +24,7 @@ import { Delta } from "@/components/ui/delta";
 import { Dica } from "@/components/ui/dica";
 import { calcularVariacao, type BomQuando, type FormatoVariacao } from "@/components/ui/variacao";
 import type { ResumoEntrega, Totais } from "@/lib/financeiro/calculo";
-import { AMOSTRA_MINIMA } from "@/lib/financeiro/contra-entrega";
+import { AMOSTRA_MINIMA, DIAS_SEM_RETORNO } from "@/lib/financeiro/contra-entrega";
 import { METRICAS, dinheiro, formatarMetrica, inteiro, porcento, valorComSinal, vezes, type IdMetrica } from "./lucro-dados";
 
 // ============================================================================
@@ -150,7 +150,11 @@ function CartaoKpi({ c, destaque }: { c: Cartao; destaque?: "ok" | "err" }) {
           <span
             className={clsx(
               "mt-1 self-start whitespace-nowrap rounded-control border px-1.5 text-label font-medium",
-              c.selo.tom === "ok" ? "border-ok-border text-ok" : "border-warn-border text-warn"
+              destaque
+                ? "border-white/40 text-surface"
+                : c.selo.tom === "ok"
+                  ? "border-ok-border text-ok"
+                  : "border-warn-border text-warn"
             )}
           >
             {c.selo.texto}
@@ -290,6 +294,9 @@ function origemDaTaxa(e: ResumoEntrega | undefined): string | undefined {
 export function IndicadoresTopoCod(b: BaseIndicadores) {
   const t = b.atual;
   const taxa = taxaUsada(b);
+  // Cobertura do previsto: conta o custo dos que ainda vao ser enviados. No
+  // Lucro previsto so o aviso; o "Todos com custo" fica no cartao Pedidos.
+  const cobertura = seloCobertura(t.cod.coberturaCusto);
   const lucro = cartaoCod(
     b,
     "lucroPrevisto",
@@ -298,7 +305,7 @@ export function IndicadoresTopoCod(b: BaseIndicadores) {
     (x) => x.cod.lucroPrevisto,
     "dinheiro",
     "Previsto menos produto, frete, taxas, devoluções esperadas e anúncios.",
-    { notas: b.dicas.lucro }
+    { notas: b.dicas.lucro, selo: cobertura?.tom === "warn" ? cobertura : undefined }
   );
   const cartoes: Cartao[] = [
     cartaoCod(
@@ -362,7 +369,7 @@ export function IndicadoresKpiCod(b: BaseIndicadores) {
       valor: taxa,
       texto: porcento(taxa),
       bom: "neutro",
-      definicao: `Dos contra entrega finalizados nos últimos 60 dias (sem a última semana), quantos foram entregues. Com menos de ${AMOSTRA_MINIMA}, vale a taxa padrão de Custos e taxas.`,
+      definicao: `Dos contra entrega finalizados nos últimos 60 dias (sem a última semana), quantos foram entregues. Em aberto há mais de ${DIAS_SEM_RETORNO} dias conta como não entregue. Com menos de ${AMOSTRA_MINIMA}, vale a taxa padrão de Custos e taxas.`,
       detalhe: origemDaTaxa(b.entrega),
     },
     daMetrica(b, "gasto", Megaphone, (x) => x.gasto, {
@@ -392,7 +399,7 @@ export function IndicadoresKpiCod(b: BaseIndicadores) {
       "Pedidos gerados: online pagos e contra entrega que não foi cancelado antes do envio.",
       {
         detalhe: `${inteiro(t.pedidos)} ${t.pedidos === 1 ? "pago" : "pagos"} · ${inteiro(t.cod.abertos)} em aberto · ${inteiro(t.cod.recusados)} ${t.cod.recusados === 1 ? "recusado" : "recusados"}`,
-        selo: seloCobertura(t.coberturaCusto),
+        selo: seloCobertura(t.cod.coberturaCusto),
       }
     ),
     cartaoCod(b, "cpaCod", "CPA", UserPlus, (x) => x.cod.cpa, "dinheiro", "Gasto em anúncios dividido pelos pedidos gerados. Quanto menor, melhor.", {

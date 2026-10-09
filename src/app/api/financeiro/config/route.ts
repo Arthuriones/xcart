@@ -13,6 +13,7 @@ export const runtime = "nodejs";
 //   - como a loja recebe (068): contra_entrega, cod_taxa_entrega,
 //     cod_custo_devolucao.
 // O corpo traz um bloco ou os dois; o upsert so mexe nas colunas que vieram.
+// So o recebimento numa loja sem linha: 409, nao cria (ver abaixo).
 //
 // A taxa e uma regra simples (percentual + fixo por pedido, na moeda da loja)
 // ate o xcart ler a taxa real do Shopify Payments. Escrita pelo service role
@@ -92,12 +93,33 @@ export async function POST(request: NextRequest) {
   if (erroLoja) return erro(`Falha ao ler a loja: ${erroLoja.message}`, 500);
   if (!loja || loja.user_id !== user.id) return erro("Loja não encontrada.", 404);
 
+  const agora = new Date().toISOString();
+  // So o recebimento: atualiza a linha, nunca cria. A linha existir e o que
+  // diz "taxa configurada" no Dashboard, no Pedidos e em Custos; criada aqui,
+  // nasceria com taxa 0 (o default da 052) e o aviso de taxa sumiria calado
+  // -- na loja mista, o Shopify Payments passava a contar sem taxa nenhuma.
+  if (!temTaxas) {
+    const { data, error } = await admin
+      .from("fin_store_settings")
+      .update({ ...campos, updated_at: agora })
+      .eq("store_id", loja.id)
+      .select("store_id");
+    if (error) {
+      if (ehColunaAusente(error)) {
+        return erro("O modo contra entrega ainda não foi liberado. Tente de novo mais tarde.", 503);
+      }
+      return erro(`Falha ao gravar: ${error.message}`, 500);
+    }
+    if (!data || data.length === 0) return erro("Salve a taxa de pagamento primeiro.", 409);
+    return NextResponse.json({ ok: true });
+  }
+
   const { error } = await admin.from("fin_store_settings").upsert(
     {
       store_id: loja.id,
       user_id: loja.user_id,
       ...campos,
-      updated_at: new Date().toISOString(),
+      updated_at: agora,
     },
     { onConflict: "store_id" }
   );

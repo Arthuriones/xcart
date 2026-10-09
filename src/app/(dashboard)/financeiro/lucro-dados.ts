@@ -734,13 +734,25 @@ export function montarPendencias(d: EntradaPendencias): Pendencia[] {
  * Avisos que so explicam um numero (custo padrao, cambio, fuso): viram Dica
  * no indicador que eles afetam, em vez de caixa na tela.
  */
-export function montarDicas(avisos: Avisos, coberturaCusto: number | null): Partial<Record<IdMetrica, string[]>> {
+export function montarDicas(
+  avisos: Avisos,
+  coberturaCusto: number | null,
+  /**
+   * Contra entrega: a cobertura e a do previsto (Totais.cod.coberturaCusto), e
+   * o SKU sem custo tambem vira nota no Lucro previsto -- la nao ha o selo do
+   * realizado para avisar que o produto entrou como zero.
+   */
+  contraEntrega = false
+): Partial<Record<IdMetrica, string[]>> {
   const dicas: Partial<Record<IdMetrica, string[]>> = {};
   const juntar = (id: IdMetrica, texto: string) => {
     (dicas[id] ??= []).push(texto);
   };
   if (coberturaCusto !== null && coberturaCusto < 0.95 && avisos.lojasSemCustoPadraoComFalta.length === 0) {
     juntar("lucro", `${porcento(1 - coberturaCusto)} da receita usa o custo padrão da loja, não o do SKU.`);
+  }
+  if (contraEntrega && avisos.lojasSemCustoPadraoComFalta.length > 0) {
+    juntar("lucro", `Produto sem custo cadastrado entrou como zero em ${listar(avisos.lojasSemCustoPadraoComFalta)}.`);
   }
   if (avisos.cambioAproximado) {
     juntar("lucro", "Parte dos valores usa câmbio aproximado: a cotação do dia ainda não chegou.");

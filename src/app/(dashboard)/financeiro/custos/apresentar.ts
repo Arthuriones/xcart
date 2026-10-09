@@ -462,7 +462,8 @@ export function mensagemDeFalha(
   if (status === null) return "Sem conexão com o servidor. Nada se perdeu: tente de novo.";
   if (status === 401) return "Sua sessão expirou. Entre de novo em outra aba e salve outra vez.";
   if (status === 404) return "Esta loja não está mais na sua conta.";
-  if (status === 400) {
+  // 409: o recebimento numa loja sem taxa ("Salve a taxa de pagamento primeiro.").
+  if (status === 400 || status === 409) {
     const texto = typeof corpo?.error === "string" ? corpo.error.trim() : "";
     return texto || "Algum valor foi recusado. Confira os campos e tente de novo.";
   }

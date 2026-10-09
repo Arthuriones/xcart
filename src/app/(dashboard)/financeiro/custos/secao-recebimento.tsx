@@ -26,7 +26,8 @@ import {
 // contra entrega e reconhecido pelo gateway, com a loja em qualquer modo.
 //
 // Grava pela rota de sempre (POST /api/financeiro/config), so os campos de
-// recebimento: a taxa de pagamento fica como esta.
+// recebimento: a taxa de pagamento fica como esta. So depois de a taxa estar
+// salva (a rota nao cria a linha so com o recebimento).
 // ============================================================================
 
 const MODOS: { valor: ModoRecebimento; rotulo: string }[] = [
@@ -46,6 +47,7 @@ export function SecaoRecebimento({
   storeId,
   moedaLoja,
   sugestao,
+  taxaConfigurada,
   form,
   sujo,
   onMudar,
@@ -54,6 +56,11 @@ export function SecaoRecebimento({
   storeId: string;
   moedaLoja: string | null;
   sugestao: SugestaoCod;
+  /**
+   * A loja ja tem a linha de taxas. Sem ela a rota recusa (409): criar a
+   * linha so com o recebimento gravaria taxa 0 e tiraria o aviso de taxa.
+   */
+  taxaConfigurada: boolean;
   form: FormRecebimento;
   sujo: boolean;
   onMudar: (f: FormRecebimento) => void;
@@ -156,8 +163,10 @@ export function SecaoRecebimento({
             <p role="alert" className="mr-auto text-dense text-err">
               {erro}
             </p>
+          ) : sujo && !taxaConfigurada ? (
+            <p className="mr-auto text-dense text-t1">Salve a taxa de pagamento abaixo primeiro.</p>
           ) : null}
-          <Button type="submit" pending={salvando || recarregando} disabled={!sujo}>
+          <Button type="submit" pending={salvando || recarregando} disabled={!sujo || !taxaConfigurada}>
             {salvando ? "Salvando…" : "Salvar"}
           </Button>
         </div>

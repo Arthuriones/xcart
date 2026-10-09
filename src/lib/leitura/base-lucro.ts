@@ -242,7 +242,7 @@ export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseL
             .range(de, a)
             .overrideTypes<(PedidoCod & { store_id: string; dia_local: string })[], { merge: false }>()
       );
-      amostraEntrega = contarAmostra(linhas, janela);
+      amostraEntrega = contarAmostra(linhas, janela, hoje);
     } catch (e) {
       console.error("[lucro] amostra de entregas", e);
     }

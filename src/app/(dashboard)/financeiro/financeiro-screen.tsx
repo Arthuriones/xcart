@@ -78,6 +78,9 @@ export function FinanceiroScreen({
   const lucroPorLoja = new Map((extras?.serie.porLoja ?? []).map((l) => [l.storeId, l.lucro]));
   const mostrarLoja = filtro.lojaId === TODAS && dados.lojaIds.length >= 2;
 
+  // Loja marcada "Contra entrega" em Custos e taxas (ou, com todas as lojas,
+  // alguma delas): Recebido, A receber e Previsto no lugar do Faturamento.
+  const contraEntrega = r.lojasContraEntrega.length > 0;
   const comparando = comparacao === "anterior";
   const semBase = comparando && !temMovimento(r.anterior);
   const base: BaseIndicadores = {
@@ -85,12 +88,12 @@ export function FinanceiroScreen({
     atual: r.atual,
     anterior: r.anterior,
     compara: comparando && !semBase,
-    dicas: montarDicas(r.avisos, r.atual.coberturaCusto),
+    // Contra entrega: a cobertura conta o custo do que ainda vai ser enviado.
+    dicas: contraEntrega
+      ? montarDicas(r.avisos, r.atual.cod.coberturaCusto, true)
+      : montarDicas(r.avisos, r.atual.coberturaCusto),
     entrega: r.entrega,
   };
-  // Loja marcada "Contra entrega" em Custos e taxas (ou, com todas as lojas,
-  // alguma delas): Recebido, A receber e Previsto no lugar do Faturamento.
-  const contraEntrega = r.lojasContraEntrega.length > 0;
 
   return (
     <div data-largura="total" className="flex flex-col gap-6">

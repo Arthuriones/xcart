@@ -2,11 +2,11 @@ import { criarConversor, rotuloLoja, type Conversor, type EntradaFinanceiro } fr
 import {
   ROTULO_SITUACAO_COD,
   aReceberCod,
+  contaDoPedido,
   ehPedidoCod,
-  foiEnviado,
   gatewayEhCod,
+  qtdComCusto,
   situacaoCod,
-  unidadesEnviadas,
   type SituacaoCod,
 } from "@/lib/financeiro/contra-entrega";
 import {
@@ -16,7 +16,6 @@ import {
   paraNumero,
   pedidoConta,
   pedidoTemCusto,
-  qtdParaCusto,
   receitaDoPedido,
   somarDias,
   type FinOrderRow,
@@ -367,19 +366,12 @@ export function valoresDoPedido(
   const receita = receitaDoPedido(p);
   const conta = pedidoConta(p);
   const cfg = ctx.cfg;
-  const situacao = situacaoDoPedido(p);
-  // Como no calculo: valor fixo do contra entrega convertido da moeda da loja.
-  const fixo = (v: number): number => {
-    if (situacao === null || v === 0) return v;
-    const c = ctx.converter(v, String(ctx.moedaLoja || moedaPedido), moedaPedido, dia);
-    if (!c) return v;
-    if (c.aproximado) aproximado = true;
-    return c.valor;
-  };
-  const taxa =
-    conta && cfg ? (paraNumero(p.recebido) * paraNumero(cfg.taxa_pct)) / 100 + fixo(paraNumero(cfg.taxa_fixa)) : 0;
-  const voltouAoEstoque = situacao === "recusado" && unidadesEnviadas(linhas) === 0 && foiEnviado(p);
-  const devolucao = situacao === "recusado" && foiEnviado(p) ? fixo(paraNumero(cfg?.cod_custo_devolucao)) : 0;
+  // A regra do calculo: situacao, valores fixos na moeda do pedido, devolucao.
+  const cc = contaDoPedido(p, cfg, ctx.moedaLoja, ctx.converter);
+  if (cc.aproximado) aproximado = true;
+  const situacao = cc.situacao;
+  const taxa = conta && cfg ? (paraNumero(p.recebido) * paraNumero(cfg.taxa_pct)) / 100 + cc.taxaFixa : 0;
+  const devolucao = cc.devolucao;
   const aReceber = situacao === null ? 0 : aReceberCod(p, situacao);
   const pctPadrao =
     cfg && cfg.custo_padrao_pct !== null && cfg.custo_padrao_pct !== undefined
@@ -397,9 +389,7 @@ export function valoresDoPedido(
       custoTipo: "nenhuma_unidade",
     };
     if (!pedidoTemCusto(p)) return item;
-    const q = voltouAoEstoque
-      ? paraNumero(l.qtd)
-      : qtdParaCusto(l, Boolean(p.cancelado_em), p.tipo === "venda" && paraNumero(p.recebido) <= 0);
+    const q = qtdComCusto(l, p, cc.voltouAoEstoque);
     if (q <= 0) {
       item.custo = 0;
       return item;

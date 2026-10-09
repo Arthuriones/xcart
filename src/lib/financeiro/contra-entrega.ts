@@ -1,9 +1,11 @@
 import {
   arredondar,
   paraNumero,
+  qtdParaCusto,
   receitaDoPedido,
   somarDias,
   type FinOrderRow,
+  type FinStoreSettingsRow,
   type Intervalo,
   type LinhaPedido,
 } from "./tipos";
@@ -33,6 +35,13 @@ export const DIAS_AMOSTRA = 60;
  * ser registrada), e os pedidos novos puxariam a taxa para cima.
  */
 export const DIAS_AMOSTRA_RECENTES = 7;
+/**
+ * Contra entrega em aberto (aguardando envio ou em transito) com mais dias que
+ * isto conta como NAO entregue na amostra. Recusa que o lojista nao cancela
+ * nem marca fica em transito para sempre: fora do denominador, a taxa ia a
+ * 100% justo na loja que mais recusa.
+ */
+export const DIAS_SEM_RETORNO = 21;
 /** Janela da sugestao "a loja virou contra entrega". */
 export const DIAS_SUGESTAO = 7;
 
@@ -216,6 +225,8 @@ export interface AmostraEntrega {
   entregues: number;
   /** Recusados e devolvidos. Cancelado antes do envio nao entra. */
   recusados: number;
+  /** Em aberto ha mais de DIAS_SEM_RETORNO dias: conta como nao entregue. */
+  semRetorno?: number;
 }
 
 export interface TaxaEntrega {
@@ -239,7 +250,8 @@ export function taxaDeEntrega(
 ): TaxaEntrega {
   const entregues = Math.max(0, paraNumero(amostra?.entregues));
   const recusados = Math.max(0, paraNumero(amostra?.recusados));
-  const n = entregues + recusados;
+  const semRetorno = Math.max(0, paraNumero(amostra?.semRetorno));
+  const n = entregues + recusados + semRetorno;
   if (n >= AMOSTRA_MINIMA) return { taxa: entregues / n, fonte: "historico", amostra: n };
   return { taxa: taxaPadrao(padraoPct), fonte: "padrao", amostra: n };
 }
@@ -249,22 +261,107 @@ export function intervaloDaAmostra(hoje: string): Intervalo {
   return { desde: somarDias(hoje, -DIAS_AMOSTRA), ate: somarDias(hoje, -DIAS_AMOSTRA_RECENTES) };
 }
 
-/** Conta entregues e recusados dos pedidos COD finalizados, por loja. */
+/**
+ * Conta os pedidos COD finalizados, por loja: pagos ou entregues contra
+ * recusados, mais os em aberto ha mais de DIAS_SEM_RETORNO dias (recusa que
+ * ninguem marcou), que contam como nao entregues. Entregue sem pagamento
+ * continua entregue.
+ */
 export function contarAmostra(
   pedidos: (PedidoCod & Pick<FinOrderRow, "store_id" | "dia_local">)[],
-  intervalo: Intervalo
+  intervalo: Intervalo,
+  hoje: string
 ): Record<string, AmostraEntrega> {
+  const limite = somarDias(hoje, -DIAS_SEM_RETORNO);
   const saida: Record<string, AmostraEntrega> = {};
   for (const p of pedidos) {
     if (p.tipo !== "venda" || !ehPedidoCod(p)) continue;
     const dia = String(p.dia_local).slice(0, 10);
     if (dia < intervalo.desde || dia > intervalo.ate) continue;
     const s = situacaoCod(p);
-    const a = (saida[p.store_id] ??= { entregues: 0, recusados: 0 });
+    const a = (saida[p.store_id] ??= { entregues: 0, recusados: 0, semRetorno: 0 });
     if (s === "pago" || s === "entregue") a.entregues += 1;
     else if (s === "recusado") a.recusados += 1;
+    else if ((s === "em_transito" || s === "aguardando_envio") && dia < limite) a.semRetorno = (a.semRetorno ?? 0) + 1;
   }
   return saida;
+}
+
+// ---------------------------------------------------------------------------
+// A conta do pedido: uma regra so para o Dashboard, o Pedidos e o por produto
+// ---------------------------------------------------------------------------
+
+/** O conversor do calculo (criarConversor): valor de uma moeda para outra no dia. */
+export type ConverterValor = (
+  valor: number,
+  de: string,
+  para: string,
+  dia: string
+) => { valor: number; aproximado: boolean } | null;
+
+export interface ContaDoPedido {
+  /** Situacao do contra entrega; null = pedido online (e reenvio). */
+  situacao: SituacaoCod | null;
+  /** Taxa fixa da loja, na moeda do pedido. */
+  taxaFixa: number;
+  /** Custo por devolucao, na moeda do pedido. 0 no online. */
+  custoDevolucao: number;
+  /** A devolucao lancada: o custo, so no recusado que foi enviado. */
+  devolucao: number;
+  /** Recusado que voltou ao estoque: as linhas dizem "nada enviado", mas saiu. */
+  voltouAoEstoque: boolean;
+  /** Alguma conversao usou a tabela fixa (sem cotacao do dia). */
+  aproximado: boolean;
+}
+
+/**
+ * O que muda na conta de um pedido por ele ser contra entrega. O Releasit cria
+ * o pedido na moeda do cliente (CZK numa loja em USD): a taxa fixa e o custo
+ * de devolucao, que estao na moeda da loja, passam para a do pedido. Pedido
+ * online fica como sempre, sem converter.
+ */
+export function contaDoPedido(
+  p: PedidoCod & Pick<FinOrderRow, "moeda" | "dia_local">,
+  cfg: Partial<Pick<FinStoreSettingsRow, "taxa_fixa" | "cod_custo_devolucao">> | null | undefined,
+  moedaLoja: string | null | undefined,
+  converter: ConverterValor
+): ContaDoPedido {
+  const situacao = p.tipo === "venda" && ehPedidoCod(p) ? situacaoCod(p) : null;
+  const moedaPedido = String(p.moeda || "").toUpperCase();
+  const dia = String(p.dia_local).slice(0, 10);
+  let aproximado = false;
+  const fixo = (v: number): number => {
+    if (situacao === null || v === 0) return v;
+    const c = converter(v, String(moedaLoja || moedaPedido).toUpperCase(), moedaPedido, dia);
+    if (!c) return v;
+    if (c.aproximado) aproximado = true;
+    return c.valor;
+  };
+  const taxaFixa = fixo(paraNumero(cfg?.taxa_fixa));
+  const custoDevolucao = situacao === null ? 0 : fixo(paraNumero(cfg?.cod_custo_devolucao));
+  const enviado = situacao === "recusado" && foiEnviado(p);
+  return {
+    situacao,
+    taxaFixa,
+    custoDevolucao,
+    devolucao: enviado ? custoDevolucao : 0,
+    voltouAoEstoque: enviado && unidadesEnviadas(p.linhas) === 0,
+    aproximado,
+  };
+}
+
+/**
+ * Unidades da linha que custam produto e frete: a regra de sempre
+ * (qtdParaCusto), e no recusado que voltou ao estoque todas as que sairam.
+ * Recusado sem envio nenhum (tag na confirmacao) nao custa.
+ */
+export function qtdComCusto(
+  l: LinhaPedido,
+  p: Pick<FinOrderRow, "tipo" | "cancelado_em" | "recebido">,
+  voltouAoEstoque: boolean
+): number {
+  if (voltouAoEstoque) return paraNumero(l.qtd);
+  return qtdParaCusto(l, Boolean(p.cancelado_em), p.tipo === "venda" && paraNumero(p.recebido) <= 0);
 }
 
 // ---------------------------------------------------------------------------

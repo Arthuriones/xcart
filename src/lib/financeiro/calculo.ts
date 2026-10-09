@@ -2,14 +2,11 @@ import { TAXAS_BRL } from "@/lib/sales/cambio";
 import {
   aReceberCod,
   chanceDeReceber,
-  ehPedidoCod,
-  foiEnviado,
-  situacaoCod,
+  contaDoPedido,
+  qtdComCusto,
   situacaoViva,
   taxaDeEntrega,
-  unidadesEnviadas,
   type AmostraEntrega,
-  type SituacaoCod,
   type TaxaEntrega,
 } from "@/lib/financeiro/contra-entrega";
 import {
@@ -119,6 +116,11 @@ export interface TotaisCod {
   roasEquilibrioPrevisto: number | null;
   /** Gasto por pedido gerado (nao so os pagos). */
   cpa: number | null;
+  /**
+   * A coberturaCusto contando tambem o que ainda vai ser enviado (o custo do
+   * Previsto). Loja so COD com nada enviado tem cobertura aqui, nao no realizado.
+   */
+  coberturaCusto: number | null;
 }
 
 export type LinhaLoja = Totais & {
@@ -274,6 +276,10 @@ interface Acumulador {
   custoAEnviar: number;
   devolucoesEsperadas: number;
   taxasEsperadas: number;
+  /** As bases da cobertura das unidades que ainda vao ser enviadas. */
+  baseAEnviarComCusto: number;
+  baseAEnviarEstimado: number;
+  baseAEnviarSemCusto: number;
 }
 
 function acumuladorVazio(): Acumulador {
@@ -300,6 +306,9 @@ function acumuladorVazio(): Acumulador {
     custoAEnviar: 0,
     devolucoesEsperadas: 0,
     taxasEsperadas: 0,
+    baseAEnviarComCusto: 0,
+    baseAEnviarEstimado: 0,
+    baseAEnviarSemCusto: 0,
   };
 }
 
@@ -321,6 +330,7 @@ function totaisDe(a: Acumulador): Totais {
   const devolucoesPrevistas = a.devolucoes + a.devolucoesEsperadas;
   const taxasPrevistas = a.taxas + a.taxasEsperadas;
   const cm2Previsto = previsto - custoPrevisto - devolucoesPrevistas - taxasPrevistas;
+  const basePrevista = baseTotal + a.baseAEnviarComCusto + a.baseAEnviarEstimado + a.baseAEnviarSemCusto;
   return {
     pedidos: a.pedidos,
     receita: a.receita,
@@ -353,6 +363,7 @@ function totaisDe(a: Acumulador): Totais {
       roasPrevisto: gasto > 0 ? previsto / gasto : null,
       roasEquilibrioPrevisto: cm2Previsto > 0 ? previsto / cm2Previsto : null,
       cpa: a.gerados > 0 && gasto > 0 ? gasto / a.gerados : null,
+      coberturaCusto: basePrevista > 0 ? (a.baseComCusto + a.baseAEnviarComCusto) / basePrevista : null,
     },
   };
 }
@@ -468,34 +479,35 @@ export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
     const cfg = configPorLoja.get(p.store_id);
     if (!cfg) lojasSemTaxa.add(rotuloLoja(loja));
 
-    // Contra entrega: a situacao decide o que ja entrou e o que pode entrar.
-    // Pedido online passa por aqui com situacao null e a conta de sempre.
-    const situacao: SituacaoCod | null = p.tipo === "venda" && ehPedidoCod(p) ? situacaoCod(p) : null;
-    // Valor fixo (moeda da loja) na moeda do pedido. O Releasit cria o pedido
-    // na moeda do cliente (CZK numa loja em USD): sem isto a taxa fixa e a
-    // devolucao sairiam em coroa. Online fica como sempre, sem converter.
-    const fixo = (v: number): number => {
-      if (situacao === null || v === 0) return v;
-      const c = converter(v, String(loja.moeda || moedaPedido), moedaPedido, dia);
-      if (!c) return v;
-      if (c.aproximado) cambioAproximado = true;
-      return c.valor;
-    };
-    const taxaFixa = fixo(paraNumero(cfg?.taxa_fixa));
-    const taxas = conta && cfg ? (paraNumero(p.recebido) * paraNumero(cfg.taxa_pct)) / 100 + taxaFixa : 0;
+    // Contra entrega: a situacao decide o que ja entrou e o que pode entrar,
+    // e os valores fixos (moeda da loja) vao para a moeda do pedido. Pedido
+    // online passa por aqui com situacao null e a conta de sempre. A mesma
+    // regra serve o Pedidos e o por produto (contaDoPedido).
+    const cc = contaDoPedido(p, cfg, loja.moeda, converter);
+    if (cc.aproximado) cambioAproximado = true;
+    const situacao = cc.situacao;
+    const taxas = conta && cfg ? (paraNumero(p.recebido) * paraNumero(cfg.taxa_pct)) / 100 + cc.taxaFixa : 0;
 
     let cmv = 0;
     let custoAEnviar = 0;
     let baseComCusto = 0;
     let baseEstimado = 0;
     let baseSemCusto = 0;
+    let baseAEnviarComCusto = 0;
+    let baseAEnviarEstimado = 0;
+    let baseAEnviarSemCusto = 0;
     if (pedidoTemCusto(p)) {
       const pctPadrao =
         cfg && cfg.custo_padrao_pct !== null && cfg.custo_padrao_pct !== undefined
           ? paraNumero(cfg.custo_padrao_pct)
           : null;
-      /** Custo de `q` unidades da linha, moeda do pedido. `aviso` = entra nos avisos e na cobertura. */
-      const custoDe = (l: LinhaPedido, q: number, aviso: boolean): number => {
+      /**
+       * Custo de `q` unidades da linha, moeda do pedido. `aEnviar` = ainda nao
+       * saiu (so o Previsto): a base vai para a cobertura do previsto, e o SKU
+       * sem custo avisa do mesmo jeito -- senao a loja so COD com nada enviado
+       * tinha um Lucro previsto sem custo nenhum, e calado.
+       */
+      const custoDe = (l: LinhaPedido, q: number, aEnviar: boolean): number => {
         const base = paraNumero(l.preco) * q;
         const versao = custoVigente(
           custosPorSku.get(`${p.store_id}\u0000${chaveSku(l.sku)}`) ?? [],
@@ -506,60 +518,51 @@ export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
           const c = converter(bruto, versao.moeda, moedaPedido, dia);
           if (c) {
             if (c.aproximado) cambioAproximado = true;
-            if (aviso) baseComCusto += base;
+            if (aEnviar) baseAEnviarComCusto += base;
+            else baseComCusto += base;
             return c.valor;
           }
           // Custo numa moeda sem cotacao: vale como "sem custo", com aviso.
-          if (aviso) moedasSemCotacao.add(String(versao.moeda).toUpperCase());
+          moedasSemCotacao.add(String(versao.moeda).toUpperCase());
         }
         if (pctPadrao !== null) {
-          if (aviso) baseEstimado += base;
+          if (aEnviar) baseAEnviarEstimado += base;
+          else baseEstimado += base;
           return (base * pctPadrao) / 100;
         }
-        if (aviso) {
-          baseSemCusto += base;
-          lojasSemCustoPadraoComFalta.add(rotuloLoja(loja));
-        }
+        if (aEnviar) baseAEnviarSemCusto += base;
+        else baseSemCusto += base;
+        lojasSemCustoPadraoComFalta.add(rotuloLoja(loja));
         return 0;
       };
-      // Recusado que voltou ao estoque: as linhas dizem "nada enviado", mas o
-      // envio registrado diz que saiu. O produto e o frete foram gastos.
-      // Recusado sem envio nenhum (tag de recusa na confirmacao) nao custa.
-      const voltouAoEstoque = situacao === "recusado" && unidadesEnviadas(p.linhas) === 0 && foiEnviado(p);
       for (const l of Array.isArray(p.linhas) ? p.linhas : []) {
         // recebido, nao liquido_pago: pago e reembolsado depois tem liquido 0
-        // e o custo dele e real.
-        const q = voltouAoEstoque
-          ? paraNumero(l.qtd)
-          : qtdParaCusto(l, Boolean(p.cancelado_em), p.tipo === "venda" && paraNumero(p.recebido) <= 0);
-        if (q > 0) cmv += custoDe(l, q, true);
+        // e o custo dele e real. Recusado que voltou ao estoque custa o que saiu.
+        const q = qtdComCusto(l, p, cc.voltouAoEstoque);
+        if (q > 0) cmv += custoDe(l, q, false);
         // Aguardando envio: o custo vem quando sair. So no previsto.
         if (situacao === "aguardando_envio") {
           const aEnviar = qtdParaCusto(l, false, false);
-          if (aEnviar > 0) custoAEnviar += custoDe(l, aEnviar, false);
+          if (aEnviar > 0) custoAEnviar += custoDe(l, aEnviar, true);
         }
       }
     }
 
-    let devolucao = 0;
+    const devolucao = cc.devolucao;
     let aReceber = 0;
     let esperado = 0;
     let pendente = 0;
     let devolucaoEsperada = 0;
     let taxasEsperadas = 0;
     let taxaUsada = 0;
-    if (situacao !== null) {
-      const custoDevolucao = fixo(paraNumero(cfg?.cod_custo_devolucao));
-      if (situacao === "recusado" && foiEnviado(p)) devolucao = custoDevolucao;
-      if (situacaoViva(situacao)) {
-        taxaUsada = taxaDaLoja(p.store_id).taxa;
-        const chance = chanceDeReceber(situacao, taxaUsada);
-        aReceber = aReceberCod(p, situacao);
-        esperado = aReceber * chance;
-        if (situacao !== "entregue") pendente = aReceber;
-        devolucaoEsperada = custoDevolucao * (1 - chance);
-        taxasEsperadas = cfg ? ((aReceber * paraNumero(cfg.taxa_pct)) / 100 + taxaFixa) * chance : 0;
-      }
+    if (situacao !== null && situacaoViva(situacao)) {
+      taxaUsada = taxaDaLoja(p.store_id).taxa;
+      const chance = chanceDeReceber(situacao, taxaUsada);
+      aReceber = aReceberCod(p, situacao);
+      esperado = aReceber * chance;
+      if (situacao !== "entregue") pendente = aReceber;
+      devolucaoEsperada = cc.custoDevolucao * (1 - chance);
+      taxasEsperadas = cfg ? ((aReceber * paraNumero(cfg.taxa_pct)) / 100 + cc.taxaFixa) * chance : 0;
     }
 
     const k = fator.valor;
@@ -584,6 +587,9 @@ export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
       custoAEnviar: custoAEnviar * k,
       devolucoesEsperadas: devolucaoEsperada * k,
       taxasEsperadas: taxasEsperadas * k,
+      baseAEnviarComCusto: baseAEnviarComCusto * k,
+      baseAEnviarEstimado: baseAEnviarEstimado * k,
+      baseAEnviarSemCusto: baseAEnviarSemCusto * k,
     });
   }
 

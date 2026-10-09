@@ -47,7 +47,7 @@ const ITENS: { titulo: string; texto: string }[] = [
 const CONTRA_ENTREGA = {
   titulo: "Contra entrega",
   texto:
-    "Pedido contra entrega é reconhecido pelo gateway. Recebido é só o que foi pago: o contra entrega entra quando é marcado como pago na Shopify. A receber é o contra entrega ainda sem pagamento. Previsto soma o recebido, os entregues a receber e o resto do a receber vezes a taxa de entrega da loja (a padrão, até ela ter 20 pedidos finalizados). Produto e frete contam só do que foi enviado; recusado enviado custa também a devolução.",
+    "Pedido contra entrega é reconhecido pelo gateway. Recebido é só o que foi pago: o contra entrega entra quando é marcado como pago na Shopify. A receber é o contra entrega ainda sem pagamento. Previsto soma o recebido, os entregues a receber e o resto do a receber vezes a taxa de entrega da loja (a padrão, até ela ter 20 pedidos finalizados; pedido em aberto há mais de 21 dias conta como não entregue). Produto e frete contam só do que foi enviado; recusado enviado custa também a devolução.",
 };
 
 export function ComoCalculamos({ contraEntrega = false }: { contraEntrega?: boolean }) {

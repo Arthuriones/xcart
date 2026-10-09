@@ -1,11 +1,11 @@
 import { criarConversor, type EntradaFinanceiro } from "@/lib/financeiro/calculo";
+import { contaDoPedido, qtdComCusto } from "@/lib/financeiro/contra-entrega";
 import {
   chaveSku,
   custoVigente,
   paraNumero,
   pedidoConta,
   pedidoTemCusto,
-  qtdParaCusto,
   receitaDoPedido,
   type ProductCostRow,
 } from "@/lib/financeiro/tipos";
@@ -18,8 +18,11 @@ import {
 // produto, entao aqui sai so produto, frete do fornecedor e taxa. Nunca chame
 // isto de lucro liquido.
 //
-// As regras de custo sao as do calculo (custoVigente, qtdParaCusto, custo
-// padrao da loja), chamadas daqui sem mudar nada. O que e novo e so como a
+// As regras de custo sao as do calculo (custoVigente, contaDoPedido e
+// qtdComCusto do contra entrega, custo padrao da loja), chamadas daqui sem
+// mudar nada: o custo e a taxa somados aqui batem com os do Dashboard. O custo
+// de devolucao do contra entrega e por pedido, nao por produto, e fica fora
+// (o recusado volta com a quantidade zerada). O que e novo e so como a
 // receita do pedido se divide entre os itens: pelo peso de cada linha (preco
 // x quantidade que ficou no pedido). Assim a soma dos produtos bate com o
 // faturamento -- o frete cobrado e o desconto entram rateados.
@@ -74,6 +77,7 @@ export function montarPorProduto(e: EntradaFinanceiro): PorProduto {
   const periodo = e.intervalos.atual;
   const lojas = new Set(e.lojas.map((l) => l.id));
   const configPorLoja = new Map(e.configs.map((c) => [c.store_id, c]));
+  const moedaPorLoja = new Map(e.lojas.map((l) => [l.id, l.moeda]));
 
   const custosPorSku = new Map<string, ProductCostRow[]>();
   for (const c of e.custos) {
@@ -110,10 +114,10 @@ export function montarPorProduto(e: EntradaFinanceiro): PorProduto {
     const conta = pedidoConta(p);
     const receita = receitaDoPedido(p);
     const cfg = configPorLoja.get(p.store_id);
-    const taxas =
-      conta && cfg
-        ? (paraNumero(p.recebido) * paraNumero(cfg.taxa_pct)) / 100 + paraNumero(cfg.taxa_fixa)
-        : 0;
+    // A regra do calculo: no contra entrega, a taxa fixa (moeda da loja) vai
+    // para a moeda do pedido e o recusado que voltou ao estoque custa.
+    const cc = contaDoPedido(p, cfg, moedaPorLoja.get(p.store_id), converter);
+    const taxas = conta && cfg ? (paraNumero(p.recebido) * paraNumero(cfg.taxa_pct)) / 100 + cc.taxaFixa : 0;
 
     // Receita e taxa rateadas pelo peso de cada linha.
     const pesos = linhas.map((l) => Math.max(0, paraNumero(l.preco) * paraNumero(l.qtd_atual)));
@@ -138,11 +142,7 @@ export function montarPorProduto(e: EntradaFinanceiro): PorProduto {
         ? paraNumero(cfg.custo_padrao_pct)
         : null;
     for (const l of linhas) {
-      const q = qtdParaCusto(
-        l,
-        Boolean(p.cancelado_em),
-        p.tipo === "venda" && paraNumero(p.recebido) <= 0
-      );
+      const q = qtdComCusto(l, p, cc.voltouAoEstoque);
       if (q <= 0) continue;
       const sku = chaveSku(l.sku);
       const a = de(sku);
