@@ -380,7 +380,7 @@ function Adicionar({
           <PainelUrl checkout={criado.checkout} urlInicial={criado.url} aoMudar={aoCriar} />
         ) : null}
 
-        <DialogFooter showCloseButton={passo !== "dados"}>
+        <DialogFooter showCloseButton={passo === "plataforma"}>
           {passo === "plataforma" && voltarPara ? (
             <Button variant="secondary" onClick={() => router.push(voltarPara)}>
               Voltar
@@ -399,6 +399,19 @@ function Adicionar({
                 Criar e mostrar a URL
               </Button>
             </>
+          ) : null}
+          {passo === "url" && criado ? (
+            // O checkout ja foi criado no passo anterior: o Concluido so fecha.
+            <Button
+              onClick={() => {
+                toast.success(`${criado.checkout.nome} conectado`, {
+                  description: "Os pedidos entram quando a Sphere mandar o primeiro evento.",
+                });
+                fechar(false);
+              }}
+            >
+              Concluído
+            </Button>
           ) : null}
         </DialogFooter>
       </DialogContent>
