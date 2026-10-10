@@ -18,6 +18,13 @@
 -- antiga: funciona antes e depois desta migration. Remover um celular pela
 -- tela tambem limpa a coluna antiga quando e a mesma URL, entao rodar esta
 -- migration de novo nao ressuscita celular removido.
+--
+-- ORDEM: DEPLOY PRIMEIRO, ESTA MIGRATION DEPOIS. Antes do deploy, o codigo
+-- antigo so grava na coluna da 063: URL removida nesse intervalo continuaria
+-- aqui (e voltaria a receber), URL nova ficaria so na coluna (que o codigo
+-- novo ignora quando esta tabela existe). Rodando depois do deploy, a copia
+-- pega o estado final da coluna. Se ja rodou antes do deploy, rode de novo o
+-- INSERT abaixo (idempotente) depois dele e confira com as consultas do fim.
 -- ============================================================================
 
 create table if not exists public.venda_webhooks (

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeShopDomain } from "@/lib/shopify/domain";
 import {
@@ -270,9 +270,10 @@ async function tratarPedidoCriado(
     const { registrarPedidoDoRodizio } = await import("@/lib/checkout-routes/pedidos-24h");
     const novo = await registrarPedidoDoRodizio(admin, loja.id, String(pedido.id), pedido.created_at ?? null);
     // Notificacao de venda no celular (Pushcut, ntfy...). So na primeira vez
-    // que o pedido entra -- reentrega da Shopify nao toca de novo -- e nunca
-    // segura nem derruba a compra: falhou, so vai para o log.
-    if (novo && loja.user_id) await notificarVenda(admin, loja, payload);
+    // que o pedido entra -- reentrega da Shopify nao toca de novo -- e roda
+    // DEPOIS da resposta (after): celular lento ou fora do ar nao segura a
+    // Purchase nem os 5 s da Shopify. Falhou, so vai para o log.
+    if (novo && loja.user_id) after(() => notificarVenda(admin, loja, payload));
   }
 
   if (!(await rastreamentoLigado(admin, loja.id))) {

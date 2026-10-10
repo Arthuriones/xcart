@@ -37,6 +37,7 @@ export default async function NotificacoesPage() {
             ativo={dados.venda.ativo}
             celulares={dados.venda.celulares}
             semTabela={dados.venda.semTabela}
+            erroLeitura={dados.venda.erro}
             agoraMs={dados.venda.lidoEm}
           />
           <CanalTelegram config={dados.config} temToken={dados.temToken} tokenDaEnv={dados.tokenDaEnv} />

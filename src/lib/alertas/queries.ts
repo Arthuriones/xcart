@@ -34,9 +34,10 @@ export interface AlertasDaTela {
    * "Venda no celular": o liga/desliga geral e os celulares (so o HOST de cada
    * URL -- a URL e segredo). semTabela = antes da 070 (so a URL unica da 063).
    * lidoEm: o relogio da leitura, para o "último envio há 5 min" sair igual no
-   * HTML e na hidratacao.
+   * HTML e na hidratacao. erro: nao deu para ler os celulares -- fica so nesta
+   * secao; o Telegram e as Regras nao tem nada com isso e continuam na tela.
    */
-  venda: { ativo: boolean; celulares: CelularDaTela[]; semTabela: boolean; lidoEm: number };
+  venda: { ativo: boolean; celulares: CelularDaTela[]; semTabela: boolean; lidoEm: number; erro: string | null };
   erro: string | null;
 }
 
@@ -67,7 +68,7 @@ export async function getAlertas(): Promise<AlertasDaTela> {
     config: configPadrao,
     temToken: false,
     tokenDaEnv: false,
-    venda: { ativo: true, celulares: [], semTabela: false, lidoEm: 0 },
+    venda: { ativo: true, celulares: [], semTabela: false, lidoEm: 0, erro: null },
     erro: null,
   };
   if (!user) return vazio;
@@ -138,7 +139,6 @@ export async function getAlertas(): Promise<AlertasDaTela> {
     resolvidos.error?.message ||
     config.error?.message ||
     erroToken ||
-    erroVenda ||
     erroLojas;
 
   const cfg = (config.data as AlertaConfigRow | null) ?? null;
@@ -162,6 +162,7 @@ export async function getAlertas(): Promise<AlertasDaTela> {
       ativo: (config.data as { notificar_vendas?: boolean } | null)?.notificar_vendas !== false,
       ...venda,
       lidoEm: Date.now(),
+      erro: erroVenda,
     },
     erro: erro ? `Não foi possível ler os alertas: ${erro}` : null,
   };

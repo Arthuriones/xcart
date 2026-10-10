@@ -39,6 +39,11 @@ interface Props {
   celulares: CelularDaTela[];
   /** Antes da migration 070: so o celular unico de antes, sem cadastro novo. */
   semTabela: boolean;
+  /**
+   * Nao deu para ler os celulares: so o aviso nesta secao. Sem a lista, a tela
+   * diria "Não configurado" e abriria o cadastro para quem ja tem celular.
+   */
+  erroLeitura: string | null;
   /** O relogio da leitura: "há 5 min" igual no HTML e na hidratacao. */
   agoraMs: number;
 }
@@ -156,11 +161,18 @@ function Adicionar({
   );
 }
 
-export function CanalVenda({ ativo: ativoSalvo, celulares, semTabela, agoraMs }: Props) {
+export function CanalVenda({ ativo: ativoSalvo, celulares, semTabela, erroLeitura, agoraMs }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   // O switch muda na hora; volta ao gravado se a rota recusar.
   const [ativoLocal, setAtivoLocal] = useState<boolean | null>(null);
+  // O servidor mudou o liga/desliga (o primeiro celular religa o aviso): ele
+  // vence o clique antigo, no RENDER, sem pintar uma vez o valor velho.
+  const [ativoVisto, setAtivoVisto] = useState(ativoSalvo);
+  if (ativoVisto !== ativoSalvo) {
+    setAtivoVisto(ativoSalvo);
+    setAtivoLocal(null);
+  }
   const [salvandoAtivo, setSalvandoAtivo] = useState(false);
   const [abrindo, setAbrindo] = useState(false);
   const [testando, setTestando] = useState<string | null>(null);
@@ -202,6 +214,16 @@ export function CanalVenda({ ativo: ativoSalvo, celulares, semTabela, agoraMs }:
       return;
     }
     toast.success("Venda de teste enviada", { description: "Confira o celular." });
+  }
+
+  if (erroLeitura) {
+    return (
+      <Section titulo="Venda no celular" nivel={3} descricao="Um aviso a cada venda, em todas as lojas.">
+        <Callout tom="err" titulo="Não deu para ler os celulares.">
+          {erroLeitura} Recarregue a página.
+        </Callout>
+      </Section>
+    );
   }
 
   return (

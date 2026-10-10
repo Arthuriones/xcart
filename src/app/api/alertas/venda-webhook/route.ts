@@ -7,7 +7,7 @@ import {
   semTabelaDeCelulares,
   urlDeWebhookValida,
 } from "@/lib/alertas/venda-webhook";
-import { MAX_CELULARES, MAX_NOME, nomeDoCelular } from "@/lib/alertas/venda-celulares";
+import { MAX_CELULARES, MAX_NOME, nomeDoCelular, nomeLivre } from "@/lib/alertas/venda-celulares";
 
 export const runtime = "nodejs";
 
@@ -86,19 +86,20 @@ export async function POST(request: NextRequest) {
   }
   const nome = nomeDoCelular(corpo.nome);
   if (!nome) return json(400, { ok: false, erro: `Use um nome de até ${MAX_NOME} letras.` });
+  const nomeEmBranco = typeof corpo.nome !== "string" || !corpo.nome.trim();
 
   const admin = createAdminClient();
 
   const { data: atuais, error: erroLeitura } = await admin
     .from("venda_webhooks")
-    .select("id, url")
+    .select("id, nome, url")
     .eq("user_id", user.id)
     .limit(MAX_CELULARES + 1);
   if (erroLeitura) {
     if (semTabelaDeCelulares(erroLeitura)) return json(409, { ok: false, erro: SEM_TABELA, semTabela: true });
     return json(500, { ok: false, erro: `Não deu para salvar: ${erroLeitura.message}` });
   }
-  const lista = (atuais || []) as { id: string; url: string | null }[];
+  const lista = (atuais || []) as { id: string; nome: string | null; url: string | null }[];
   if (lista.some((l) => String(l.url || "").trim() === url)) {
     return json(409, { ok: false, erro: "Esse webhook já está cadastrado." });
   }
@@ -108,7 +109,9 @@ export async function POST(request: NextRequest) {
 
   const { data: linha, error } = await admin
     .from("venda_webhooks")
-    .insert({ user_id: user.id, nome, url })
+    // Em branco com celular ja cadastrado vira "Celular 2": senao seriam dois
+    // "Celular · api.pushcut.io" iguais na lista.
+    .insert({ user_id: user.id, nome: nomeEmBranco ? nomeLivre(lista.map((l) => l.nome)) : nome, url })
     .select("id, nome, url, ultimo_envio_em, ultimo_erro")
     .single();
   if (error || !linha) {

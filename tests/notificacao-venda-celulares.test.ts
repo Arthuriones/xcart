@@ -38,7 +38,7 @@ import {
   webhooksDeVendaDoDono,
   type Venda,
 } from "@/lib/alertas/venda-webhook";
-import { MAX_CELULARES, nomeDoCelular, resumoDoCanal } from "@/lib/alertas/venda-celulares";
+import { MAX_CELULARES, nomeDoCelular, nomeLivre, resumoDoCanal } from "@/lib/alertas/venda-celulares";
 import { GET, PATCH, POST } from "@/app/api/alertas/venda-webhook/route";
 import { DELETE } from "@/app/api/alertas/venda-webhook/[id]/route";
 import { POST as TESTAR } from "@/app/api/alertas/venda-webhook/[id]/teste/route";
@@ -266,11 +266,20 @@ describe("API dos celulares", () => {
     expect(db.tabelas.alerta_config[0].notificar_vendas).toBe(true);
   });
 
-  it("adicionar sem nome vira 'Celular'; o segundo nao mexe no liga/desliga", async () => {
+  it("adicionar sem nome: 'Celular', e com 'Celular' ja na lista, 'Celular 2'; o segundo nao mexe no liga/desliga", async () => {
+    const vazio = banco([]);
+    const primeiro = await corpo(await POST(req({ url: URL_A, nome: "   " })));
+    expect(primeiro.json.celular).toMatchObject({ nome: "Celular" });
+    expect(vazio.tabelas.venda_webhooks).toHaveLength(1);
+
     const db = banco([celular(ID_A, URL_A)], { ativo: false });
     const r = await corpo(await POST(req({ url: URL_B })));
-    expect(r.json.celular).toMatchObject({ nome: "Celular", host: "ntfy.sh" });
+    expect(r.json.celular).toMatchObject({ nome: "Celular 2", host: "ntfy.sh" });
     expect(db.tabelas.alerta_config[0].notificar_vendas).toBe(false);
+
+    // Quem digitou o nome fica com ele, mesmo repetido.
+    const digitado = await corpo(await POST(req({ url: URL_C, nome: "Celular" })));
+    expect(digitado.json.celular).toMatchObject({ nome: "Celular" });
   });
 
   it("URL repetida, URL invalida e nome longo sao recusados sem ecoar a URL", async () => {
@@ -370,6 +379,15 @@ describe("regras da tela", () => {
     expect(nomeDoCelular(" iPhone  da Ana ")).toBe("iPhone da Ana");
     expect(nomeDoCelular("x".repeat(41))).toBeNull();
     expect(nomeDoCelular(42)).toBeNull();
+  });
+
+  it("nome livre para quem deixou em branco", () => {
+    expect(nomeLivre([])).toBe("Celular");
+    expect(nomeLivre(["Sócio"])).toBe("Celular");
+    expect(nomeLivre(["Celular"])).toBe("Celular 2");
+    expect(nomeLivre(["celular ", "Celular 2"])).toBe("Celular 3");
+    // Removeu o "Celular 2": a vaga dele volta.
+    expect(nomeLivre(["Celular", "Celular 3", null])).toBe("Celular 2");
   });
 
   it("status do topo", () => {

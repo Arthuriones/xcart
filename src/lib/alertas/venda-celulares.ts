@@ -36,6 +36,22 @@ export function nomeDoCelular(v: unknown): string | null {
   return n.length <= MAX_NOME ? n : null;
 }
 
+/**
+ * Nome para quem deixou em branco: "Celular" se ninguem usa; senao "Celular 2",
+ * "Celular 3"... o primeiro livre. Todo Pushcut tem o mesmo host: dois
+ * "Celular · api.pushcut.io" nao se distinguem, e nao da para renomear.
+ */
+export function nomeLivre(emUso: (string | null | undefined)[]): string {
+  const usados = new Set(emUso.map((n) => String(n ?? "").replace(/\s+/g, " ").trim().toLowerCase()));
+  if (!usados.has(NOME_PADRAO.toLowerCase())) return NOME_PADRAO;
+  // Entre 2 e usados.size + 1 sempre sobra um (o "Celular" ocupa uma vaga).
+  for (let i = 2; i <= usados.size + 1; i++) {
+    const nome = `${NOME_PADRAO} ${i}`;
+    if (!usados.has(nome.toLowerCase())) return nome;
+  }
+  return `${NOME_PADRAO} ${usados.size + 1}`;
+}
+
 /** "Ligado · 2 celulares" / "Desligado" / "Não configurado". */
 export function resumoDoCanal(ativo: boolean, n: number): { ligado: boolean; texto: string } {
   if (n === 0) return { ligado: false, texto: "Não configurado" };
