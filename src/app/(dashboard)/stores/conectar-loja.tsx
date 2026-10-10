@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/components/ui/cn";
+import { PARAM_DE } from "@/lib/conectar-operacao";
 import { getPublicAppUrl } from "@/lib/public-url";
 import { normalizeShopDomain } from "@/lib/shopify/domain";
 import { SHOPIFY_SCOPES_STRING } from "@/lib/shopify/scopes";
@@ -27,7 +28,12 @@ import { MENSAGEM_CONEXAO_PADRAO, mensagemConexao } from "@/lib/leitura/lojas-es
 // estado vazio e o "Reconectar" de cada linha abrem o mesmo dialogo.
 // ============================================================================
 
-type Abrir = { dominio?: string; reconectar?: boolean };
+type Abrir = {
+  dominio?: string;
+  reconectar?: boolean;
+  /** Veio de "Conectar operação": o Voltar do primeiro passo devolve a escolha. */
+  voltar?: string | null;
+};
 
 type ContextoConectar = {
   abrir: (opcoes?: Abrir) => void;
@@ -75,6 +81,7 @@ export function ConectarLojaProvider({
     const url = new URL(window.location.href);
     url.searchParams.delete("conectar");
     url.searchParams.delete("dominio");
+    url.searchParams.delete(PARAM_DE);
     window.history.replaceState(null, "", `${url.pathname}${url.search}`);
   }, [abrir]);
 
@@ -499,7 +506,14 @@ function Assistente({
       </div>
 
       <div className="flex justify-between gap-2 border-t border-border bg-surface-2 px-5 py-3">
-        <Button variant="secondary" onClick={() => setPasso((p) => Math.max(1, p - 1))} disabled={passo === 1 || ocupado}>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            if (passo === 1 && opcoes.voltar) router.push(opcoes.voltar);
+            else setPasso((p) => Math.max(1, p - 1));
+          }}
+          disabled={(passo === 1 && !opcoes.voltar) || ocupado}
+        >
           Voltar
         </Button>
         <Button onClick={avancar} pending={ocupado}>

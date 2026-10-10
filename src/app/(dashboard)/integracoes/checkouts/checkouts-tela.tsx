@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CheckIcon, CopyIcon, MoreHorizontalIcon, PlusIcon, SendIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -21,6 +21,7 @@ import { Section } from "@/components/ui/section";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Switch } from "@/components/ui/switch";
+import { PARAM_DE } from "@/lib/conectar-operacao";
 import { FUSO_RELATORIO_PADRAO } from "@/lib/financeiro/tipos";
 import {
   MOEDAS_COMISSAO,
@@ -42,6 +43,9 @@ import { estadoDoCheckout, haQuantoTempo, plural, quando, rotuloAfiliados } from
 // ============================================================================
 
 const API = "/api/checkouts";
+
+/** useSyncExternalStore so para saber se ja esta no navegador: nada muda depois. */
+const semAssinatura = () => () => {};
 
 /** Os fusos oferecidos em "Avançado". O padrao e o de Sao Paulo. */
 const FUSOS = [
@@ -218,9 +222,25 @@ function PainelUrl({
 // Adicionar checkout: plataforma -> nome -> URL
 // ---------------------------------------------------------------------------
 
-function Adicionar({ aberto, aoMudar, aoCriar }: { aberto: boolean; aoMudar: (v: boolean) => void; aoCriar: () => void }) {
+function Adicionar({
+  aberto,
+  aoMudar,
+  aoCriar,
+  passoInicial,
+  voltar,
+}: {
+  aberto: boolean;
+  aoMudar: (v: boolean) => void;
+  aoCriar: () => void;
+  /** "dados" quando a URL ja escolheu a plataforma (?novo=sphere). */
+  passoInicial: "plataforma" | "dados";
+  /** Veio de "Conectar operação": o Voltar devolve a escolha (so nesta abertura). */
+  voltar: string | null;
+}) {
   const id = useId();
-  const [passo, setPasso] = useState<"plataforma" | "dados" | "url">("plataforma");
+  const router = useRouter();
+  const [passo, setPasso] = useState<"plataforma" | "dados" | "url">(passoInicial);
+  const [voltarPara, setVoltarPara] = useState(voltar);
   const [nome, setNome] = useState("");
   const [moeda, setMoeda] = useState<string>("EUR");
   const [fuso, setFuso] = useState(FUSO_RELATORIO_PADRAO);
@@ -233,6 +253,7 @@ function Adicionar({ aberto, aoMudar, aoCriar }: { aberto: boolean; aoMudar: (v:
     aoMudar(v);
     if (!v) {
       setPasso("plataforma");
+      setVoltarPara(null);
       setNome("");
       setMoeda("EUR");
       setFuso(FUSO_RELATORIO_PADRAO);
@@ -360,9 +381,18 @@ function Adicionar({ aberto, aoMudar, aoCriar }: { aberto: boolean; aoMudar: (v:
         ) : null}
 
         <DialogFooter showCloseButton={passo !== "dados"}>
+          {passo === "plataforma" && voltarPara ? (
+            <Button variant="secondary" onClick={() => router.push(voltarPara)}>
+              Voltar
+            </Button>
+          ) : null}
           {passo === "dados" ? (
             <>
-              <Button variant="secondary" onClick={() => setPasso("plataforma")} disabled={salvando}>
+              <Button
+                variant="secondary"
+                onClick={() => (voltarPara ? router.push(voltarPara) : setPasso("plataforma"))}
+                disabled={salvando}
+              >
                 Voltar
               </Button>
               <Button pending={salvando} onClick={criar}>
@@ -500,12 +530,18 @@ export function CheckoutsTela({
   eventos,
   semMigration,
   agoraMs,
+  abrirEm = null,
+  voltar = null,
 }: {
   checkouts: CheckoutResumo[];
   contas: Record<string, string[]>;
   eventos: EventoDaTela[];
   semMigration: boolean;
   agoraMs: number;
+  /** ?novo= na URL: abre o "Adicionar checkout" ao chegar, neste passo. */
+  abrirEm?: "plataforma" | "dados" | null;
+  /** ?de=conectar: o Voltar do primeiro passo devolve /conectar. */
+  voltar?: string | null;
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -517,6 +553,25 @@ export function CheckoutsTela({
   const [testando, setTestando] = useState<string | null>(null);
   const fuso = FUSO_RELATORIO_PADRAO;
   const atualizar = () => startTransition(() => router.refresh());
+
+  // ?novo= na URL: o "Adicionar checkout" abre so no navegador (o dialogo
+  // nao existe no HTML do servidor) -- useSyncExternalStore, sem setState em
+  // efeito -- e fecha de vez ao fechar. O pedido sai da URL para recarregar a
+  // pagina nao reabrir, como no "Conectar loja" (stores/conectar-loja.tsx).
+  const [pedidoAberto, setPedidoAberto] = useState(() => abrirEm !== null && !semMigration);
+  const noNavegador = useSyncExternalStore(semAssinatura, () => true, () => false);
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("novo") && !url.searchParams.has(PARAM_DE)) return;
+    url.searchParams.delete("novo");
+    url.searchParams.delete(PARAM_DE);
+    window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+  }, []);
+  const adicionarAberto = adicionando || (pedidoAberto && noNavegador);
+  function mudarAdicionar(v: boolean) {
+    setAdicionando(v);
+    if (!v) setPedidoAberto(false);
+  }
 
   const estados = checkouts.map((c) => estadoDoCheckout(c, agoraMs, fuso));
   const comErro = estados.filter((e) => e.tom === "err").length;
@@ -683,7 +738,13 @@ export function CheckoutsTela({
         </Section>
       ) : null}
 
-      <Adicionar aberto={adicionando} aoMudar={setAdicionando} aoCriar={atualizar} />
+      <Adicionar
+        aberto={adicionarAberto}
+        aoMudar={mudarAdicionar}
+        aoCriar={atualizar}
+        passoInicial={abrirEm === "dados" ? "dados" : "plataforma"}
+        voltar={pedidoAberto ? voltar : null}
+      />
 
       <Dialog open={urlDe !== null} onOpenChange={(v) => !v && setUrlDe(null)}>
         <DialogContent size="md">

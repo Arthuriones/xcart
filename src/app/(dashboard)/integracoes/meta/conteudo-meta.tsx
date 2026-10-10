@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ROTA_CONECTAR_OPERACAO, ROTULO_CONECTAR_OPERACAO } from "@/lib/conectar-operacao";
 import { CabecalhoPlataforma } from "../cabecalho-plataforma";
 import { ContasTabela } from "../contas-tabela";
 import type { DadosAnuncios } from "../dados-anuncios";
@@ -44,11 +45,11 @@ export function ConteudoMeta({ d }: { d: DadosAnuncios }) {
 
       {d.lojas.length === 0 && d.checkouts.length === 0 ? (
         <EmptyState
-          titulo="Conecte uma loja primeiro"
+          titulo="Conecte uma loja ou um checkout primeiro"
           descricao="O gasto de cada conta de anúncio entra no lucro de uma loja (ou de um checkout). Sem nenhum, não há onde ligar a conta."
           acao={
-            <Link href="/stores?conectar=1" className={buttonVariants()}>
-              Conectar loja
+            <Link href={ROTA_CONECTAR_OPERACAO} className={buttonVariants()}>
+              {ROTULO_CONECTAR_OPERACAO}
             </Link>
           }
         />

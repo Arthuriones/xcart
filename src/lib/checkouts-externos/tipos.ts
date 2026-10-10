@@ -23,6 +23,17 @@ export const PLATAFORMAS_CHECKOUT: {
   { id: "kiwify", nome: "Kiwify", descricao: "Em breve", ativa: false },
 ];
 
+/**
+ * `?novo=` na URL de Integracoes > Checkouts abre o "Adicionar checkout" ao
+ * chegar (vem de /conectar): plataforma ativa vai direto ao nome e moeda;
+ * "1", plataforma em breve ou desconhecida abre na escolha da plataforma.
+ * Sem o parametro, nada abre.
+ */
+export function passoDoNovo(novo: string | string[] | null | undefined): "plataforma" | "dados" | null {
+  if (typeof novo !== "string" || !novo) return null;
+  return PLATAFORMAS_CHECKOUT.some((p) => p.ativa && p.id === novo) ? "dados" : "plataforma";
+}
+
 export const NOME_PLATAFORMA: Record<IdPlataformaCheckout, string> = {
   sphere: "Sphere Affiliates",
 };

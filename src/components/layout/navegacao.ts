@@ -19,6 +19,7 @@ import {
   TrendingUp,
   type LucideIcon,
 } from "lucide-react";
+import { ROTA_CONECTAR_OPERACAO } from "@/lib/conectar-operacao";
 import { textos } from "@/lib/textos";
 import { hrefAtivo } from "./nav-ativo";
 import type { ModoContexto } from "./contexto";
@@ -130,7 +131,16 @@ export const ITENS: Record<IdItem, ItemNav> = {
     contador: "alertas",
   },
   custos: { id: "custos", href: "/financeiro/custos", rotulo: t("costs"), icone: Calculator, atalho: "c" },
-  lojas: { id: "lojas", href: "/stores", rotulo: t("stores"), icone: Store, atalho: "o", busca: "shopify" },
+  lojas: {
+    id: "lojas",
+    href: "/stores",
+    rotulo: t("stores"),
+    icone: Store,
+    atalho: "o",
+    busca: "shopify checkouts",
+    // "Conectar operação" (a escolha entre loja e checkout) acende Lojas.
+    tambem: [ROTA_CONECTAR_OPERACAO],
+  },
   integracoes: {
     id: "integracoes",
     href: "/integracoes",
@@ -277,6 +287,7 @@ export const SECOES_CONFIGURACOES: { id: string; titulo: string; links: LinkConf
     id: "contas",
     titulo: t("accounts"),
     links: [
+      { rotulo: t("connectOperation"), href: ROTA_CONECTAR_OPERACAO, dica: "Loja Shopify ou checkout externo" },
       { rotulo: "Meta", href: "/integracoes/meta", dica: "Gasto e envio das compras" },
       { rotulo: "Google", href: "/integracoes/google", dica: "Gasto e envio das compras" },
       { rotulo: "Shopify", href: "/integracoes/shopify", dica: "Acesso de cada loja" },
@@ -320,6 +331,7 @@ const TITULOS: Record<string, string> = {
   "/tracking/eventos": t("liveEvents"),
   "/alertas": t("alerts"),
   "/stores": t("stores"),
+  [ROTA_CONECTAR_OPERACAO]: t("connectOperation"),
   "/clone": t("import"),
   "/clone/shopify": `${t("import")} da Shopify`,
   "/bulk": t("import"),

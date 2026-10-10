@@ -179,6 +179,18 @@ describe("itemAcesoNoMenu (nenhum item acende errado)", () => {
     expect(itemAcesoNoMenu("/clone", grupos)).toBe("importar");
   });
 
+  it("Conectar operação (/conectar) acende Lojas, no grupo Operações", () => {
+    for (const temRota of [false, true]) {
+      const grupos = gruposNav(temRota);
+      expect(itemAtivo("/conectar")).toBe("lojas");
+      expect(itemAcesoNoMenu("/conectar", grupos)).toBe("lojas");
+      expect(grupos.find((g) => g.itens.some((i) => i.id === "lojas"))?.rotulo).toBe("Operações");
+    }
+    // O menu continua com "Lojas", sem item novo.
+    expect(ITENS.lojas.rotulo).toBe("Lojas");
+    expect(ITENS.lojas.href).toBe("/stores");
+  });
+
   it("Alertas acende Alertas; rota fora do app nao acende nada", () => {
     const grupos = gruposNav(false);
     expect(itemAcesoNoMenu("/alertas", grupos)).toBe("alertas");
@@ -228,6 +240,13 @@ describe("indice de /configuracoes", () => {
     expect(modulos).toEqual(["Roteamento", "Importar", "Atividade", "Claude (MCP)", "Guia de configuração"]);
   });
 
+  it("Contas abre com o Conectar operação", () => {
+    const contas = SECOES_CONFIGURACOES.find((s) => s.id === "contas")!.links;
+    expect(contas[0]).toMatchObject({ rotulo: "Conectar operação", href: "/conectar" });
+    expect(contas.map((l) => l.href)).toContain("/stores");
+    expect(contas.map((l) => l.href)).toContain("/integracoes/checkouts");
+  });
+
   it("todo link cai numa tela conhecida, sem repetir", () => {
     expect(new Set(hrefs).size).toBe(hrefs.length);
     for (const href of hrefs) expect(itemAtivo(href), href).not.toBeNull();
@@ -267,6 +286,8 @@ describe("contexto e titulo do topo", () => {
     // loja nao fingir que filtra.
     expect(contextoDaRota("/clone/routed-checkout").tipo).toBe("nenhum");
     expect(contextoDaRota("/stores").tipo).toBe("nenhum");
+    // A escolha nao mostra numero: sem seletor de loja.
+    expect(contextoDaRota("/conectar").tipo).toBe("nenhum");
   });
 
   it("titulo pelo prefixo mais longo", () => {
@@ -277,6 +298,8 @@ describe("contexto e titulo do topo", () => {
     expect(tituloDaRota("/clone/routed-checkout/map")).toBe("Rotas");
     expect(tituloDaRota("/configuracoes")).toBe("Configurações");
     expect(tituloDaRota("/pedidos")).toBe("Pedidos");
+    expect(tituloDaRota("/conectar")).toBe("Conectar operação");
+    expect(tituloDaRota("/stores")).toBe("Lojas");
     expect(tituloDaRota("/nao-existe")).toBe("xcart");
   });
 });
@@ -315,6 +338,8 @@ describe("messages/pt.json", () => {
       "setupGuide",
       "more",
       "skipToContent",
+      // Conectar operação (/conectar)
+      "connectOperation",
     ];
     for (const chave of novas) {
       expect(typeof pt.nav[chave], chave).toBe("string");

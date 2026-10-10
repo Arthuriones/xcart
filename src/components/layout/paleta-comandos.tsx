@@ -14,6 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import clsx from "clsx";
+import { ROTA_CONECTAR_OPERACAO, ROTULO_CONECTAR_OPERACAO } from "@/lib/conectar-operacao";
 import { ATALHOS_G, ITENS } from "./navegacao";
 import { Janela } from "./sobreposicao";
 
@@ -277,9 +278,16 @@ export function PaletaComandos({
   }
 
   if (!soLojas && !soPedidos) {
-    const acoes: Omit<Resultado, "grupo">[] = [
+    // `busca`: outras palavras que acham a acao (o rotulo ja acha).
+    const acoes: (Omit<Resultado, "grupo"> & { busca?: string })[] = [
       { chave: "acao-atualizar", rotulo: "Atualizar agora", icone: RefreshCw, acao: () => { setAberta(false); onAtualizar(); } },
-      { chave: "acao-conectar", rotulo: "Conectar loja", icone: Store, acao: () => ir(`${ITENS.lojas.href}?conectar=1`) },
+      {
+        chave: "acao-conectar",
+        rotulo: ROTULO_CONECTAR_OPERACAO,
+        busca: "conectar loja shopify checkout sphere",
+        icone: Store,
+        acao: () => ir(ROTA_CONECTAR_OPERACAO),
+      },
       { chave: "acao-importar", rotulo: "Importar produto", icone: Download, acao: () => ir(ITENS.importar.href) },
       {
         chave: "acao-tema",
@@ -301,7 +309,9 @@ export function PaletaComandos({
         },
       },
     ];
-    for (const a of acoes) if (casa(a.rotulo)) resultados.push({ ...a, grupo: "Ações" });
+    for (const { busca, ...a } of acoes) {
+      if (casa(`${a.rotulo} ${busca ?? ""}`)) resultados.push({ ...a, grupo: "Ações" });
+    }
   }
 
   const indice = Math.min(ativo, Math.max(0, resultados.length - 1));

@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Tooltip } from "@base-ui/react/tooltip";
-import { Calendar, Check, ChevronDown, RefreshCw, Search, SlidersHorizontal, Store, X } from "lucide-react";
+import { Calendar, Check, ChevronDown, Plus, RefreshCw, Search, SlidersHorizontal, Store, X } from "lucide-react";
 import clsx from "clsx";
+import { ROTA_CONECTAR_OPERACAO, ROTULO_CONECTAR_OPERACAO } from "@/lib/conectar-operacao";
 import {
   COOKIE_LOJA,
   COOKIE_MOEDA,
@@ -296,6 +298,23 @@ function ListaLojas({
   );
 }
 
+/** "+ Conectar operação" no pe da lista de lojas: a escolha entre loja e checkout. */
+function LinkConectar({ grande, aoIr }: { grande?: boolean; aoIr: () => void }) {
+  return (
+    <Link
+      href={ROTA_CONECTAR_OPERACAO}
+      onClick={aoIr}
+      className={clsx(
+        "flex w-full items-center gap-2.5 rounded-control px-2 text-t1 hover:bg-hover hover:text-ink",
+        grande ? "min-h-ctl-lg text-body" : "min-h-10 text-dense"
+      )}
+    >
+      <Plus className="size-4 shrink-0" strokeWidth={1.75} aria-hidden />
+      {ROTULO_CONECTAR_OPERACAO}
+    </Link>
+  );
+}
+
 function Radio({
   marcado,
   rotulo,
@@ -453,6 +472,14 @@ export function BarraContexto({
               busca={busca}
               onEscolher={(id) => {
                 ctx.gravar({ lojaId: id });
+                setAberto(null);
+                setBusca("");
+              }}
+            />
+          </div>
+          <div className="border-t border-border p-1">
+            <LinkConectar
+              aoIr={() => {
                 setAberto(null);
                 setBusca("");
               }}
@@ -704,6 +731,7 @@ export function ContextoCelular({
               grande
               onEscolher={(id) => setRascunho({ ...r, lojaId: id })}
             />
+            <LinkConectar grande aoIr={() => abrir(false)} />
           </div>
 
           {completo && (

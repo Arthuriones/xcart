@@ -4,6 +4,7 @@ import { Store } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ROTA_CONECTAR_OPERACAO, ROTULO_CONECTAR_OPERACAO } from "@/lib/conectar-operacao";
 import { filtroResolvido, lerComparacao, lerFiltroGlobal } from "@/lib/filtro-global";
 import { TODAS } from "@/lib/financeiro/tipos";
 import { getFinanceiro } from "@/lib/financeiro/queries";
@@ -135,14 +136,9 @@ function SemLojas() {
       titulo="Conecte uma loja ou um checkout"
       descricao="Cruzamos os pedidos (ou as comissões) com o gasto do Meta e do Google."
       acao={
-        <span className="flex flex-wrap justify-center gap-2">
-          <Link href="/stores?conectar=1" className={buttonVariants({})}>
-            Conectar loja
-          </Link>
-          <Link href="/integracoes/checkouts" className={buttonVariants({ variant: "secondary" })}>
-            Adicionar checkout
-          </Link>
-        </span>
+        <Link href={ROTA_CONECTAR_OPERACAO} className={buttonVariants({})}>
+          {ROTULO_CONECTAR_OPERACAO}
+        </Link>
       }
       className="min-h-80"
     />

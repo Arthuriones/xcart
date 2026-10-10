@@ -99,6 +99,8 @@ A checkout where the order happens outside Shopify (Sphere Affiliates first: COD
 
 Webhook: `POST /api/webhooks/checkout/<token>` (public; token = the only secret; 404 for unknown; 64 KB cap; the insert into `checkout_externo_eventos` is the lock; `aplicarEvento` keeps out-of-order events from regressing; the "Venda no celular" goes in `after()`). The test event (`afiliado.codigo = "xcart-teste"`) never creates an order. In the Dashboard the checkout is a "store" with `tipo: "checkout"` in `EntradaFinanceiro.lojas`, orders in `externos`, and it rides the cash-on-delivery cards (Recebido / A receber / Previsto by the approval rate). `filtroResolvido()` keeps `lojas`/`lojaIds` Shopify-only and adds `checkouts`/`checkoutIds`/`checkout`. External checkouts do NOT count towards plan limits.
 
+**"Conectar operação" (`/conectar`, `src/lib/conectar-operacao.ts`)** is the one generic entry point: it asks WHAT to connect (Shopify store or external checkout; "Em breve" platforms come from `PLATAFORMAS_CHECKOUT`) and links to the existing flow already open at the right step -- `/stores?conectar=1&de=conectar` (the store wizard) or `/integracoes/checkouts?novo=sphere&de=conectar` (name/currency step, `passoDoNovo`). `de=conectar` makes the first step's "Voltar" go back to `/conectar` (fixed target, never a URL from the query). Generic CTAs (Dashboard/Pedidos/Meta/Google/Atividade empty states, Lojas header, top selector, Ctrl K) point there; Shopify-only screens keep "Conectar loja". `/stores` also lists the external checkouts read-only (`checkouts-da-conta.tsx`).
+
 ---
 
 ## 6. Shopify integration (`src/lib/shopify/client.ts`)

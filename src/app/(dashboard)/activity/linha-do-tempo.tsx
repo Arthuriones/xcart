@@ -35,6 +35,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { gravarCookie, rotuloFuso } from "@/components/layout/contexto";
+import { ROTA_CONECTAR_OPERACAO, ROTULO_CONECTAR_OPERACAO } from "@/lib/conectar-operacao";
 import { COOKIE_LOJA, TODAS } from "@/lib/financeiro/tipos";
 import {
   DIAS_CARRINHO,
@@ -186,10 +187,10 @@ export function LinhaDoTempo({
         descricao="Lojas, importações, alertas e compras de créditos aparecem aqui."
         acao={
           <Link
-            href="/stores?conectar=1"
+            href={ROTA_CONECTAR_OPERACAO}
             className={cn(buttonVariants({ variant: "primary" }), "h-ctl-lg sm:h-ctl-md")}
           >
-            Conectar loja
+            {ROTULO_CONECTAR_OPERACAO}
           </Link>
         }
         className="py-12"

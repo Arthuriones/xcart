@@ -4,6 +4,7 @@ import { Store } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ROTA_CONECTAR_OPERACAO, ROTULO_CONECTAR_OPERACAO } from "@/lib/conectar-operacao";
 import { filtroResolvido, lerFiltroGlobal } from "@/lib/filtro-global";
 import { rotuloLoja } from "@/lib/financeiro/calculo";
 import { TODAS } from "@/lib/financeiro/tipos";
@@ -95,14 +96,9 @@ function SemNada() {
       titulo="Conecte uma loja ou um checkout para ver os pedidos"
       descricao="Os pedidos aparecem aqui com o lucro (loja) ou a comissão (checkout) de cada um."
       acao={
-        <span className="flex flex-wrap justify-center gap-2">
-          <Link href="/stores?conectar=1" className={buttonVariants({})}>
-            Conectar loja
-          </Link>
-          <Link href="/integracoes/checkouts" className={buttonVariants({ variant: "secondary" })}>
-            Adicionar checkout
-          </Link>
-        </span>
+        <Link href={ROTA_CONECTAR_OPERACAO} className={buttonVariants({})}>
+          {ROTULO_CONECTAR_OPERACAO}
+        </Link>
       }
       className="min-h-80"
     />
