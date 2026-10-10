@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 // eventos chegando. Cada checkout vira uma "loja" de comissao no seletor do
 // topo e no Dashboard. Ver src/lib/checkouts-externos/.
 //
-// ?novo=sphere (ou ?novo=1) abre o "Adicionar checkout" ao chegar, ja no passo
+// ?novo=sphere (ou ?novo=1) abre o "Conectar checkout" ao chegar, ja no passo
 // certo; e a porta do "Conectar operação" (/conectar), que manda &de=conectar
 // para o Voltar devolver a escolha.
 // ============================================================================

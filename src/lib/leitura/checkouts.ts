@@ -33,7 +33,11 @@ export interface CheckoutsDaTela {
 
 const EVENTOS_NA_TELA = 20;
 
-export async function lerCheckoutsDaTela(): Promise<CheckoutsDaTela> {
+/**
+ * `comEventos: false` pula os eventos (a tela Lojas so lista os checkouts):
+ * `eventos` vem vazio e a tabela deles nao entra na leitura.
+ */
+export async function lerCheckoutsDaTela({ comEventos = true }: { comEventos?: boolean } = {}): Promise<CheckoutsDaTela> {
   const user = await getCurrentUser();
   if (!user) return { checkouts: [], contas: {}, eventos: [], semMigration: false };
   const supabase = await createClient();
@@ -48,12 +52,14 @@ export async function lerCheckoutsDaTela(): Promise<CheckoutsDaTela> {
       .select("checkout_id, conta")
       .eq("user_id", user.id)
       .order("criado_em", { ascending: true }),
-    supabase
-      .from("checkout_externo_eventos")
-      .select("checkout_id, pedido_id, evento, recebido_em")
-      .eq("user_id", user.id)
-      .order("recebido_em", { ascending: false })
-      .limit(EVENTOS_NA_TELA),
+    comEventos
+      ? supabase
+          .from("checkout_externo_eventos")
+          .select("checkout_id, pedido_id, evento, recebido_em")
+          .eq("user_id", user.id)
+          .order("recebido_em", { ascending: false })
+          .limit(EVENTOS_NA_TELA)
+      : null,
   ]);
   if (cks.error) {
     if (semMigration069(cks.error)) return { checkouts: [], contas: {}, eventos: [], semMigration: true };
@@ -64,11 +70,11 @@ export async function lerCheckoutsDaTela(): Promise<CheckoutsDaTela> {
   for (const c of (cts.error ? [] : (cts.data ?? [])) as { checkout_id: string; conta: string }[]) {
     (contas[String(c.checkout_id)] ??= []).push(String(c.conta));
   }
-  if (evs.error && !semMigration069(evs.error)) throw new Error(`Falha ao ler os eventos: ${evs.error.message}`);
+  if (evs?.error && !semMigration069(evs.error)) throw new Error(`Falha ao ler os eventos: ${evs.error.message}`);
   return {
     checkouts: ((cks.data ?? []) as CheckoutExternoRow[]).map(resumoDoCheckout),
     contas,
-    eventos: ((evs.error ? [] : (evs.data ?? [])) as {
+    eventos: ((!evs || evs.error ? [] : (evs.data ?? [])) as {
       checkout_id: string;
       pedido_id: string;
       evento: string;

@@ -3,6 +3,7 @@ import { PLATAFORMAS_CHECKOUT, passoDoNovo } from "../src/lib/checkouts-externos
 import {
   OPCOES_CONECTAR,
   ROTA_CONECTAR_OPERACAO,
+  RESUMO_CHECKOUT_EXTERNO,
   ROTULO_CONECTAR_OPERACAO,
   rotuloContagem,
   voltarParaEscolha,
@@ -58,6 +59,12 @@ describe("opcoes do Conectar operação", () => {
       expect(passoDoNovo(url.searchParams.get("novo"))).toBe("dados");
       expect(voltarParaEscolha(url.searchParams.get("de"))).toBe("/conectar");
     }
+  });
+
+  it("so promete o que o app mostra: lucro por campanha nao existe", () => {
+    const tudo = OPCOES_CONECTAR.flatMap((o) => [o.texto, ...o.traz]).join(" ");
+    expect(tudo).not.toMatch(/lucro (por produto e )?por campanha/i);
+    expect(porId.checkout.texto).toBe(RESUMO_CHECKOUT_EXTERNO);
   });
 
   it("hoje: Sphere ativa; Yampi, CartPanda e Kiwify em breve", () => {

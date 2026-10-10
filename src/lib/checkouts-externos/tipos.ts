@@ -10,7 +10,7 @@
 
 export type IdPlataformaCheckout = "sphere";
 
-/** O que a tela oferece em "Adicionar checkout". So a Sphere recebe hoje. */
+/** O que a tela oferece em "Conectar checkout". So a Sphere recebe hoje. */
 export const PLATAFORMAS_CHECKOUT: {
   id: IdPlataformaCheckout | "yampi" | "cartpanda" | "kiwify";
   nome: string;
@@ -24,7 +24,7 @@ export const PLATAFORMAS_CHECKOUT: {
 ];
 
 /**
- * `?novo=` na URL de Integracoes > Checkouts abre o "Adicionar checkout" ao
+ * `?novo=` na URL de Integracoes > Checkouts abre o "Conectar checkout" ao
  * chegar (vem de /conectar): plataforma ativa vai direto ao nome e moeda;
  * "1", plataforma em breve ou desconhecida abre na escolha da plataforma.
  * Sem o parametro, nada abre.

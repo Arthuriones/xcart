@@ -45,7 +45,6 @@ export interface OpcaoConectar {
   texto: string;
   /** O que a operacao traz, em itens curtos. */
   traz: string[];
-  nota?: string;
   /** O selo "2 conectadas" / "1 conectado". */
   contagem: { um: string; varios: string };
   destinos: DestinoConectar[];
@@ -53,13 +52,17 @@ export interface OpcaoConectar {
 
 const DE = `${PARAM_DE}=${DE_CONECTAR}`;
 
+/** O checkout externo numa frase: a mesma aqui e na tela Lojas. */
+export const RESUMO_CHECKOUT_EXTERNO = "Pedido feito fora da Shopify, com comissão por venda.";
+
 export const OPCOES_CONECTAR: OpcaoConectar[] = [
   {
     id: "loja",
     titulo: "Loja Shopify",
     texto: "Pedidos, custos e lucro de cada venda, mais o rastreamento das compras.",
-    traz: ["Pedidos dos últimos 60 dias", "Rastreamento no Meta, Google e TikTok", "Lucro por produto e por campanha"],
-    nota: "A vitrine e a loja de checkout do roteamento também são lojas Shopify.",
+    // "Gasto", nao "lucro", por campanha: lucro por campanha nao existe (ver
+    // src/lib/leitura/por-campanha.ts).
+    traz: ["Pedidos dos últimos 60 dias", "Rastreamento no Meta, Google e TikTok", "Lucro por produto e gasto por campanha"],
     contagem: { um: "conectada", varios: "conectadas" },
     destinos: [
       {
@@ -74,7 +77,7 @@ export const OPCOES_CONECTAR: OpcaoConectar[] = [
   {
     id: "checkout",
     titulo: "Checkout externo",
-    texto: "Pedido que acontece fora da Shopify e paga comissão.",
+    texto: RESUMO_CHECKOUT_EXTERNO,
     traz: ["Comissão em Recebido e A receber", "Cada pedido com a situação dele", "Gasto do Meta e do Google no lucro"],
     contagem: { um: "conectado", varios: "conectados" },
     destinos: PLATAFORMAS_CHECKOUT.map((p) => ({

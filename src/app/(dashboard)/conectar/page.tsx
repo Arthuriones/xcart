@@ -85,7 +85,6 @@ function Cartao({ opcao }: { opcao: OpcaoConectar }) {
             </li>
           ))}
         </ul>
-        {opcao.nota ? <p className="text-label text-t2">{opcao.nota}</p> : null}
       </div>
 
       <ul aria-labelledby={idTitulo} className="mt-auto border-t border-border-subtle">
@@ -102,7 +101,7 @@ function Cartao({ opcao }: { opcao: OpcaoConectar }) {
               <Link
                 href={d.href}
                 aria-label={`${d.cta} ${d.nome}`}
-                className={buttonVariants({ className: "shrink-0" })}
+                className={buttonVariants({ className: "shrink-0 h-ctl-lg sm:h-ctl-md" })}
               >
                 {d.cta}
               </Link>

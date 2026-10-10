@@ -219,7 +219,7 @@ function PainelUrl({
 }
 
 // ---------------------------------------------------------------------------
-// Adicionar checkout: plataforma -> nome -> URL
+// Conectar checkout: plataforma -> nome -> URL
 // ---------------------------------------------------------------------------
 
 function Adicionar({
@@ -289,7 +289,7 @@ function Adicionar({
       <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>
-            {passo === "plataforma" ? "Adicionar checkout" : passo === "dados" ? "Sphere Affiliates" : "Cole a URL na Sphere"}
+            {passo === "plataforma" ? "Conectar checkout" : passo === "dados" ? "Sphere Affiliates" : "Cole a URL na Sphere"}
           </DialogTitle>
           <DialogDescription>
             {passo === "plataforma"
@@ -538,7 +538,7 @@ export function CheckoutsTela({
   eventos: EventoDaTela[];
   semMigration: boolean;
   agoraMs: number;
-  /** ?novo= na URL: abre o "Adicionar checkout" ao chegar, neste passo. */
+  /** ?novo= na URL: abre o "Conectar checkout" ao chegar, neste passo. */
   abrirEm?: "plataforma" | "dados" | null;
   /** ?de=conectar: o Voltar do primeiro passo devolve /conectar. */
   voltar?: string | null;
@@ -554,7 +554,7 @@ export function CheckoutsTela({
   const fuso = FUSO_RELATORIO_PADRAO;
   const atualizar = () => startTransition(() => router.refresh());
 
-  // ?novo= na URL: o "Adicionar checkout" abre so no navegador (o dialogo
+  // ?novo= na URL: o "Conectar checkout" abre so no navegador (o dialogo
   // nao existe no HTML do servidor) -- useSyncExternalStore, sem setState em
   // efeito -- e fecha de vez ao fechar. O pedido sai da URL para recarregar a
   // pagina nao reabrir, como no "Conectar loja" (stores/conectar-loja.tsx).
@@ -612,7 +612,7 @@ export function CheckoutsTela({
         acao={
           <Button onClick={() => setAdicionando(true)} disabled={semMigration}>
             <PlusIcon aria-hidden />
-            Adicionar checkout
+            Conectar checkout
           </Button>
         }
       />
@@ -631,7 +631,7 @@ export function CheckoutsTela({
             semMigration ? undefined : (
               <Button onClick={() => setAdicionando(true)}>
                 <PlusIcon aria-hidden />
-                Adicionar checkout
+                Conectar checkout
               </Button>
             )
           }

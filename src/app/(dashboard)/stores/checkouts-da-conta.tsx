@@ -2,6 +2,7 @@ import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { nomeDaPlataforma } from "@/lib/checkouts-externos/tipos";
+import { RESUMO_CHECKOUT_EXTERNO } from "@/lib/conectar-operacao";
 import { FUSO_RELATORIO_PADRAO } from "@/lib/financeiro/tipos";
 import { lerCheckoutsDaTela, type CheckoutsDaTela } from "@/lib/leitura/checkouts";
 import { estadoDoCheckout, rotuloAfiliados } from "../integracoes/regras";
@@ -15,9 +16,13 @@ import { estadoDoCheckout, rotuloAfiliados } from "../integracoes/regras";
 const ROTA_CHECKOUTS = "/integracoes/checkouts";
 const LINK = "font-medium text-ink underline underline-offset-2 hover:text-t1";
 
-/** O relogio e lido junto com os dados, fora do componente (que fica puro). */
+/**
+ * O relogio e lido junto com os dados, fora do componente (que fica puro).
+ * Sem os eventos: a lista nao usa, e a tabela deles falhar nao deve apagar os
+ * checkouts desta tela.
+ */
 async function ler(): Promise<{ dados: CheckoutsDaTela; agoraMs: number }> {
-  const dados = await lerCheckoutsDaTela();
+  const dados = await lerCheckoutsDaTela({ comEventos: false });
   return { dados, agoraMs: Date.now() };
 }
 
@@ -62,7 +67,7 @@ export async function CheckoutsDaConta() {
           <h2 id="lojas-checkouts" className="text-section text-ink">
             Checkouts externos ({checkouts.length})
           </h2>
-          <p className="text-label text-t2">Pedido fora da Shopify, pago por comissão.</p>
+          <p className="text-label text-t2">{RESUMO_CHECKOUT_EXTERNO}</p>
         </div>
         <Link href={ROTA_CHECKOUTS} className={buttonVariants({ variant: "secondary", size: "sm" })}>
           Gerenciar
