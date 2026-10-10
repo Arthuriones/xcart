@@ -360,6 +360,14 @@ export function haQuantoTempo(iso: string, agoraMs: number): string {
   return `há ${d} ${d === 1 ? "dia" : "dias"}`;
 }
 
+/** " · afiliado ywq2mdhu", " · afiliados a, b", " · afiliados a, b +2". Nenhum = "". */
+export function rotuloAfiliados(contas: string[] | undefined): string {
+  if (!contas || contas.length === 0) return "";
+  if (contas.length === 1) return ` · afiliado ${contas[0]}`;
+  const mais = contas.length > 2 ? ` +${contas.length - 2}` : "";
+  return ` · afiliados ${contas.slice(0, 2).join(", ")}${mais}`;
+}
+
 type CheckoutParaEstado = Pick<
   CheckoutResumo,
   "ativo" | "ultimo_evento_em" | "ultimo_evento_teste" | "ultimo_erro" | "ultimo_erro_em"
@@ -371,7 +379,7 @@ type CheckoutParaEstado = Pick<
  * pode chegar depois).
  */
 export function estadoDoCheckout(c: CheckoutParaEstado, agoraMs: number, fuso: string): Estado & { ordem: number } {
-  if (!c.ativo) return { ordem: 4, tom: "neutral", texto: "Pausado", detalhe: "os eventos chegam e são ignorados" };
+  if (!c.ativo) return { ordem: 4, tom: "neutral", texto: "Pausado", detalhe: "pedido novo não entra; os que já estão seguem atualizando" };
   const eventoMs = c.ultimo_evento_em ? Date.parse(c.ultimo_evento_em) : NaN;
   const erroMs = c.ultimo_erro_em ? Date.parse(c.ultimo_erro_em) : NaN;
   if (c.ultimo_erro && (!Number.isFinite(eventoMs) || !(erroMs < eventoMs))) {

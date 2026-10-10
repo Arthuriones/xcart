@@ -90,7 +90,8 @@ A checkout where the order happens outside Shopify (Sphere Affiliates first: COD
 
 | Table | Purpose |
 |---|---|
-| **checkouts_externos** | `plataforma` ('sphere'), `nome`, `ativo`, `moeda_receita` (Sphere does not send the commission currency), `fuso` (the order's `dia_local`), `taxa_aprovacao_padrao`, `conta_externa` (affiliate code, pinned on the first real event), last event/error. |
+| **checkouts_externos** | `plataforma` ('sphere'), `nome`, `ativo` (paused = a NEW order is ignored; events of an existing order still apply, since Sphere sends each one once), `moeda_receita` (Sphere does not send the commission currency), `fuso` (the order's `dia_local`), `taxa_aprovacao_padrao`, last event/error. |
+| **checkout_externo_contas** | Affiliate codes (`afiliado.codigo`) per checkout, PK `(user_id, plataforma, conta)`: the first event of a code links it; a checkout may have several codes, but a code belongs to ONE checkout of the user (another checkout gets 409 -- double count). "Trocar URL" releases the checkout's codes. |
 | **checkout_externo_segredos** | The webhook token (in clear, to show the URL again) + `token_hash` (sha256, unique: the endpoint lookup). RLS on, **zero policy**, only `service_role`. |
 | **pedidos_externos** | One row per order, LAST state: `situacao` pendente/aprovado/pago/expirado/revertido, `receita` = net commission, `valor` = order total (hint only), `dia_local`, `atualizado_em` (event time, never regresses), `versao` (optimistic lock). |
 | **checkout_externo_eventos** | Idempotency lock `(checkout, pedido, evento)` + the screen log. |

@@ -101,7 +101,6 @@ export interface CheckoutExternoRow {
   moeda_receita: string;
   fuso: string;
   taxa_aprovacao_padrao: number | string;
-  conta_externa: string | null;
   notificar_aprovada: boolean;
   ultimo_evento_em: string | null;
   ultimo_evento: string | null;
@@ -121,7 +120,6 @@ export interface CheckoutResumo {
   moeda_receita: string;
   fuso: string;
   taxa_aprovacao_padrao: number;
-  conta_externa: string | null;
   notificar_aprovada: boolean;
   ultimo_evento_em: string | null;
   ultimo_evento: string | null;
@@ -141,7 +139,6 @@ export function resumoDoCheckout(c: CheckoutExternoRow): CheckoutResumo {
     moeda_receita: c.moeda_receita,
     fuso: c.fuso,
     taxa_aprovacao_padrao: Number.isFinite(taxa) ? taxa : 70,
-    conta_externa: c.conta_externa,
     notificar_aprovada: Boolean(c.notificar_aprovada),
     ultimo_evento_em: c.ultimo_evento_em,
     ultimo_evento: c.ultimo_evento,
@@ -190,7 +187,7 @@ export const COLUNAS_PEDIDO_EXTERNO =
   "checkout_id, user_id, pedido_id, situacao, status_comissao, status_pedido, metodo_pagamento, produto, pais, programa, moeda, valor, receita, moeda_receita, criado_em, dia_local, aprovado_em, pago_em, perdido_em, atualizado_em, versao";
 
 export const COLUNAS_CHECKOUT =
-  "id, user_id, plataforma, nome, ativo, moeda_receita, fuso, taxa_aprovacao_padrao, conta_externa, notificar_aprovada, ultimo_evento_em, ultimo_evento, ultimo_evento_teste, ultimo_erro, ultimo_erro_em, created_at, updated_at";
+  "id, user_id, plataforma, nome, ativo, moeda_receita, fuso, taxa_aprovacao_padrao, notificar_aprovada, ultimo_evento_em, ultimo_evento, ultimo_evento_teste, ultimo_erro, ultimo_erro_em, created_at, updated_at";
 
 /**
  * Tabela (PGRST205/42P01) ou coluna (42703/PGRST204) que o banco nao tem: a

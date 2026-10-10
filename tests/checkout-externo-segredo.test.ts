@@ -30,14 +30,14 @@ describe("migration 069: o segredo nao sai pela sessao", () => {
   });
 
   it("as tabelas do lojista: le pela RLS, com WITH CHECK, e a sessao nao escreve", () => {
-    for (const t of ["checkouts_externos", "pedidos_externos", "checkout_externo_eventos"]) {
+    for (const t of ["checkouts_externos", "pedidos_externos", "checkout_externo_eventos", "checkout_externo_contas"]) {
       expect(SQL).toMatch(new RegExp(`alter table public\\.${t} enable row level security;`));
       const policy = SQL.match(new RegExp(`create policy "[^"]+" on public\\.${t}[^;]*;`))?.[0] ?? "";
       expect(policy).toMatch(/using \(\(select auth\.uid\(\)\) = user_id\)/);
       expect(policy).toMatch(/with check/);
     }
     expect(SQL).toMatch(
-      /revoke insert, update, delete on table\s+public\.checkouts_externos, public\.pedidos_externos, public\.checkout_externo_eventos\s+from public, anon, authenticated;/
+      /revoke insert, update, delete on table\s+public\.checkouts_externos, public\.pedidos_externos, public\.checkout_externo_eventos,\s+public\.checkout_externo_contas\s+from public, anon, authenticated;/
     );
   });
 
@@ -94,7 +94,6 @@ describe("codigo: so o service role toca o segredo", () => {
       moeda_receita: "EUR",
       fuso: "UTC",
       taxa_aprovacao_padrao: "70.00",
-      conta_externa: null,
       notificar_aprovada: false,
       ultimo_evento_em: null,
       ultimo_evento: null,
@@ -130,7 +129,7 @@ vi.mock("@/lib/checkouts-externos/repo-supabase", () => ({
     lerPedido: async () => null,
     inserirPedido: async () => "ok",
     atualizarPedido: async () => true,
-    fixarConta: async () => "ok",
+    reivindicarConta: async () => "ok",
     marcarCheckout: async () => undefined,
   }),
 }));
@@ -164,7 +163,7 @@ describe("POST /api/webhooks/checkout/[token]", () => {
   });
 
   it("corpo acima de 64 KB: 413", async () => {
-    estado.checkout = { id: "ck", user_id: "u", plataforma: "sphere", nome: "S", ativo: true, fuso: "UTC", moeda_receita: "EUR", conta_externa: null, notificar_aprovada: false };
+    estado.checkout = { id: "ck", user_id: "u", plataforma: "sphere", nome: "S", ativo: true, fuso: "UTC", moeda_receita: "EUR", notificar_aprovada: false };
     const grande = JSON.stringify({ evento: "pedido.criado", lixo: "x".repeat(65 * 1024) });
     const r = await post(TOKEN, grande);
     expect(r.status).toBe(413);
@@ -179,7 +178,6 @@ describe("POST /api/webhooks/checkout/[token]", () => {
       ativo: true,
       fuso: "Europe/Rome",
       moeda_receita: "EUR",
-      conta_externa: null,
       notificar_aprovada: false,
     };
     const agora = new Date().toISOString();
@@ -198,7 +196,7 @@ describe("POST /api/webhooks/checkout/[token]", () => {
   });
 
   it("corpo que nao e JSON: 400", async () => {
-    estado.checkout = { id: "ck", user_id: "u", plataforma: "sphere", nome: "S", ativo: true, fuso: "UTC", moeda_receita: "EUR", conta_externa: null, notificar_aprovada: false };
+    estado.checkout = { id: "ck", user_id: "u", plataforma: "sphere", nome: "S", ativo: true, fuso: "UTC", moeda_receita: "EUR", notificar_aprovada: false };
     const r = await post(TOKEN, "nao e json");
     expect(r.status).toBe(400);
   });

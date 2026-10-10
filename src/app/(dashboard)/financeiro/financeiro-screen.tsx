@@ -15,7 +15,7 @@ import {
   IndicadoresTopoCod,
   type BaseIndicadores,
 } from "./indicadores";
-import { montarDicas, nomeDaLoja, situacaoDasLojas, temMovimento } from "./lucro-dados";
+import { composicaoCod, montarDicas, nomeDaLoja, situacaoDasLojas, temMovimento } from "./lucro-dados";
 import { PorLoja } from "./por-loja";
 
 // ============================================================================
@@ -84,9 +84,11 @@ export function FinanceiroScreen({
   // Loja marcada "Contra entrega" em Custos e taxas (ou, com todas as lojas,
   // alguma delas): Recebido, A receber e Previsto no lugar do Faturamento.
   const contraEntrega = r.lojasContraEntrega.length > 0;
-  // Checkout externo (comissao): so ele no filtro troca os rotulos ("Taxa de
-  // aprovação", sem custo de produto); misturado com loja, vale o contra entrega.
-  const soCheckouts = dados.lojaIds.length === 0 && dados.checkoutIds.length > 0;
+  // Checkout externo (comissao) entra nestes cartoes sempre. Os textos seguem
+  // o que o filtro soma: so checkout ("Taxa de aprovação", sem custo de
+  // produto), so loja, ou os dois -- com "Todas", loja online + checkout ja
+  // abre estes cartoes, e a taxa ai e so a de aprovacao.
+  const composicao = composicaoCod(dados.lojaIds, dados.checkoutIds, r.lojasContraEntrega);
   const codShopify = r.lojasContraEntrega.some((id) => dados.lojaIds.includes(id));
   const comparando = comparacao === "anterior";
   const semBase = comparando && !temMovimento(r.anterior);
@@ -100,7 +102,7 @@ export function FinanceiroScreen({
       ? montarDicas(r.avisos, r.atual.cod.coberturaCusto, true)
       : montarDicas(r.avisos, r.atual.coberturaCusto),
     entrega: r.entrega,
-    checkout: soCheckouts,
+    composicao,
   };
 
   return (

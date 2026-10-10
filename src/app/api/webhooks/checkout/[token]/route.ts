@@ -19,17 +19,18 @@ export const dynamic = "force-dynamic";
 //
 // O corpo traz VALOR MONETARIO que vai para o lucro (a comissao). Por isso:
 // teto de 64 KB, validacao dura no adaptador (numero, moeda ISO, data na
-// janela), conta de afiliado fixada no primeiro evento, e o evento de teste
-// nunca vira pedido.
+// janela), afiliado de outro checkout do usuario recusado, e o evento de
+// teste nunca vira pedido.
 //
 // -------------------------------- codigos ---------------------------------
 //
 // 404  token desconhecido (generico: nao diz se o formato estava certo)
 // 413  corpo grande demais
 // 400  corpo invalido -> o erro fica no checkout, a tela mostra
-// 409  URL colada em outra conta da plataforma
+// 409  afiliado que ja e de outro checkout do usuario (contaria em dobro)
 // 503  falha nossa -> a plataforma tenta de novo (1 retentativa na Sphere)
-// 200  o resto, inclusive duplicado, teste e checkout pausado
+// 200  o resto, inclusive duplicado, teste e pedido novo com o checkout
+//      pausado (pedido que ja existe segue atualizando mesmo pausado)
 //
 // A Sphere espera 10 s: a notificacao no celular sai DEPOIS da resposta.
 // ============================================================================
@@ -70,12 +71,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   try {
     json = JSON.parse(raw);
   } catch {
-    if (checkout.ativo) {
-      await repo.marcarCheckout(checkout.id, {
-        ultimo_erro: "Evento recusado: o corpo não é JSON.",
-        ultimo_erro_em: agora.toISOString(),
-      });
-    }
+    await repo.marcarCheckout(checkout.id, {
+      ultimo_erro: "Evento recusado: o corpo não é JSON.",
+      ultimo_erro_em: agora.toISOString(),
+    });
     return resposta(400, { ok: false, erro: "corpo nao e JSON" });
   }
 

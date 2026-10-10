@@ -45,7 +45,9 @@ create table if not exists public.checkouts_externos (
   -- Cresce com as plataformas (yampi, cartpanda, kiwify...).
   plataforma             text not null check (plataforma in ('sphere')),
   nome                   text not null check (length(btrim(nome)) between 1 and 80),
-  -- Pausado: o endpoint responde 200 e ignora (a Sphere nao fica em erro).
+  -- Pausado: pedido NOVO nao entra (200, ignorado) e nada notifica. Evento de
+  -- pedido que ja existe segue valendo: a plataforma manda cada movimentacao
+  -- uma vez so, e a comissao aprovada durante a pausa nao pode se perder.
   ativo                  boolean not null default true,
   -- A Sphere NAO manda a moeda da comissao: o lojista diz qual e.
   moeda_receita          text not null default 'EUR' check (moeda_receita ~ '^[A-Z]{3}$'),
@@ -55,9 +57,6 @@ create table if not exists public.checkouts_externos (
   -- Taxa de aprovacao (%) do Previsto ate o checkout ter amostra propria.
   taxa_aprovacao_padrao  numeric(5,2) not null default 70
                          check (taxa_aprovacao_padrao >= 0 and taxa_aprovacao_padrao <= 100),
-  -- Codigo do afiliado (afiliado.codigo), fixado no primeiro evento real:
-  -- a URL colada em OUTRA conta da plataforma e recusada.
-  conta_externa          text check (conta_externa is null or length(conta_externa) between 1 and 64),
   -- Avisar no celular tambem a comissao aprovada (o pedido criado sempre avisa).
   notificar_aprovada     boolean not null default false,
   ultimo_evento_em       timestamptz,
@@ -72,12 +71,34 @@ create table if not exists public.checkouts_externos (
   constraint checkouts_externos_id_user_key unique (id, user_id)
 );
 
--- Dois checkouts do mesmo afiliado contariam a comissao em dobro.
-create unique index if not exists checkouts_externos_conta_key
-  on public.checkouts_externos (user_id, plataforma, conta_externa)
-  where conta_externa is not null;
 create index if not exists checkouts_externos_user_idx
   on public.checkouts_externos (user_id, created_at);
+
+
+-- ---------------------------------------------------------------------------
+-- 1b. Os codigos de afiliado de cada checkout
+-- ---------------------------------------------------------------------------
+--
+-- O primeiro evento real de cada afiliado.codigo o liga ao checkout que
+-- recebeu. Um checkout pode ter VARIOS codigos (a doc da Sphere nao garante
+-- um codigo por conta: ele vem junto do programa_id), mas cada codigo e de UM
+-- checkout do usuario -- a mesma conta da Sphere com a URL de dois checkouts
+-- contaria a comissao em dobro, e o segundo recebe 409. "Trocar URL" solta os
+-- codigos do checkout (a URL nova os liga de novo no primeiro evento).
+create table if not exists public.checkout_externo_contas (
+  user_id      uuid not null,
+  plataforma   text not null check (plataforma in ('sphere')),
+  conta        text not null check (length(conta) between 1 and 64),
+  checkout_id  uuid not null,
+  criado_em    timestamptz not null default now(),
+  primary key (user_id, plataforma, conta),
+  constraint checkout_externo_contas_checkout_fk
+    foreign key (checkout_id, user_id)
+    references public.checkouts_externos (id, user_id) on delete cascade
+);
+
+create index if not exists checkout_externo_contas_checkout_idx
+  on public.checkout_externo_contas (checkout_id);
 
 
 -- ---------------------------------------------------------------------------
@@ -244,6 +265,17 @@ create policy "Dono le checkout_externo_eventos" on public.checkout_externo_even
                  where c.id = checkout_externo_eventos.checkout_id
                    and c.user_id = (select auth.uid())));
 
+alter table public.checkout_externo_contas enable row level security;
+drop policy if exists "Dono le checkout_externo_contas" on public.checkout_externo_contas;
+create policy "Dono le checkout_externo_contas" on public.checkout_externo_contas
+  for all to authenticated
+  using ((select auth.uid()) = user_id)
+  with check (
+    (select auth.uid()) = user_id
+    and exists (select 1 from public.checkouts_externos c
+                 where c.id = checkout_externo_contas.checkout_id
+                   and c.user_id = (select auth.uid())));
+
 -- Segredo: RLS ligada e ZERO policy = ninguem entra pelo Data API. E os dois
 -- caminhos de privilegio fechados (o grant a PUBLIC e o do default privileges).
 alter table public.checkout_externo_segredos enable row level security;
@@ -252,16 +284,20 @@ grant select, insert, update, delete on table public.checkout_externo_segredos t
 
 -- Escrita so pelo servidor (service_role); o lojista so le.
 revoke insert, update, delete on table
-  public.checkouts_externos, public.pedidos_externos, public.checkout_externo_eventos
+  public.checkouts_externos, public.pedidos_externos, public.checkout_externo_eventos,
+  public.checkout_externo_contas
   from public, anon, authenticated;
 revoke select on table
-  public.checkouts_externos, public.pedidos_externos, public.checkout_externo_eventos
+  public.checkouts_externos, public.pedidos_externos, public.checkout_externo_eventos,
+  public.checkout_externo_contas
   from public, anon;
 grant select on table
-  public.checkouts_externos, public.pedidos_externos, public.checkout_externo_eventos
+  public.checkouts_externos, public.pedidos_externos, public.checkout_externo_eventos,
+  public.checkout_externo_contas
   to authenticated;
 grant select, insert, update, delete on table
-  public.checkouts_externos, public.pedidos_externos, public.checkout_externo_eventos
+  public.checkouts_externos, public.pedidos_externos, public.checkout_externo_eventos,
+  public.checkout_externo_contas
   to service_role;
 
 
@@ -275,6 +311,8 @@ grant select, insert, update, delete on table
 --   select has_table_privilege('authenticated', 'public.pedidos_externos', 'insert');            -- false
 --   select has_table_privilege('authenticated', 'public.checkout_externo_eventos', 'delete');    -- false
 --   select has_table_privilege('anon', 'public.pedidos_externos', 'select');                     -- false
+--   select has_table_privilege('authenticated', 'public.checkout_externo_contas', 'select');     -- true
+--   select has_table_privilege('authenticated', 'public.checkout_externo_contas', 'insert');     -- false
 --   select count(*) from pg_policies where tablename = 'checkout_externo_segredos';             -- 0
 --   select relrowsecurity from pg_class where relname = 'checkout_externo_segredos';            -- true
 --   select count(*) from information_schema.columns

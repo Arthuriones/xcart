@@ -132,6 +132,7 @@ interface Memoria {
   eventos: Set<string>;
   pedidos: Map<string, PedidoGravado>;
   marcas: MarcaCheckout[];
+  /** afiliado -> checkout que o recebe. */
   contas: Map<string, string>;
   soltos: string[];
 }
@@ -187,14 +188,14 @@ function memoria(opcoes: { falharInsert?: number; corridaUpdate?: number; contaE
       m.pedidos.set(k, { ...x.pedido, versao: x.versao + 1 });
       return true;
     },
-    async fixarConta(ck, conta) {
-      if (opcoes.contaEmUso === conta) return "em_uso";
-      const atual = m.contas.get(ck);
-      if (!atual) {
-        m.contas.set(ck, conta);
+    async reivindicarConta(x) {
+      if (opcoes.contaEmUso === x.conta) return "em_uso";
+      const dono = m.contas.get(x.conta);
+      if (!dono) {
+        m.contas.set(x.conta, x.checkout_id);
         return "ok";
       }
-      return atual === conta ? "ok" : "outra";
+      return dono === x.checkout_id ? "ok" : "em_uso";
     },
     async marcarCheckout(_ck, campos) {
       m.marcas.push(campos);
@@ -211,7 +212,6 @@ const CHECKOUT: CheckoutParaReceber = {
   ativo: true,
   fuso: "Europe/Rome",
   moeda_receita: "EUR",
-  conta_externa: null,
   notificar_aprovada: false,
 };
 
@@ -302,11 +302,30 @@ describe("receberEvento: teste, pausa, conta e corpo invalido", () => {
     expect(m.contas.size).toBe(0);
   });
 
-  it("checkout pausado responde 200 e ignora", async () => {
+  it("checkout pausado: pedido novo nao entra (nem trava, nem liga afiliado)", async () => {
     const m = memoria();
     const r = await receberEvento(m.repo, { ...CHECKOUT, ativo: false }, sphere, C_CRIADO, AGORA);
-    expect(r.corpo).toEqual({ ok: true, ignorado: "checkout pausado" });
+    expect(r).toEqual({ status: 200, corpo: { ok: true, ignorado: "checkout pausado" }, notificar: null });
     expect(m.pedidos.size).toBe(0);
+    expect(m.eventos.size).toBe(0);
+    expect(m.contas.size).toBe(0);
+  });
+
+  it("checkout pausado: pedido que ja existe segue atualizando, sem notificar", async () => {
+    // Criado antes da pausa; a comissao aprovada e paga chegam durante a pausa.
+    // A Sphere manda cada uma uma vez so: descartar deixava o pedido pendente
+    // para sempre (A receber inflado, Recebido menor).
+    const m = memoria();
+    await receberEvento(m.repo, CHECKOUT, sphere, C_CRIADO, AGORA);
+    const pausado = { ...CHECKOUT, ativo: false, notificar_aprovada: true };
+    const a = await receberEvento(m.repo, pausado, sphere, C_APROVADA, AGORA);
+    expect(a).toEqual({ status: 200, corpo: { ok: true }, notificar: null });
+    expect(m.pedidos.get("ck-1|12345")?.situacao).toBe("aprovado");
+    await receberEvento(m.repo, pausado, sphere, C_PAGA, AGORA);
+    expect(m.pedidos.get("ck-1|12345")?.situacao).toBe("pago");
+    // A trava vale igual: a retentativa nao aplica duas vezes.
+    const b = await receberEvento(m.repo, pausado, sphere, C_PAGA, AGORA);
+    expect(b.corpo).toEqual({ ok: true, duplicado: true });
   });
 
   it("corpo invalido: 400 e o erro fica no checkout", async () => {
@@ -316,26 +335,43 @@ describe("receberEvento: teste, pausa, conta e corpo invalido", () => {
     expect(m.marcas.at(-1)?.ultimo_erro).toMatch(/pedido ausente/);
   });
 
-  it("o primeiro evento fixa o afiliado; URL colada em outra conta e recusada", async () => {
+  it("o primeiro evento liga o afiliado; outro codigo no mesmo checkout tambem entra", async () => {
+    // A doc da Sphere manda o codigo junto do programa_id e nao garante um
+    // codigo por conta: recusar o segundo perdia pedido de verdade.
     const m = memoria();
     await receberEvento(m.repo, CHECKOUT, sphere, C_CRIADO, AGORA);
-    expect(m.contas.get("ck-1")).toBe("ywq2mdhu");
-    const fixado = { ...CHECKOUT, conta_externa: "ywq2mdhu" };
-    const outra = corpo("pedido.criado", "pending", "2026-07-16T10:00:00.000Z", {
+    expect(m.contas.get("ywq2mdhu")).toBe("ck-1");
+    const outro = corpo("pedido.criado", "pending", "2026-07-16T10:00:00.000Z", {
       afiliado: { codigo: "outra123", programa_id: "x" },
       pedido: { ...C_CRIADO.pedido, id: 999 },
     });
-    const r = await receberEvento(m.repo, fixado, sphere, outra, AGORA);
-    expect(r.status).toBe(409);
-    expect(m.marcas.at(-1)?.ultimo_erro).toMatch(/outra conta/);
-    expect(m.pedidos.has("ck-1|999")).toBe(false);
+    const r = await receberEvento(m.repo, CHECKOUT, sphere, outro, AGORA);
+    expect(r.status).toBe(200);
+    expect(m.pedidos.has("ck-1|999")).toBe(true);
+    expect(m.contas.get("outra123")).toBe("ck-1");
   });
 
   it("afiliado que outro checkout do usuario ja recebe: 409 (contaria em dobro)", async () => {
-    const m = memoria({ contaEmUso: "ywq2mdhu" });
-    const r = await receberEvento(m.repo, CHECKOUT, sphere, C_CRIADO, AGORA);
+    const m = memoria();
+    // A mesma conta da Sphere com a URL de dois checkouts.
+    await receberEvento(m.repo, CHECKOUT, sphere, C_CRIADO, AGORA);
+    const outroCheckout = { ...CHECKOUT, id: "ck-2", nome: "Outro" };
+    const r = await receberEvento(m.repo, outroCheckout, sphere, C_APROVADA, AGORA);
     expect(r.status).toBe(409);
-    expect(m.pedidos.size).toBe(0);
+    expect(m.marcas.at(-1)?.ultimo_erro).toMatch(/Outro checkout seu já recebe o afiliado ywq2mdhu/);
+    expect(m.pedidos.has("ck-2|12345")).toBe(false);
+    expect(m.eventos.has("ck-2|12345|comissao.aprovada")).toBe(false);
+  });
+
+  it("afiliado solto ('Trocar URL' no outro checkout) volta a entrar", async () => {
+    const m = memoria();
+    await receberEvento(m.repo, CHECKOUT, sphere, C_CRIADO, AGORA);
+    const outroCheckout = { ...CHECKOUT, id: "ck-2", nome: "Outro" };
+    expect((await receberEvento(m.repo, outroCheckout, sphere, C_APROVADA, AGORA)).status).toBe(409);
+    m.contas.delete("ywq2mdhu");
+    const r = await receberEvento(m.repo, outroCheckout, sphere, C_APROVADA, AGORA);
+    expect(r.status).toBe(200);
+    expect(m.contas.get("ywq2mdhu")).toBe("ck-2");
   });
 
   it("aviso de comissao aprovada so com o checkout pedindo", async () => {

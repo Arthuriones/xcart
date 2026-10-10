@@ -22,7 +22,9 @@ export const runtime = "nodejs";
 // ============================================================================
 // PATCH /api/checkouts/[id]: renomear, pausar, moeda e fuso, taxa padrao,
 // aviso de comissao aprovada e "Trocar URL" (token novo; o antigo morre na
-// hora). DELETE remove o checkout: os pedidos e eventos vao junto (cascade da
+// hora, e os afiliados ligados ao checkout ficam livres -- o primeiro evento
+// na URL nova liga de novo; sem isso, afiliado ligado por engano travava o
+// outro checkout em 409 para sempre). DELETE remove o checkout: os pedidos e eventos vao junto (cascade da
 // 069) e a conta de anuncio ligada fica sem checkout.
 // ============================================================================
 
@@ -123,6 +125,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .upsert({ checkout_id: atual.id, token, token_hash, updated_at: new Date().toISOString() }, { onConflict: "checkout_id" });
     if (error) return json(500, { ok: false, erro: `Falha ao trocar a URL: ${error.message}` });
     url = urlPublica(token);
+    // Depois do token: a URL antiga ja morreu e nao liga o afiliado de novo.
+    const solta = await admin
+      .from("checkout_externo_contas")
+      .delete()
+      .eq("checkout_id", atual.id)
+      .eq("user_id", user.id);
+    if (solta.error) {
+      console.error("[checkouts] soltar afiliados", solta.error.message);
+      aviso = "URL trocada, mas os afiliados ainda estão ligados a este checkout. Troque de novo.";
+    }
   }
 
   return json(200, { ok: true, checkout: resumoDoCheckout(salvo), ...(url ? { url } : {}), ...(aviso ? { aviso } : {}) });

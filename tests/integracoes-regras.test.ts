@@ -15,6 +15,7 @@ import {
   listarNomes,
   passaNoFiltro,
   quando,
+  rotuloAfiliados,
   semAcesso,
   situacaoDaConta,
   textoDoGasto,
@@ -311,6 +312,18 @@ describe("checkout externo (069)", () => {
     expect(estadoDoCheckout(erro, AGORA, SP)).toMatchObject({ tom: "err", detalhe: "URL colada em outra conta" });
     expect(estadoDoCheckout({ ...erro, ultimo_evento_em: "2026-10-02T17:10:00Z" }, AGORA, SP).texto).toBe("Recebendo");
     expect(estadoDoCheckout({ ...erro, ultimo_evento_em: "2026-10-02T16:50:00Z" }, AGORA, SP).texto).toBe("Erro");
+  });
+
+  it("pausado diz que pedido novo nao entra (os antigos seguem)", () => {
+    expect(estadoDoCheckout({ ...base, ativo: false }, AGORA, SP).detalhe).toMatch(/pedido novo não entra/);
+  });
+
+  it("afiliados ligados ao checkout: um, dois, mais", () => {
+    expect(rotuloAfiliados(undefined)).toBe("");
+    expect(rotuloAfiliados([])).toBe("");
+    expect(rotuloAfiliados(["ywq2mdhu"])).toBe(" · afiliado ywq2mdhu");
+    expect(rotuloAfiliados(["a", "b"])).toBe(" · afiliados a, b");
+    expect(rotuloAfiliados(["a", "b", "c", "d"])).toBe(" · afiliados a, b +2");
   });
 
   it("conta ligada a um checkout nao e 'Sem loja'", () => {

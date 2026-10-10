@@ -11,10 +11,15 @@ import { nomeDaPlataforma } from "./tipos";
 //
 // A ORDEM DO TRABALHO
 //
-//   pausado -> 200 ignorado (a plataforma nao fica em erro)
 //   corpo invalido -> 400, e o erro fica no checkout (a tela mostra)
 //   evento de teste -> so marca "teste recebido"; NUNCA vira pedido
-//   conta de afiliado diferente da fixada -> 409 (URL colada em outra conta)
+//   pausado e pedido que nao existe -> 200 ignorado (pedido novo nao entra).
+//     Pedido que JA existe segue o caminho normal, so sem notificar: a
+//     plataforma manda cada movimentacao uma vez so, e a comissao aprovada
+//     ou paga durante a pausa nao pode ficar "pendente" para sempre.
+//   afiliado de OUTRO checkout do usuario -> 409 (contaria em dobro). O
+//     primeiro evento de cada codigo o liga a este checkout; um checkout pode
+//     ter varios (a Sphere nao garante um codigo por conta).
 //   trava (checkout, pedido, evento) ja existe -> 200 duplicado
 //   pedido gravado (trava otimista pela versao) -> 200
 //   falhou ao gravar -> a trava sai e responde 503: a retentativa da
@@ -29,7 +34,6 @@ export interface CheckoutParaReceber {
   ativo: boolean;
   fuso: string;
   moeda_receita: string;
-  conta_externa: string | null;
   notificar_aprovada: boolean;
 }
 
@@ -53,8 +57,11 @@ export interface RepositorioCheckout {
   inserirPedido(x: { checkout_id: string; user_id: string; pedido_id: string; pedido: EstadoPedido }): Promise<"ok" | "existe">;
   /** false = a versao mudou (outro evento gravou antes): ler de novo. */
   atualizarPedido(x: { checkout_id: string; pedido_id: string; versao: number; pedido: EstadoPedido }): Promise<boolean>;
-  /** Fixa o codigo do afiliado. "em_uso" = outro checkout do usuario ja tem. */
-  fixarConta(checkoutId: string, conta: string): Promise<"ok" | "em_uso" | "outra">;
+  /**
+   * Liga o codigo do afiliado a este checkout (o primeiro evento de cada
+   * codigo liga). "em_uso" = o codigo ja e de outro checkout do usuario.
+   */
+  reivindicarConta(x: { checkout_id: string; user_id: string; plataforma: string; conta: string }): Promise<"ok" | "em_uso">;
   marcarCheckout(checkoutId: string, campos: MarcaCheckout): Promise<void>;
 }
 
@@ -82,7 +89,10 @@ function resp(status: ResultadoRecebimento["status"], corpo: Record<string, unkn
   return { status, corpo, notificar: null };
 }
 
-/** Grava o pedido com trava otimista. Devolve se o evento venceu, ou lanca. */
+/**
+ * Grava o pedido com trava otimista. Devolve se o evento venceu, ou lanca.
+ * Checkout pausado nao cria pedido: so atualiza o que ja existe.
+ */
 async function gravarPedido(
   repo: RepositorioCheckout,
   checkout: CheckoutParaReceber,
@@ -92,6 +102,7 @@ async function gravarPedido(
     const atual = await repo.lerPedido(checkout.id, ev.pedidoId);
     const r = aplicarEvento(atual, ev, checkout.fuso);
     if (!atual) {
+      if (!checkout.ativo) return { venceu: false };
       const ins = await repo.inserirPedido({
         checkout_id: checkout.id,
         user_id: checkout.user_id,
@@ -121,8 +132,6 @@ export async function receberEvento(
   agora: Date
 ): Promise<ResultadoRecebimento> {
   const agoraIso = agora.toISOString();
-  if (!checkout.ativo) return resp(200, { ok: true, ignorado: "checkout pausado" });
-
   const leitura = plataforma.ler(corpo, agora);
   if (!leitura.ok) {
     await repo.marcarCheckout(checkout.id, { ultimo_erro: `Evento recusado: ${leitura.erro}`.slice(0, 500), ultimo_erro_em: agoraIso });
@@ -141,19 +150,23 @@ export async function receberEvento(
     return resp(200, { ok: true, teste: true });
   }
 
-  const nome = nomeDaPlataforma(checkout.plataforma);
+  // Pausado: pedido novo nao entra (nem liga afiliado, nem trava o evento).
+  if (!checkout.ativo && !(await repo.lerPedido(checkout.id, ev.pedidoId))) {
+    return resp(200, { ok: true, ignorado: "checkout pausado" });
+  }
+
   if (ev.conta) {
-    let recusa: string | null = null;
-    if (checkout.conta_externa && ev.conta !== checkout.conta_externa) {
-      recusa = `URL colada em outra conta da ${nome} (afiliado ${ev.conta}). Esta URL é da conta ${checkout.conta_externa}.`;
-    } else if (!checkout.conta_externa) {
-      const fixou = await repo.fixarConta(checkout.id, ev.conta);
-      if (fixou === "em_uso") recusa = `Outro checkout seu já recebe a conta ${ev.conta} da ${nome}. Use a URL dele.`;
-      else if (fixou === "outra") recusa = `URL colada em outra conta da ${nome} (afiliado ${ev.conta}).`;
-    }
-    if (recusa) {
+    const dono = await repo.reivindicarConta({
+      checkout_id: checkout.id,
+      user_id: checkout.user_id,
+      plataforma: checkout.plataforma,
+      conta: ev.conta,
+    });
+    if (dono === "em_uso") {
+      const nome = nomeDaPlataforma(checkout.plataforma);
+      const recusa = `Outro checkout seu já recebe o afiliado ${ev.conta} da ${nome}. Use a URL dele, ou "Trocar URL" nele para soltar o afiliado.`;
       await repo.marcarCheckout(checkout.id, { ultimo_erro: recusa.slice(0, 500), ultimo_erro_em: agoraIso });
-      return resp(409, { ok: false, erro: "conta de afiliado diferente da deste checkout" });
+      return resp(409, { ok: false, erro: "afiliado de outro checkout" });
     }
   }
 
@@ -189,9 +202,11 @@ export async function receberEvento(
     moedaComissao: ev.receita.moeda || checkout.moeda_receita,
   };
   // O pedido criado avisa uma vez (a trava e por pedido e evento). A comissao
-  // aprovada so com o checkout pedindo, e so se ela mudou o pedido.
-  const notificar: Notificacao | null =
-    ev.evento === "pedido.criado"
+  // aprovada so com o checkout pedindo, e so se ela mudou o pedido. Pausado
+  // nao avisa nada.
+  const notificar: Notificacao | null = !checkout.ativo
+    ? null
+    : ev.evento === "pedido.criado"
       ? { tipo: "criado", ...base }
       : checkout.notificar_aprovada && ev.receita.situacao === "aprovado" && venceu
         ? { tipo: "aprovado", ...base }

@@ -765,6 +765,34 @@ export function montarDicas(
 }
 
 // ---------------------------------------------------------------------------
+// Cartoes de contra entrega: o que o filtro mistura
+// ---------------------------------------------------------------------------
+
+/**
+ * O que os cartoes de contra entrega somam, para os textos dizerem a verdade.
+ * `origem`: so loja Shopify, so checkout externo (comissao) ou os dois.
+ * `taxa`: de onde vem a taxa do Previsto -- loja em contra entrega (entrega),
+ * checkout (aprovacao) ou os dois (a media mistura as duas).
+ *
+ * Com "Todas", loja Shopify SEM contra entrega mais um checkout ja abre estes
+ * cartoes (o checkout e sempre "a receber + previsto"), e ai a taxa e so a de
+ * aprovacao do checkout -- chamar de "Taxa de entrega" mentia.
+ */
+export interface ComposicaoCod {
+  origem: "lojas" | "checkouts" | "ambos";
+  taxa: "entrega" | "aprovacao" | "misto";
+}
+
+export function composicaoCod(lojaIds: string[], checkoutIds: string[], lojasContraEntrega: string[]): ComposicaoCod {
+  const origem = checkoutIds.length === 0 ? "lojas" : lojaIds.length === 0 ? "checkouts" : "ambos";
+  const lojas = new Set(lojaIds);
+  const checkouts = new Set(checkoutIds);
+  const codLoja = lojasContraEntrega.some((id) => lojas.has(id));
+  const codCheckout = lojasContraEntrega.some((id) => checkouts.has(id));
+  return { origem, taxa: codLoja && codCheckout ? "misto" : codCheckout ? "aprovacao" : "entrega" };
+}
+
+// ---------------------------------------------------------------------------
 // "Atualizado ha X"
 // ---------------------------------------------------------------------------
 

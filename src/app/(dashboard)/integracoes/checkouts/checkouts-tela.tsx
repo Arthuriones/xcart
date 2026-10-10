@@ -32,7 +32,7 @@ import {
 import type { EventoDaTela } from "@/lib/leitura/checkouts";
 import { CabecalhoPlataforma } from "../cabecalho-plataforma";
 import { chamar } from "../api";
-import { estadoDoCheckout, haQuantoTempo, plural, quando } from "../regras";
+import { estadoDoCheckout, haQuantoTempo, plural, quando, rotuloAfiliados } from "../regras";
 
 // ============================================================================
 // Checkouts externos: cadastrar (Sphere -> nome -> URL), copiar a URL do
@@ -496,11 +496,13 @@ function Editar({ checkout, aoFechar, aoSalvar }: { checkout: CheckoutResumo; ao
 
 export function CheckoutsTela({
   checkouts,
+  contas,
   eventos,
   semMigration,
   agoraMs,
 }: {
   checkouts: CheckoutResumo[];
+  contas: Record<string, string[]>;
   eventos: EventoDaTela[];
   semMigration: boolean;
   agoraMs: number;
@@ -530,7 +532,9 @@ export function CheckoutsTela({
     const r = await chamar(`${API}/${c.id}`, { method: "PATCH", body: JSON.stringify({ ativo: !c.ativo }) });
     if (!r.ok) return toast.error("Não deu para salvar", { description: r.erro });
     toast.success(c.ativo ? `${c.nome} pausado` : `${c.nome} ativo de novo`, {
-      description: c.ativo ? "Os eventos que chegarem agora são ignorados." : "Os próximos eventos voltam a contar.",
+      description: c.ativo
+        ? "Pedido novo não entra. Os que já estão seguem atualizando."
+        : "Pedidos novos voltam a entrar.",
     });
     atualizar();
   }
@@ -591,7 +595,7 @@ export function CheckoutsTela({
                     <span className="truncate text-body font-semibold text-ink">{c.nome}</span>
                     <span className="text-label text-t2">
                       {nomeDaPlataforma(c.plataforma)}
-                      {c.conta_externa ? ` · afiliado ${c.conta_externa}` : ""} · comissão em {c.moeda_receita}
+                      {rotuloAfiliados(contas[c.id])} · comissão em {c.moeda_receita}
                     </span>
                   </span>
                   <span className="flex flex-wrap items-center gap-2">
@@ -699,19 +703,21 @@ export function CheckoutsTela({
         onOpenChange={(v) => !v && setTrocando(null)}
         tom="normal"
         titulo={`Trocar a URL de ${trocando?.nome ?? "checkout"}?`}
-        descricao="A URL antiga para de funcionar na hora. Cole a nova na Sphere logo em seguida, senão os eventos se perdem."
+        descricao="A URL antiga para de funcionar na hora e os afiliados ligados a ela ficam livres. Cole a nova na Sphere logo em seguida, senão os eventos se perdem."
         confirmar="Trocar URL"
         onConfirmar={async () => {
           if (!trocando) return;
           const alvo = trocando;
-          const r = await chamar<{ url: string }>(`${API}/${alvo.id}`, {
+          const r = await chamar<{ url: string; aviso?: string }>(`${API}/${alvo.id}`, {
             method: "PATCH",
             body: JSON.stringify({ trocarUrl: true }),
           });
           if (!r.ok) throw new Error(r.erro);
           setTrocando(null);
           setUrlDe(alvo);
-          toast.success("URL trocada", { description: "Cole a nova na Sphere." });
+          if (r.aviso) toast.warning("URL trocada", { description: r.aviso });
+          else toast.success("URL trocada", { description: "Cole a nova na Sphere." });
+          atualizar();
         }}
       />
 

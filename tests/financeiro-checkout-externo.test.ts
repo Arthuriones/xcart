@@ -3,6 +3,7 @@ import { calcularFinanceiro, type EntradaFinanceiro, type LojaFinanceira, type P
 import { contarAmostraExterna } from "@/lib/checkouts-externos/financeiro";
 import { montarPedidosExternos } from "@/lib/checkouts-externos/pedidos";
 import { montarSerieDiaria } from "@/lib/leitura/serie-diaria";
+import { composicaoCod } from "@/app/(dashboard)/financeiro/lucro-dados";
 import { intervaloDaAmostra } from "@/lib/financeiro/contra-entrega";
 import type { PedidoExternoRow } from "@/lib/checkouts-externos/tipos";
 import type { AdAccountRow, AdSpendDailyRow, FinOrderRow, FxRateRow } from "@/lib/financeiro/tipos";
@@ -250,6 +251,18 @@ describe("Todas as lojas: loja Shopify + checkout", () => {
     expect(junto.atual.receita).toBeCloseTo(so.atual.receita + 125 * 6.25);
     expect(junto.atual.gasto).toBeCloseTo(75);
     expect(junto.lojasContraEntrega).toEqual([CK]);
+  });
+
+  it("cartoes: loja online + checkout usam a taxa de APROVACAO; com loja em contra entrega, a media", () => {
+    // A loja Lumen nao e contra entrega: so o checkout entra na taxa do
+    // Previsto. Chamar de "Taxa de entrega" mentia (era a de aprovacao, 70%).
+    const junto = calcularFinanceiro(entrada({ ...base, lojas: [LOJA_SHOPIFY, CHECKOUT], externos: EXTERNOS }));
+    expect(composicaoCod([LOJA], [CK], junto.lojasContraEntrega)).toEqual({ origem: "ambos", taxa: "aprovacao" });
+    expect(junto.entrega.taxa).toBeCloseTo(0.7);
+    expect(composicaoCod([LOJA], [CK], [LOJA, CK])).toEqual({ origem: "ambos", taxa: "misto" });
+    expect(composicaoCod([], [CK], [CK])).toEqual({ origem: "checkouts", taxa: "aprovacao" });
+    expect(composicaoCod([LOJA], [], [LOJA])).toEqual({ origem: "lojas", taxa: "entrega" });
+    expect(composicaoCod([LOJA], [], [])).toEqual({ origem: "lojas", taxa: "entrega" });
   });
 
   it("sem o checkout no filtro, a conta ligada a ele fica de fora", () => {

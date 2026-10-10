@@ -15,7 +15,7 @@ import { RE_TOKEN, type SituacaoExterna } from "./tipos";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
-const COLUNAS_RECEBER = "id, user_id, plataforma, nome, ativo, fuso, moeda_receita, conta_externa, notificar_aprovada";
+const COLUNAS_RECEBER = "id, user_id, plataforma, nome, ativo, fuso, moeda_receita, notificar_aprovada";
 
 const COLUNAS_ESTADO =
   "situacao, status_comissao, status_pedido, metodo_pagamento, produto, pais, programa, moeda, valor, receita, moeda_receita, criado_em, dia_local, aprovado_em, pago_em, perdido_em, atualizado_em, versao";
@@ -149,24 +149,25 @@ export function repositorioSupabase(admin: Admin): RepositorioCheckout {
       if (error) throw new Error(`falha ao atualizar o pedido: ${error.message}`);
       return (data ?? []).length > 0;
     },
-    async fixarConta(checkoutId, conta) {
-      const { data, error } = await admin
-        .from("checkouts_externos")
-        .update({ conta_externa: conta, updated_at: new Date().toISOString() })
-        .eq("id", checkoutId)
-        .is("conta_externa", null)
-        .select("id");
-      if (error?.code === "23505") return "em_uso";
-      if (error) throw new Error(`falha ao fixar a conta: ${error.message}`);
-      if ((data ?? []).length > 0) return "ok";
-      // Outro evento fixou antes: vale se foi a mesma conta.
-      const { data: ck, error: e2 } = await admin
-        .from("checkouts_externos")
-        .select("conta_externa")
-        .eq("id", checkoutId)
-        .maybeSingle();
-      if (e2) throw new Error(`falha ao ler a conta: ${e2.message}`);
-      return (ck as { conta_externa: string | null } | null)?.conta_externa === conta ? "ok" : "outra";
+    async reivindicarConta(x) {
+      const dono = async (): Promise<string | null> => {
+        const { data, error } = await admin
+          .from("checkout_externo_contas")
+          .select("checkout_id")
+          .eq("user_id", x.user_id)
+          .eq("plataforma", x.plataforma)
+          .eq("conta", x.conta)
+          .maybeSingle();
+        if (error) throw new Error(`falha ao ler o afiliado: ${error.message}`);
+        return (data as { checkout_id: string } | null)?.checkout_id ?? null;
+      };
+      const antes = await dono();
+      if (antes) return antes === x.checkout_id ? "ok" : "em_uso";
+      const { error } = await admin.from("checkout_externo_contas").insert(x);
+      if (!error) return "ok";
+      if (error.code !== "23505") throw new Error(`falha ao ligar o afiliado: ${error.message}`);
+      // Outro evento ligou no meio (a mesma conta mandando aos dois checkouts).
+      return (await dono()) === x.checkout_id ? "ok" : "em_uso";
     },
     async marcarCheckout(checkoutId, campos) {
       const { error } = await admin
