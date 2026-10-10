@@ -2,17 +2,19 @@
 // como listas de linhas, filtros simples (eq/in/gte/lt/is/neq), insert com a
 // PK de shopify_webhook_events, update/delete pelos filtros e contagem com
 // { head: true }. Ordem nao e aplicada: o teste guarda as linhas ja na ordem
-// que a consulta pediria.
+// que a consulta pediria. upsert pela coluna do onConflict; .select() depois
+// de uma escrita devolve as linhas escritas (o insert ganha um id se nao tem).
 
 type Linha = Record<string, unknown>;
 type Erro = { code?: string; message: string };
-type Op = "select" | "insert" | "update" | "delete";
+type Op = "select" | "insert" | "update" | "delete" | "upsert";
 
 export interface FakeSupabase {
   // O tipo do cliente real e do chamador; aqui basta o formato.
   client: never;
   tabelas: Record<string, Linha[]>;
   inserts: { tabela: string; linha: Linha }[];
+  upserts: { tabela: string; linha: Linha }[];
   updates: { tabela: string; payload: Linha; linhas: number }[];
   deletes: { tabela: string; linhas: number }[];
 }
@@ -28,9 +30,13 @@ export function fakeSupabase(
     client: undefined as never,
     tabelas,
     inserts: [],
+    upserts: [],
     updates: [],
     deletes: [],
   };
+
+  // id das linhas inseridas com .select(), unico no banco inteiro.
+  let novoId = 0;
 
   function from(tabela: string) {
     const filtros: ((l: Linha) => boolean)[] = [];
@@ -39,6 +45,14 @@ export function fakeSupabase(
     let head = false;
     let limite: number | null = null;
     let unico = false;
+    let devolver = false;
+    let conflito = "id";
+
+    // So quando a escrita pede .select(): sem ele o Supabase devolve data null.
+    const resposta = (linhas: Linha[]) => {
+      if (!devolver) return { data: null, error: null, count: null };
+      return { data: unico ? (linhas[0] ?? null) : linhas, error: null, count: null };
+    };
 
     const executar = () => {
       const erro = falhar?.(tabela, op, payload) ?? null;
@@ -52,22 +66,38 @@ export function fakeSupabase(
             return { data: null, error: { code: "23505", message: "duplicate key" }, count: null };
           }
         }
+        const gravadas: Linha[] = [];
         for (const n of novas) {
-          linhas.push({ ...n });
+          const linha = devolver && n.id === undefined ? { id: `${tabela}-${++novoId}`, ...n } : { ...n };
+          linhas.push(linha);
+          gravadas.push({ ...linha });
           saida.inserts.push({ tabela, linha: { ...n } });
         }
-        return { data: null, error: null, count: null };
+        return resposta(gravadas);
+      }
+      if (op === "upsert") {
+        const novas = (Array.isArray(payload) ? payload : [payload]) as Linha[];
+        const cols = conflito.split(",").map((c) => c.trim());
+        const gravadas: Linha[] = [];
+        for (const n of novas) {
+          const atual = linhas.find((l) => cols.every((c) => l[c] === n[c]));
+          if (atual) Object.assign(atual, n);
+          else linhas.push({ ...n });
+          gravadas.push({ ...(atual ?? n) });
+          saida.upserts.push({ tabela, linha: { ...n } });
+        }
+        return resposta(gravadas);
       }
       const alvo = linhas.filter((l) => filtros.every((f) => f(l)));
       if (op === "update") {
         for (const l of alvo) Object.assign(l, payload as Linha);
         saida.updates.push({ tabela, payload: payload as Linha, linhas: alvo.length });
-        return { data: null, error: null, count: null };
+        return resposta(alvo.map((l) => ({ ...l })));
       }
       if (op === "delete") {
         for (const l of alvo) linhas.splice(linhas.indexOf(l), 1);
         saida.deletes.push({ tabela, linhas: alvo.length });
-        return { data: null, error: null, count: null };
+        return resposta(alvo);
       }
       if (head) return { data: null, error: null, count: alvo.length };
       // Como o PostgREST do Supabase: no maximo 1000 linhas por resposta,
@@ -80,6 +110,13 @@ export function fakeSupabase(
     const q: Record<string, unknown> = {
       select: (_cols?: string, o?: { head?: boolean }) => {
         if (o?.head) head = true;
+        if (op !== "select") devolver = true;
+        return q;
+      },
+      upsert: (l: unknown, o?: { onConflict?: string }) => {
+        op = "upsert";
+        payload = l;
+        if (o?.onConflict) conflito = o.onConflict;
         return q;
       },
       insert: (l: unknown) => {

@@ -1,16 +1,11 @@
 import "server-only";
 import type { createAdminClient } from "@/lib/supabase/admin";
-import {
-  enviarNotificacaoDeVenda,
-  formatarValor,
-  webhookDeVendaDoDono,
-  type Venda,
-} from "@/lib/alertas/venda-webhook";
+import { formatarValor, notificarVendaNosCelulares, type Venda } from "@/lib/alertas/venda-webhook";
 import type { Notificacao } from "./receber";
 
 // ============================================================================
-// "Venda no celular" para checkout externo: a mesma URL e o mesmo envio da
-// venda da Shopify (src/lib/alertas/venda-webhook.ts), com o titulo
+// "Venda no celular" para checkout externo: os mesmos celulares e o mesmo
+// envio da venda da Shopify (src/lib/alertas/venda-webhook.ts), com o titulo
 // "Novo pedido · <valor>" e o texto "Checkout · #12345 · Produto · comissão".
 // Roda depois da resposta (after): falhou, so vai para o log.
 // ============================================================================
@@ -45,10 +40,7 @@ export function vendaDoPedidoExterno(n: Notificacao): Venda {
 
 export async function notificarPedidoExterno(admin: Admin, userId: string, n: Notificacao): Promise<void> {
   try {
-    const url = await webhookDeVendaDoDono(admin, userId);
-    if (!url) return;
-    const r = await enviarNotificacaoDeVenda(url, vendaDoPedidoExterno(n));
-    if (!r.ok) console.warn("[checkout/webhook] notificacao de venda falhou", r.erro);
+    await notificarVendaNosCelulares(admin, userId, vendaDoPedidoExterno(n), "checkout/webhook");
   } catch (e) {
     console.error("[checkout/webhook] notificacao de venda", e instanceof Error ? e.message : e);
   }

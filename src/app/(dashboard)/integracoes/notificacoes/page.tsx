@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 export default async function NotificacoesPage() {
   const dados = await getAlertas();
   const conectado = Boolean(dados.config.telegram_chat_id) && dados.temToken;
-  const vendaLigada = Boolean(dados.venda.host) && dados.venda.ativo;
+  const vendaLigada = dados.venda.celulares.length > 0 && dados.venda.ativo;
   const canais = [conectado ? "Telegram" : null, vendaLigada ? "Venda no celular" : null].filter(Boolean);
 
   return (
@@ -33,7 +33,12 @@ export default async function NotificacoesPage() {
         <ErroLeitura titulo="Não deu para ler a configuração das notificações." detalhe={dados.erro} />
       ) : (
         <>
-          <CanalVenda ativo={dados.venda.ativo} host={dados.venda.host} />
+          <CanalVenda
+            ativo={dados.venda.ativo}
+            celulares={dados.venda.celulares}
+            semTabela={dados.venda.semTabela}
+            agoraMs={dados.venda.lidoEm}
+          />
           <CanalTelegram config={dados.config} temToken={dados.temToken} tokenDaEnv={dados.tokenDaEnv} />
           <RegrasAlertas gastoMinimo={Number(dados.config.gasto_sem_venda_min ?? 30)} />
         </>

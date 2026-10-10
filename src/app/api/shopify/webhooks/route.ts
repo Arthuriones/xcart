@@ -195,16 +195,14 @@ async function notificarVenda(
   pedido: Record<string, unknown>
 ) {
   try {
-    const { webhookDeVendaDoDono, enviarNotificacaoDeVenda, vendaDoPedido } = await import(
-      "@/lib/alertas/venda-webhook"
+    const { notificarVendaNosCelulares, vendaDoPedido } = await import("@/lib/alertas/venda-webhook");
+    // Todos os celulares do dono, em paralelo; cada falha vai para o log so com o host.
+    await notificarVendaNosCelulares(
+      admin,
+      loja.user_id as string,
+      vendaDoPedido(pedido as Parameters<typeof vendaDoPedido>[0], loja.name || loja.shop_domain),
+      "shopify/webhook"
     );
-    const url = await webhookDeVendaDoDono(admin, loja.user_id as string);
-    if (!url) return;
-    const r = await enviarNotificacaoDeVenda(
-      url,
-      vendaDoPedido(pedido as Parameters<typeof vendaDoPedido>[0], loja.name || loja.shop_domain)
-    );
-    if (!r.ok) console.warn("[shopify/webhook] notificacao de venda falhou", r.erro);
   } catch (e) {
     console.error("[shopify/webhook] notificacao de venda", e instanceof Error ? e.message : e);
   }

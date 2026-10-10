@@ -2,6 +2,8 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/supabase/current-user";
+import { lerCelularesDaTela } from "@/lib/alertas/venda-webhook";
+import type { CelularDaTela } from "@/lib/alertas/venda-celulares";
 import { filtroResolvido } from "@/lib/filtro-global";
 import {
   MOEDA_PADRAO,
@@ -28,8 +30,13 @@ export interface AlertasDaTela {
   temToken: boolean;
   /** O token vem da env da instalacao, nao do usuario. */
   tokenDaEnv: boolean;
-  /** Notificacao de venda no celular: ligada e o HOST da URL (a URL e segredo). */
-  venda: { ativo: boolean; host: string | null };
+  /**
+   * "Venda no celular": o liga/desliga geral e os celulares (so o HOST de cada
+   * URL -- a URL e segredo). semTabela = antes da 070 (so a URL unica da 063).
+   * lidoEm: o relogio da leitura, para o "último envio há 5 min" sair igual no
+   * HTML e na hidratacao.
+   */
+  venda: { ativo: boolean; celulares: CelularDaTela[]; semTabela: boolean; lidoEm: number };
   erro: string | null;
 }
 
@@ -60,7 +67,7 @@ export async function getAlertas(): Promise<AlertasDaTela> {
     config: configPadrao,
     temToken: false,
     tokenDaEnv: false,
-    venda: { ativo: true, host: null },
+    venda: { ativo: true, celulares: [], semTabela: false, lidoEm: 0 },
     erro: null,
   };
   if (!user) return vazio;
@@ -103,23 +110,23 @@ export async function getAlertas(): Promise<AlertasDaTela> {
   ]);
 
   let temTokenProprio = false;
-  let hostDaVenda: string | null = null;
   let erroToken: string | null = null;
+  let venda: { celulares: CelularDaTela[]; semTabela: boolean } = { celulares: [], semTabela: false };
+  let erroVenda: string | null = null;
   try {
-    const { data, error } = await createAdminClient()
-      .from("alerta_config_secrets")
-      .select("telegram_bot_token, venda_webhook_url")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (error) erroToken = error.message;
-    const urlVenda = String((data as { venda_webhook_url?: string | null } | null)?.venda_webhook_url || "");
-    try {
-      hostDaVenda = urlVenda ? new URL(urlVenda).hostname : null;
-    } catch {
-      hostDaVenda = null;
-    }
+    const admin = createAdminClient();
+    const [segredos, celulares] = await Promise.all([
+      admin.from("alerta_config_secrets").select("telegram_bot_token").eq("user_id", user.id).maybeSingle(),
+      lerCelularesDaTela(admin, user.id).then(
+        (v) => ({ ok: true as const, v }),
+        (e: unknown) => ({ ok: false as const, erro: e instanceof Error ? e.message : String(e) })
+      ),
+    ]);
+    if (segredos.error) erroToken = segredos.error.message;
+    if (celulares.ok) venda = celulares.v;
+    else erroVenda = celulares.erro;
     temTokenProprio = !!String(
-      (data as { telegram_bot_token?: string | null } | null)?.telegram_bot_token || ""
+      (segredos.data as { telegram_bot_token?: string | null } | null)?.telegram_bot_token || ""
     ).trim();
   } catch (e) {
     erroToken = e instanceof Error ? e.message : String(e);
@@ -131,6 +138,7 @@ export async function getAlertas(): Promise<AlertasDaTela> {
     resolvidos.error?.message ||
     config.error?.message ||
     erroToken ||
+    erroVenda ||
     erroLojas;
 
   const cfg = (config.data as AlertaConfigRow | null) ?? null;
@@ -152,7 +160,8 @@ export async function getAlertas(): Promise<AlertasDaTela> {
     tokenDaEnv,
     venda: {
       ativo: (config.data as { notificar_vendas?: boolean } | null)?.notificar_vendas !== false,
-      host: hostDaVenda,
+      ...venda,
+      lidoEm: Date.now(),
     },
     erro: erro ? `Não foi possível ler os alertas: ${erro}` : null,
   };
