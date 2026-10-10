@@ -39,7 +39,7 @@ export type DadosPedidosExternos =
     };
 
 export async function lerPedidosExternos(): Promise<DadosPedidosExternos> {
-  const { filtro, checkoutIds } = await filtroResolvido();
+  const { filtro, checkoutIds, lojaIds } = await filtroResolvido();
   if (checkoutIds.length === 0) return { vazio: true };
   const ids = new Set(checkoutIds);
   const checkouts: CheckoutDaTela[] = (await lerCheckoutsDoUsuario())
@@ -47,7 +47,9 @@ export async function lerPedidosExternos(): Promise<DadosPedidosExternos> {
     .map((c) => ({ id: c.id, nome: c.nome, fuso: c.fuso, moeda_receita: c.moeda_receita }));
   if (checkouts.length === 0) return { vazio: true };
 
-  const fuso = checkouts.length === 1 ? checkouts[0].fuso : FUSO_RELATORIO_PADRAO;
+  // A mesma regra do Dashboard (base-lucro.ts): o fuso do checkout so quando
+  // o filtro tem ele sozinho, senao o "Hoje" daqui e o de la divergem.
+  const fuso = lojaIds.length === 0 && checkouts.length === 1 ? checkouts[0].fuso : FUSO_RELATORIO_PADRAO;
   const intervalo = intervaloDoPeriodo(filtro.periodo, diaNoFuso(new Date(), fuso)).atual;
   const supabase = await createClient();
 

@@ -86,7 +86,8 @@ export const lerFotoGuia = cache(async (): Promise<FotoGuia> => {
       .from("tracking_destinations")
       .select("id, store_id, plataforma, ativo, labels, test_event_code")
       .eq("user_id", user.id),
-    supabase.from("ad_accounts").select("plataforma, store_id, ativo, ultimo_erro").eq("user_id", user.id),
+    // "*": checkout_id so existe depois da 069, e coluna ausente no select da erro.
+    supabase.from("ad_accounts").select("*").eq("user_id", user.id),
     supabase.from("fin_store_settings").select("store_id, custo_padrao_pct").eq("user_id", user.id),
     supabase
       .from("routed_checkout_configs")
@@ -208,6 +209,7 @@ export const lerFotoGuia = cache(async (): Promise<FotoGuia> => {
     : (contasRes.data ?? []).map((c) => ({
         plataforma: c.plataforma === "google" ? "google" : "meta",
         storeId: c.store_id ? String(c.store_id) : null,
+        checkoutId: c.checkout_id ? String(c.checkout_id) : null,
         ativo: Boolean(c.ativo),
         comErro: Boolean(c.ultimo_erro),
       }));

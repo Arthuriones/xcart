@@ -15,7 +15,8 @@ import { RE_TOKEN, type SituacaoExterna } from "./tipos";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
-const COLUNAS_RECEBER = "id, user_id, plataforma, nome, ativo, fuso, moeda_receita, notificar_aprovada";
+const COLUNAS_RECEBER =
+  "id, user_id, plataforma, nome, ativo, fuso, moeda_receita, notificar_aprovada, ultimo_evento_em, ultimo_evento_teste";
 
 const COLUNAS_ESTADO =
   "situacao, status_comissao, status_pedido, metodo_pagamento, produto, pais, programa, moeda, valor, receita, moeda_receita, criado_em, dia_local, aprovado_em, pago_em, perdido_em, atualizado_em, versao";

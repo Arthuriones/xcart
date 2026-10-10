@@ -64,7 +64,7 @@ describe("lerSphere: o corpo da doc", () => {
     });
   });
 
-  it("o status da comissao manda na situacao", () => {
+  it("no pedido.criado, o status da comissao diz a situacao", () => {
     const casos: [string, string][] = [
       ["pending", "pendente"],
       ["approved", "aprovado"],
@@ -74,7 +74,21 @@ describe("lerSphere: o corpo da doc", () => {
       ["PAID", "pago"],
     ];
     for (const [status, situacao] of casos) {
-      const r = lerSphere(com((c) => void (c.comissao.status = status)), AGORA);
+      const r = lerSphere(com((c) => ((c.evento = "pedido.criado"), (c.comissao.status = status), c)), AGORA);
+      expect(r.ok && r.evento.receita.situacao).toBe(situacao);
+    }
+  });
+
+  it("status atrasado nao segura o evento: vale a etapa mais avancada", () => {
+    const casos: [string, string, string][] = [
+      ["pedido.expirado", "pending", "expirado"],
+      ["comissao.paga", "approved", "pago"],
+      ["comissao.aprovada", "pending", "aprovado"],
+      ["comissao.aprovada", "paid", "pago"],
+      ["comissao.aprovada", "reversed", "revertido"],
+    ];
+    for (const [evento, status, situacao] of casos) {
+      const r = lerSphere(com((c) => ((c.evento = evento), (c.comissao.status = status), c)), AGORA);
       expect(r.ok && r.evento.receita.situacao).toBe(situacao);
     }
   });

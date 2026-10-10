@@ -42,6 +42,14 @@ const STATUS: Record<string, SituacaoExterna> = {
   reversed: "revertido",
 };
 
+const ORDEM_SITUACAO: Record<SituacaoExterna, number> = {
+  pendente: 0,
+  aprovado: 1,
+  pago: 2,
+  expirado: 3,
+  revertido: 4,
+};
+
 const POR_EVENTO: Record<string, SituacaoExterna> = {
   "pedido.criado": "pendente",
   "comissao.aprovada": "aprovado",
@@ -144,8 +152,18 @@ export function lerSphere(corpo: unknown, agora: Date): Leitura {
   const comissao = lerValor(c.valor);
   if (comissao === null) return { ok: false, erro: "comissao.valor invalido" };
   const statusOriginal = typeof c.status === "string" ? c.status.trim().toLowerCase().slice(0, 40) || null : null;
-  // O status da comissao manda; sem ele (ou desconhecido), vale o evento.
-  const situacao = (statusOriginal && STATUS[statusOriginal]) || POR_EVENTO[evento];
+  // Vale a etapa mais avancada entre o status da comissao e o evento: a
+  // propria doc manda campo atrasado (comissao.aprovada com pedido.status
+  // "created"), e um pedido.expirado com a comissao ainda "pending" ficaria
+  // pendente para sempre.
+  const peloStatus = statusOriginal ? STATUS[statusOriginal] : undefined;
+  const peloEvento = POR_EVENTO[evento];
+  const situacao =
+    peloStatus && peloEvento
+      ? ORDEM_SITUACAO[peloStatus] >= ORDEM_SITUACAO[peloEvento]
+        ? peloStatus
+        : peloEvento
+      : peloStatus || peloEvento;
   if (!situacao) return { ok: false, erro: `evento desconhecido: ${evento}` };
 
   const a = ehObjeto(corpo.afiliado) ? corpo.afiliado : {};

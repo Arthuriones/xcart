@@ -1,4 +1,6 @@
 import { Suspense } from "react";
+import { SoLojasShopify } from "@/components/layout/so-lojas-shopify";
+import { filtroResolvido } from "@/lib/filtro-global";
 import { FUSO_RELATORIO_PADRAO } from "@/lib/financeiro/tipos";
 import { lerAtividade, type LeituraAtividade } from "@/lib/leitura/atividade";
 import { tipoDe, type TipoAtividade } from "@/lib/leitura/atividade-regras";
@@ -34,6 +36,12 @@ export default async function ActivityPage({
 }
 
 async function Conteudo({ tipo, q }: { tipo: TipoAtividade | null; q: string }) {
+  // Checkout externo na barra do topo: a linha do tempo e das lojas Shopify.
+  const checkout = await filtroResolvido()
+    .then((r) => r.checkout)
+    .catch(() => null);
+  if (checkout) return <SoLojasShopify checkout={checkout.nome} />;
+
   let dados: LeituraAtividade;
   try {
     dados = await lerAtividade({ tipo, antes: null });

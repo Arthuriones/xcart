@@ -48,8 +48,8 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     return json(500, { ok: false, erro: `Falha ao ler o checkout: ${e instanceof Error ? e.message : e}` });
   }
 
-  const inicio = Date.now() - 1000;
   let status = 0;
+  let resposta: unknown = null;
   try {
     const r = await safeFetch(url, {
       method: "POST",
@@ -58,6 +58,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       timeoutMs: TIMEOUT_MS,
     });
     status = r.status;
+    resposta = await r.json().catch(() => null);
   } catch {
     return json(200, { ok: false, erro: "A URL não respondeu. Tente de novo em instantes." });
   }
@@ -65,12 +66,13 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     return json(200, { ok: false, erro: `A URL respondeu ${status}.`, status });
   }
 
-  // 2xx nao basta (um redirect para GET tambem da 200): confere que o
-  // endpoint gravou o "Teste recebido" agora.
-  const depois = await checkoutDaSessao(id).catch(() => null);
-  const quando = depois?.ultimo_evento_em ? Date.parse(depois.ultimo_evento_em) : NaN;
-  if (!depois || !depois.ultimo_evento_teste || !(quando >= inicio)) {
+  // 2xx nao basta (um redirect para GET tambem da 200): so o endpoint do
+  // checkout responde { ok: true, teste: true }. Nao relemos ultimo_evento_em:
+  // num checkout que ja recebe eventos reais o teste nao o mexe.
+  const r = resposta as { ok?: unknown; teste?: unknown } | null;
+  if (!r || r.ok !== true || r.teste !== true) {
     return json(200, { ok: false, erro: "A URL respondeu, mas o evento não chegou ao checkout.", status });
   }
-  return json(200, { ok: true, status, checkout: resumoDoCheckout(depois) });
+  const depois = await checkoutDaSessao(id).catch(() => null);
+  return json(200, { ok: true, status, checkout: depois ? resumoDoCheckout(depois) : null });
 }

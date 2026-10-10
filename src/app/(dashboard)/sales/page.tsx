@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { horaNoFuso, rotuloFuso } from "@/components/layout/contexto";
 import { getRouteGraph } from "@/lib/checkout-routes/graph";
 import { filtroResolvido, lerFiltroGlobal } from "@/lib/filtro-global";
+import { SoLojasShopify } from "@/components/layout/so-lojas-shopify";
 import { FUSO_RELATORIO_PADRAO, TODAS } from "@/lib/financeiro/tipos";
 import { getSales, type Sales, type SalesPeriod } from "@/lib/sales/queries";
 import { getCurrentUser } from "@/lib/supabase/current-user";
@@ -54,9 +55,10 @@ async function lerVendas(periodo: SalesPeriod, lojaId: string): Promise<Leitura>
  * A loja do filtro global, se houver. Falha aqui nao derruba a tela: sem o
  * nome da loja, ela so abre com todas.
  */
-async function lojaDoFiltro(): Promise<{ id: string; nome: string } | null> {
+async function lojaDoFiltro(): Promise<{ id: string; nome: string; checkout?: true } | null> {
   try {
-    const { filtro, lojas } = await filtroResolvido();
+    const { filtro, lojas, checkout } = await filtroResolvido();
+    if (checkout) return { id: checkout.id, nome: checkout.nome, checkout: true };
     if (filtro.lojaId === TODAS) return null;
     const loja = lojas.find((l) => l.id === filtro.lojaId);
     return loja ? { id: loja.id, nome: loja.nome } : null;
@@ -73,7 +75,7 @@ async function lojaDoFiltro(): Promise<{ id: string; nome: string } | null> {
  */
 async function Conteudo({ periodo, lojaId }: { periodo: SalesPeriod; lojaId: string }) {
   let leitura: Leitura;
-  let loja: { id: string; nome: string } | null;
+  let loja: { id: string; nome: string; checkout?: true } | null;
   try {
     [leitura, loja] = await Promise.all([lerVendas(periodo, lojaId), lojaDoFiltro()]);
   } catch (e) {
@@ -86,6 +88,9 @@ async function Conteudo({ periodo, lojaId }: { periodo: SalesPeriod; lojaId: str
       />
     );
   }
+
+  // Checkout externo na barra do topo: vendas aqui sao as do roteamento Shopify.
+  if (loja?.checkout) return <SoLojasShopify checkout={loja.nome} />;
 
   const { dados, em } = leitura;
   if (!dados.hasRoute) return <SemRota tela="vendas" />;

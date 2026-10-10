@@ -35,6 +35,9 @@ export interface CheckoutParaReceber {
   fuso: string;
   moeda_receita: string;
   notificar_aprovada: boolean;
+  /** Para o teste nao esconder um webhook parado (ver o ramo do teste). */
+  ultimo_evento_em: string | null;
+  ultimo_evento_teste: boolean;
 }
 
 export type PedidoGravado = EstadoPedido & { versao: number };
@@ -137,16 +140,26 @@ export async function receberEvento(
     await repo.marcarCheckout(checkout.id, { ultimo_erro: `Evento recusado: ${leitura.erro}`.slice(0, 500), ultimo_erro_em: agoraIso });
     return resp(400, { ok: false, erro: leitura.erro });
   }
-  const ev = leitura.evento;
+  // A moeda da comissao fica gravada no pedido (a Sphere nao manda a dela):
+  // trocar a moeda do checkout depois nao reescreve o passado.
+  const ev: EventoNormalizado = {
+    ...leitura.evento,
+    receita: { ...leitura.evento.receita, moeda: leitura.evento.receita.moeda || checkout.moeda_receita },
+  };
 
   if (ev.teste) {
-    await repo.marcarCheckout(checkout.id, {
-      ultimo_evento_em: agoraIso,
-      ultimo_evento: ev.evento,
-      ultimo_evento_teste: true,
-      ultimo_erro: null,
-      ultimo_erro_em: null,
-    });
+    // So marca "teste recebido" enquanto nao chegou evento real: num checkout
+    // que ja recebe, o teste apagaria o "ultimo evento ha X" e o relogio do
+    // aviso de webhook parado. Quem confere o teste le a resposta.
+    if (!checkout.ultimo_evento_em || checkout.ultimo_evento_teste) {
+      await repo.marcarCheckout(checkout.id, {
+        ultimo_evento_em: agoraIso,
+        ultimo_evento: ev.evento,
+        ultimo_evento_teste: true,
+        ultimo_erro: null,
+        ultimo_erro_em: null,
+      });
+    }
     return resp(200, { ok: true, teste: true });
   }
 

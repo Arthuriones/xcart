@@ -73,6 +73,8 @@ export interface DestinoGuia {
 export interface ContaGuia {
   plataforma: "meta" | "google";
   storeId: string | null;
+  /** Conta ligada a um checkout externo (069): o gasto entra nele. */
+  checkoutId?: string | null;
   ativo: boolean;
   comErro: boolean;
 }
@@ -443,7 +445,7 @@ function passoContas(foto: FotoGuia): PassoGuia {
     return { ...passo, estado: "naoConferido", detalhe: "Não deu para conferir as contas de anúncio agora." };
   }
   const ativas = foto.contas.filter((c) => c.ativo);
-  const ligadas = ativas.filter((c) => c.storeId);
+  const ligadas = ativas.filter((c) => c.storeId || c.checkoutId);
   const semLoja = ativas.length - ligadas.length;
 
   if (ligadas.length > 0) {

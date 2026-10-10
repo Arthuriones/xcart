@@ -213,6 +213,8 @@ const CHECKOUT: CheckoutParaReceber = {
   fuso: "Europe/Rome",
   moeda_receita: "EUR",
   notificar_aprovada: false,
+  ultimo_evento_em: null,
+  ultimo_evento_teste: false,
 };
 
 function corpo(evento: string, status: string, dataEvento: string, extra: Record<string, unknown> = {}) {
@@ -300,6 +302,20 @@ describe("receberEvento: teste, pausa, conta e corpo invalido", () => {
     expect(m.marcas.at(-1)).toMatchObject({ ultimo_evento_teste: true, ultimo_erro: null });
     // E nao fixa a conta de afiliado do teste.
     expect(m.contas.size).toBe(0);
+  });
+
+  it("checkout que ja recebe eventos reais: o teste responde ok sem mexer no 'ultimo evento'", async () => {
+    const m = memoria();
+    const recebendo = { ...CHECKOUT, ultimo_evento_em: "2026-07-16T10:00:00.000Z", ultimo_evento_teste: false };
+    const r = await receberEvento(m.repo, recebendo, sphere, exemploSphere(AGORA), AGORA);
+    expect(r).toEqual({ status: 200, corpo: { ok: true, teste: true }, notificar: null });
+    expect(m.marcas).toHaveLength(0);
+  });
+
+  it("a moeda da comissao fica gravada no pedido (trocar a do checkout nao reescreve)", async () => {
+    const m = memoria();
+    await receberEvento(m.repo, { ...CHECKOUT, moeda_receita: "PLN" }, sphere, C_CRIADO, AGORA);
+    expect(m.pedidos.get("ck-1|12345")?.moeda_receita).toBe("PLN");
   });
 
   it("checkout pausado: pedido novo nao entra (nem trava, nem liga afiliado)", async () => {
