@@ -84,6 +84,20 @@ All tables have RLS (owner-scoped via `auth.uid()`); service-role bypasses. Shar
 
 Storage buckets (public read; write scoped to `foldername[1] == auth.uid()`): `store-logos`, `product-images` (neutralized/branded/review images live here), `store-assets`.
 
+### 5.1 External checkout (migration 069, `src/lib/checkouts-externos/`)
+
+A checkout where the order happens outside Shopify (Sphere Affiliates first: COD affiliate network, the owner earns a **commission**). It is NOT a `stores` row — almost every `.from("stores")` assumes Shopify.
+
+| Table | Purpose |
+|---|---|
+| **checkouts_externos** | `plataforma` ('sphere'), `nome`, `ativo`, `moeda_receita` (Sphere does not send the commission currency), `fuso` (the order's `dia_local`), `taxa_aprovacao_padrao`, `conta_externa` (affiliate code, pinned on the first real event), last event/error. |
+| **checkout_externo_segredos** | The webhook token (in clear, to show the URL again) + `token_hash` (sha256, unique: the endpoint lookup). RLS on, **zero policy**, only `service_role`. |
+| **pedidos_externos** | One row per order, LAST state: `situacao` pendente/aprovado/pago/expirado/revertido, `receita` = net commission, `valor` = order total (hint only), `dia_local`, `atualizado_em` (event time, never regresses), `versao` (optimistic lock). |
+| **checkout_externo_eventos** | Idempotency lock `(checkout, pedido, evento)` + the screen log. |
+| **ad_accounts.checkout_id** | An ad account links to ONE store OR ONE checkout (`check`), composite FK `on delete set null (checkout_id)`. |
+
+Webhook: `POST /api/webhooks/checkout/<token>` (public; token = the only secret; 404 for unknown; 64 KB cap; the insert into `checkout_externo_eventos` is the lock; `aplicarEvento` keeps out-of-order events from regressing; the "Venda no celular" goes in `after()`). The test event (`afiliado.codigo = "xcart-teste"`) never creates an order. In the Dashboard the checkout is a "store" with `tipo: "checkout"` in `EntradaFinanceiro.lojas`, orders in `externos`, and it rides the cash-on-delivery cards (Recebido / A receber / Previsto by the approval rate). `filtroResolvido()` keeps `lojas`/`lojaIds` Shopify-only and adds `checkouts`/`checkoutIds`/`checkout`. External checkouts do NOT count towards plan limits.
+
 ---
 
 ## 6. Shopify integration (`src/lib/shopify/client.ts`)

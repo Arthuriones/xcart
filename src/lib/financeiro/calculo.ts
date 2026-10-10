@@ -30,6 +30,7 @@ import {
   type MoedaRelatorio,
   type ProductCostRow,
 } from "@/lib/financeiro/tipos";
+import type { PedidoExternoRow } from "@/lib/checkouts-externos/tipos";
 
 // ============================================================================
 // Motor do Lucro. Puro: recebe as linhas do banco, devolve os totais.
@@ -46,6 +47,13 @@ import {
 // realizado continua nos campos de sempre (receita = so o que foi pago); o
 // que ainda pode entrar e o previsto ficam em Totais.cod. Pedido online passa
 // pela mesma conta de antes -- tests/financeiro-contra-entrega.test.ts trava.
+//
+// Checkout externo (069, src/lib/checkouts-externos): uma "loja" de comissao
+// em `lojas` (tipo "checkout"), com os pedidos em `externos`. A receita e a
+// COMISSAO (aprovada + paga = Recebido; pendente = A receber, pela taxa de
+// aprovacao), sem custo de produto nem taxa. Entra na visao contra entrega:
+// os mesmos campos, a mesma conta de Previsto e Lucro previsto. Loja Shopify
+// nao muda -- tests/financeiro-checkout-externo.test.ts trava.
 // ============================================================================
 
 /**
@@ -83,6 +91,23 @@ export interface Totais {
   coberturaCusto: number | null;
   /** A visao contra entrega. Sem pedido COD, o previsto e o realizado. */
   cod: TotaisCod;
+  /** Checkout externo (comissao). Tudo zero sem checkout no filtro. */
+  externo: TotaisExterno;
+}
+
+/** Os pedidos de checkout externo no periodo (src/lib/checkouts-externos). */
+export interface TotaisExterno {
+  /** Todos os pedidos criados. */
+  pedidos: number;
+  pendentes: number;
+  aprovados: number;
+  pagos: number;
+  /** Expirados e revertidos. */
+  perdidos: number;
+  /** A comissao dos expirados e revertidos. */
+  perdido: number;
+  /** Total dos pedidos na plataforma (pedido.valor): so dica, nao e receita. */
+  valorPedidos: number;
 }
 
 /**
@@ -164,7 +189,21 @@ export interface ResumoEntrega {
   amostra: number;
 }
 
-export type LojaFinanceira = LojaDoSeletor & { fuso: string | null; moeda: string | null };
+export type LojaFinanceira = LojaDoSeletor & {
+  fuso: string | null;
+  moeda: string | null;
+  /**
+   * Checkout externo: a taxa de aprovacao padrao (%) ate ter amostra. A
+   * `moeda` dele e a da comissao (a Sphere nao manda).
+   */
+  taxaPadraoPct?: number | null;
+};
+
+/** O que o calculo le de um pedido de checkout externo (pedidos_externos). */
+export type PedidoExternoFin = Pick<
+  PedidoExternoRow,
+  "checkout_id" | "situacao" | "moeda" | "valor" | "receita" | "moeda_receita" | "dia_local"
+>;
 
 export interface EntradaFinanceiro {
   lojas: LojaFinanceira[];
@@ -180,9 +219,12 @@ export interface EntradaFinanceiro {
   hoje: string;
   /**
    * Contra entrega finalizados dos ultimos 60 dias, por loja (a taxa de
-   * entrega). Ausente = taxa padrao de cada loja.
+   * entrega). Ausente = taxa padrao de cada loja. Checkout externo: a
+   * amostra de aprovacao, pelo id dele.
    */
   amostraEntrega?: Record<string, AmostraEntrega>;
+  /** Pedidos de checkout externo do periodo (069). Ausente = nenhum. */
+  externos?: PedidoExternoFin[];
 }
 
 // ---------------------------------------------------------------------------
@@ -280,6 +322,14 @@ interface Acumulador {
   baseAEnviarComCusto: number;
   baseAEnviarEstimado: number;
   baseAEnviarSemCusto: number;
+  // Checkout externo
+  extPedidos: number;
+  extPendentes: number;
+  extAprovados: number;
+  extPagos: number;
+  extPerdidos: number;
+  extPerdido: number;
+  extValorPedidos: number;
 }
 
 function acumuladorVazio(): Acumulador {
@@ -309,6 +359,13 @@ function acumuladorVazio(): Acumulador {
     baseAEnviarComCusto: 0,
     baseAEnviarEstimado: 0,
     baseAEnviarSemCusto: 0,
+    extPedidos: 0,
+    extPendentes: 0,
+    extAprovados: 0,
+    extPagos: 0,
+    extPerdidos: 0,
+    extPerdido: 0,
+    extValorPedidos: 0,
   };
 }
 
@@ -364,6 +421,15 @@ function totaisDe(a: Acumulador): Totais {
       roasEquilibrioPrevisto: cm2Previsto > 0 ? previsto / cm2Previsto : null,
       cpa: a.gerados > 0 && gasto > 0 ? gasto / a.gerados : null,
       coberturaCusto: basePrevista > 0 ? (a.baseComCusto + a.baseAEnviarComCusto) / basePrevista : null,
+    },
+    externo: {
+      pedidos: a.extPedidos,
+      pendentes: a.extPendentes,
+      aprovados: a.extAprovados,
+      pagos: a.extPagos,
+      perdidos: a.extPerdidos,
+      perdido: a.extPerdido,
+      valorPedidos: a.extValorPedidos,
     },
   };
 }
@@ -434,9 +500,11 @@ export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
   const lojasSemCustoPadraoComFalta = new Set<string>();
 
   // Taxa de entrega de cada loja: a da amostra, ou a padrao de Custos e taxas.
+  // Checkout externo: a taxa de APROVACAO, com a padrao do proprio checkout.
   const taxaPorLoja: Record<string, TaxaEntrega> = {};
   for (const l of e.lojas) {
-    taxaPorLoja[l.id] = taxaDeEntrega(e.amostraEntrega?.[l.id], configPorLoja.get(l.id)?.cod_taxa_entrega);
+    const padrao = l.tipo === "checkout" ? l.taxaPadraoPct : configPorLoja.get(l.id)?.cod_taxa_entrega;
+    taxaPorLoja[l.id] = taxaDeEntrega(e.amostraEntrega?.[l.id], padrao);
   }
   const taxaDaLoja = (id: string): TaxaEntrega => taxaPorLoja[id] ?? taxaDeEntrega(null, null);
 
@@ -593,13 +661,62 @@ export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
     });
   }
 
+  // --- Checkout externo (comissao) ----------------------------------------
+  for (const x of e.externos ?? []) {
+    const ck = lojaPorId.get(x.checkout_id);
+    if (!ck || ck.tipo !== "checkout") continue;
+    const dia = String(x.dia_local).slice(0, 10);
+    if (!dentro(dia, iAtual) && !dentro(dia, iAnterior)) continue;
+
+    // A comissao vem na moeda do checkout (a Sphere nao diz qual e).
+    const moedaComissao = String(x.moeda_receita || ck.moeda || "EUR").toUpperCase();
+    const fator = converter(1, moedaComissao, e.moeda, dia);
+    if (!fator) {
+      moedasSemCotacao.add(moedaComissao);
+      continue;
+    }
+    if (fator.aproximado) cambioAproximado = true;
+    const comissao = paraNumero(x.receita) * fator.valor;
+    // O total do pedido e so dica: sem cotacao, fica de fora so ele.
+    const fatorPedido = converter(1, String(x.moeda || "").toUpperCase(), e.moeda, dia);
+    const valorPedido = fatorPedido ? paraNumero(x.valor) * fatorPedido.valor : 0;
+
+    const comum: Partial<Acumulador> = { gerados: 1, extPedidos: 1, extValorPedidos: valorPedido };
+    if (x.situacao === "aprovado" || x.situacao === "pago") {
+      lancar(ck.id, dia, {
+        ...comum,
+        pedidos: 1,
+        receita: comissao,
+        extAprovados: x.situacao === "aprovado" ? 1 : 0,
+        extPagos: x.situacao === "pago" ? 1 : 0,
+      });
+    } else if (x.situacao === "pendente") {
+      const taxa = taxaDaLoja(ck.id).taxa;
+      lancar(ck.id, dia, {
+        ...comum,
+        codAbertos: 1,
+        extPendentes: 1,
+        aReceber: comissao,
+        esperado: comissao * taxa,
+        aReceberPendente: comissao,
+        esperadoPendente: comissao * taxa,
+      });
+    } else {
+      // expirado ou revertido: a comissao nao vem.
+      lancar(ck.id, dia, { ...comum, codRecusados: 1, extPerdidos: 1, extPerdido: comissao });
+    }
+  }
+
   // --- Gasto --------------------------------------------------------------
+  // A conta liga a uma loja OU a um checkout externo (069).
+  const destinoDaConta = (c: AdAccountRow): string | null => c.store_id ?? c.checkout_id ?? null;
   const contaPorId = new Map<string, AdAccountRow>();
   const fusosDiferentes: Avisos["fusosDiferentes"] = [];
   for (const c of e.contas) {
-    if (!c.store_id || !lojaPorId.has(c.store_id)) continue;
+    const destino = destinoDaConta(c);
+    if (!destino || !lojaPorId.has(destino)) continue;
     contaPorId.set(c.id, c);
-    const loja = lojaPorId.get(c.store_id)!;
+    const loja = lojaPorId.get(destino)!;
     if (c.fuso && loja.fuso && c.fuso !== loja.fuso) {
       fusosDiferentes.push({
         conta: c.nome || c.external_id,
@@ -615,7 +732,8 @@ export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
     // detalhe e somaria em dobro.
     if (g.nivel !== "conta") continue;
     const conta = contaPorId.get(g.ad_account_id);
-    if (!conta || !conta.store_id) continue;
+    const destino = conta ? destinoDaConta(conta) : null;
+    if (!conta || !destino) continue;
     const dia = String(g.data).slice(0, 10);
     if (!dentro(dia, iAtual) && !dentro(dia, iAnterior)) continue;
     const c = converter(paraNumero(g.gasto), g.moeda, e.moeda, dia);
@@ -625,7 +743,7 @@ export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
     }
     if (c.aproximado) cambioAproximado = true;
     lancar(
-      conta.store_id,
+      destino,
       dia,
       conta.plataforma === "google" ? { gastoGoogle: c.valor } : { gastoMeta: c.valor }
     );
@@ -652,8 +770,9 @@ export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
     parcial: dia === e.hoje,
   }));
 
+  // Checkout externo e sempre "a receber + previsto": entra aqui tambem.
   const lojasContraEntrega = e.lojas
-    .filter((l) => configPorLoja.get(l.id)?.contra_entrega === true)
+    .filter((l) => l.tipo === "checkout" || configPorLoja.get(l.id)?.contra_entrega === true)
     .map((l) => l.id);
 
   return {

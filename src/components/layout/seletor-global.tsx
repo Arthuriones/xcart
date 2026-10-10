@@ -131,6 +131,11 @@ function nomeDaLoja(lojas: LojaContexto[], id: string): string | null {
   return loja ? loja.nome || loja.dominio : null;
 }
 
+/** "Loja: X" ou "Checkout: X" no botao do seletor. */
+function prefixoDa(lojas: LojaContexto[], id: string): string {
+  return lojas.find((l) => l.id === id)?.tipo === "checkout" ? "Checkout" : "Loja";
+}
+
 function dominioCurto(dominio: string) {
   return dominio.replace(/\.myshopify\.com$/i, "");
 }
@@ -205,12 +210,17 @@ function ListaLojas({
 }) {
   const termo = busca.trim().toLowerCase();
   const casa = (l: LojaContexto) => !termo || `${l.nome} ${l.dominio}`.toLowerCase().includes(termo);
-  const ativas = lojas.filter((l) => !l.semAcesso);
-  const semAcesso = lojas.filter((l) => l.semAcesso);
+  const shopify = lojas.filter((l) => l.tipo !== "checkout");
+  const checkouts = lojas.filter((l) => l.tipo === "checkout");
+  const ativas = shopify.filter((l) => !l.semAcesso);
+  const semAcesso = shopify.filter((l) => l.semAcesso);
   const ativasVisiveis = ativas.filter(casa);
   const semAcessoVisiveis = semAcesso.filter(casa);
+  const checkoutsVisiveis = checkouts.filter(casa);
   const mostraTodas = !termo || "todas as lojas".includes(termo);
-  const nada = !mostraTodas && ativasVisiveis.length === 0 && semAcessoVisiveis.length === 0;
+  const nada =
+    !mostraTodas && ativasVisiveis.length === 0 && semAcessoVisiveis.length === 0 && checkoutsVisiveis.length === 0;
+  const somadas = ativas.length + checkouts.length;
 
   const titulo = "px-2 pb-1 pt-2 text-label font-medium text-t3";
   return (
@@ -219,9 +229,9 @@ function ListaLojas({
         <OpcaoLoja
           nome="Todas as lojas"
           sub={
-            ativas.length === 1
+            somadas === 1
               ? `1 ativa${mostrarMoeda ? `, em ${moeda}` : ""}`
-              : `${ativas.length} ativas${mostrarMoeda ? ` somadas em ${moeda}` : ""}`
+              : `${somadas} ativas${mostrarMoeda ? ` somadas em ${moeda}` : ""}`
           }
           ponto="ink"
           marcada={lojaId === TODAS}
@@ -256,6 +266,22 @@ function ListaLojas({
               sub="A Shopify não deixa ler os pedidos"
               ponto="t4"
               apagada
+              marcada={lojaId === l.id}
+              grande={grande}
+              onEscolher={() => onEscolher(l.id)}
+            />
+          ))}
+        </>
+      )}
+      {checkoutsVisiveis.length > 0 && (
+        <>
+          <div className={titulo}>Checkouts ({checkoutsVisiveis.length})</div>
+          {checkoutsVisiveis.map((l) => (
+            <OpcaoLoja
+              key={l.id}
+              nome={l.nome}
+              sub={l.dominio}
+              ponto="ok"
               marcada={lojaId === l.id}
               grande={grande}
               onEscolher={() => onEscolher(l.id)}
@@ -397,7 +423,9 @@ export function BarraContexto({
               )}
             >
               <Store className="size-4 shrink-0 text-t2" strokeWidth={1.75} aria-hidden />
-              <span className="truncate">{filtrada ? `Loja: ${nomeLoja}` : "Todas as lojas"}</span>
+              <span className="truncate">
+                {filtrada ? `${prefixoDa(dados.lojas, v.lojaId)}: ${nomeLoja}` : "Todas as lojas"}
+              </span>
               <ChevronDown className="size-3.5 shrink-0 text-t3" strokeWidth={1.75} aria-hidden />
             </button>
           }

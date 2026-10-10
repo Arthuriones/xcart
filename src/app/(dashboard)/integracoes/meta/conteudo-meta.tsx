@@ -42,10 +42,10 @@ export function ConteudoMeta({ d }: { d: DadosAnuncios }) {
         }
       />
 
-      {d.lojas.length === 0 ? (
+      {d.lojas.length === 0 && d.checkouts.length === 0 ? (
         <EmptyState
           titulo="Conecte uma loja primeiro"
-          descricao="O gasto de cada conta de anúncio entra no lucro de uma loja. Sem loja, não há onde ligar a conta."
+          descricao="O gasto de cada conta de anúncio entra no lucro de uma loja (ou de um checkout). Sem nenhum, não há onde ligar a conta."
           acao={
             <Link href="/stores?conectar=1" className={buttonVariants()}>
               Conectar loja
@@ -76,6 +76,7 @@ export function ConteudoMeta({ d }: { d: DadosAnuncios }) {
               plataforma="meta"
               contas={d.contas}
               lojas={d.lojas}
+              checkouts={d.checkouts}
               gastos={d.gastos}
               erroGasto={d.erroGasto}
               fusosLoja={d.fusosLoja}

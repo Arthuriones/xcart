@@ -4,12 +4,14 @@ import {
   casaBusca,
   contarFiltros,
   estadoDaLoja,
+  estadoDoCheckout,
   estadoDoDestino,
   estadoScriptsGoogle,
   estadoTokenMeta,
   estadosDaNav,
   formatarCustomerId,
   gastoNaTela,
+  haQuantoTempo,
   listarNomes,
   passaNoFiltro,
   quando,
@@ -274,5 +276,66 @@ describe("textos", () => {
     expect(listarNomes(["A"])).toBe("A");
     expect(listarNomes(["A", "B", "C"])).toBe("A, B e C");
     expect(listarNomes(["A", "B", "C", "D", "E"])).toBe("A, B, C e mais 2");
+  });
+});
+
+describe("checkout externo (069)", () => {
+  const base = {
+    ativo: true,
+    ultimo_evento_em: null as string | null,
+    ultimo_evento_teste: false,
+    ultimo_erro: null as string | null,
+    ultimo_erro_em: null as string | null,
+  };
+
+  it("aguardando o primeiro evento, recebendo, teste e parado", () => {
+    expect(estadoDoCheckout(base, AGORA, SP)).toMatchObject({ tom: "run", texto: "Aguardando o 1º evento" });
+    expect(estadoDoCheckout({ ...base, ultimo_evento_em: "2026-10-02T17:25:00Z" }, AGORA, SP)).toMatchObject({
+      tom: "ok",
+      texto: "Recebendo",
+      detalhe: "último evento há 5 min",
+    });
+    expect(
+      estadoDoCheckout({ ...base, ultimo_evento_em: "2026-10-02T17:25:00Z", ultimo_evento_teste: true }, AGORA, SP)
+    ).toMatchObject({ tom: "info", texto: "Teste recebido", detalhe: "às 14:25" });
+    expect(estadoDoCheckout({ ...base, ultimo_evento_em: "2026-09-28T17:25:00Z" }, AGORA, SP)).toMatchObject({
+      tom: "warn",
+      texto: "Sem eventos",
+      detalhe: "último há 4 dias",
+    });
+  });
+
+  it("pausado vem antes de tudo; erro so vale se for mais novo que o ultimo evento", () => {
+    expect(estadoDoCheckout({ ...base, ativo: false, ultimo_erro: "x" }, AGORA, SP).texto).toBe("Pausado");
+    const erro = { ...base, ultimo_erro: "URL colada em outra conta", ultimo_erro_em: "2026-10-02T17:00:00Z" };
+    expect(estadoDoCheckout(erro, AGORA, SP)).toMatchObject({ tom: "err", detalhe: "URL colada em outra conta" });
+    expect(estadoDoCheckout({ ...erro, ultimo_evento_em: "2026-10-02T17:10:00Z" }, AGORA, SP).texto).toBe("Recebendo");
+    expect(estadoDoCheckout({ ...erro, ultimo_evento_em: "2026-10-02T16:50:00Z" }, AGORA, SP).texto).toBe("Erro");
+  });
+
+  it("conta ligada a um checkout nao e 'Sem loja'", () => {
+    expect(situacaoDaConta(conta({ store_id: null, checkout_id: "ck-1" }), AGORA, SP).grupo).toBe("ok");
+    expect(situacaoDaConta(conta({ store_id: null, checkout_id: null }), AGORA, SP).grupo).toBe("semLoja");
+  });
+
+  it("menu: checkouts com erro, aguardando e ok; sem dado nao inventa estado", () => {
+    const r = { contas: [], lojas: { total: 1, semAcesso: 0 }, telegram: false, tokensClaude: 0 };
+    expect(estadosDaNav({ ...r, checkouts: { total: 0, comErro: 0, aguardando: 0 } }).checkouts).toEqual({ tom: "neutral", texto: "Nenhum" });
+    expect(estadosDaNav({ ...r, checkouts: { total: 2, comErro: 1, aguardando: 1 } }).checkouts?.tom).toBe("err");
+    expect(estadosDaNav({ ...r, checkouts: { total: 2, comErro: 0, aguardando: 1 } }).checkouts?.tom).toBe("run");
+    expect(estadosDaNav({ ...r, checkouts: { total: 2, comErro: 0, aguardando: 0 } }).checkouts).toEqual({ tom: "ok", texto: "2 checkouts" });
+    expect(estadosDaNav(r).checkouts).toBeNull();
+    // Conta ligada a checkout nao e pendencia no menu do Meta.
+    const meta = estadosDaNav({
+      ...r,
+      contas: [{ plataforma: "meta", store_id: null, checkout_id: "ck", ativo: true, ultimo_erro: null }],
+    }).meta;
+    expect(meta).toEqual({ tom: "ok", texto: "1 conta" });
+  });
+
+  it("ha quanto tempo", () => {
+    expect(haQuantoTempo("2026-10-02T17:29:50Z", AGORA)).toBe("agora");
+    expect(haQuantoTempo("2026-10-02T15:30:00Z", AGORA)).toBe("há 2 h");
+    expect(haQuantoTempo("2026-10-01T17:30:00Z", AGORA)).toBe("há 1 dia");
   });
 });

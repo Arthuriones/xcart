@@ -232,6 +232,7 @@ export function TelaGoogle({
   contas,
   todas,
   lojas,
+  checkouts,
   estadoLeitura,
   envio,
   tabela,
@@ -240,6 +241,8 @@ export function TelaGoogle({
   /** Todas as contas Google, sem filtro de loja. */
   todas: number;
   lojas: LojaDoSeletor[];
+  /** Checkouts externos (069): a conta tambem liga a um deles. */
+  checkouts?: LojaDoSeletor[];
   estadoLeitura: Estado;
   /** O cartao "Para enviar as compras" (server component). */
   envio: ReactNode;
@@ -331,7 +334,14 @@ export function TelaGoogle({
       {script ? <PainelScript titulo={script.titulo} script={script.texto} onFechar={() => setScript(null)} /> : null}
 
       {!semConta ? (
-        <ContasTabela plataforma="google" contas={contas} lojas={lojas} onScript={mostrarScript} {...tabela} />
+        <ContasTabela
+          plataforma="google"
+          contas={contas}
+          lojas={lojas}
+          checkouts={checkouts}
+          onScript={mostrarScript}
+          {...tabela}
+        />
       ) : null}
     </>
   );

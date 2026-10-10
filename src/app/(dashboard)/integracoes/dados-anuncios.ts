@@ -31,7 +31,9 @@ export interface DadosAnuncios {
   /** Contas desta plataforma, sem filtro de loja (o token e um so). */
   daPlataforma: ContaAnuncioResumo[];
   lojas: LojaDoSeletor[];
-  /** Loja escolhida na barra do topo, ou null com todas. */
+  /** Checkouts externos (069): a conta tambem liga a um deles. */
+  checkouts: LojaDoSeletor[];
+  /** Loja (ou checkout) escolhida na barra do topo, ou null com todas. */
   lojaFiltrada: LojaDoSeletor | null;
   /** store_id -> fuso IANA da loja (do sync de pedidos). */
   fusosLoja: Record<string, string>;
@@ -88,11 +90,12 @@ export async function carregarAnuncios(
   } catch (e) {
     return { ok: false, erro: mensagem(e) };
   }
-  const { filtro, lojas } = filtroLojas;
+  const { filtro, lojas, checkouts, checkout } = filtroLojas;
   const agora = new Date();
 
   const { fusos, erro: erroFuso } = await fusosDasLojas(lojas.map((l) => l.id));
-  const lojaFiltrada = filtro.lojaId !== TODAS ? (lojas.find((l) => l.id === filtro.lojaId) ?? null) : null;
+  const lojaFiltrada =
+    filtro.lojaId !== TODAS ? (lojas.find((l) => l.id === filtro.lojaId) ?? checkout ?? null) : null;
   // O mesmo "hoje" do Lucro: o da loja escolhida, ou Sao Paulo com todas.
   const fuso = (lojaFiltrada && fusos[lojaFiltrada.id]) || FUSO_RELATORIO_PADRAO;
   const intervalo = intervaloDoPeriodo(filtro.periodo, diaNoFuso(agora, fuso)).atual;
@@ -101,7 +104,9 @@ export async function carregarAnuncios(
   // Com uma loja escolhida: as contas dela e as que ainda nao tem loja (sao
   // as que pedem para ser ligadas).
   const contas = lojaFiltrada
-    ? daPlataforma.filter((c) => c.store_id === lojaFiltrada.id || !c.store_id)
+    ? daPlataforma.filter(
+        (c) => c.store_id === lojaFiltrada.id || c.checkout_id === lojaFiltrada.id || (!c.store_id && !c.checkout_id)
+      )
     : daPlataforma;
 
   const [gasto, destinos] = await Promise.all([
@@ -149,6 +154,7 @@ export async function carregarAnuncios(
       daPlataforma,
       conexoes,
       lojas,
+      checkouts,
       lojaFiltrada,
       fusosLoja: fusos,
       erroFuso,

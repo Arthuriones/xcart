@@ -48,6 +48,11 @@ export interface BaseIndicadores {
   dicas: Partial<Record<IdMetrica, string[]>>;
   /** Taxa de entrega do filtro: so os cartoes de contra entrega usam. */
   entrega?: ResumoEntrega;
+  /**
+   * So checkout externo no filtro (comissao): "Taxa de aprovação" no lugar da
+   * de entrega, e Perdido no lugar de custo de produto e devoluções.
+   */
+  checkout?: boolean;
 }
 
 interface Cartao {
@@ -284,10 +289,10 @@ function taxaUsada(b: BaseIndicadores): number | null {
   return b.atual.cod.taxaEntrega ?? b.entrega?.taxa ?? null;
 }
 
-function origemDaTaxa(e: ResumoEntrega | undefined): string | undefined {
+function origemDaTaxa(e: ResumoEntrega | undefined, checkout = false): string | undefined {
   if (!e || e.fonte === null) return undefined;
-  if (e.fonte === "historico") return `Da loja · ${inteiro(e.amostra)} pedidos`;
-  if (e.fonte === "misto") return "Média das lojas";
+  if (e.fonte === "historico") return `${checkout ? "Do checkout" : "Da loja"} · ${inteiro(e.amostra)} pedidos`;
+  if (e.fonte === "misto") return checkout ? "Média dos checkouts" : "Média das lojas";
   return e.amostra > 0 ? `Padrão · ${inteiro(e.amostra)} de ${AMOSTRA_MINIMA} pedidos` : "Padrão";
 }
 
@@ -304,7 +309,9 @@ export function IndicadoresTopoCod(b: BaseIndicadores) {
     CircleDollarSign,
     (x) => x.cod.lucroPrevisto,
     "dinheiro",
-    "Previsto menos produto, frete, taxas, devoluções esperadas e anúncios.",
+    b.checkout
+      ? "Previsto menos o gasto em anúncios ligado ao checkout."
+      : "Previsto menos produto, frete, taxas, devoluções esperadas e anúncios.",
     { notas: b.dicas.lucro, selo: cobertura?.tom === "warn" ? cobertura : undefined }
   );
   const cartoes: Cartao[] = [
@@ -315,8 +322,14 @@ export function IndicadoresTopoCod(b: BaseIndicadores) {
       HandCoins,
       (x) => x.receita,
       "dinheiro",
-      "Pedidos pagos: os online e os contra entrega marcados como pagos na Shopify.",
-      { detalhe: `${inteiro(t.pedidos)} ${t.pedidos === 1 ? "pago" : "pagos"}` }
+      b.checkout
+        ? "Comissão aprovada ou paga: a que já é sua."
+        : "Pedidos pagos: os online e os contra entrega marcados como pagos na Shopify.",
+      {
+        detalhe: b.checkout
+          ? `${inteiro(t.externo.aprovados)} ${t.externo.aprovados === 1 ? "aprovada" : "aprovadas"} · ${inteiro(t.externo.pagos)} ${t.externo.pagos === 1 ? "paga" : "pagas"}`
+          : `${inteiro(t.pedidos)} ${t.pedidos === 1 ? "pago" : "pagos"}`,
+      }
     ),
     cartaoCod(
       b,
@@ -325,8 +338,15 @@ export function IndicadoresTopoCod(b: BaseIndicadores) {
       Hourglass,
       (x) => x.cod.aReceber,
       "dinheiro",
-      "Contra entrega ainda sem pagamento: aguardando envio, em trânsito ou entregue.",
-      { bom: "neutro", detalhe: `${inteiro(t.cod.abertos)} em aberto` }
+      b.checkout
+        ? "Comissão pendente: pedidos ainda sem aprovação."
+        : "Contra entrega ainda sem pagamento: aguardando envio, em trânsito ou entregue.",
+      {
+        bom: "neutro",
+        detalhe: b.checkout
+          ? `${inteiro(t.cod.abertos)} ${t.cod.abertos === 1 ? "pendente" : "pendentes"}`
+          : `${inteiro(t.cod.abertos)} em aberto`,
+      }
     ),
     cartaoCod(
       b,
@@ -335,8 +355,13 @@ export function IndicadoresTopoCod(b: BaseIndicadores) {
       CalendarClock,
       (x) => x.cod.previsto,
       "dinheiro",
-      "Recebido, mais os entregues a receber, mais o que ainda vai ser entregue vezes a taxa de entrega.",
-      { detalhe: taxa !== null ? `Com ${porcento(taxa)} de entrega` : undefined }
+      b.checkout
+        ? "Recebido, mais a comissão pendente vezes a taxa de aprovação."
+        : "Recebido, mais os entregues a receber, mais o que ainda vai ser entregue vezes a taxa de entrega.",
+      {
+        detalhe:
+          taxa !== null ? `Com ${porcento(taxa)} de ${b.checkout ? "aprovação" : "entrega"}` : undefined,
+      }
     ),
     cartaoCod(
       b,
@@ -345,7 +370,9 @@ export function IndicadoresTopoCod(b: BaseIndicadores) {
       Wallet,
       (x) => x.lucro,
       "dinheiro",
-      "Recebido menos produto e frete do que já foi enviado, taxas, devoluções e anúncios."
+      b.checkout
+        ? "Recebido menos o gasto em anúncios ligado ao checkout."
+        : "Recebido menos produto e frete do que já foi enviado, taxas, devoluções e anúncios."
     ),
   ];
   return (
@@ -361,17 +388,29 @@ export function IndicadoresTopoCod(b: BaseIndicadores) {
 export function IndicadoresKpiCod(b: BaseIndicadores) {
   const t = b.atual;
   const taxa = taxaUsada(b);
+  const ck = b.checkout === true;
   const cartoes: Cartao[] = [
-    {
-      id: "taxaEntrega",
-      rotulo: "Taxa de entrega",
-      icone: Truck,
-      valor: taxa,
-      texto: porcento(taxa),
-      bom: "neutro",
-      definicao: `Dos contra entrega finalizados nos últimos 60 dias (sem a última semana), quantos foram entregues. Em aberto há mais de ${DIAS_SEM_RETORNO} dias conta como não entregue. Com menos de ${AMOSTRA_MINIMA}, vale a taxa padrão de Custos e taxas.`,
-      detalhe: origemDaTaxa(b.entrega),
-    },
+    ck
+      ? {
+          id: "taxaAprovacao",
+          rotulo: "Taxa de aprovação",
+          icone: Truck,
+          valor: taxa,
+          texto: porcento(taxa),
+          bom: "neutro",
+          definicao: `Dos pedidos dos últimos 60 dias (sem a última semana), quantos tiveram a comissão aprovada. Pendente há mais de ${DIAS_SEM_RETORNO} dias conta como perdido. Com menos de ${AMOSTRA_MINIMA}, vale a taxa padrão do checkout.`,
+          detalhe: origemDaTaxa(b.entrega, true),
+        }
+      : {
+          id: "taxaEntrega",
+          rotulo: "Taxa de entrega",
+          icone: Truck,
+          valor: taxa,
+          texto: porcento(taxa),
+          bom: "neutro",
+          definicao: `Dos contra entrega finalizados nos últimos 60 dias (sem a última semana), quantos foram entregues. Em aberto há mais de ${DIAS_SEM_RETORNO} dias conta como não entregue. Com menos de ${AMOSTRA_MINIMA}, vale a taxa padrão de Custos e taxas.`,
+          detalhe: origemDaTaxa(b.entrega),
+        },
     daMetrica(b, "gasto", Megaphone, (x) => x.gasto, {
       rotulo: "Anúncios",
       detalhe: `Meta ${dinheiro(t.gastoMeta, b.moeda)} · Google ${dinheiro(t.gastoGoogle, b.moeda)}`,
@@ -396,29 +435,63 @@ export function IndicadoresKpiCod(b: BaseIndicadores) {
       Receipt,
       (x) => x.cod.gerados,
       "numero",
-      "Pedidos gerados: online pagos e contra entrega que não foi cancelado antes do envio.",
-      {
-        detalhe: `${inteiro(t.pedidos)} ${t.pedidos === 1 ? "pago" : "pagos"} · ${inteiro(t.cod.abertos)} em aberto · ${inteiro(t.cod.recusados)} ${t.cod.recusados === 1 ? "recusado" : "recusados"}`,
-        selo: seloCobertura(t.cod.coberturaCusto),
-      }
+      ck
+        ? "Pedidos criados no checkout no período, em qualquer situação."
+        : "Pedidos gerados: online pagos e contra entrega que não foi cancelado antes do envio.",
+      ck
+        ? {
+            detalhe: `${inteiro(t.externo.aprovados + t.externo.pagos)} aprovados · ${inteiro(t.externo.pendentes)} pendentes · ${inteiro(t.externo.perdidos)} perdidos`,
+          }
+        : {
+            detalhe: `${inteiro(t.pedidos)} ${t.pedidos === 1 ? "pago" : "pagos"} · ${inteiro(t.cod.abertos)} em aberto · ${inteiro(t.cod.recusados)} ${t.cod.recusados === 1 ? "recusado" : "recusados"}`,
+            selo: seloCobertura(t.cod.coberturaCusto),
+          }
     ),
     cartaoCod(b, "cpaCod", "CPA", UserPlus, (x) => x.cod.cpa, "dinheiro", "Gasto em anúncios dividido pelos pedidos gerados. Quanto menor, melhor.", {
       bom: "descer",
     }),
-    daMetrica(b, "custo", Package, (x) => x.cmv, {
-      definicao: "Produto mais frete do fornecedor do que já foi enviado, pelo custo cadastrado em Custos.",
-      detalhe: `Previsto ${dinheiro(t.cod.custoPrevisto, b.moeda)}`,
-    }),
-    cartaoCod(
-      b,
-      "devolucoes",
-      "Devoluções",
-      Undo2,
-      (x) => x.devolucoes,
-      "dinheiro",
-      "Custo por devolução (Custos e taxas) vezes os recusados que foram enviados.",
-      { bom: "descer", detalhe: `Previsto ${dinheiro(t.cod.devolucoesPrevistas, b.moeda)}` }
-    ),
+    ...(ck
+      ? [
+          cartaoCod(
+            b,
+            "perdido",
+            "Perdido",
+            Undo2,
+            (x) => x.externo.perdido,
+            "dinheiro",
+            "Comissão de pedidos expirados (COD não pago ou não entregue) ou revertidos.",
+            {
+              bom: "descer",
+              detalhe: `${inteiro(t.externo.perdidos)} ${t.externo.perdidos === 1 ? "pedido" : "pedidos"}`,
+            }
+          ),
+          cartaoCod(
+            b,
+            "valorPedidos",
+            "Valor dos pedidos",
+            Package,
+            (x) => x.externo.valorPedidos,
+            "dinheiro",
+            "Soma do total dos pedidos na plataforma. Só referência: a sua receita é a comissão.",
+            { bom: "neutro", detalhe: "Não entra no lucro" }
+          ),
+        ]
+      : [
+          daMetrica(b, "custo", Package, (x) => x.cmv, {
+            definicao: "Produto mais frete do fornecedor do que já foi enviado, pelo custo cadastrado em Custos.",
+            detalhe: `Previsto ${dinheiro(t.cod.custoPrevisto, b.moeda)}`,
+          }),
+          cartaoCod(
+            b,
+            "devolucoes",
+            "Devoluções",
+            Undo2,
+            (x) => x.devolucoes,
+            "dinheiro",
+            "Custo por devolução (Custos e taxas) vezes os recusados que foram enviados.",
+            { bom: "descer", detalhe: `Previsto ${dinheiro(t.cod.devolucoesPrevistas, b.moeda)}` }
+          ),
+        ]),
   ];
   return (
     <section aria-label="Indicadores do período" className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">

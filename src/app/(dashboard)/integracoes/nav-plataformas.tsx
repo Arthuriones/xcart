@@ -16,6 +16,7 @@ const PLATAFORMAS: { id: IdPlataforma; rotulo: string }[] = [
   { id: "meta", rotulo: "Meta" },
   { id: "google", rotulo: "Google" },
   { id: "shopify", rotulo: "Shopify" },
+  { id: "checkouts", rotulo: "Checkouts" },
   { id: "notificacoes", rotulo: "Notificações" },
   { id: "avancado", rotulo: "Avançado" },
 ];

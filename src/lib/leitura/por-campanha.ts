@@ -51,7 +51,7 @@ export interface EntradaCampanhas {
   cambio: FxRateRow[];
   moeda: MoedaRelatorio;
   intervalo: Intervalo;
-  /** So as contas ligadas a estas lojas: o mesmo recorte do lucro. */
+  /** So as contas ligadas a estas lojas (ou checkouts externos): o mesmo recorte do lucro. */
   lojaIds: string[];
 }
 
@@ -59,7 +59,12 @@ export function montarPorCampanha(e: EntradaCampanhas): LinhaCampanha[] {
   const converter = criarConversor(e.cambio);
   const lojas = new Set(e.lojaIds);
   const contaPorId = new Map(
-    e.contas.filter((c) => c.store_id && lojas.has(c.store_id)).map((c) => [c.id, c])
+    e.contas
+      .filter((c) => {
+        const destino = c.store_id ?? c.checkout_id ?? null;
+        return destino !== null && lojas.has(destino);
+      })
+      .map((c) => [c.id, c])
   );
 
   const porCampanha = new Map<string, LinhaCampanha>();
@@ -81,7 +86,7 @@ export function montarPorCampanha(e: EntradaCampanhas): LinhaCampanha[] {
         contaId: conta.id,
         contaNome: conta.nome || conta.external_id,
         plataforma: conta.plataforma,
-        storeId: conta.store_id,
+        storeId: conta.store_id ?? conta.checkout_id ?? null,
         gasto: 0,
         impressoes: 0,
         cliques: 0,

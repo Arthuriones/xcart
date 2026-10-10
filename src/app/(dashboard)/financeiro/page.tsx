@@ -74,7 +74,7 @@ async function Conteudo() {
       const b = base.value;
       extras = {
         serie: montarSerieDiaria(b.entrada, {
-          porLoja: dados.filtro.lojaId === TODAS && dados.lojaIds.length >= 2,
+          porLoja: dados.filtro.lojaId === TODAS && dados.lojaIds.length + dados.checkoutIds.length >= 2,
         }),
         produtos: montarPorProduto(b.entrada),
         // Falha so no gasto por campanha: so a aba Campanha mostra o erro.
@@ -86,7 +86,7 @@ async function Conteudo() {
               cambio: b.entrada.cambio,
               moeda: b.entrada.moeda,
               intervalo: b.entrada.intervalos.atual,
-              lojaIds: b.lojaIds,
+              lojaIds: [...b.lojaIds, ...b.checkoutIds],
             }),
       };
       if (b.erroCampanha) erroExtras = b.erroCampanha;
@@ -97,16 +97,20 @@ async function Conteudo() {
   }
   if (marcas.status === "rejected") console.error("[lucro] lojas desinstaladas", marcas.reason);
 
-  // Contas ativas das lojas do filtro. getFinanceiro le a MESMA base
-  // (memorizada): se ele abriu, ela tambem. Sem ela, nada de inventar.
-  const lojaSet = new Set(dados.lojaIds);
+  // Contas ativas das lojas (e checkouts) do filtro. getFinanceiro le a MESMA
+  // base (memorizada): se ele abriu, ela tambem. Sem ela, nada de inventar.
+  const lojaSet = new Set([...dados.lojaIds, ...dados.checkoutIds]);
+  const destino = (c: { store_id: string | null; checkout_id?: string | null }) => c.store_id ?? c.checkout_id ?? null;
   const contasAtivas =
     base.status === "fulfilled" && base.value
-      ? base.value.contas.filter((c) => c.ativo && c.store_id && lojaSet.has(c.store_id))
+      ? base.value.contas.filter((c) => {
+          const d = destino(c);
+          return c.ativo && d !== null && lojaSet.has(d);
+        })
       : null;
   const conexao: ConexaoLucro = {
     desinstaladas: marcas.status === "fulfilled" ? marcas.value : {},
-    lojasComConta: contasAtivas ? [...new Set(contasAtivas.map((c) => String(c.store_id)))] : null,
+    lojasComConta: contasAtivas ? [...new Set(contasAtivas.map((c) => String(destino(c))))] : null,
     atualizadoEm: momentoAtualizado(
       dados.estados.map((e) => e.ultimo_sync_ok_em),
       (contasAtivas ?? []).map((c) => c.ultimo_sync_ok_em)
@@ -128,12 +132,17 @@ function SemLojas() {
   return (
     <EmptyState
       icone={<Store />}
-      titulo="Conecte uma loja para ver o lucro"
-      descricao="Cruzamos os pedidos da Shopify com o gasto do Meta e do Google."
+      titulo="Conecte uma loja ou um checkout"
+      descricao="Cruzamos os pedidos (ou as comissões) com o gasto do Meta e do Google."
       acao={
-        <Link href="/stores?conectar=1" className={buttonVariants({})}>
-          Conectar loja
-        </Link>
+        <span className="flex flex-wrap justify-center gap-2">
+          <Link href="/stores?conectar=1" className={buttonVariants({})}>
+            Conectar loja
+          </Link>
+          <Link href="/integracoes/checkouts" className={buttonVariants({ variant: "secondary" })}>
+            Adicionar checkout
+          </Link>
+        </span>
       }
       className="min-h-80"
     />

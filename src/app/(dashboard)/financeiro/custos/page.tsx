@@ -4,6 +4,7 @@ import { Store } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { filtroResolvido, lerFiltroGlobal } from "@/lib/filtro-global";
+import { SoLojasShopify } from "@/components/layout/so-lojas-shopify";
 import { carregarCustos } from "@/lib/financeiro/custos-queries";
 import { lerConexoes, lerCustosDasLojas } from "@/lib/leitura/custos-lojas";
 import { resumirCustos, type Situacao } from "./apresentar";
@@ -44,6 +45,8 @@ async function Conteudo({ situacaoInicial }: { situacaoInicial: Situacao }) {
     return <ErroCustos detalhe={mensagem(e)} />;
   }
   const { filtro, lojas } = resolvido;
+  // Checkout externo nao tem custo por SKU: a comissao ja e liquida.
+  if (resolvido.checkout) return <SoLojasShopify checkout={resolvido.checkout.nome} />;
   if (lojas.length === 0) return <SemLojas />;
 
   const escolhida = lojas.find((l) => l.id === filtro.lojaId) ?? (lojas.length === 1 ? lojas[0] : null);

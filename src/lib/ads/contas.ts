@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import type { AdAccountRow, ContaAnuncioResumo } from "@/lib/financeiro/tipos";
+import { semMigration069 } from "@/lib/checkouts-externos/tipos";
 
 // ============================================================================
 // Contas de anuncio como a TELA ve.
@@ -19,6 +20,7 @@ type LinhaConta = Pick<
   AdAccountRow,
   | "id"
   | "store_id"
+  | "checkout_id"
   | "plataforma"
   | "external_id"
   | "nome"
@@ -39,6 +41,7 @@ export function resumoDaConta(c: LinhaConta, temSegredo: boolean): ContaAnuncioR
     moeda: c.moeda ?? null,
     fuso: c.fuso ?? null,
     store_id: c.store_id ?? null,
+    checkout_id: c.checkout_id ?? null,
     ativo: Boolean(c.ativo),
     fonte: c.fonte,
     ultimo_sync_ok_em: c.ultimo_sync_ok_em ?? null,
@@ -53,14 +56,14 @@ export async function listarContasDoUsuario(): Promise<ContaAnuncioResumo[]> {
   if (!user) return [];
 
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("ad_accounts")
-    .select(COLUNAS_CONTA)
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: true });
+  const ler = (colunas: string) =>
+    supabase.from("ad_accounts").select(colunas).eq("user_id", user.id).order("created_at", { ascending: true });
+  // checkout_id so existe depois da 069: sem ela, a lista antiga.
+  let { data, error } = await ler(`${COLUNAS_CONTA}, checkout_id`);
+  if (error && semMigration069(error)) ({ data, error } = await ler(COLUNAS_CONTA));
   if (error) throw new Error(`Falha ao ler as contas de anúncio: ${error.message}`);
 
-  const contas = (data || []) as LinhaConta[];
+  const contas = (data || []) as unknown as LinhaConta[];
   if (contas.length === 0) return [];
 
   const admin = createAdminClient();

@@ -71,8 +71,6 @@ async function executar(request: NextRequest) {
     .select("*")
     .eq("plataforma", "meta")
     .eq("ativo", true)
-    // Conta sem loja ainda nao entra no lucro: nao gasta chamada com ela.
-    .not("store_id", "is", null)
     .order("ultimo_sync_em", { ascending: true, nullsFirst: true });
 
   let somenteRecentes = false;
@@ -97,7 +95,10 @@ async function executar(request: NextRequest) {
     );
   }
 
-  const contas = (data ?? []) as AdAccountRow[];
+  // Conta sem loja nem checkout externo (069) ainda nao entra no lucro: nao
+  // gasta chamada com ela. Filtro aqui, nao no banco: checkout_id so existe
+  // depois da 069, e select("*") le com ou sem ela.
+  const contas = ((data ?? []) as AdAccountRow[]).filter((c) => c.store_id || c.checkout_id);
   const resposta: SyncResposta = { ok: true, processadas: 0, puladas: 0, erros: [] };
 
   for (let i = 0; i < contas.length; i += 1) {

@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
-import { filtroResolvido, lerComparacao } from "@/lib/filtro-global";
+import { filtroResolvido, lerCheckoutsDoUsuario, lerComparacao } from "@/lib/filtro-global";
 import { contarAlertasAbertos } from "@/lib/leitura/notificacoes";
 import {
   FUSO_RELATORIO_PADRAO,
@@ -32,7 +32,7 @@ export async function TopoDados() {
 }
 
 async function lerContexto(): Promise<DadosContexto> {
-  const [{ filtro, lojas }, comparacao, user] = await Promise.all([
+  const [{ filtro, lojas, checkouts, checkout }, comparacao, user] = await Promise.all([
     filtroResolvido(),
     lerComparacao(),
     getCurrentUser(),
@@ -56,15 +56,24 @@ async function lerContexto(): Promise<DadosContexto> {
     }
   }
 
-  const lojasContexto: LojaContexto[] = lojas.map((l) => ({
-    ...l,
-    semAcesso: estados.get(l.id)?.negado ?? false,
-  }));
+  const lojasContexto: LojaContexto[] = [
+    ...lojas.map((l) => ({
+      ...l,
+      semAcesso: estados.get(l.id)?.negado ?? false,
+    })),
+    // Checkouts externos (069): no mesmo seletor, no grupo "Checkouts".
+    ...checkouts.map((c) => ({ ...c, semAcesso: false })),
+  ];
 
-  // O mesmo fuso que o Lucro usa para o "hoje": o da loja escolhida, ou o de
-  // Sao Paulo com todas as lojas (ver getFinanceiro).
+  // O mesmo fuso que o Lucro usa para o "hoje": o da loja (ou do checkout)
+  // escolhido, ou o de Sao Paulo com todas as lojas (ver getFinanceiro).
+  const fusoCheckout = checkout
+    ? (await lerCheckoutsDoUsuario()).find((c) => c.id === checkout.id)?.fuso
+    : null;
   const fuso =
-    (filtro.lojaId !== TODAS && estados.get(filtro.lojaId)?.fuso) || FUSO_RELATORIO_PADRAO;
+    fusoCheckout ||
+    (filtro.lojaId !== TODAS && estados.get(filtro.lojaId)?.fuso) ||
+    FUSO_RELATORIO_PADRAO;
   const hoje = diaNoFuso(new Date(), fuso);
   const intervalos = Object.fromEntries(
     PERIODOS.map((p) => [p.id, intervaloDoPeriodo(p.id, hoje)])

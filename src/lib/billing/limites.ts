@@ -24,6 +24,13 @@ import {
 // rastreamento da loja (a tela de Rastreamento mostra a desinstalada que ainda
 // esta ligada) ou tirar a loja da rota.
 //
+// Checkout externo (Sphere e afins, migration 069) NAO conta em nenhum dos
+// dois: nao tem tracking_configs nem entra em rota, entao lerUso nem o ve, e
+// POST /api/checkouts nao chama conferirLigarRastreamento/conferirRoteamento.
+// O teto dele e so contra abuso (MAX_CHECKOUTS em
+// src/lib/checkouts-externos/tipos.ts). Se um dia virar limite de plano, o
+// lugar e LimitesPlano em plans.ts -- nao misture com as lojas daqui.
+//
 // Conectar loja NAO tem limite. O limite so barra uma ativacao NOVA: nada que
 // ja esta ligado acima do limite e desligado (quem passou do limite continua
 // com o que tem, e so nao liga mais).

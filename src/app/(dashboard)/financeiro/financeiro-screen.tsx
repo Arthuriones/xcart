@@ -63,7 +63,10 @@ export function FinanceiroScreen({
 }) {
   const { resultado: r, filtro } = dados;
   const moeda = r.moeda;
-  const lojaEscolhida = filtro.lojaId !== TODAS ? dados.lojas.find((l) => l.id === filtro.lojaId) : undefined;
+  const lojaEscolhida =
+    filtro.lojaId !== TODAS
+      ? [...dados.lojas, ...dados.checkouts].find((l) => l.id === filtro.lojaId)
+      : undefined;
   const rotuloLoja = lojaEscolhida ? nomeDaLoja(lojaEscolhida) : "Todas as lojas";
   // So para o leitor de tela do grafico: na tela, a barra do topo ja diz.
   const contexto = `${rotuloLoja} · ${ROTULO_PERIODO[filtro.periodo]} (${rotuloIntervalo(r.intervalos.atual)}) · ${moeda}`;
@@ -76,11 +79,15 @@ export function FinanceiroScreen({
   // porDia vem do mais novo para o mais antigo; o grafico quer o contrario.
   const pontos = [...r.porDia].reverse().map(pontoDeLinha);
   const lucroPorLoja = new Map((extras?.serie.porLoja ?? []).map((l) => [l.storeId, l.lucro]));
-  const mostrarLoja = filtro.lojaId === TODAS && dados.lojaIds.length >= 2;
+  const mostrarLoja = filtro.lojaId === TODAS && dados.lojaIds.length + dados.checkoutIds.length >= 2;
 
   // Loja marcada "Contra entrega" em Custos e taxas (ou, com todas as lojas,
   // alguma delas): Recebido, A receber e Previsto no lugar do Faturamento.
   const contraEntrega = r.lojasContraEntrega.length > 0;
+  // Checkout externo (comissao): so ele no filtro troca os rotulos ("Taxa de
+  // aprovação", sem custo de produto); misturado com loja, vale o contra entrega.
+  const soCheckouts = dados.lojaIds.length === 0 && dados.checkoutIds.length > 0;
+  const codShopify = r.lojasContraEntrega.some((id) => dados.lojaIds.includes(id));
   const comparando = comparacao === "anterior";
   const semBase = comparando && !temMovimento(r.anterior);
   const base: BaseIndicadores = {
@@ -93,6 +100,7 @@ export function FinanceiroScreen({
       ? montarDicas(r.avisos, r.atual.cod.coberturaCusto, true)
       : montarDicas(r.avisos, r.atual.coberturaCusto),
     entrega: r.entrega,
+    checkout: soCheckouts,
   };
 
   return (
@@ -106,7 +114,7 @@ export function FinanceiroScreen({
             contexto={contexto}
             rotuloReceita={contraEntrega ? "Recebido" : undefined}
           />
-          <Cascata atual={r.atual} moeda={moeda} contraEntrega={contraEntrega} />
+          <Cascata atual={r.atual} moeda={moeda} contraEntrega={codShopify} />
         </div>
         {contraEntrega ? <IndicadoresKpiCod {...base} /> : <IndicadoresKpi {...base} />}
         {mostrarLoja && <PorLoja lojas={r.porLoja} moeda={moeda} />}
@@ -129,7 +137,7 @@ export function FinanceiroScreen({
         erroExtras={erroExtras}
       />
 
-      <ComoCalculamos contraEntrega={contraEntrega} />
+      <ComoCalculamos contraEntrega={codShopify} checkout={dados.checkoutIds.length > 0} />
     </div>
   );
 }

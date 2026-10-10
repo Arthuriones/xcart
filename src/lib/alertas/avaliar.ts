@@ -436,6 +436,8 @@ export async function coletarCondicoesDetalhado(
     id: string;
     user_id: string;
     store_id: string | null;
+    /** Checkout externo ligado (069). Ausente sem a migration. */
+    checkout_id?: string | null;
     plataforma: "meta" | "google";
     external_id: string;
     nome: string | null;
@@ -447,15 +449,11 @@ export async function coletarCondicoesDetalhado(
   let contas: Conta[] | null = null;
   const lerContas = async () => {
     if (contas) return contas;
-    const { data, error } = await admin
-      .from("ad_accounts")
-      .select(
-        "id, user_id, store_id, plataforma, external_id, nome, fuso, ultimo_sync_ok_em, ultimo_erro, created_at"
-      )
-      .eq("ativo", true)
-      .not("store_id", "is", null);
+    // "*" e o filtro aqui: checkout_id so existe depois da 069. Conta sem
+    // loja nem checkout nao entra no lucro, e nao vira alerta.
+    const { data, error } = await admin.from("ad_accounts").select("*").eq("ativo", true);
     if (error) throw new Error(error.message);
-    contas = (data || []) as Conta[];
+    contas = ((data || []) as Conta[]).filter((c) => c.store_id || c.checkout_id);
     return contas;
   };
 
@@ -464,8 +462,8 @@ export async function coletarCondicoesDetalhado(
       // Gasto do Google nao e lido hoje (decisao de 04/10): conta Google
       // parada nao e problema de ninguem.
       if (c.plataforma === "google") continue;
-      const loja = lojas.get(String(c.store_id));
-      if (!loja) continue;
+      // Conta de loja: a loja tem que existir. Conta de checkout externo: vale.
+      if (c.store_id && !lojas.get(String(c.store_id))) continue;
       const okEm = c.ultimo_sync_ok_em ? Date.parse(c.ultimo_sync_ok_em) : null;
       const criada = c.created_at ? Date.parse(c.created_at) : 0;
       const atrasado =
@@ -475,7 +473,7 @@ export async function coletarCondicoesDetalhado(
       const plataforma = nomePlataforma(c.plataforma);
       condicoes.push({
         user_id: c.user_id,
-        store_id: String(c.store_id),
+        store_id: c.store_id ? String(c.store_id) : null,
         regra: "ads_sync_atrasado",
         chave: String(c.id),
         severidade: "critico",
@@ -510,8 +508,9 @@ export async function coletarCondicoesDetalhado(
       .in("data", dias);
     if (error) throw new Error(error.message);
 
-    // (loja) -> (moeda|dia) -> soma
+    // (loja) -> (moeda|dia) -> soma; o mesmo para checkout externo (069).
     const somas = new Map<string, Map<string, { moeda: string; dia: string; total: number }>>();
+    const somasCheckout = new Map<string, Map<string, { moeda: string; dia: string; total: number }>>();
     const contaPorId = new Map(frescas.map((c) => [c.id, c]));
     for (const g of (gastos || []) as {
       ad_account_id: string;
@@ -520,19 +519,40 @@ export async function coletarCondicoesDetalhado(
       gasto: number | string;
     }[]) {
       const conta = contaPorId.get(String(g.ad_account_id));
-      if (!conta?.store_id) continue;
+      const destino = conta?.store_id ?? conta?.checkout_id ?? null;
+      if (!conta || !destino) continue;
       const dia = String(g.data).slice(0, 10);
       if (hojeDaConta.get(conta.id) !== dia) continue;
-      const porLoja = somas.get(conta.store_id) ?? new Map();
+      const alvo = conta.store_id ? somas : somasCheckout;
+      const porLoja = alvo.get(destino) ?? new Map();
       const k = `${g.moeda}|${dia}`;
       const atual = porLoja.get(k) ?? { moeda: String(g.moeda), dia, total: 0 };
       atual.total += paraNumero(g.gasto);
       porLoja.set(k, atual);
-      somas.set(conta.store_id, porLoja);
+      alvo.set(destino, porLoja);
     }
-    if (somas.size === 0) return;
+    if (somas.size === 0 && somasCheckout.size === 0) return;
 
-    const donos = [...new Set([...somas.keys()].map((s) => donoDa(s)).filter(Boolean))] as string[];
+    // Checkout externo: o dono, o nome e o fuso do "hoje" vem dele.
+    type CheckoutAlerta = { id: string; user_id: string; nome: string; fuso: string | null; ativo: boolean };
+    const checkoutPorId = new Map<string, CheckoutAlerta>();
+    if (somasCheckout.size > 0) {
+      const { data: cks, error: erroCk } = await admin
+        .from("checkouts_externos")
+        .select("id, user_id, nome, fuso, ativo")
+        .in("id", [...somasCheckout.keys()]);
+      if (erroCk) throw new Error(erroCk.message);
+      for (const c of (cks || []) as CheckoutAlerta[]) checkoutPorId.set(String(c.id), c);
+    }
+
+    const donos = [
+      ...new Set(
+        [
+          ...[...somas.keys()].map((s) => donoDa(s)),
+          ...[...somasCheckout.keys()].map((id) => checkoutPorId.get(id)?.user_id ?? null),
+        ].filter(Boolean)
+      ),
+    ] as string[];
     const { data: configs, error: erroCfg } = await admin
       .from("alerta_config")
       .select("user_id, gasto_sem_venda_min")
@@ -608,6 +628,40 @@ export async function coletarCondicoesDetalhado(
         severidade: "critico",
         titulo: `Gastou ${valor} sem vender hoje`,
         detalhe: `Nenhuma venda paga hoje e o gasto em anúncio já passou de ${formatarDinheiro(minimo, acima.moeda)}. Confira o checkout, o pagamento e as campanhas.`,
+      });
+    }
+
+    // Checkout externo (069): qualquer pedido de hoje (pendente conta: a
+    // comissao do COD so e aprovada dias depois) e venda. Nao depende de
+    // fin_sync_state -- o pedido chega pelo webhook, na hora.
+    for (const [checkoutId, porMoeda] of somasCheckout) {
+      const ck = checkoutPorId.get(checkoutId);
+      if (!ck || !ck.ativo) continue;
+      const minimo = minimoDe.has(ck.user_id) ? minimoDe.get(ck.user_id)! : 30;
+      const acima = [...porMoeda.values()]
+        .filter((s) => s.total > 0 && s.total >= minimo)
+        .sort((a, b) => b.total - a.total)[0];
+      if (!acima) continue;
+      const hojeDoCheckout = diaNoFuso(agora, ck.fuso || "America/Sao_Paulo");
+      const { data: vendas, error: e5 } = await admin
+        .from("pedidos_externos")
+        .select("pedido_id")
+        .eq("checkout_id", checkoutId)
+        .eq("dia_local", hojeDoCheckout)
+        .limit(1);
+      if (e5) throw new Error(e5.message);
+      if ((vendas || []).length > 0) continue;
+
+      const valor = formatarDinheiro(acima.total, acima.moeda);
+      condicoes.push({
+        user_id: ck.user_id,
+        // Sem loja: o alerta e do checkout, que vai na chave (sem migration).
+        store_id: null,
+        regra: "gastou_sem_vender",
+        chave: `checkout:${checkoutId}|${hojeDoCheckout}`,
+        severidade: "critico",
+        titulo: `Gastou ${valor} sem vender hoje · ${ck.nome}`,
+        detalhe: `Nenhum pedido no checkout hoje e o gasto em anúncio já passou de ${formatarDinheiro(minimo, acima.moeda)}. Confira a oferta, o webhook e as campanhas.`,
       });
     }
   });

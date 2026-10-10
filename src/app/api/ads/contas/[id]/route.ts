@@ -2,11 +2,13 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ehUuid, type ContaPatchCorpo } from "@/lib/financeiro/tipos";
+import { semMigration069 } from "@/lib/checkouts-externos/tipos";
 
 export const runtime = "nodejs";
 
 // ============================================================================
-// Edita (loja, ativo, nome) ou remove uma conta de anuncio, Meta ou Google.
+// Edita (loja ou checkout externo, ativo, nome) ou remove uma conta de
+// anuncio, Meta ou Google.
 //
 // Escrita pelo service role, depois de conferir pela SESSAO que a conta e do
 // usuario -- e, ao ligar a uma loja, que a loja tambem e. O user_id nunca vem
@@ -58,6 +60,29 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return json(404, { ok: false, erro: "Loja não encontrada." });
       }
       mudanca.store_id = loja.id;
+      // A conta liga a UMA loja OU a UM checkout externo (069).
+      mudanca.checkout_id = null;
+    }
+  }
+
+  // Checkout externo (069): conferido igual a loja -- pela linha do banco, o
+  // dono tem que ser o da sessao. Ligar a um checkout tira a loja.
+  if (corpo.checkout_id !== undefined) {
+    if (corpo.checkout_id === null) {
+      mudanca.checkout_id = null;
+    } else {
+      if (corpo.store_id) return json(400, { ok: false, erro: "Escolha uma loja ou um checkout, não os dois." });
+      if (!ehUuid(corpo.checkout_id)) return json(404, { ok: false, erro: "Checkout não encontrado." });
+      const { data: ck } = await admin
+        .from("checkouts_externos")
+        .select("id, user_id")
+        .eq("id", corpo.checkout_id)
+        .maybeSingle();
+      if (!ck || ck.user_id !== user.id) {
+        return json(404, { ok: false, erro: "Checkout não encontrado." });
+      }
+      mudanca.checkout_id = ck.id;
+      mudanca.store_id = null;
     }
   }
 
@@ -78,12 +103,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
   mudanca.updated_at = new Date().toISOString();
 
-  const { data, error } = await admin
-    .from("ad_accounts")
-    .update(mudanca)
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .select("id");
+  const gravar = (m: Record<string, unknown>) =>
+    admin.from("ad_accounts").update(m).eq("id", id).eq("user_id", user.id).select("id");
+  let { data, error } = await gravar(mudanca);
+  // Sem a 069 a coluna checkout_id nao existe: ligar a loja continua valendo.
+  if (error && semMigration069(error) && corpo.checkout_id == null && "checkout_id" in mudanca) {
+    const { checkout_id: _semColuna, ...semCheckout } = mudanca;
+    void _semColuna;
+    ({ data, error } = await gravar(semCheckout));
+  }
   if (error) return json(500, { ok: false, erro: `Falha ao salvar: ${error.message}` });
   if (!data || data.length === 0) return json(404, { ok: false, erro: "Conta não encontrada." });
 

@@ -38,10 +38,10 @@ export function ConteudoGoogle({ d }: { d: DadosAnuncios }) {
         }
       />
 
-      {d.lojas.length === 0 ? (
+      {d.lojas.length === 0 && d.checkouts.length === 0 ? (
         <EmptyState
           titulo="Conecte uma loja primeiro"
-          descricao="O gasto de cada conta de anúncio entra no lucro de uma loja. Sem loja, não há onde ligar a conta."
+          descricao="O gasto de cada conta de anúncio entra no lucro de uma loja (ou de um checkout). Sem nenhum, não há onde ligar a conta."
           acao={
             <Link href="/stores?conectar=1" className={buttonVariants()}>
               Conectar loja
@@ -62,6 +62,7 @@ export function ConteudoGoogle({ d }: { d: DadosAnuncios }) {
             contas={d.contas}
             todas={d.daPlataforma.length}
             lojas={d.lojas}
+            checkouts={d.checkouts}
             estadoLeitura={estadoLeitura}
             envio={<EnvioCompras plataforma="google" destinos={d.destinos} lojas={d.lojas} erro={d.erroDestinos} />}
             tabela={{

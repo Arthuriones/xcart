@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { Callout } from "@/components/ui/callout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { filtroResolvido } from "@/lib/filtro-global";
+import { SoLojasShopify } from "@/components/layout/so-lojas-shopify";
 import { TODAS } from "@/lib/financeiro/tipos";
 import { diagnosticarCadaLoja } from "@/lib/leitura/tracking-diagnostico";
 import { getPainelTracking } from "@/lib/tracking/queries";
@@ -29,10 +30,12 @@ export const dynamic = "force-dynamic";
 // ============================================================================
 
 async function carregar() {
-  const [{ filtro, lojas: doUsuario }, painel] = await Promise.all([
+  const [{ filtro, lojas: doUsuario, checkout }, painel] = await Promise.all([
     filtroResolvido(),
     getPainelTracking(),
   ]);
+  // Checkout externo: a Sphere nao manda pixel nem clique (ver 069).
+  if (checkout) return { checkout: checkout.nome };
   const escolhida = filtro.lojaId === TODAS ? null : filtro.lojaId;
   const lojas = escolhida ? painel.lojas.filter((l) => l.storeId === escolhida) : painel.lojas;
 
@@ -92,6 +95,15 @@ async function Conteudo() {
             </details>
           )}
         </Callout>
+      </>
+    );
+  }
+
+  if ("checkout" in dados && typeof dados.checkout === "string") {
+    return (
+      <>
+        <Titulo />
+        <SoLojasShopify checkout={dados.checkout} />
       </>
     );
   }

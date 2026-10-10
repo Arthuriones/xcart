@@ -7,6 +7,7 @@ import {
   COOKIE_LOJA,
   COOKIE_MOEDA,
   COOKIE_PERIODO,
+  FUSO_RELATORIO_PADRAO,
   TODAS,
   filtroDeCookies,
   type FiltroGlobal,
@@ -17,6 +18,7 @@ import {
   comparacaoDeCookie,
   type Comparacao,
 } from "@/components/layout/contexto";
+import { nomeDaPlataforma, semMigration069 } from "@/lib/checkouts-externos/tipos";
 
 // ============================================================================
 // O filtro global (loja, periodo, moeda) mora em COOKIE, nao na URL.
@@ -63,18 +65,94 @@ export const listarLojasDoUsuario = cache(async (): Promise<LojaDoSeletor[]> => 
   });
 });
 
+/** O checkout externo com o que o Dashboard e o topo precisam (sem o token). */
+export interface CheckoutDoUsuario {
+  id: string;
+  nome: string;
+  plataforma: string;
+  ativo: boolean;
+  fuso: string;
+  moeda_receita: string;
+  taxa_aprovacao_padrao: number;
+}
+
 /**
- * O filtro conferido contra as lojas do usuario. Loja alheia, apagada ou lixo
- * no cookie vira TODAS -- nunca erro, nunca dado de outro.
+ * Checkouts externos do usuario (migration 069), pela sessao (RLS). Sem a 069
+ * aplicada, nenhum. Erro de banco LANCA, como o das lojas.
+ */
+export const lerCheckoutsDoUsuario = cache(async (): Promise<CheckoutDoUsuario[]> => {
+  const user = await getCurrentUser();
+  if (!user) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("checkouts_externos")
+    .select("id, nome, plataforma, ativo, fuso, moeda_receita, taxa_aprovacao_padrao")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: true });
+  if (error) {
+    if (semMigration069(error)) return [];
+    throw new Error(`Falha ao ler os checkouts: ${error.message}`);
+  }
+  return ((data || []) as Record<string, unknown>[]).map((c) => ({
+    id: String(c.id),
+    nome: String(c.nome || nomeDaPlataforma(c.plataforma as string)),
+    plataforma: String(c.plataforma || ""),
+    ativo: c.ativo !== false,
+    fuso: String(c.fuso || FUSO_RELATORIO_PADRAO),
+    moeda_receita: String(c.moeda_receita || "EUR").toUpperCase(),
+    taxa_aprovacao_padrao: Number(c.taxa_aprovacao_padrao ?? 70),
+  }));
+});
+
+/** Os checkouts no formato do seletor: o dominio e o nome da plataforma. */
+export const listarCheckoutsDoUsuario = cache(async (): Promise<LojaDoSeletor[]> =>
+  (await lerCheckoutsDoUsuario()).map((c) => ({
+    id: c.id,
+    nome: c.nome,
+    dominio: nomeDaPlataforma(c.plataforma),
+    tipo: "checkout" as const,
+  }))
+);
+
+/**
+ * O filtro conferido contra as lojas e os checkouts do usuario. Loja alheia,
+ * apagada ou lixo no cookie vira TODAS -- nunca erro, nunca dado de outro.
+ *
+ * `lojas`/`lojaIds` continuam SO Shopify: quem ja usava segue igual. Com um
+ * checkout escolhido, `lojaIds` vem vazio e `checkout` diz qual -- a tela so
+ * de loja (Custos, Rastreamento, Eventos) mostra "Esta tela e das lojas
+ * Shopify" em vez de "conecte uma loja". Com TODAS, vem tudo dos dois lados.
  */
 export async function filtroResolvido(): Promise<{
   filtro: FiltroGlobal;
   lojas: LojaDoSeletor[];
   /** As lojas que a tela deve considerar: a escolhida, ou todas. */
   lojaIds: string[];
+  checkouts: LojaDoSeletor[];
+  /** Os checkouts que a tela deve considerar: o escolhido, ou todos. */
+  checkoutIds: string[];
+  /** O checkout escolhido na barra, ou null. */
+  checkout: LojaDoSeletor | null;
 }> {
-  const [filtroCru, lojas] = await Promise.all([lerFiltroGlobal(), listarLojasDoUsuario()]);
+  const [filtroCru, lojas, checkouts] = await Promise.all([
+    lerFiltroGlobal(),
+    listarLojasDoUsuario(),
+    listarCheckoutsDoUsuario(),
+  ]);
   const escolhida = lojas.find((l) => l.id === filtroCru.lojaId);
-  const filtro: FiltroGlobal = escolhida ? filtroCru : { ...filtroCru, lojaId: TODAS };
-  return { filtro, lojas, lojaIds: escolhida ? [escolhida.id] : lojas.map((l) => l.id) };
+  if (escolhida) {
+    return { filtro: filtroCru, lojas, lojaIds: [escolhida.id], checkouts, checkoutIds: [], checkout: null };
+  }
+  const checkout = checkouts.find((c) => c.id === filtroCru.lojaId) ?? null;
+  if (checkout) {
+    return { filtro: filtroCru, lojas, lojaIds: [], checkouts, checkoutIds: [checkout.id], checkout };
+  }
+  return {
+    filtro: { ...filtroCru, lojaId: TODAS },
+    lojas,
+    lojaIds: lojas.map((l) => l.id),
+    checkouts,
+    checkoutIds: checkouts.map((c) => c.id),
+    checkout: null,
+  };
 }

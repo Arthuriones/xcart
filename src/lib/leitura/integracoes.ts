@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/supabase/current-user";
 import { listarLojasDoUsuario } from "@/lib/filtro-global";
 import { destinosParaTela } from "@/lib/tracking/destinos";
 import type { Plataforma, RegraAlerta } from "@/lib/financeiro/tipos";
+import { semMigration069 } from "@/lib/checkouts-externos/tipos";
 
 // ============================================================================
 // Leituras novas da tela Integracoes. So SELECT, nada de API externa.
@@ -24,6 +25,8 @@ import type { Plataforma, RegraAlerta } from "@/lib/financeiro/tipos";
 export interface ContaResumida {
   plataforma: Plataforma;
   store_id: string | null;
+  /** Checkout externo ligado (069). */
+  checkout_id?: string | null;
   ativo: boolean;
   ultimo_erro: string | null;
 }
@@ -31,6 +34,8 @@ export interface ContaResumida {
 export interface ResumoIntegracoes {
   contas: ContaResumida[] | null;
   lojas: { total: number; semAcesso: number } | null;
+  /** Checkouts externos (069): quantos, com erro e sem o 1o evento. */
+  checkouts?: { total: number; comErro: number; aguardando: number } | null;
   telegram: boolean | null;
   tokensClaude: number | null;
 }
@@ -45,17 +50,21 @@ async function ou<T>(promessa: PromiseLike<T>): Promise<T | null> {
 
 export async function lerResumoIntegracoes(): Promise<ResumoIntegracoes> {
   const user = await getCurrentUser();
-  if (!user) return { contas: [], lojas: { total: 0, semAcesso: 0 }, telegram: false, tokensClaude: 0 };
+  if (!user) {
+    return {
+      contas: [],
+      lojas: { total: 0, semAcesso: 0 },
+      checkouts: { total: 0, comErro: 0, aguardando: 0 },
+      telegram: false,
+      tokensClaude: 0,
+    };
+  }
   const supabase = await createClient();
   const agoraIso = new Date().toISOString();
 
-  const [contas, lojas, sync, config, tokens] = await Promise.all([
-    ou(
-      supabase
-        .from("ad_accounts")
-        .select("plataforma, store_id, ativo, ultimo_erro")
-        .eq("user_id", user.id)
-    ),
+  const [contas, lojas, sync, config, tokens, checkouts] = await Promise.all([
+    // "*": checkout_id so existe depois da 069, e a tabela nao tem segredo.
+    ou(supabase.from("ad_accounts").select("*").eq("user_id", user.id)),
     ou(supabase.from("stores").select("id, uninstalled_at").eq("user_id", user.id)),
     ou(supabase.from("fin_sync_state").select("store_id, ultimo_erro_tipo").eq("user_id", user.id)),
     ou(
@@ -72,7 +81,33 @@ export async function lerResumoIntegracoes(): Promise<ResumoIntegracoes> {
         .is("revoked_at", null)
         .gt("expires_at", agoraIso)
     ),
+    ou(
+      supabase
+        .from("checkouts_externos")
+        .select("ativo, ultimo_evento_em, ultimo_erro, ultimo_erro_em")
+        .eq("user_id", user.id)
+    ),
   ]);
+
+  let resumoCheckouts: ResumoIntegracoes["checkouts"] = null;
+  if (checkouts && (!checkouts.error || semMigration069(checkouts.error))) {
+    const lista = (checkouts.error ? [] : (checkouts.data ?? [])) as {
+      ativo: boolean;
+      ultimo_evento_em: string | null;
+      ultimo_erro: string | null;
+      ultimo_erro_em: string | null;
+    }[];
+    const ativos = lista.filter((c) => c.ativo);
+    resumoCheckouts = {
+      total: lista.length,
+      comErro: ativos.filter(
+        (c) =>
+          c.ultimo_erro &&
+          (!c.ultimo_evento_em || !(Date.parse(String(c.ultimo_erro_em)) < Date.parse(c.ultimo_evento_em)))
+      ).length,
+      aguardando: ativos.filter((c) => !c.ultimo_evento_em).length,
+    };
+  }
 
   let resumoLojas: ResumoIntegracoes["lojas"] = null;
   if (lojas && !lojas.error) {
@@ -96,11 +131,13 @@ export async function lerResumoIntegracoes(): Promise<ResumoIntegracoes> {
         ? ((contas.data ?? []) as ContaResumida[]).map((c) => ({
             plataforma: c.plataforma,
             store_id: c.store_id ?? null,
+            checkout_id: c.checkout_id ?? null,
             ativo: Boolean(c.ativo),
             ultimo_erro: c.ultimo_erro ?? null,
           }))
         : null,
     lojas: resumoLojas,
+    checkouts: resumoCheckouts,
     telegram:
       config && !config.error
         ? Boolean((config.data as { telegram_chat_id?: string | null } | null)?.telegram_chat_id)

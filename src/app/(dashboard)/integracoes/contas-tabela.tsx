@@ -69,13 +69,17 @@ import { ErroLeitura } from "./erro-leitura";
 // ============================================================================
 
 const NENHUMA = "__nenhuma";
+/** Valor do Select para checkout externo: "ck:<id>" (loja usa o id puro). */
+const PREFIXO_CHECKOUT = "ck:";
 
-type Mudanca = { store_id?: string | null; ativo?: boolean };
+type Mudanca = { store_id?: string | null; checkout_id?: string | null; ativo?: boolean };
 
 interface Props {
   plataforma: Plataforma;
   contas: ContaAnuncioResumo[];
   lojas: LojaDoSeletor[];
+  /** Checkouts externos (069): a conta tambem liga a um deles. */
+  checkouts?: LojaDoSeletor[];
   gastos: Record<string, GastoNaTela>;
   erroGasto: string | null;
   fusosLoja: Record<string, string>;
@@ -144,6 +148,7 @@ export function ContasTabela({
   plataforma,
   contas,
   lojas,
+  checkouts = [],
   gastos,
   erroGasto,
   fusosLoja,
@@ -177,6 +182,14 @@ export function ContasTabela({
   const [erroAcao, setErroAcao] = useState<string | null>(null);
 
   const nomeLoja = new Map(lojas.map((l) => [l.id, l.nome]));
+  const nomeCheckout = new Map(checkouts.map((c) => [c.id, c.nome]));
+  /** A loja ou o checkout ligado, para a coluna e a ordem. */
+  const nomeLigada = (c: Pick<ContaAnuncioResumo, "store_id" | "checkout_id">): string | null =>
+    c.store_id
+      ? (nomeLoja.get(c.store_id) ?? "Loja removida")
+      : c.checkout_id
+        ? (nomeCheckout.get(c.checkout_id) ?? "Checkout removido")
+        : null;
   const atualizar = () => startTransition(() => router.refresh());
 
   const efetivas = contas.map((c) => ({ ...c, ...sobrepor[c.id] }));
@@ -191,7 +204,7 @@ export function ContasTabela({
       situacao,
       gasto,
       nomeOrdem: nome.toLocaleLowerCase("pt-BR"),
-      lojaOrdem: c.store_id ? (nomeLoja.get(c.store_id) ?? "").toLocaleLowerCase("pt-BR") : "",
+      lojaOrdem: (nomeLigada(c) ?? "").toLocaleLowerCase("pt-BR"),
       hojeValor: gasto.hoje?.valor ?? null,
       periodoValor: gasto.periodo?.valor ?? null,
       situacaoOrdem: ORDEM_GRUPO[situacao.grupo],
@@ -242,19 +255,24 @@ export function ContasTabela({
   }
 
   function mudarLoja(c: ContaAnuncioResumo, valor: string | null) {
-    const novo = !valor || valor === NENHUMA ? null : valor;
-    if (novo === (c.store_id ?? null)) return;
+    const v = !valor || valor === NENHUMA ? null : valor;
+    const checkoutId = v?.startsWith(PREFIXO_CHECKOUT) ? v.slice(PREFIXO_CHECKOUT.length) : null;
+    const storeId = v && !checkoutId ? v : null;
+    if (storeId === (c.store_id ?? null) && checkoutId === (c.checkout_id ?? null)) return;
     const nome = nomeDaConta(c);
+    // Ligar a um tira a outra ligacao (a conta liga a UMA loja OU a UM checkout).
+    const mudanca: Mudanca = checkoutId ? { checkout_id: checkoutId, store_id: null } : { store_id: storeId, checkout_id: null };
+    const destino = storeId ? (nomeLoja.get(storeId) ?? "loja") : checkoutId ? (nomeCheckout.get(checkoutId) ?? "checkout") : null;
     void salvar(
       c,
-      { store_id: novo },
-      { store_id: c.store_id ?? null },
-      novo
+      mudanca,
+      { store_id: c.store_id ?? null, checkout_id: c.checkout_id ?? null },
+      destino
         ? {
-            titulo: `${nome} ligada a ${nomeLoja.get(novo) ?? "loja"}`,
-            texto: "O gasto dela passa a contar no lucro dessa loja, inclusive os dias já lidos.",
+            titulo: `${nome} ligada a ${destino}`,
+            texto: `O gasto dela passa a contar no lucro ${checkoutId ? "desse checkout" : "dessa loja"}, inclusive os dias já lidos.`,
           }
-        : { titulo: `${nome} sem loja`, texto: "O gasto dela sai do lucro até você escolher uma loja." }
+        : { titulo: `${nome} sem loja`, texto: "O gasto dela sai do lucro até você escolher uma loja ou um checkout." }
     );
   }
 
@@ -361,26 +379,31 @@ export function ContasTabela({
       titulo: "Loja ligada",
       ordenarPor: "lojaOrdem",
       celula: (l) => {
-        const lojaId = l.conta.store_id ?? null;
+        const ligada = nomeLigada(l.conta);
+        const valor = l.conta.store_id
+          ? l.conta.store_id
+          : l.conta.checkout_id
+            ? `${PREFIXO_CHECKOUT}${l.conta.checkout_id}`
+            : NENHUMA;
         return (
-          <Select
-            value={lojaId ?? NENHUMA}
-            onValueChange={(v) => mudarLoja(l.conta, v)}
-            disabled={salvando[l.id]}
-          >
+          <Select value={valor} onValueChange={(v) => mudarLoja(l.conta, v)} disabled={salvando[l.id]}>
             <SelectTrigger
               size="sm"
               aria-label={`Loja ligada a ${l.nome}`}
-              className={cn("w-full sm:w-36", !lojaId && "border-warn-border text-warn")}
+              className={cn("w-full sm:w-36", !ligada && "border-warn-border text-warn")}
             >
-              <SelectValue>
-                {() => (lojaId ? (nomeLoja.get(lojaId) ?? "Loja removida") : "Escolher loja")}
-              </SelectValue>
+              <SelectValue>{() => ligada ?? "Escolher loja"}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {lojas.map((loja) => (
                 <SelectItem key={loja.id} value={loja.id}>
                   {loja.nome}
+                </SelectItem>
+              ))}
+              {checkouts.length > 0 ? <SelectSeparator /> : null}
+              {checkouts.map((ck) => (
+                <SelectItem key={ck.id} value={`${PREFIXO_CHECKOUT}${ck.id}`}>
+                  {ck.nome} · checkout
                 </SelectItem>
               ))}
               <SelectSeparator />

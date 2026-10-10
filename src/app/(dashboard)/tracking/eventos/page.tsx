@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { filtroResolvido } from "@/lib/filtro-global";
+import { SoLojasShopify } from "@/components/layout/so-lojas-shopify";
 import { lerFeed } from "@/lib/tracking/feed";
 import { fusoDaTela, nomesDosPedidos } from "@/lib/leitura/eventos";
 import { buttonVariants } from "@/components/ui/button";
@@ -25,8 +26,9 @@ type Busca = Promise<Record<string, string | string[] | undefined>>;
  * outra tela poder mandar o lojista direto as falhas.
  */
 async function carregar(searchParams: Busca) {
-  const [busca, { filtro, lojas, lojaIds }] = await Promise.all([searchParams, filtroResolvido()]);
-  if (!lojas.length) return { lojas, vazio: true as const };
+  const [busca, { filtro, lojas, lojaIds, checkout }] = await Promise.all([searchParams, filtroResolvido()]);
+  if (checkout) return { lojas, vazio: true as const, checkout: checkout.nome };
+  if (!lojas.length) return { lojas, vazio: true as const, checkout: null };
   const [inicial, fuso] = await Promise.all([lerFeed(lojaIds, null), fusoDaTela(filtro.lojaId)]);
   const pedidos = await nomesDosPedidos(inicial);
   return {
@@ -48,6 +50,15 @@ async function Conteudo({ searchParams }: { searchParams: Busca }) {
   } catch (e) {
     console.error("[tracking/eventos]", e);
     return <ErroEventos detalhe={e instanceof Error ? e.message.slice(0, 300) : undefined} />;
+  }
+
+  if (dados.vazio && dados.checkout) {
+    return (
+      <>
+        <CabecalhoEventos />
+        <SoLojasShopify checkout={dados.checkout} />
+      </>
+    );
   }
 
   if (dados.vazio) {

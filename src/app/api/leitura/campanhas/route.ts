@@ -26,7 +26,7 @@ export async function GET() {
       cambio: base.entrada.cambio,
       moeda: base.entrada.moeda,
       intervalo: base.entrada.intervalos.atual,
-      lojaIds: base.lojaIds,
+      lojaIds: [...base.lojaIds, ...base.checkoutIds],
     });
     return NextResponse.json(
       { moeda: base.entrada.moeda, intervalo: base.entrada.intervalos.atual, linhas },

@@ -32,6 +32,10 @@ export interface Venda {
   /** "paid" vira "Venda aprovada"; o resto, "Nova venda". */
   statusFinanceiro?: string | null;
   produtos: string[];
+  /** Troca o "Nova venda" do titulo (checkout externo: "Novo pedido"). */
+  rotulo?: string | null;
+  /** Vai no fim do texto (checkout externo: "comissão €75.00"). */
+  detalhe?: string | null;
 }
 
 export function hostDaUrl(url: string): string | null {
@@ -63,10 +67,11 @@ export function formatarValor(valor: number, moeda: string): string {
 /** Titulo e texto da notificacao. Puro, para os testes. */
 export function mensagemDaVenda(v: Venda): { titulo: string; texto: string } {
   const aprovada = (v.statusFinanceiro || "").toLowerCase() === "paid";
-  const titulo = `${aprovada ? "Venda aprovada" : "Nova venda"} · ${formatarValor(v.valor, v.moeda)}`;
+  const rotulo = v.rotulo || (aprovada ? "Venda aprovada" : "Nova venda");
+  const titulo = `${rotulo} · ${formatarValor(v.valor, v.moeda)}`;
   const itens = v.produtos.filter(Boolean);
   const produtos = itens.length > 2 ? `${itens.slice(0, 2).join(", ")} +${itens.length - 2}` : itens.join(", ");
-  const texto = [v.loja, v.pedido, produtos].filter(Boolean).join(" · ");
+  const texto = [v.loja, v.pedido, produtos, v.detalhe].filter(Boolean).join(" · ");
   return { titulo, texto };
 }
 

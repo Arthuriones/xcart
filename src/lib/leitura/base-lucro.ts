@@ -2,8 +2,10 @@ import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
-import { filtroResolvido } from "@/lib/filtro-global";
-import type { EntradaFinanceiro, LojaFinanceira } from "@/lib/financeiro/calculo";
+import { filtroResolvido, lerCheckoutsDoUsuario } from "@/lib/filtro-global";
+import { contarAmostraExterna } from "@/lib/checkouts-externos/financeiro";
+import { semMigration069, type PedidoExternoRow } from "@/lib/checkouts-externos/tipos";
+import type { EntradaFinanceiro, LojaFinanceira, PedidoExternoFin } from "@/lib/financeiro/calculo";
 import { contarAmostra, intervaloDaAmostra, type AmostraEntrega, type PedidoCod } from "@/lib/financeiro/contra-entrega";
 import {
   FUSO_RELATORIO_PADRAO,
@@ -32,6 +34,11 @@ import {
 // Erro de banco LANCA: quem chama mostra o erro, nunca zero. O gasto por
 // campanha e a excecao: so a aba Campanha depende dele, entao a falha dele
 // vira `erroCampanha` em vez de derrubar a tela inteira.
+//
+// Checkout externo (069): entra em `entrada.lojas` como "loja" de comissao
+// (tipo "checkout"), com os pedidos em `entrada.externos`. `lojas`/`lojaIds`
+// do retorno continuam so Shopify; os checkouts vem em `checkouts`/`checkoutIds`.
+// Sem a 069 aplicada, nenhum checkout -- o resto segue igual.
 // ============================================================================
 
 const PAGINA = 1000;
@@ -65,14 +72,29 @@ const COLUNAS_PEDIDO =
 const COLUNAS_ENVIO = "cod, status_envio, entrega, enviado_em, entregue_em, devolucao, marca_recusa";
 /** O que a situacao do contra entrega precisa (a amostra da taxa de entrega). */
 const COLUNAS_AMOSTRA = `store_id, dia_local, tipo, gateways, cancelado_em, status_financeiro, recebido, reembolsado, linhas, ${COLUNAS_ENVIO}`;
+/** O que o calculo le de um pedido de checkout externo. */
+const COLUNAS_EXTERNO = "checkout_id, situacao, moeda, valor, receita, moeda_receita, dia_local";
+
+/** Le pedidos_externos; sem a 069 aplicada, nenhum. */
+async function lerExternos<T>(rotulo: string, ler: () => Promise<T[]>): Promise<T[]> {
+  try {
+    return await ler();
+  } catch (e) {
+    if (e instanceof Error && semMigration069({ message: e.message })) return [];
+    throw new Error(e instanceof Error ? e.message : `Falha ao ler ${rotulo}`);
+  }
+}
 
 export interface BaseLucro {
   /** Pronta para calcularFinanceiro e as montagens de src/lib/leitura. */
   entrada: EntradaFinanceiro;
   filtro: FiltroGlobal;
-  /** Todas as lojas do usuario (o seletor), nao so as do filtro. */
+  /** Todas as lojas do usuario (o seletor), nao so as do filtro. So Shopify. */
   lojas: LojaDoSeletor[];
   lojaIds: string[];
+  /** Os checkouts externos do usuario (069) e os do filtro. */
+  checkouts: LojaDoSeletor[];
+  checkoutIds: string[];
   estados: FinSyncStateRow[];
   /** Fuso do relatorio: o da loja, quando o filtro tem uma so. */
   fuso: string;
@@ -92,26 +114,35 @@ export interface BaseLucro {
  * anterior e o anuncio zerados -- nao use no Dashboard.
  */
 export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseLucro | null> => {
-  const { filtro, lojas, lojaIds } = await filtroResolvido();
-  if (lojas.length === 0 || lojaIds.length === 0) return null;
+  const { filtro, lojas, lojaIds, checkouts, checkoutIds } = await filtroResolvido();
+  if (lojaIds.length === 0 && checkoutIds.length === 0) return null;
   const user = await getCurrentUser();
   if (!user) return null;
   const supabase = await createClient();
+  // Filtro so com checkout: nada de Shopify a ler (e .in() vazio nao vale).
+  const temLojas = lojaIds.length > 0;
+  const ckSet = new Set(checkoutIds);
+  const checkoutsDoFiltro = (await lerCheckoutsDoUsuario()).filter((c) => ckSet.has(c.id));
 
-  const estados = await lerTudo<FinSyncStateRow>("o estado da sincronização de pedidos", (de, ate) =>
-    supabase
-      .from("fin_sync_state")
-      .select("*")
-      .in("store_id", lojaIds)
-      .order("store_id", { ascending: true })
-      .range(de, ate)
-  );
+  const estados = temLojas
+    ? await lerTudo<FinSyncStateRow>("o estado da sincronização de pedidos", (de, ate) =>
+        supabase
+          .from("fin_sync_state")
+          .select("*")
+          .in("store_id", lojaIds)
+          .order("store_id", { ascending: true })
+          .range(de, ate)
+      )
+    : [];
   const estadoPorLoja = new Map(estados.map((e) => [e.store_id, e]));
 
+  // O "hoje" no fuso da loja (ou do checkout) quando o filtro tem um so.
   const fusoRef =
-    lojaIds.length === 1
+    lojaIds.length === 1 && checkoutsDoFiltro.length === 0
       ? estadoPorLoja.get(lojaIds[0])?.fuso || FUSO_RELATORIO_PADRAO
-      : FUSO_RELATORIO_PADRAO;
+      : lojaIds.length === 0 && checkoutsDoFiltro.length === 1
+        ? checkoutsDoFiltro[0].fuso || FUSO_RELATORIO_PADRAO
+        : FUSO_RELATORIO_PADRAO;
   const hoje = diaNoFuso(new Date(), fusoRef);
   const intervalos = intervaloDoPeriodo(filtro.periodo, hoje);
   const desde = enxuta ? intervalos.atual.desde : intervalos.anterior.desde;
@@ -132,27 +163,33 @@ export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseL
         .overrideTypes<FinOrderRow[], { merge: false }>()
     );
 
-  const [pedidos, custos, configs, contas] = await Promise.all([
-    lerPedidos(`${COLUNAS_PEDIDO}, ${COLUNAS_ENVIO}`).catch((e: unknown) => {
-      if (e instanceof ColunaAusente) return lerPedidos(COLUNAS_PEDIDO);
-      throw e;
-    }),
-    lerTudo<ProductCostRow>("os custos dos produtos", (de, a) =>
-      supabase
-        .from("product_costs")
-        .select("*")
-        .in("store_id", lojaIds)
-        .order("id", { ascending: true })
-        .range(de, a)
-    ),
-    lerTudo<FinStoreSettingsRow>("as taxas das lojas", (de, a) =>
-      supabase
-        .from("fin_store_settings")
-        .select("*")
-        .in("store_id", lojaIds)
-        .order("store_id", { ascending: true })
-        .range(de, a)
-    ),
+  const [pedidos, custos, configs, contas, externos] = await Promise.all([
+    !temLojas
+      ? ([] as FinOrderRow[])
+      : lerPedidos(`${COLUNAS_PEDIDO}, ${COLUNAS_ENVIO}`).catch((e: unknown) => {
+          if (e instanceof ColunaAusente) return lerPedidos(COLUNAS_PEDIDO);
+          throw e;
+        }),
+    !temLojas
+      ? ([] as ProductCostRow[])
+      : lerTudo<ProductCostRow>("os custos dos produtos", (de, a) =>
+          supabase
+            .from("product_costs")
+            .select("*")
+            .in("store_id", lojaIds)
+            .order("id", { ascending: true })
+            .range(de, a)
+        ),
+    !temLojas
+      ? ([] as FinStoreSettingsRow[])
+      : lerTudo<FinStoreSettingsRow>("as taxas das lojas", (de, a) =>
+          supabase
+            .from("fin_store_settings")
+            .select("*")
+            .in("store_id", lojaIds)
+            .order("store_id", { ascending: true })
+            .range(de, a)
+        ),
     enxuta
       ? ([] as AdAccountRow[])
       : lerTudo<AdAccountRow>("as contas de anúncio", (de, a) =>
@@ -163,10 +200,30 @@ export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseL
             .order("id", { ascending: true })
             .range(de, a)
         ),
+    // Checkout externo: os pedidos do periodo (a tela Pedidos le os dela).
+    enxuta || checkoutIds.length === 0
+      ? ([] as PedidoExternoFin[])
+      : lerExternos("os pedidos dos checkouts", () =>
+          lerTudo<PedidoExternoFin>("os pedidos dos checkouts", (de, a) =>
+            supabase
+              .from("pedidos_externos")
+              .select(COLUNAS_EXTERNO)
+              .in("checkout_id", checkoutIds)
+              .gte("dia_local", desde)
+              .lte("dia_local", ate)
+              .order("checkout_id", { ascending: true })
+              .order("pedido_id", { ascending: true })
+              .range(de, a)
+              .overrideTypes<PedidoExternoFin[], { merge: false }>()
+          )
+        ),
   ]);
 
   const lojaSet = new Set(lojaIds);
-  const contaIds = contas.filter((c) => c.store_id && lojaSet.has(c.store_id)).map((c) => c.id);
+  // A conta liga a uma loja OU a um checkout (069).
+  const contaIds = contas
+    .filter((c) => (c.store_id && lojaSet.has(c.store_id)) || (c.checkout_id && ckSet.has(c.checkout_id)))
+    .map((c) => c.id);
 
   let erroCampanha: string | null = null;
   const [gastos, gastosCampanha] = contaIds.length
@@ -207,6 +264,11 @@ export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseL
   for (const c of custos) moedas.add(String(c.moeda).toUpperCase());
   for (const g of gastos) moedas.add(String(g.moeda).toUpperCase());
   for (const g of gastosCampanha) moedas.add(String(g.moeda).toUpperCase());
+  for (const c of checkoutsDoFiltro) moedas.add(c.moeda_receita);
+  for (const x of externos) {
+    moedas.add(String(x.moeda).toUpperCase());
+    if (x.moeda_receita) moedas.add(String(x.moeda_receita).toUpperCase());
+  }
 
   const cambio = await lerTudo<FxRateRow>("o câmbio", (de, a) =>
     supabase
@@ -248,13 +310,48 @@ export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseL
     }
   }
 
-  const lojasDoFiltro: LojaFinanceira[] = lojas
-    .filter((l) => lojaSet.has(l.id))
-    .map((l) => ({
-      ...l,
-      fuso: estadoPorLoja.get(l.id)?.fuso ?? null,
-      moeda: estadoPorLoja.get(l.id)?.moeda ?? null,
-    }));
+  // Taxa de aprovacao dos checkouts externos: a mesma janela, amostra propria.
+  // Falha aqui tambem nao derruba a tela (cai na taxa padrao do checkout).
+  if (!enxuta && checkoutIds.length > 0) {
+    const janela = intervaloDaAmostra(hoje);
+    try {
+      const linhas = await lerExternos("a amostra dos checkouts", () =>
+        lerTudo<Pick<PedidoExternoRow, "checkout_id" | "situacao" | "dia_local">>("a amostra dos checkouts", (de, a) =>
+          supabase
+            .from("pedidos_externos")
+            .select("checkout_id, situacao, dia_local")
+            .in("checkout_id", checkoutIds)
+            .gte("dia_local", janela.desde)
+            .lte("dia_local", janela.ate)
+            .order("checkout_id", { ascending: true })
+            .order("pedido_id", { ascending: true })
+            .range(de, a)
+        )
+      );
+      amostraEntrega = { ...(amostraEntrega ?? {}), ...contarAmostraExterna(linhas, janela, hoje) };
+    } catch (e) {
+      console.error("[lucro] amostra dos checkouts", e);
+    }
+  }
+
+  const lojasDoFiltro: LojaFinanceira[] = [
+    ...lojas
+      .filter((l) => lojaSet.has(l.id))
+      .map((l) => ({
+        ...l,
+        fuso: estadoPorLoja.get(l.id)?.fuso ?? null,
+        moeda: estadoPorLoja.get(l.id)?.moeda ?? null,
+      })),
+    ...checkoutsDoFiltro.map((c) => ({
+      id: c.id,
+      nome: c.nome,
+      dominio: checkouts.find((x) => x.id === c.id)?.dominio ?? "Checkout",
+      tipo: "checkout" as const,
+      fuso: c.fuso,
+      moeda: c.moeda_receita,
+      taxaPadraoPct: c.taxa_aprovacao_padrao,
+    })),
+  ];
 
   return {
     entrada: {
@@ -269,10 +366,13 @@ export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseL
       moeda: filtro.moeda,
       hoje,
       amostraEntrega,
+      externos,
     },
     filtro,
     lojas,
     lojaIds,
+    checkouts,
+    checkoutIds,
     estados,
     fuso: fusoRef,
     contas,

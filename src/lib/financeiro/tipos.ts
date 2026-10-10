@@ -82,7 +82,13 @@ export interface LojaDoSeletor {
   id: string;
   /** stores.name e velho em algumas lojas: mostre sempre junto do dominio. */
   nome: string;
+  /** Loja: o .myshopify.com. Checkout externo: o nome da plataforma. */
   dominio: string;
+  /**
+   * Ausente = loja Shopify. "checkout" = checkout externo (migration 069):
+   * uma "loja" de comissao, sem Shopify por tras.
+   */
+  tipo?: "loja" | "checkout";
 }
 
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -342,6 +348,11 @@ export interface AdAccountRow {
   id: string;
   user_id: string;
   store_id: string | null;
+  /**
+   * Checkout externo ligado (069), no lugar da loja: a conta liga a UMA loja
+   * OU a UM checkout. Ausente sem a migration.
+   */
+  checkout_id?: string | null;
   plataforma: Plataforma;
   external_id: string;
   nome: string | null;
@@ -469,6 +480,8 @@ export interface ContaAnuncioResumo {
   moeda: string | null;
   fuso: string | null;
   store_id: string | null;
+  /** Checkout externo ligado (069). null/ausente = nenhum. */
+  checkout_id?: string | null;
   ativo: boolean;
   fonte: "api" | "script";
   ultimo_sync_ok_em: string | null;
@@ -498,6 +511,8 @@ export type GoogleContaCriadaResposta =
 /** PATCH ROTAS.apiContas + "/" + id (DELETE no mesmo caminho remove). */
 export interface ContaPatchCorpo {
   store_id?: string | null;
+  /** Liga a um checkout externo (069). Ligar a um tira a outra ligacao. */
+  checkout_id?: string | null;
   ativo?: boolean;
   nome?: string | null;
 }

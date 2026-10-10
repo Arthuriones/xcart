@@ -72,6 +72,7 @@ export function PedidosTela({
   moeda,
   contextoCsv,
   arquivoCsv,
+  abas,
 }: {
   pedidos: PedidoTela[];
   resumo: ResumoPedidos;
@@ -79,6 +80,8 @@ export function PedidosTela({
   /** Loja, periodo e moeda: a primeira linha do CSV. */
   contextoCsv: string[];
   arquivoCsv: string;
+  /** "Lojas | Checkouts" quando o usuario tem os dois (page.tsx). */
+  abas?: ReactNode;
 }) {
   const [filtro, setFiltro] = useState<FiltroId>("todos");
   const [filtroCod, setFiltroCod] = useState<FiltroCod>("todos");
@@ -198,7 +201,10 @@ export function PedidosTela({
   return (
     <div data-largura="total" className="flex flex-col gap-3.5">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="hidden text-page font-semibold text-ink md:block">Pedidos</h1>
+        <span className="flex flex-wrap items-center gap-4">
+          <h1 className="hidden text-page font-semibold text-ink md:block">Pedidos</h1>
+          {abas}
+        </span>
         <Button variant="secondary" onClick={exportar} disabled={!lista.length}>
           <Download aria-hidden />
           Exportar CSV

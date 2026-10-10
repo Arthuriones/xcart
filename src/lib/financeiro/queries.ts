@@ -33,6 +33,9 @@ export type DadosFinanceiro =
       filtro: FiltroGlobal;
       lojas: LojaDoSeletor[];
       lojaIds: string[];
+      /** Checkouts externos (069): todos do usuario e os do filtro. */
+      checkouts: LojaDoSeletor[];
+      checkoutIds: string[];
       estados: FinSyncStateRow[];
       contas: ResumoContas;
       resultado: ResultadoFinanceiro;
@@ -59,21 +62,28 @@ function maiorData(datas: (string | null | undefined)[]): string | null {
 export async function getFinanceiro(): Promise<DadosFinanceiro> {
   const base = await lerBaseLucro();
   if (!base) return { vazio: true };
-  const { entrada, filtro, lojas, lojaIds, estados, contas, fuso } = base;
+  const { entrada, filtro, lojas, lojaIds, checkouts, checkoutIds, estados, contas, fuso } = base;
 
   const resultado = calcularFinanceiro(entrada);
 
-  // Contas que importam para ESTA tela: as das lojas filtradas e as soltas
-  // (sem loja, o gasto delas nao entra em lugar nenhum).
-  const lojaSet = new Set(lojaIds);
-  const contasDasLojas = contas.filter((c) => c.store_id && lojaSet.has(c.store_id));
-  const relevantes = contas.filter((c) => !c.store_id || lojaSet.has(c.store_id));
+  // Contas que importam para ESTA tela: as das lojas (e checkouts) filtradas
+  // e as soltas (sem loja nem checkout, o gasto delas nao entra em lugar nenhum).
+  const lojaSet = new Set([...lojaIds, ...checkoutIds]);
+  const destino = (c: AdAccountRow) => c.store_id ?? c.checkout_id ?? null;
+  const contasDasLojas = contas.filter((c) => {
+    const d = destino(c);
+    return d !== null && lojaSet.has(d);
+  });
+  const relevantes = contas.filter((c) => {
+    const d = destino(c);
+    return d === null || lojaSet.has(d);
+  });
   const agora = Date.now();
   const nomeConta = (c: AdAccountRow) =>
     `${c.plataforma === "google" ? "Google" : "Meta"} ${c.nome || c.external_id}`;
   const resumoContas: ResumoContas = {
     total: contas.length,
-    semLoja: contas.filter((c) => !c.store_id && c.ativo).length,
+    semLoja: contas.filter((c) => destino(c) === null && c.ativo).length,
     comErro: relevantes
       .filter((c) => c.ativo && c.ultimo_erro)
       .map((c) => ({ nome: nomeConta(c), erro: String(c.ultimo_erro) })),
@@ -92,6 +102,8 @@ export async function getFinanceiro(): Promise<DadosFinanceiro> {
     filtro,
     lojas,
     lojaIds,
+    checkouts,
+    checkoutIds,
     estados,
     contas: resumoContas,
     resultado,

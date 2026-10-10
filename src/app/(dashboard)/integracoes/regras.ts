@@ -7,6 +7,7 @@ import type {
   LojaConexao,
   ResumoIntegracoes,
 } from "@/lib/leitura/integracoes";
+import type { CheckoutResumo } from "@/lib/checkouts-externos/tipos";
 
 // ============================================================================
 // Regras da tela Integracoes, sem React e sem banco: a situacao de cada conta,
@@ -84,7 +85,8 @@ export const ORDEM_GRUPO: Record<GrupoConta, number> = {
 type ContaParaSituacao = Pick<
   ContaAnuncioResumo,
   "plataforma" | "ativo" | "store_id" | "temSegredo" | "ultimo_erro" | "ultimo_sync_ok_em"
->;
+> &
+  Partial<Pick<ContaAnuncioResumo, "checkout_id">>;
 
 /**
  * A situacao de uma conta. Pausada vem antes do erro: o cron nao le conta
@@ -101,7 +103,8 @@ export function situacaoDaConta(c: ContaParaSituacao, agoraMs: number, fuso: str
     };
   }
   if (c.ultimo_erro) return { grupo: "problema", tom: "err", texto: "Erro", detalhe: c.ultimo_erro };
-  if (!c.store_id) {
+  // Ligada a um checkout externo (069) conta como ligada.
+  if (!c.store_id && !c.checkout_id) {
     return { grupo: "semLoja", tom: "warn", texto: "Sem loja", detalhe: "gasto fora do lucro" };
   }
   if (meta && !c.temSegredo) {
@@ -339,17 +342,65 @@ export function semAcesso(l: Pick<LojaConexao, "desinstaladaEm" | "sync">): bool
 }
 
 // ---------------------------------------------------------------------------
+// Checkout externo (069)
+// ---------------------------------------------------------------------------
+
+/** Sem evento ha mais que isto (com o checkout ativo): aviso. */
+export const CHECKOUT_PARADO_MS = 3 * 24 * 60 * 60 * 1000;
+
+/** "há 5 min", "há 3 h", "há 2 dias". */
+export function haQuantoTempo(iso: string, agoraMs: number): string {
+  const ms = agoraMs - Date.parse(iso);
+  if (!Number.isFinite(ms) || ms < 60_000) return "agora";
+  const min = Math.floor(ms / 60_000);
+  if (min < 60) return `há ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `há ${h} h`;
+  const d = Math.floor(h / 24);
+  return `há ${d} ${d === 1 ? "dia" : "dias"}`;
+}
+
+type CheckoutParaEstado = Pick<
+  CheckoutResumo,
+  "ativo" | "ultimo_evento_em" | "ultimo_evento_teste" | "ultimo_erro" | "ultimo_erro_em"
+>;
+
+/**
+ * A situacao de um checkout externo. O erro so vale se for mais novo que o
+ * ultimo evento aceito (o evento seguinte limpa, mas o teste de outra aba
+ * pode chegar depois).
+ */
+export function estadoDoCheckout(c: CheckoutParaEstado, agoraMs: number, fuso: string): Estado & { ordem: number } {
+  if (!c.ativo) return { ordem: 4, tom: "neutral", texto: "Pausado", detalhe: "os eventos chegam e são ignorados" };
+  const eventoMs = c.ultimo_evento_em ? Date.parse(c.ultimo_evento_em) : NaN;
+  const erroMs = c.ultimo_erro_em ? Date.parse(c.ultimo_erro_em) : NaN;
+  if (c.ultimo_erro && (!Number.isFinite(eventoMs) || !(erroMs < eventoMs))) {
+    return { ordem: 0, tom: "err", texto: "Erro", detalhe: c.ultimo_erro };
+  }
+  if (!c.ultimo_evento_em || !Number.isFinite(eventoMs)) {
+    return { ordem: 1, tom: "run", texto: "Aguardando o 1º evento", detalhe: "cole a URL no painel da plataforma" };
+  }
+  if (c.ultimo_evento_teste) {
+    return { ordem: 2, tom: "info", texto: "Teste recebido", detalhe: quando(c.ultimo_evento_em, agoraMs, fuso) };
+  }
+  if (agoraMs - eventoMs > CHECKOUT_PARADO_MS) {
+    return { ordem: 1, tom: "warn", texto: "Sem eventos", detalhe: `último ${haQuantoTempo(c.ultimo_evento_em, agoraMs)}` };
+  }
+  return { ordem: 3, tom: "ok", texto: "Recebendo", detalhe: `último evento ${haQuantoTempo(c.ultimo_evento_em, agoraMs)}` };
+}
+
+// ---------------------------------------------------------------------------
 // Menu de plataformas
 // ---------------------------------------------------------------------------
 
-export type IdPlataforma = "meta" | "google" | "shopify" | "notificacoes" | "avancado";
+export type IdPlataforma = "meta" | "google" | "shopify" | "checkouts" | "notificacoes" | "avancado";
 
 export type EstadosNav = Record<IdPlataforma, Estado | null>;
 
 function estadoContas(contas: NonNullable<ResumoIntegracoes["contas"]>, plataforma: "meta" | "google"): Estado {
   const daPlataforma = contas.filter((c) => c.plataforma === plataforma);
   if (daPlataforma.length === 0) return { tom: "neutral", texto: "Não ligado" };
-  const pendentes = daPlataforma.filter((c) => c.ativo && (c.ultimo_erro || !c.store_id)).length;
+  const pendentes = daPlataforma.filter((c) => c.ativo && (c.ultimo_erro || (!c.store_id && !c.checkout_id))).length;
   if (pendentes > 0) {
     const algumErro = daPlataforma.some((c) => c.ativo && c.ultimo_erro);
     return { tom: algumErro ? "err" : "warn", texto: plural(pendentes, "pendência", "pendências") };
@@ -367,6 +418,15 @@ export function estadosDaNav(r: ResumoIntegracoes): EstadosNav {
         : r.lojas.semAcesso > 0
           ? { tom: "warn", texto: `${r.lojas.semAcesso} sem acesso` }
           : { tom: "ok", texto: plural(r.lojas.total, "loja", "lojas") }
+      : null,
+    checkouts: r.checkouts
+      ? r.checkouts.total === 0
+        ? { tom: "neutral", texto: "Nenhum" }
+        : r.checkouts.comErro > 0
+          ? { tom: "err", texto: plural(r.checkouts.comErro, "com erro", "com erro") }
+          : r.checkouts.aguardando > 0
+            ? { tom: "run", texto: "Aguardando" }
+            : { tom: "ok", texto: plural(r.checkouts.total, "checkout", "checkouts") }
       : null,
     notificacoes:
       r.telegram === null ? null : r.telegram ? { tom: "ok", texto: "Telegram" } : { tom: "neutral", texto: "Não ligado" },
