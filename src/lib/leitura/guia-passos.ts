@@ -1,3 +1,4 @@
+import { ROTA_CONECTAR_OPERACAO } from "@/lib/conectar-operacao";
 import { quandoFoi } from "@/lib/leitura/lojas-estado";
 
 // ============================================================================
@@ -7,8 +8,10 @@ import { quandoFoi } from "@/lib/leitura/lojas-estado";
 //
 // Dois caminhos, porque sao duas operacoes diferentes:
 //   - "direto": o anuncio leva o comprador a loja que cobra. E o caso do
-//     Arthur. Conectar loja -> rastreamento -> contas de anuncio -> custos ->
-//     primeira venda rastreada.
+//     Arthur. Conectar operacao -> rastreamento -> contas de anuncio ->
+//     custos -> primeira venda rastreada. A operacao e uma loja Shopify OU um
+//     checkout externo (069); quem so tem checkout fica com operacao e contas
+//     -- rastreamento, custos e a venda rastreada sao da loja Shopify.
 //   - "vitrine": o anuncio leva a vitrine e o carrinho vai, pelo SKU, para uma
 //     loja de checkout. Os passos da rota vem antes dos mesmos quatro do fim.
 //
@@ -88,6 +91,11 @@ export interface RotaGuia {
 
 export interface FotoGuia {
   lojas: LojaGuia[] | null;
+  /**
+   * Checkouts externos (Sphere...): tambem sao operacao conectada. Ausente =
+   * nenhum (foto antiga, testes); null = a leitura falhou.
+   */
+  checkouts?: { id: string; nome: string }[] | null;
   /** Lojas com o interruptor do rastreamento ligado. */
   rastreamentoLigado: string[] | null;
   /**
@@ -241,27 +249,31 @@ function base(foto: FotoGuia, agora: Date): Base {
 
 // --- Passos do caminho direto (e o fim do caminho com vitrine) -------------
 
+/** O passo 1 do caminho direto: uma loja Shopify OU um checkout externo. */
 function passoLoja(foto: FotoGuia, b: Base): PassoGuia {
   const passo = {
     id: "loja" as const,
-    titulo: "Conecte sua loja Shopify",
+    titulo: "Conecte sua operação",
     texto:
-      "O xcart lê os pedidos da loja a cada 15 minutos e calcula o lucro de cada venda.",
-    href: ROTA_CONECTAR_LOJA,
-    cta: "Conectar loja",
+      "Uma loja Shopify ou um checkout externo, como a Sphere. O xcart lê os pedidos e calcula o lucro de cada venda.",
+    href: ROTA_CONECTAR_OPERACAO,
+    cta: "Conectar operação",
   };
-  if (!foto.lojas || !b.ativas) {
-    return { ...passo, estado: "naoConferido", detalhe: "Não deu para conferir suas lojas agora." };
-  }
-  if (b.ativas.length > 0) {
-    const nomes = listarNomes(b.ativas.map((l) => l.nome));
+  const checkouts = foto.checkouts === undefined ? [] : foto.checkouts;
+  const conectadas = [...(b.ativas ?? []).map((l) => l.nome), ...(checkouts ?? []).map((c) => c.nome)];
+  // Uma operacao conectada basta, mesmo com a outra leitura falhando.
+  if (conectadas.length > 0) {
+    const nomes = listarNomes(conectadas);
     return {
       ...passo,
       estado: "feito",
-      detalhe: b.ativas.length === 1 ? `${nomes} conectada.` : `${nomes} conectadas.`,
+      detalhe: conectadas.length === 1 ? `${nomes} conectada.` : `${nomes} conectadas.`,
       href: "/stores",
       cta: "Ver lojas",
     };
+  }
+  if (!foto.lojas || !b.ativas || checkouts === null) {
+    return { ...passo, estado: "naoConferido", detalhe: "Não deu para conferir suas operações agora." };
   }
   if (foto.lojas.length > 0) {
     return {
@@ -786,6 +798,11 @@ function passoTeste(foto: FotoGuia, b: Base): PassoGuia {
 // Montagem
 // ---------------------------------------------------------------------------
 
+/** Nenhuma loja Shopify (nem sem acesso) e ao menos um checkout externo. */
+function soCheckout(foto: FotoGuia): boolean {
+  return foto.lojas !== null && foto.lojas.length === 0 && (foto.checkouts ?? []).length > 0;
+}
+
 /** Os passos de um caminho, na ordem, com o estado de cada um. */
 export function montarGuia(foto: FotoGuia, caminho: CaminhoGuia, agora: Date): Guia {
   const b = base(foto, agora);
@@ -810,7 +827,11 @@ export function montarGuia(foto: FotoGuia, caminho: CaminhoGuia, agora: Date): G
           passoTeste(foto, b),
           ...comuns,
         ]
-      : [passoLoja(foto, b), ...comuns];
+      : soCheckout(foto)
+        ? // Rastreamento, custos e a venda rastreada sao da loja Shopify: quem
+          // so tem checkout externo termina com as contas de anuncio ligadas.
+          [passoLoja(foto, b), passoContas(foto)]
+        : [passoLoja(foto, b), ...comuns];
 
   const feitos = passos.filter((p) => p.estado === "feito").length;
   const naoConferidos = passos.filter((p) => p.estado === "naoConferido").length;

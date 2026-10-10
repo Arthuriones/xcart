@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { estadoConexao } from "@/lib/leitura/lojas-estado";
 import { checarSnippet } from "@/lib/tracking/diagnostico";
+import { semMigration069 } from "@/lib/checkouts-externos/tipos";
 import {
   COOKIE_GUIA_CAMINHO,
   COOKIE_GUIA_DISPENSADO,
@@ -43,6 +44,7 @@ type Cliente = Awaited<ReturnType<typeof createClient>>;
 
 const VAZIA: FotoGuia = {
   lojas: [],
+  checkouts: [],
   rastreamentoLigado: [],
   pixelCheckoutVisto: [],
   scriptNoTema: {},
@@ -67,7 +69,7 @@ export const lerFotoGuia = cache(async (): Promise<FotoGuia> => {
   const supabase = await createClient();
 
   // Primeira ida: tudo que so depende do usuario.
-  const [lojasRes, syncRes, ligadoRes, destinosRes, contasRes, taxaRes, rotasRes] = await Promise.all([
+  const [lojasRes, syncRes, ligadoRes, destinosRes, contasRes, taxaRes, rotasRes, checkoutsRes] = await Promise.all([
     supabase
       .from("stores")
       .select("id, name, shop_domain, uninstalled_at")
@@ -93,7 +95,20 @@ export const lerFotoGuia = cache(async (): Promise<FotoGuia> => {
       .from("routed_checkout_configs")
       .select("id, enabled, source_store_id, target_store_id")
       .eq("user_id", user.id),
+    supabase.from("checkouts_externos").select("id, nome").eq("user_id", user.id),
   ]);
+
+  // --- Checkouts externos (069) ----------------------------------------------
+  // Sem a 069 aplicada a tabela nao existe: nenhum checkout, nao "falhou".
+  let checkouts: FotoGuia["checkouts"] = [];
+  if (checkoutsRes.error) {
+    if (!semMigration069(checkoutsRes.error)) {
+      log("checkouts externos", checkoutsRes.error);
+      checkouts = null;
+    }
+  } else {
+    checkouts = (checkoutsRes.data ?? []).map((c) => ({ id: String(c.id), nome: String(c.nome ?? "") }));
+  }
 
   // --- Lojas e a conexao de cada uma --------------------------------------
   let lojas: LojaGuia[] | null = null;
@@ -269,6 +284,7 @@ export const lerFotoGuia = cache(async (): Promise<FotoGuia> => {
 
   return {
     lojas,
+    checkouts,
     rastreamentoLigado: ligadoRes.error ? null : (ligadoRes.data ?? []).map((c) => String(c.store_id)),
     // So as ligadas: e o que o passo do rastreamento olha.
     pixelCheckoutVisto: ligadoRes.error

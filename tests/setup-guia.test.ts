@@ -72,14 +72,14 @@ describe("caminhoDoGuia", () => {
 });
 
 describe("caminho direto", () => {
-  it("conta nova: cinco passos, nada feito, o proximo e conectar a loja", () => {
+  it("conta nova: cinco passos, nada feito, o proximo e conectar a operacao", () => {
     const g = montarGuia(VAZIA, "direto", AGORA);
     expect(g.passos.map((p) => p.id)).toEqual(["loja", "rastreamento", "contas", "custos", "venda"]);
     expect(g.feitos).toBe(0);
     expect(g.total).toBe(5);
     expect(g.completo).toBe(false);
     expect(g.proximo?.id).toBe("loja");
-    expect(g.proximo?.href).toBe("/stores?conectar=1");
+    expect(g.proximo?.href).toBe("/conectar");
     expect(passo(VAZIA, "venda").detalhe).toBe("Depois de ligar o rastreamento.");
   });
 
@@ -102,6 +102,35 @@ describe("caminho direto", () => {
       expect(p.href).toMatch(/^\//);
       expect(p.cta.length).toBeGreaterThan(0);
     }
+  });
+
+  it("o passo 1 e a operacao: leva a escolha entre loja e checkout", () => {
+    const p = passo(VAZIA, "loja");
+    expect(p.titulo).toBe("Conecte sua operação");
+    expect(p.href).toBe("/conectar");
+    expect(p.cta).toBe("Conectar operação");
+  });
+
+  it("checkout externo conta como operacao conectada, junto das lojas", () => {
+    const foto = { ...ARTHUR, checkouts: [{ id: "ck", nome: "Sphere Itália" }] };
+    expect(passo(foto, "loja").detalhe).toBe("Lash Bestie, Softnook e Sphere Itália conectadas.");
+    expect(montarGuia(foto, "direto", AGORA).passos).toHaveLength(5);
+  });
+
+  it("so checkout externo: operacao e contas de anuncio, sem os passos da loja Shopify", () => {
+    const foto: FotoGuia = { ...VAZIA, checkouts: [{ id: "ck", nome: "Sphere Itália" }] };
+    const g = montarGuia(foto, "direto", AGORA);
+    expect(g.passos.map((p) => p.id)).toEqual(["loja", "contas"]);
+    expect(g.passos[0]).toMatchObject({ estado: "feito", detalhe: "Sphere Itália conectada." });
+    expect(g.proximo?.id).toBe("contas");
+    const ligada = { ...foto, contas: [{ plataforma: "meta" as const, storeId: null, checkoutId: "ck", ativo: true, comErro: false }] };
+    expect(montarGuia(ligada, "direto", AGORA).completo).toBe(true);
+  });
+
+  it("leitura dos checkouts falhou e nenhuma loja: nao conferido, nunca 'falta'", () => {
+    expect(passo({ ...VAZIA, checkouts: null }, "loja").estado).toBe("naoConferido");
+    // Com loja ativa, a operacao ja esta conectada.
+    expect(passo({ ...ARTHUR, checkouts: null }, "loja").estado).toBe("feito");
   });
 
   it("so lojas sem acesso: conectar loja pede atencao, nao 'feito'", () => {
