@@ -798,9 +798,17 @@ function passoTeste(foto: FotoGuia, b: Base): PassoGuia {
 // Montagem
 // ---------------------------------------------------------------------------
 
-/** Nenhuma loja Shopify (nem sem acesso) e ao menos um checkout externo. */
+/**
+ * Nenhuma loja Shopify COM ACESSO e ao menos um checkout externo. Loja
+ * desinstalada nao segura o guia: quem largou a Shopify e opera so a Sphere
+ * nao fica preso em "Depois de conectar a loja" para sempre.
+ */
 function soCheckout(foto: FotoGuia): boolean {
-  return foto.lojas !== null && foto.lojas.length === 0 && (foto.checkouts ?? []).length > 0;
+  return (
+    foto.lojas !== null &&
+    foto.lojas.every((l) => l.semAcesso) &&
+    (foto.checkouts ?? []).length > 0
+  );
 }
 
 /** Os passos de um caminho, na ordem, com o estado de cada um. */

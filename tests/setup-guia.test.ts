@@ -127,6 +127,18 @@ describe("caminho direto", () => {
     expect(montarGuia(ligada, "direto", AGORA).completo).toBe(true);
   });
 
+  it("loja desinstalada + checkout: o guia segue o caminho do checkout e fecha", () => {
+    const foto: FotoGuia = {
+      ...VAZIA,
+      lojas: [{ id: "goto", nome: "Gotoku", semAcesso: true }],
+      checkouts: [{ id: "ck", nome: "Sphere Itália" }],
+      contas: [{ plataforma: "meta", storeId: null, checkoutId: "ck", ativo: true, comErro: false }],
+    };
+    const g = montarGuia(foto, "direto", AGORA);
+    expect(g.passos.map((p) => p.id)).toEqual(["loja", "contas"]);
+    expect(g.completo).toBe(true);
+  });
+
   it("leitura dos checkouts falhou e nenhuma loja: nao conferido, nunca 'falta'", () => {
     expect(passo({ ...VAZIA, checkouts: null }, "loja").estado).toBe("naoConferido");
     // Com loja ativa, a operacao ja esta conectada.
