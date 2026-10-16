@@ -1,4 +1,5 @@
 import {
+  CORTE_LANDING,
   JANELA_ORIGEM_MS,
   caminhoDeEntrada,
   cliquesDeParametros,
@@ -9,6 +10,7 @@ import {
   parametrosDaUrl,
   plataformaDe,
   plataformaDoClique,
+  plataformaValida,
   temUtm,
   utmDeParametros,
   utmDosAtributos,
@@ -55,9 +57,15 @@ import {
 // campanha) e COMPLETADO por outro toque da mesma plataforma e da mesma
 // campanha (quando ele sabe a campanha): um so, o mais proximo do pedido.
 //
-// So click id, sem UTM (cart attribute gclid, cookie _fbc): diz a plataforma,
-// sem campanha. O _fbc carrega a hora do clique, e fora da janela nao conta.
-// Nada de anuncio mas visita registrada: "Direto". Nada mesmo: sem linha (a
+// Click id SOLTO, sem UTM (o gclid do carrinho, o _fbc da identidade): so diz
+// a plataforma com a hora do clique dentro da janela -- e so o _fbc carrega a
+// dele. gclid, ttclid e fbclid sem _fbc nao tem hora: o cookie dura 90 dias e
+// o snippet os regrava no carrinho a cada visita, entao ficam so na coluna
+// `clique` (houve um clique, nao que o pedido veio dele). O clique novo sem
+// UTM chega DATADO por outro caminho: o snippet e a ponte guardam o conjunto
+// `{clique, em}` como se fosse UTM (Utm.clique), e ele vira toque.
+// Nada de anuncio mas visita registrada: "Direto". So o click id sem hora,
+// sem visita: linha sem plataforma (a tela decide). Nada mesmo: sem linha (a
 // tela diz "Sem dado").
 //
 // SEM DADO PESSOAL: so UTMs, ids e o caminho da pagina de entrada.
@@ -86,10 +94,14 @@ export interface Toque {
   niveis?: NiveisAnuncio;
 }
 
-/** Um click id sem UTM nem hora confiavel: so diz a plataforma. */
+/** Um click id sem UTM (do carrinho, da identidade, da origem gravada). */
 export interface CliqueSolto {
   fonte: FonteOrigem;
   plataforma: PlataformaAnuncio;
+  /** Com hora DENTRO da janela: pode dizer a plataforma do pedido. Sem hora, so a coluna `clique`. */
+  vale: boolean;
+  /** A hora do clique, quando se sabe (a do _fbc). */
+  em?: string | null;
 }
 
 export interface VisitaSemAnuncio {
@@ -171,6 +183,23 @@ function temSinal(t: Toque): boolean {
   return temUtm(t.utm) || plataformaDoClique(t.cliques) !== null || Boolean(t.plataforma);
 }
 
+/** O click id do toque: o da URL dele, ou o `clique` do conjunto datado. */
+function cliqueDoToque(t: Toque | null | undefined): PlataformaAnuncio | null {
+  return t ? (plataformaDoClique(t.cliques) ?? plataformaValida(t.utm.clique)) : null;
+}
+
+const SEM_UTM = {
+  utm_source: null,
+  utm_medium: null,
+  utm_campaign: null,
+  utm_content: null,
+  utm_term: null,
+  campanha_id: null,
+  conjunto_id: null,
+  anuncio_id: null,
+  posicionamento: null,
+} as const;
+
 function valido(t: Toque, pedidoMs: number): boolean {
   if (!temSinal(t)) return false;
   // Da sessao do pedido: vale mesmo sem hora. Fora dela, so com hora e na janela.
@@ -222,11 +251,14 @@ export function calcularOrigem(e: {
   const validos = ordenar(e.toques).filter((t) => valido(t, pedidoMs));
   const escolhido = escolherToque(validos, pedidoMs);
 
-  const clique =
-    plataformaDoClique(escolhido?.cliques) ??
-    validos.map((t) => plataformaDoClique(t.cliques)).find(Boolean) ??
-    [...(e.cliques ?? [])].sort((a, b) => ordemDaFonte(a.fonte) - ordemDaFonte(b.fonte))[0]?.plataforma ??
-    null;
+  const soltos = [...(e.cliques ?? [])].sort((a, b) => ordemDaFonte(a.fonte) - ordemDaFonte(b.fonte));
+  const soltoQueVale = soltos.find((c) => c.vale) ?? null;
+  // O click id que pode dizer a plataforma: o do toque escolhido, o de outro
+  // toque valido, ou o solto com hora na janela.
+  const cliqueQueVale =
+    cliqueDoToque(escolhido) ?? validos.map(cliqueDoToque).find(Boolean) ?? soltoQueVale?.plataforma ?? null;
+  // A coluna `clique` guarda tambem o sem hora: houve clique, nao que o pedido veio dele.
+  const clique = cliqueQueVale ?? soltos[0]?.plataforma ?? null;
 
   if (escolhido) {
     const base = resolver(escolhido);
@@ -257,7 +289,7 @@ export function calcularOrigem(e: {
     return {
       fonte: escolhido.fonte,
       sessao: escolhido.sessao,
-      plataforma: base.plataforma ?? clique,
+      plataforma: base.plataforma ?? cliqueQueVale,
       clique,
       utm_source: utm.source ?? null,
       utm_medium: utm.medium ?? null,
@@ -273,25 +305,28 @@ export function calcularOrigem(e: {
     };
   }
 
-  const fonteDoClique = clique
-    ? [...(e.cliques ?? [])].sort((a, b) => ordemDaFonte(a.fonte) - ordemDaFonte(b.fonte))[0]?.fonte
-    : null;
-  if (clique || e.visita) {
+  // So o click id com hora na janela (_fbc): a plataforma, sem campanha.
+  if (soltoQueVale) {
     return {
-      fonte: fonteDoClique ?? e.visita?.fonte ?? "atributo",
-      sessao: !clique,
-      plataforma: clique,
+      fonte: soltoQueVale.fonte,
+      sessao: false,
+      plataforma: soltoQueVale.plataforma,
       clique,
-      utm_source: null,
-      utm_medium: null,
-      utm_campaign: null,
-      utm_content: null,
-      utm_term: null,
-      campanha_id: null,
-      conjunto_id: null,
-      anuncio_id: null,
-      posicionamento: null,
-      toque_em: clique ? null : (e.visita?.em ?? null),
+      ...SEM_UTM,
+      toque_em: soltoQueVale.em ?? null,
+      pagina_entrada: e.visita?.pagina ?? null,
+    };
+  }
+  // Visita sem anuncio ("Direto"), ou so um click id sem hora (sem visita: a
+  // tela nao chama de Direto). Em nenhum dos dois o clique vira plataforma.
+  if (e.visita || clique) {
+    return {
+      fonte: e.visita?.fonte ?? soltos[0]?.fonte ?? "atributo",
+      sessao: Boolean(e.visita),
+      plataforma: null,
+      clique,
+      ...SEM_UTM,
+      toque_em: e.visita?.em ?? null,
       pagina_entrada: e.visita?.pagina ?? null,
     };
   }
@@ -343,10 +378,18 @@ export function mesclarOrigens(
   if (!gravada) return nova;
   const as = [nova, gravada];
   const toques = as.map(toqueDaGravada).filter((t): t is Toque => t !== null);
-  const cliques = as
+  // O clique gravado so volta a valer se ja valia (virou a plataforma).
+  const cliques: CliqueSolto[] = as
     .filter((o) => o.clique)
-    .map((o) => ({ fonte: o.fonte, plataforma: o.clique as PlataformaAnuncio }));
-  const direta = as.find((o) => !o.plataforma && !o.clique) ?? null;
+    .map((o) => ({
+      fonte: o.fonte,
+      plataforma: o.clique as PlataformaAnuncio,
+      vale: o.plataforma === o.clique,
+      em: o.toque_em,
+    }));
+  // Visita sem anuncio: sem plataforma e da sessao (a linha so com o click id
+  // sem hora nao e visita).
+  const direta = as.find((o) => !o.plataforma && o.sessao) ?? null;
   return (
     calcularOrigem({
       pedidoEm,
@@ -371,19 +414,29 @@ export function mesmaOrigem(a: OrigemDoPedido | null | undefined, b: OrigemDoPed
 // Toques de cada lugar
 // ---------------------------------------------------------------------------
 
-/** Click id solto, com o _fbc fora da janela descartado (ele diz quando foi o clique). */
+/**
+ * Click id solto (carrinho, identidade). So o _fbc diz a hora do clique: na
+ * janela, VALE (diz a plataforma); fora dela, nem conta. O resto nao tem hora
+ * e so entra na coluna `clique` (ver cabecalho).
+ */
 function cliqueSolto(fonte: FonteOrigem, c: Cliques, pedidoMs: number): CliqueSolto | null {
   const quando = instanteDoFbc(c.fbc);
-  const fbcVelho = quando !== null && !naJanela(new Date(quando).toISOString(), pedidoMs);
+  if (quando !== null) {
+    const em = new Date(quando).toISOString();
+    if (naJanela(em, pedidoMs)) return { fonte, plataforma: "meta", vale: true, em };
+  }
   const fbclidDoFbc = c.fbc ? String(c.fbc).split(".").slice(3).join(".") : null;
-  const limpo: Cliques = {
-    ...c,
-    fbc: fbcVelho ? null : c.fbc,
-    // O mesmo clique do _fbc velho: tambem velho.
-    fbclid: fbcVelho && c.fbclid === fbclidDoFbc ? null : c.fbclid,
+  const semHora: Cliques = {
+    gclid: c.gclid,
+    gbraid: c.gbraid,
+    wbraid: c.wbraid,
+    ttclid: c.ttclid,
+    // O _fbc fora da janela sai, e o fbclid do MESMO clique com ele.
+    fbc: quando === null ? c.fbc : null,
+    fbclid: quando !== null && c.fbclid === fbclidDoFbc ? null : c.fbclid,
   };
-  const plataforma = plataformaDoClique(limpo);
-  return plataforma ? { fonte, plataforma } : null;
+  const plataforma = plataformaDoClique(semHora);
+  return plataforma ? { fonte, plataforma, vale: false } : null;
 }
 
 function toquesDosAtributos(lista: readonly AtributoDoPedido[] | null | undefined, pagina: string | null): Toque[] {
@@ -432,7 +485,7 @@ export function origemDoWebhook(
 
   const landing = (pedido.landing_site || "").trim();
   if (landing) {
-    const p = parametrosDaUrl(landing, true);
+    const p = parametrosDaUrl(landing, CORTE_LANDING);
     const pagina = caminhoDeEntrada(landing);
     toques.push({
       fonte: "landing",
@@ -487,6 +540,8 @@ export function limparUtm(u: Utm | Record<string, unknown> | null | undefined): 
     const v = limparValor(o[k]);
     if (v) saida[k] = v;
   }
+  const clique = plataformaValida(o.clique);
+  if (clique) saida.clique = clique;
   return saida;
 }
 

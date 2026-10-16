@@ -47,6 +47,14 @@ export interface Utm {
   id?: string | null;
   /** gad_campaignid: o Google acrescenta sozinho, com o id da campanha. */
   gad?: string | null;
+  /**
+   * A plataforma do click id que chegou NESTE clique (gclid, fbclid, ttclid),
+   * guardada pelo snippet e pela ponte com a hora dele. E o que deixa o clique
+   * sem UTM (Google so com auto-tagging, TikTok sem o modelo) valer na janela
+   * e substituir a UTM de um clique anterior. O click id solto, sem hora, nao
+   * define plataforma (origem-pedido.ts).
+   */
+  clique?: PlataformaAnuncio | null;
 }
 
 export const CHAVES_UTM = ["source", "medium", "campaign", "content", "term", "id"] as const;
@@ -107,8 +115,17 @@ export function nomeDe(v: unknown): string | null {
   return SO_ID.test(t) ? null : t;
 }
 
+/** Tem campanha ou, pelo menos, o clique datado (`clique`). */
 export function temUtm(u: Utm | null | undefined): boolean {
-  return Boolean(u && (CHAVES_UTM.some((k) => u[k]) || u.gad));
+  return Boolean(u && (CHAVES_UTM.some((k) => u[k]) || u.gad || u.clique));
+}
+
+const PLATAFORMAS_ANUNCIO = new Set<string>(["meta", "google", "tiktok"]);
+
+/** "meta" | "google" | "tiktok", ou null para qualquer outra coisa. */
+export function plataformaValida(v: unknown): PlataformaAnuncio | null {
+  const t = typeof v === "string" ? v.trim().toLowerCase() : "";
+  return PLATAFORMAS_ANUNCIO.has(t) ? (t as PlataformaAnuncio) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -121,16 +138,21 @@ export function temUtm(u: Utm | null | undefined): boolean {
  */
 const FBCLID_COMPLETO = /_aem_[A-Za-z0-9_-]{22}$/;
 
+/** O landing_site do pedido: a Shopify corta em 255 caracteres. */
+export const CORTE_LANDING = 255;
+/** A URL da pagina que o snippet e a ponte mandam ao coletor: cortada em 500. */
+export const CORTE_PAGINA = 500;
+
 /**
  * Os parametros de uma URL, so os INTEIROS.
  *
- * `cortadaEm255`: o landing_site do pedido, que a Shopify corta em 255
- * caracteres. Perto do limite o ultimo parametro pode estar pela metade -- um
- * id cortado e pior que nenhum, e `utm_source=i` (o "ig" cortado) apareceu de
- * verdade -- entao ele sai, exceto o fbclid que prova estar inteiro.
+ * `cortadaEm`: o tamanho em que a URL foi cortada (CORTE_LANDING,
+ * CORTE_PAGINA). Perto do limite o ultimo parametro pode estar pela metade --
+ * um id cortado e pior que nenhum, e `utm_source=i` (o "ig" cortado) apareceu
+ * de verdade -- entao ele sai, exceto o fbclid que prova estar inteiro.
  * URL torta nao lanca.
  */
-export function parametrosDaUrl(url: string | null | undefined, cortadaEm255 = false): URLSearchParams {
+export function parametrosDaUrl(url: string | null | undefined, cortadaEm?: number): URLSearchParams {
   const bruto = (url || "").trim();
   if (!bruto || !bruto.includes("?")) return new URLSearchParams();
   let p: URLSearchParams;
@@ -139,7 +161,7 @@ export function parametrosDaUrl(url: string | null | undefined, cortadaEm255 = f
   } catch {
     return new URLSearchParams();
   }
-  if (cortadaEm255 && bruto.length >= 250) {
+  if (cortadaEm && bruto.length >= cortadaEm - 5) {
     const chaves = [...p.keys()];
     const ultima = chaves[chaves.length - 1];
     const fbclidInteiro = ultima === "fbclid" && FBCLID_COMPLETO.test(p.get("fbclid") || "");
@@ -233,6 +255,7 @@ export function plataformaDoClique(c: Cliques | null | undefined): PlataformaAnu
 export function plataformaDe(utm: Utm, cliques?: Cliques | null): PlataformaOrigem | null {
   return (
     plataformaDoClique(cliques) ??
+    plataformaValida(utm.clique) ??
     plataformaDaFonte(utm.source) ??
     (utm.gad ? "google" : null) ??
     (utm.source ? "outra" : null)
@@ -276,6 +299,9 @@ export function nomesDaUtm(utm: Utm): { campanha: string | null; conjunto: strin
 /** Os nossos (_xc_utm_*) e os de app de COD/checkout ("utm_source", "UTM Source"). */
 const CHAVE_UTM_ATRIBUTO = /^_?(xc_)?utm[ _-]?(source|medium|campaign|content|term|id)$/i;
 const CHAVE_UTM_EM = /^_xc_utm_em$/i;
+/** Do mesmo conjunto do snippet: o gad_campaignid e a plataforma do click id do clique. */
+const CHAVE_UTM_GAD = /^_xc_utm_gad$/i;
+const CHAVE_UTM_CLIQUE = /^_xc_utm_clique$/i;
 /** Os click ids que o snippet e a ponte poem no carrinho. */
 const CHAVE_CLIQUE_ATRIBUTO: Record<string, keyof Cliques> = {
   fbclid: "fbclid",
@@ -326,6 +352,16 @@ export function utmDosAtributos(lista: readonly AtributoDoPedido[] | null | unde
       em = instanteDe(a?.value);
       continue;
     }
+    if (CHAVE_UTM_GAD.test(chave)) {
+      const gad = String(a?.value ?? "").trim();
+      if (SO_ID.test(gad)) nosso.gad = gad;
+      continue;
+    }
+    if (CHAVE_UTM_CLIQUE.test(chave)) {
+      const clique = plataformaValida(a?.value);
+      if (clique) nosso.clique = clique;
+      continue;
+    }
     const m = CHAVE_UTM_ATRIBUTO.exec(chave);
     if (!m) continue;
     const valor = limparValor(a?.value);
@@ -364,9 +400,11 @@ export function instanteDoFbc(fbc: string | null | undefined): number | null {
 // ---------------------------------------------------------------------------
 
 /**
- * As UTMs do clique que o snippet guardou (cookie _xc_utm, 7 dias) e manda em
- * cada evento: `{utm_source, ..., em}`. A hora vem do navegador; adiantada
- * vira agora, e mais velha que a janela nao vale.
+ * As UTMs do clique que o snippet e a ponte guardaram (cookie, 7 dias) e
+ * mandam em cada evento: `{utm_source, ..., gad_campaignid, clique, em}`. So
+ * com o `clique` (gclid sem UTM) tambem vale: e um clique novo, e substitui a
+ * UTM do anterior na identidade. A hora vem do navegador; adiantada vira
+ * agora, e mais velha que a janela nao vale.
  */
 export function utmDoCorpo(v: unknown, agoraMs: number): { utm: Utm; em: string } | null {
   if (!v || typeof v !== "object" || Array.isArray(v)) return null;
@@ -376,6 +414,10 @@ export function utmDoCorpo(v: unknown, agoraMs: number): { utm: Utm; em: string 
     const x = limparValor(o[`utm_${k}`]);
     if (x) utm[k] = x;
   }
+  const gad = String(o.gad_campaignid ?? "").trim();
+  if (SO_ID.test(gad)) utm.gad = gad;
+  const clique = plataformaValida(o.clique);
+  if (clique) utm.clique = clique;
   if (!temUtm(utm)) return null;
   const n = Number(o.em);
   const ms = !Number.isFinite(n) || n > agoraMs + 864e5 ? agoraMs : n;
@@ -383,9 +425,13 @@ export function utmDoCorpo(v: unknown, agoraMs: number): { utm: Utm; em: string 
   return { utm, em: new Date(ms).toISOString() };
 }
 
-/** As UTMs da URL da pagina (snippet antigo, que nao manda `utm`): o clique e agora. */
+/**
+ * As UTMs da URL da pagina (quem nao manda `utm`: snippet antigo, o pixel do
+ * checkout): o clique e agora. A URL vem cortada em 500 (CORTE_PAGINA): o
+ * ultimo parametro, que pode estar pela metade, sai.
+ */
 export function utmDaPagina(url: string | null | undefined, agoraMs: number): { utm: Utm; em: string } | null {
-  const utm = utmDeParametros(parametrosDaUrl(url));
+  const utm = utmDeParametros(parametrosDaUrl(url, CORTE_PAGINA));
   return temUtm(utm) ? { utm, em: new Date(agoraMs).toISOString() } : null;
 }
 

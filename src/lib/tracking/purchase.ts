@@ -16,7 +16,7 @@ import {
   urlSemTtclid,
   type EventoTiktok,
 } from "@/lib/tracking/tiktok-evento";
-import { parametrosDaUrl, type Utm } from "@/lib/tracking/utm";
+import { CORTE_LANDING, parametrosDaUrl, type Utm } from "@/lib/tracking/utm";
 
 // ============================================================================
 // Pedido da Shopify -> evento Purchase do CAPI (Meta) e da Events API (TikTok).
@@ -193,7 +193,7 @@ export function cliquesDaLanding(landingSite: string | null | undefined): {
   fbclid: string | null;
   ttclid: string | null;
 } {
-  const parametros = parametrosDaUrl(landingSite, true);
+  const parametros = parametrosDaUrl(landingSite, CORTE_LANDING);
   const ler = (k: string) => (parametros.get(k) || "").trim() || null;
   return {
     gclid: ler("gclid"),

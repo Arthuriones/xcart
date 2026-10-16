@@ -137,6 +137,24 @@ describe("coletor: UTMs do clique na identidade", () => {
     });
   });
 
+  it("clique novo so com gclid (auto-tagging): o conjunto `clique` substitui a UTM guardada", async () => {
+    const em = AGORA - 60_000;
+    await postar({ ...IDENTIDADE, gclid: "Cj0KCQ", utm: { clique: "google", gad_campaignid: "21234567890", em } });
+    expect(mundo.escritas[0].campos).toMatchObject({
+      gclid: "Cj0KCQ",
+      utm: { clique: "google", gad: "21234567890" },
+      utm_em: new Date(em).toISOString(),
+    });
+  });
+
+  it("URL da pagina cortada em 500: o id pela metade no fim nao vai para a identidade", async () => {
+    const url = `https://vsl.com/oferta?fbclid=${"F".repeat(380)}&utm_source=fb&utm_campaign=Escala%7C120200000000000001&utm_content=120200000000000003`;
+    await postar({ ...EVENTO, pageUrl: url.slice(0, 500) });
+    const utm = mundo.escritas[0].campos.utm as Record<string, unknown>;
+    expect(utm).toMatchObject({ source: "fb", campaign: "Escala|120200000000000001" });
+    expect(utm).not.toHaveProperty("content");
+  });
+
   it("evento sem UTM nao apaga a guardada: a coluna nem vai na escrita", async () => {
     await postar({ ...EVENTO, pageUrl: "https://loja.shop/cart" });
     expect(mundo.escritas).toHaveLength(1);

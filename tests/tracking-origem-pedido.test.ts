@@ -145,14 +145,17 @@ describe("webhook: URL de chegada, atributos e identidade", () => {
     });
   });
 
-  it("ttclid: TikTok, mesmo sem UTM", () => {
+  it("ttclid na URL de chegada: TikTok, mesmo sem UTM", () => {
     expect(origemDoWebhook({ created_at: PEDIDO_EM, landing_site: "/products/x?ttclid=E.C.P.abc" }, null)).toMatchObject({
       plataforma: "tiktok",
       clique: "tiktok",
     });
+  });
+
+  it("ttclid so no carrinho (sem hora): fica na coluna clique, nao vira plataforma", () => {
     expect(
       origemDoWebhook({ created_at: PEDIDO_EM, note_attributes: [{ name: "ttclid", value: "E.C.P.abc" }] }, null)
-    ).toMatchObject({ fonte: "atributo", plataforma: "tiktok", campanha_id: null });
+    ).toMatchObject({ fonte: "atributo", sessao: false, plataforma: null, clique: "tiktok", campanha_id: null });
   });
 });
 
@@ -182,7 +185,7 @@ describe("janela de 7 dias: UTM herdada de clique velho nao vale", () => {
     expect(o).toMatchObject({ plataforma: null, campanha_id: null });
   });
 
-  it("_fbc velho nao faz clique do Meta; fbclid solto (sem hora) ainda faz", () => {
+  it("_fbc velho nao faz clique do Meta; o da janela faz, com a hora dele", () => {
     const velho = `fb.1.${Date.parse(antes(20))}.IwAR1`;
     expect(
       origemDoWebhook(
@@ -193,7 +196,60 @@ describe("janela de 7 dias: UTM herdada de clique velho nao vale", () => {
     const novo = `fb.1.${Date.parse(antes(1))}.IwAR2`;
     expect(
       origemDoWebhook({ created_at: PEDIDO_EM, note_attributes: [{ name: "_fbc", value: novo }] }, null)
-    ).toMatchObject({ plataforma: "meta", clique: "meta" });
+    ).toMatchObject({ plataforma: "meta", clique: "meta", toque_em: antes(1) });
+  });
+
+  it("compra organica com gclid de carrinho velho (cookie de 90 dias): Direto, nunca Google", () => {
+    const o = origemDoWebhook(
+      { created_at: PEDIDO_EM, landing_site: "/", note_attributes: [{ name: "gclid", value: "Cj0KCQ" }] },
+      null
+    );
+    expect(o).toMatchObject({ fonte: "landing", sessao: true, plataforma: null, clique: "google", campanha_id: null });
+  });
+
+  it("gclid ou ttclid so na identidade (sem hora) tambem nao vira plataforma", () => {
+    expect(origemDoWebhook({ created_at: PEDIDO_EM }, { gclid: "Cj0KCQ", ttclid: "E.C.P" })).toMatchObject({
+      fonte: "identidade",
+      sessao: false,
+      plataforma: null,
+      clique: "google",
+    });
+    // Com a visita da sessao: Direto.
+    expect(
+      origemDoWebhook({ created_at: PEDIDO_EM, landing_site: "/collections/all" }, { gclid: "Cj0KCQ" })
+    ).toMatchObject({ plataforma: null, pagina_entrada: "/collections/all" });
+  });
+
+  it("clique novo so com gclid troca o conjunto: Meta no dia 0, Google no dia 2, pedido sem sessao no dia 3", () => {
+    // O pedido nasce no dia 3: o clique do Meta (dia 0) e o do Google (dia 2)
+    // estao na janela. O snippet trocou o conjunto no clique do Google
+    // (_xc_utm_* do Meta vazios), mas o _fbc do dia 0 continua no carrinho.
+    const pedidoEm = antes(-3);
+    const dia = (n: number) => String(Date.parse(PEDIDO_EM) + n * DIA);
+    const atributos = [
+      { name: "_fbc", value: `fb.1.${dia(0)}.IwAR0` },
+      { name: "fbclid", value: "IwAR0" },
+      { name: "gclid", value: "Cj0KCQ" },
+      { name: "_xc_utm_clique", value: "google" },
+      { name: "_xc_utm_gad", value: "21234567890" },
+      { name: "_xc_utm_em", value: dia(2) },
+    ];
+    expect(origemDoWebhook({ created_at: pedidoEm, note_attributes: atributos }, null)).toMatchObject({
+      fonte: "atributo",
+      plataforma: "google",
+      clique: "google",
+      campanha_id: "21234567890",
+      conjunto_id: null,
+      anuncio_id: null,
+      toque_em: new Date(Number(dia(2))).toISOString(),
+    });
+    // Pedido sem atributo (app de COD): a identidade com o conjunto do Google.
+    expect(
+      origemDoWebhook(
+        { created_at: pedidoEm },
+        { utm: { clique: "google" }, utmEm: new Date(Number(dia(2))).toISOString(), fbc: `fb.1.${dia(0)}.IwAR0` }
+      )
+    ).toMatchObject({ fonte: "identidade", plataforma: "google", campanha_id: null });
   });
 
   it("o clique mais novo vence entre toques com hora", () => {
@@ -345,6 +401,35 @@ describe("a gravada e a nova se completam", () => {
     expect(uma).toMatchObject({ fonte: "landing", campanha_id: CAMP, conjunto_id: CONJ, anuncio_id: ANUN });
     expect(mesmaOrigem(mesclarOrigens(uma, uma, PEDIDO_EM), uma)).toBe(true);
     expect(mesmaOrigem(mesclarOrigens(base, uma, PEDIDO_EM), uma)).toBe(true);
+  });
+
+  it("Direto com click id sem hora: o sync nao transforma o clique em plataforma", () => {
+    const doWebhook = origemDoWebhook(
+      { created_at: PEDIDO_EM, landing_site: "/", note_attributes: [{ name: "gclid", value: "Cj0KCQ" }] },
+      null
+    )!;
+    const sync = origemDoSync({
+      createdAt: PEDIDO_EM,
+      customerJourneySummary: {
+        ready: true,
+        lastVisit: { occurredAt: antes(0.1), landingPage: "https://loja.shop/", utmParameters: null },
+      },
+    })!;
+    const final = mesclarOrigens(sync, doWebhook, PEDIDO_EM);
+    expect(final).toMatchObject({ plataforma: null, clique: "google", sessao: true });
+    expect(mesmaOrigem(mesclarOrigens(final, final, PEDIDO_EM), final)).toBe(true);
+  });
+
+  it("clique com hora gravado (_fbc na janela) continua valendo ao mesclar", () => {
+    const doWebhook = origemDoWebhook(
+      { created_at: PEDIDO_EM, note_attributes: [{ name: "_fbc", value: `fb.1.${Date.parse(antes(1))}.IwAR2` }] },
+      null
+    )!;
+    const sync = origemDoSync({
+      createdAt: PEDIDO_EM,
+      customerJourneySummary: { ready: true, lastVisit: { occurredAt: antes(0.1), landingPage: "/", utmParameters: null } },
+    })!;
+    expect(mesclarOrigens(sync, doWebhook, PEDIDO_EM)).toMatchObject({ plataforma: "meta", clique: "meta" });
   });
 
   it("completar so com a MESMA campanha: outro anuncio nao se mistura", () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  CORTE_LANDING,
   JANELA_ORIGEM_MS,
   PARAMETROS_URL,
   caminhoDeEntrada,
@@ -136,14 +137,14 @@ describe("landing_site cortado em 255", () => {
   it("o ultimo parametro cortado sai (utm_source=i era o ig pela metade)", () => {
     const cortado = "/products/x?fbclid=" + "a".repeat(223) + "&utm_source=i";
     expect(cortado.length).toBe(255);
-    expect(parametrosDaUrl(cortado, true).has("utm_source")).toBe(false);
+    expect(parametrosDaUrl(cortado, CORTE_LANDING).has("utm_source")).toBe(false);
     // Sem a regra (URL inteira da jornada), fica.
     expect(parametrosDaUrl(cortado).get("utm_source")).toBe("i");
   });
 
   it("URL curta nao perde nada; URL torta nao lanca", () => {
-    expect(parametrosDaUrl("/?utm_campaign=123456", true).get("utm_campaign")).toBe("123456");
-    expect(() => parametrosDaUrl("/?utm_source=%E0%A4%A", true)).not.toThrow();
+    expect(parametrosDaUrl("/?utm_campaign=123456", CORTE_LANDING).get("utm_campaign")).toBe("123456");
+    expect(() => parametrosDaUrl("/?utm_source=%E0%A4%A", CORTE_LANDING)).not.toThrow();
   });
 });
 
@@ -243,6 +244,18 @@ describe("atributos do pedido: lista fechada", () => {
     ).toEqual({ fbc: "fb.1.1760000000000.IwAR", gclid: "Cj0" });
   });
 
+  it("o conjunto do clique sem UTM: _xc_utm_clique e _xc_utm_gad, com a hora", () => {
+    const r = utmDosAtributos([
+      { key: "_xc_utm_clique", value: "google" },
+      { key: "_xc_utm_gad", value: "21234567890" },
+      { key: "_xc_utm_em", value: "1760000000000" },
+    ]);
+    expect(r.nosso).toEqual({ utm: { clique: "google", gad: "21234567890" }, em: new Date(1760000000000).toISOString() });
+    // Plataforma estranha ou gad que nao e id nao entram; sem a hora, nada.
+    expect(utmDosAtributos([{ key: "_xc_utm_clique", value: "bing" }, { key: "_xc_utm_em", value: "1760000000000" }]).nosso).toBeNull();
+    expect(utmDosAtributos([{ key: "_xc_utm_clique", value: "google" }]).nosso).toBeNull();
+  });
+
   it("instante em ms ou ISO; fora do razoavel e null", () => {
     expect(instanteDe("1760000000000")).toBe(new Date(1760000000000).toISOString());
     expect(instanteDe("2026-10-08T19:17:00Z")).toBe("2026-10-08T19:17:00.000Z");
@@ -273,9 +286,29 @@ describe("o que o snippet manda ao coletor", () => {
     expect(utmDoCorpo({ utm_source: "x@y.com" }, AGORA)).toBeNull();
   });
 
+  it("clique novo sem UTM (so o click id, com gad_campaignid): vale, e substitui a UTM guardada", () => {
+    expect(utmDoCorpo({ clique: "google", gad_campaignid: "21234567890", em: AGORA - 1000 }, AGORA)).toEqual({
+      utm: { clique: "google", gad: "21234567890" },
+      em: new Date(AGORA - 1000).toISOString(),
+    });
+    expect(utmDoCorpo({ clique: "bing", em: AGORA }, AGORA)).toBeNull();
+    expect(plataformaDe({ clique: "tiktok" })).toBe("tiktok");
+  });
+
   it("snippet antigo: tira da URL da pagina", () => {
     expect(utmDaPagina(`https://loja.shop${META_AUTOMATICO}`, AGORA)?.utm.term).toBe("120252293728570706");
     expect(utmDaPagina("https://loja.shop/products/x", AGORA)).toBeNull();
+  });
+
+  it("URL da pagina cortada em 500: o ultimo parametro, pela metade, sai", () => {
+    const inteira = `https://loja.shop/products/x?fbclid=${"F".repeat(380)}&utm_source=fb&utm_campaign=Escala%7C120200000000000001&utm_content=120200000000000003`;
+    const cortada = inteira.slice(0, 500);
+    expect(cortada.length).toBe(500);
+    const r = utmDaPagina(cortada, AGORA);
+    expect(r?.utm).toMatchObject({ source: "fb", campaign: "Escala|120200000000000001" });
+    expect(r?.utm.content).toBeUndefined();
+    // Curta, nada sai.
+    expect(utmDaPagina("https://loja.shop/?utm_content=120200000000000003", AGORA)?.utm.content).toBe("120200000000000003");
   });
 });
 

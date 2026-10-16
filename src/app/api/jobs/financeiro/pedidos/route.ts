@@ -32,6 +32,8 @@ const TRAVA_VENCE_MS = 10 * 60 * 1000;
 const ESPERA_NEGADO_MS = 6 * 60 * 60 * 1000;
 /** "Atualizar agora" repetido: nao martela a Shopify. */
 const ESPERA_SESSAO_MS = 60 * 1000;
+/** Teto da passada de origem (071) por loja e rodada: o resto fica para a proxima. */
+const RECUPERACAO_POR_LOJA_MS = 20_000;
 
 function segredoDoCron() {
   return process.env.CRON_SECRET || process.env.BULK_IMPORT_CRON_SECRET || "";
@@ -155,18 +157,29 @@ async function executar(request: NextRequest) {
     try {
       const r = await sincronizarLoja(admin, loja, estado ?? null, undefined, limiteEm);
 
-      // A carga inicial feita AGORA ja leu a origem dos 60 dias: a passada de
-      // recuperacao (071) nao precisa rodar nesta loja.
+      // A carga inicial feita INTEIRA nesta rodada (comecou sem cursor, nao
+      // retomou nada) ja leu a origem dos 60 dias: a passada de recuperacao
+      // (071) nao precisa rodar nesta loja. Carga que vem de rodadas
+      // anteriores (de antes do deploy ou da 071) leu paginas sem a origem: a
+      // recuperacao roda, e e barata (~3 pontos por pedido).
       const cargaComOrigem =
-        r.terminou && r.comOrigem && !estado?.carga_inicial_ok && faltaRecuperarOrigens(estado ?? null);
+        r.terminou &&
+        r.comOrigem &&
+        !estado?.carga_inicial_ok &&
+        !estado?.cursor_atualizado &&
+        !estado?.retomar_cursor &&
+        faltaRecuperarOrigens(estado ?? null);
 
       // f) a origem dos pedidos de antes da 071, uma vez por loja, com o tempo
       // que sobrar -- e so depois da carga inicial, que ja le a origem. So no
-      // cron: o "Atualizar agora" nao espera por isto. Falha vai para o log: a
-      // foto financeira desta rodada ja esta gravada.
+      // cron: o "Atualizar agora" nao espera por isto. Teto proprio por loja
+      // (RECUPERACAO_POR_LOJA_MS): na primeira rodada depois da 071 todas as
+      // lojas fazem a passada, e a primeira nao pode comer o orcamento do sync
+      // financeiro das seguintes. Falha vai para o log: a foto financeira desta
+      // rodada ja esta gravada.
       if (doCron && estado?.carga_inicial_ok && Date.now() < limiteEm) {
         try {
-          await recuperarOrigens(admin, loja, estado ?? null, limiteEm);
+          await recuperarOrigens(admin, loja, estado ?? null, Math.min(limiteEm, Date.now() + RECUPERACAO_POR_LOJA_MS));
         } catch (e) {
           console.error("[fin/pedidos] recuperacao da origem", loja.shop_domain, mensagemDe(e));
         }

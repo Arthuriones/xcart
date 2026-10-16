@@ -34,8 +34,10 @@
  * mesmos nomes que o tema grava via /cart/update.js. Vao junto os cookies dos
  * pixels de navegador DESTA pagina (_fbp, _fbc, _ttp): o Meta e o TikTok rodam
  * aqui, e a compra sai com o mesmo id de navegador que eles usaram. E as UTMs
- * do anuncio (_xc_utm_* e a hora do clique em _xc_utm_em): sao a campanha, o
- * conjunto e o anuncio do pedido.
+ * do anuncio (_xc_utm_*, _xc_utm_gad, _xc_utm_clique e a hora do clique em
+ * _xc_utm_em): sao a campanha, o conjunto e o anuncio do pedido. No link para
+ * as paginas da loja vai a hora do clique (xcart_clique_em), para o snippet de
+ * la nao tomar o click id repassado por um clique de agora.
  *
  * RASTREAMENTO DA PROPRIA PAGINA
  *
@@ -208,11 +210,26 @@
 
   /**
    * As UTMs, como CONJUNTO e com a hora do clique (o mesmo acordo do snippet
-   * da loja, secao 1e): UTM nova substitui todas, e a guardada so vale 7 dias.
-   * Sem isto o link do CTA levaria a UTM de um clique de 2 meses atras, e a
-   * loja a tomaria por um clique de agora.
+   * da loja, secao 1e): clique novo substitui o conjunto inteiro, e o guardado
+   * so vale 7 dias. Clique novo e UTM, gad_campaignid ou so o click id (Google
+   * so com auto-tagging, TikTok sem o modelo), que entra como `clique`. Sem
+   * isto o link do CTA levaria a UTM de um clique de 2 meses atras -- ou a de
+   * um clique do Meta depois de um clique novo no Google.
    */
+  var EXTRAS_UTM = ["gad_campaignid", "clique"];
+  var CONJUNTO_UTM = UTM.concat(EXTRAS_UTM);
   var utmEm = null;
+  // A hora do ultimo clique, de qualquer idade (o cookie dura 90 dias, como os
+  // click ids): vai com o click id repassado as paginas da loja.
+  var cliqueEm = null;
+
+  function cliqueDaUrl(q) {
+    if (q.get("gclid") || q.get("gbraid") || q.get("wbraid")) return "google";
+    if (q.get("fbclid")) return "meta";
+    if (q.get("ttclid")) return "tiktok";
+    return null;
+  }
+
   function coletarUtm() {
     var q;
     try {
@@ -220,33 +237,75 @@
     } catch (e) {
       return;
     }
+    var nova = {};
     var naUrl = false;
-    for (var i = 0; i < UTM.length; i++) if (q.get(UTM[i])) naUrl = true;
-    if (naUrl) {
-      for (var j = 0; j < UTM.length; j++) {
-        var daUrl = q.get(UTM[j]);
-        if (daUrl) {
-          gravarCookie(PREFIXO + UTM[j], daUrl);
-          guardados[UTM[j]] = daUrl;
+    for (var i = 0; i < UTM.length; i++) {
+      if (q.get(UTM[i])) {
+        nova[UTM[i]] = q.get(UTM[i]);
+        naUrl = true;
+      }
+    }
+    var gad = q.get("gad_campaignid");
+    if (gad && /^\d{5,25}$/.test(gad)) {
+      nova.gad_campaignid = gad;
+      naUrl = true;
+    }
+    var clique = cliqueDaUrl(q);
+    if (clique) {
+      nova.clique = clique;
+      naUrl = true;
+    }
+    // O click id da URL que ja estava no cookie e o MESMO clique (recarga,
+    // voltar, aba reaberta): a hora fica a de quando ele chegou. Por isso
+    // roda antes de coletar(CLICK_IDS), que regrava os cookies.
+    var mesmoClique = clique !== null;
+    for (var c = 0; c < CLICK_IDS.length; c++) {
+      var id = q.get(CLICK_IDS[c]);
+      if (id && lerCookie(PREFIXO + CLICK_IDS[c]) !== id) mesmoClique = false;
+    }
+    if (naUrl && !mesmoClique) {
+      for (var j = 0; j < CONJUNTO_UTM.length; j++) {
+        var chave = CONJUNTO_UTM[j];
+        if (nova[chave]) {
+          gravarCookie(PREFIXO + chave, nova[chave]);
+          guardados[chave] = nova[chave];
         } else {
-          apagarCookie(PREFIXO + UTM[j]);
+          apagarCookie(PREFIXO + chave);
         }
       }
-      utmEm = String(Date.now());
+      utmEm = cliqueEm = String(Date.now());
       gravarCookie(PREFIXO + "utm_em", utmEm);
       return;
     }
     var em = lerCookie(PREFIXO + "utm_em");
-    if (!em || !/^\d+$/.test(em) || Date.now() - Number(em) > 7 * 864e5) return;
+    if (!em || !/^\d+$/.test(em)) return;
+    cliqueEm = em;
+    if (Date.now() - Number(em) > 7 * 864e5) return;
     utmEm = em;
-    for (var k = 0; k < UTM.length; k++) {
-      var doCookie = lerCookie(PREFIXO + UTM[k]);
-      if (doCookie) guardados[UTM[k]] = doCookie;
+    for (var k = 0; k < CONJUNTO_UTM.length; k++) {
+      var doCookie = lerCookie(PREFIXO + CONJUNTO_UTM[k]);
+      if (doCookie) guardados[CONJUNTO_UTM[k]] = doCookie;
     }
   }
 
-  coletar(CLICK_IDS);
+  /** O conjunto para o coletor (a identidade), no formato do snippet da loja. */
+  function utmDoEvento() {
+    if (!utmEm) return undefined;
+    var saida = { em: Number(utmEm) };
+    var algo = false;
+    for (var i = 0; i < CONJUNTO_UTM.length; i++) {
+      var v = guardados[CONJUNTO_UTM[i]];
+      // Com "@" e e-mail: nao vai.
+      if (v && v.indexOf("@") === -1) {
+        saida[CONJUNTO_UTM[i]] = v.slice(0, 200);
+        algo = true;
+      }
+    }
+    return algo ? saida : undefined;
+  }
+
   coletarUtm();
+  coletar(CLICK_IDS);
 
   // Nada para levar: visita organica, ou o anuncio nao trouxe parametro. No
   // modo de rastreamento segue mesmo assim: o Meta e o TikTok atribuem por
@@ -284,17 +343,23 @@
       return href;
     }
 
+    var levouClique = false;
     for (var i = 0; i < CLICK_IDS.length; i++) {
       var c = CLICK_IDS[i];
       // Click id nosso SEMPRE vence: e o do clique que esta acontecendo agora.
-      if (guardados[c]) u.searchParams.set(c, guardados[c]);
+      if (guardados[c]) {
+        u.searchParams.set(c, guardados[c]);
+        levouClique = true;
+      }
     }
-    for (var j = 0; j < UTM.length; j++) {
-      var m = UTM[j];
+    var paraLink = UTM.concat(["gad_campaignid"]);
+    for (var j = 0; j < paraLink.length; j++) {
+      var m = paraLink[j];
       // utm so quando o link nao define: quem escreveu a pagina pode ter
       // marcado aquele botao de proposito, e sobrescrever apagaria a intencao.
       if (guardados[m] && !u.searchParams.has(m)) {
         u.searchParams.set(m, guardados[m]);
+        levouClique = true;
       }
     }
     if (ehPermalink(u)) {
@@ -313,17 +378,20 @@
       // A campanha, o conjunto e o anuncio vao ao PEDIDO pelo mesmo caminho:
       // nenhuma pagina da loja roda antes do checkout. Com a hora do clique,
       // que o servidor confere contra a janela de 7 dias.
-      if (utmEm) {
-        var algumaUtm = false;
-        for (var t = 0; t < UTM.length; t++) {
-          // Com "@" e e-mail: nao vira atributo do pedido.
-          if (guardados[UTM[t]] && guardados[UTM[t]].indexOf("@") === -1) {
-            u.searchParams.set("attributes[_xc_" + UTM[t] + "]", guardados[UTM[t]].slice(0, 200));
-            algumaUtm = true;
-          }
+      var conjunto = utmDoEvento();
+      if (conjunto) {
+        for (var t = 0; t < CONJUNTO_UTM.length; t++) {
+          var k = CONJUNTO_UTM[t];
+          // Os nomes que o snippet da loja grava no carrinho.
+          var nomeUtm = k === "gad_campaignid" ? "utm_gad" : k === "clique" ? "utm_clique" : k;
+          if (conjunto[k]) u.searchParams.set("attributes[_xc_" + nomeUtm + "]", conjunto[k]);
         }
-        if (algumaUtm) u.searchParams.set("attributes[_xc_utm_em]", utmEm);
+        u.searchParams.set("attributes[_xc_utm_em]", utmEm);
       }
+    } else if (levouClique && cliqueEm) {
+      // A hora do clique que a ponte viu: o snippet da loja nao toma um click
+      // id de semanas atras por um clique de agora.
+      u.searchParams.set("xcart_clique_em", cliqueEm);
     }
     return u.toString();
   }
@@ -401,6 +469,9 @@
       produto: produto,
       // Explicita: o Referer cross-origin so leva a origem, sem caminho.
       pageUrl: location.href.slice(0, 500),
+      // O conjunto do clique (UTMs e a hora): vai para a identidade, a origem
+      // do pedido que chega sem atributo.
+      utm: utmDoEvento(),
       fonte: "ponte",
     });
   }

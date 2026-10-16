@@ -30,8 +30,13 @@
 --
 -- SO ACRESCENTA. O codigo funciona com e sem esta migration: sem a tabela
 -- (42P01/PGRST205) nao grava nem le a origem e a tela cai no Purchase, como
--- antes; sem as colunas da identidade, grava a identidade sem elas. Ordem com
--- o deploy: qualquer uma.
+-- antes; sem as colunas da identidade, grava a identidade sem elas.
+--
+-- ORDEM: APLICAR ANTES DO DEPLOY (ou junto). O codigo velho nao le nada
+-- daqui, entao antes nao quebra nada. Ja o codigo novo sem a 071 paga uma ida
+-- a mais ao banco por evento no coletor (/api/tracking/collect, publico e de
+-- volume alto): todo visitante com o cookie `_xc_utm` tenta gravar a coluna
+-- `utm`, leva a recusa e grava de novo sem ela.
 --
 -- PERMISSOES: as de fin_orders (052). O lojista LE pela RLS; quem escreve e
 -- so o service_role (webhook e cron). As colunas novas de tracking_identities
@@ -55,9 +60,10 @@ create table if not exists public.fin_order_origem (
   fonte             text not null check (fonte in ('jornada', 'landing', 'atributo', 'identidade')),
   -- O toque e da sessao que virou o pedido (ultima visita, URL de chegada).
   sessao            boolean not null default false,
-  -- null = visita sem anuncio (Direto).
+  -- null = visita sem anuncio (Direto), ou so um click id sem hora.
   plataforma        text check (plataforma is null or plataforma in ('meta', 'google', 'tiktok', 'outra')),
-  -- Click id visto em qualquer fonte.
+  -- Click id visto em qualquer fonte, com ou sem hora: houve um clique, nao
+  -- que o pedido veio dele. Quem diz de onde veio e `plataforma`.
   clique            text check (clique is null or clique in ('meta', 'google', 'tiktok')),
   -- Brutos, como vieram (formato "nome|id" da Utmify incluido).
   utm_source        text check (utm_source is null or length(utm_source) <= 200),
@@ -123,8 +129,10 @@ grant select, insert, update, delete on table public.fin_order_origem to service
 -- 2. As UTMs do clique na identidade do visitante
 -- ---------------------------------------------------------------------------
 alter table public.tracking_identities
-  -- {source, medium, campaign, content, term, id}: so as chaves conhecidas,
-  -- cada valor ate 200 caracteres e sem "@" (src/lib/tracking/utm.ts).
+  -- {source, medium, campaign, content, term, id, gad, clique}: so as chaves
+  -- conhecidas, cada valor ate 200 caracteres e sem "@" (src/lib/tracking/
+  -- utm.ts). `clique` e a plataforma do click id do mesmo clique: o clique
+  -- novo sem UTM (gclid so com auto-tagging) tambem substitui o anterior.
   add column if not exists utm    jsonb check (utm is null
                                                or (jsonb_typeof(utm) = 'object' and length(utm::text) <= 2000)),
   -- Hora do clique: a janela de 7 dias ate o pedido conta daqui. NAO e o

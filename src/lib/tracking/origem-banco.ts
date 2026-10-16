@@ -18,18 +18,33 @@ import {
 // em mesclarOrigens). Um SELECT e um upsert por lote, so do que mudou.
 //
 // Sem a 071 (tabela ausente) nao grava nada e nao lanca: o resto do webhook
-// e do sync segue igual.
+// e do sync segue igual. Linha que o banco RECUSA (CHECK, tipo) fica de fora
+// sozinha, com log: uma linha torta nao segura o lote nem prende a passada dos
+// 60 dias na mesma pagina.
 // ============================================================================
 
 type Admin = ReturnType<typeof createAdminClient>;
 
 export const TABELA_ORIGEM = "fin_order_origem";
 
-/** A tabela (ou a coluna) nao existe: a 071 ainda nao foi aplicada. */
-export function semMigration071(e: { code?: string | null; message?: string | null } | null | undefined): boolean {
+type ErroBanco = { code?: string | null; message?: string | null } | null | undefined;
+
+/**
+ * A tabela (ou a coluna) nao existe: a 071 ainda nao foi aplicada. Pelo
+ * codigo, ou pela mensagem de "nao existe" citando o que a 071 cria. So o
+ * nome da tabela nao basta: a violacao de CHECK tambem o cita ("new row for
+ * relation fin_order_origem violates...") e seria engolida como "sem tabela".
+ */
+export function semMigration071(e: ErroBanco): boolean {
   if (!e) return false;
   if (e.code === "42P01" || e.code === "PGRST205" || e.code === "42703" || e.code === "PGRST204") return true;
-  return /fin_order_origem|origem_backfill|does not exist|Could not find the/i.test(String(e.message ?? ""));
+  const m = String(e.message ?? "");
+  return /does not exist|Could not find/i.test(m) && /fin_order_origem|origem_backfill/i.test(m);
+}
+
+/** O banco recusou o DADO (classes 22 e 23: tipo, CHECK, NOT NULL), nao a conexao. */
+function linhaRecusada(e: ErroBanco): boolean {
+  return /^2[23]/.test(String(e?.code ?? ""));
 }
 
 const COLUNAS = ["store_id", "shopify_order_id", ...CAMPOS_ORIGEM].join(", ");
@@ -80,14 +95,25 @@ export async function gravarOrigens(
   }
   if (mudaram.length === 0) return { gravadas: 0, semTabela: false };
 
-  const { error: erroGravar } = await admin
-    .from(TABELA_ORIGEM)
-    .upsert(mudaram, { onConflict: "store_id,shopify_order_id" });
-  if (erroGravar) {
-    if (semMigration071(erroGravar)) return { gravadas: 0, semTabela: true };
-    throw new Error(`gravar origem dos pedidos: ${erroGravar.message}`);
+  const gravar = (lote: LinhaOrigem[]) =>
+    admin.from(TABELA_ORIGEM).upsert(lote, { onConflict: "store_id,shopify_order_id" });
+  const { error: erroGravar } = await gravar(mudaram);
+  if (!erroGravar) return { gravadas: mudaram.length, semTabela: false };
+  if (semMigration071(erroGravar)) return { gravadas: 0, semTabela: true };
+  if (!linhaRecusada(erroGravar)) throw new Error(`gravar origem dos pedidos: ${erroGravar.message}`);
+
+  // Uma linha recusada derruba o lote inteiro: de novo, uma a uma.
+  let feitas = 0;
+  for (const linha of mudaram) {
+    const { error } = await gravar([linha]);
+    if (!error) {
+      feitas += 1;
+      continue;
+    }
+    if (!linhaRecusada(error)) throw new Error(`gravar origem dos pedidos: ${error.message}`);
+    console.error("[origem] linha recusada pelo banco", linha.store_id, linha.shopify_order_id, error.code, error.message);
   }
-  return { gravadas: mudaram.length, semTabela: false };
+  return { gravadas: feitas, semTabela: false };
 }
 
 /**

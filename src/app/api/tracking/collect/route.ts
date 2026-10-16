@@ -16,7 +16,7 @@ import { MAX_TTCLID, montarFbc, montarUserData, montarUserTiktok } from "@/lib/t
 import { montarEventoDeFunilTiktok } from "@/lib/tracking/tiktok-evento";
 import { JANELA_PIXEL_CHECKOUT_MS } from "@/lib/tracking/google-tag";
 import { hashDoIp, ipDaRequisicao } from "@/lib/tracking/ip-balde";
-import { utmDaPagina, utmDoCorpo } from "@/lib/tracking/utm";
+import { CORTE_PAGINA, utmDaPagina, utmDoCorpo } from "@/lib/tracking/utm";
 
 export const runtime = "nodejs";
 
@@ -435,14 +435,16 @@ export async function POST(request: NextRequest) {
   let ttclid = ttclidBruto && ttclidBruto.length <= MAX_TTCLID ? ttclidBruto : null;
   let ttp = (typeof corpo.ttp === "string" ? corpo.ttp : "").trim().slice(0, 100) || null;
 
-  // As UTMs do clique, para a origem do pedido. O snippet manda as do cookie
-  // (com a hora do clique); o antigo, que nao manda, ainda leva a URL da
-  // pagina -- e na pagina de chegada as UTMs estao nela. So chaves conhecidas,
-  // cortadas, sem "@" (utm.ts).
+  // As UTMs do clique, para a origem do pedido. O snippet e a ponte mandam o
+  // conjunto do cookie, com a hora do clique -- inclusive o clique novo sem
+  // UTM (so `clique`, a plataforma do gclid/ttclid), que SUBSTITUI a campanha
+  // do clique anterior. Quem nao manda (snippet antigo, pixel do checkout)
+  // ainda leva a URL da pagina, cortada em 500 (o ultimo parametro sai). So
+  // chaves conhecidas, cortadas, sem "@" (utm.ts).
   const agoraMs = Date.now();
   const utmDoClique =
     utmDoCorpo(corpo.utm, agoraMs) ??
-    utmDaPagina(typeof corpo.pageUrl === "string" ? corpo.pageUrl.slice(0, 500) : null, agoraMs);
+    utmDaPagina(typeof corpo.pageUrl === "string" ? corpo.pageUrl.slice(0, CORTE_PAGINA) : null, agoraMs);
 
   /**
    * Grava a associacao visitante -> click ids.

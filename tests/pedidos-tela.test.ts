@@ -164,6 +164,15 @@ describe("origemDoPedido", () => {
     });
   });
 
+  it("fbc so conta ate 7 dias antes do pedido (a janela da origem gravada)", () => {
+    const pedidoEm = "2026-10-03T15:00:00Z";
+    const fbc = (dias: number) => `fb.1.${Date.parse(pedidoEm) - dias * 864e5}.IwAR`;
+    expect(origemDoPedido({ url: "https://loja.com/", fbc: fbc(2), pedidoEm }).id).toBe("meta");
+    expect(origemDoPedido({ url: "https://loja.com/", fbc: fbc(20), pedidoEm }).id).toBe("direto");
+    // A URL de chegada e da sessao: o fbclid nela vale sem janela.
+    expect(origemDoPedido({ url: "https://loja.com/?fbclid=IwAR", fbc: fbc(20), pedidoEm }).id).toBe("meta");
+  });
+
   it("evento sem sinal nenhum: Direto, e URL torta nao lanca", () => {
     expect(origemDoPedido({ url: "https://loja.com/", fbc: null }).id).toBe("direto");
     expect(origemDoPedido({ url: "https://loja.com/?utm_source=%E0%A4%A&fbcl" }).id).not.toBe("meta");
@@ -717,6 +726,81 @@ describe("origem gravada no pedido", () => {
     // Pedido web sem origem e sem Purchase continua "Sem dado" (pedido de antes do rastreamento).
     const web = pedido();
     expect(montar([web])[0].origem).toMatchObject({ id: "sem_dado", pista: "Sem evento de rastreamento deste pedido" });
+  });
+
+  it("gravada com click id sem hora: Direto, e o clique nao vira plataforma", () => {
+    const p = pedido();
+    const [pt] = montar([p], {
+      origens: [
+        gravada(p.shopify_order_id, {
+          fonte: "landing",
+          plataforma: null,
+          clique: "google",
+          utm_source: null,
+          utm_medium: null,
+          utm_campaign: null,
+          utm_content: null,
+          utm_term: null,
+          campanha_id: null,
+          conjunto_id: null,
+          anuncio_id: null,
+          toque_em: null,
+          pagina_entrada: "/",
+        }),
+      ],
+    });
+    expect(pt.origem).toMatchObject({ id: "direto", pista: "Clique do Google sem data: não conta" });
+  });
+
+  it("gravada sem anuncio perde para o Purchase com clique (a passada dos 60 dias nao tem a identidade)", () => {
+    const p = pedido();
+    const direta = gravada(p.shopify_order_id, {
+      fonte: "jornada",
+      plataforma: null,
+      clique: null,
+      utm_source: null,
+      utm_medium: null,
+      utm_campaign: null,
+      utm_content: null,
+      utm_term: null,
+      campanha_id: null,
+      conjunto_id: null,
+      anuncio_id: null,
+    });
+    const fbc = `fb.1.${Date.parse(p.criado_em) - 2 * 864e5}.IwAR`;
+    const [comClique] = montar([p], { origens: [direta], eventos: [evento(p.shopify_order_id, { url: "https://loja.com/", fbc })] });
+    expect(comClique.origem).toMatchObject({ id: "meta", pista: "Cookie de clique do Meta (fbc)" });
+    // fbc fora da janela: fica a gravada (Direto).
+    const velho = `fb.1.${Date.parse(p.criado_em) - 20 * 864e5}.IwAR`;
+    const [semClique] = montar([p], { origens: [direta], eventos: [evento(p.shopify_order_id, { url: "https://loja.com/", fbc: velho })] });
+    expect(semClique.origem).toMatchObject({ id: "direto", pista: "Visita sem clique de anúncio" });
+  });
+
+  it("gravada so com click id sem hora e sem visita (app de COD): Sem dado, nunca Direto nem Google", () => {
+    const releasit = { origem: "5690175", gateways: ["Cash on Delivery (COD)"], recebido: 0 };
+    const p = pedido(releasit);
+    const [pt] = montar([p], {
+      origens: [
+        gravada(p.shopify_order_id, {
+          fonte: "identidade",
+          sessao: false,
+          plataforma: null,
+          clique: "google",
+          utm_source: null,
+          utm_medium: null,
+          utm_campaign: null,
+          utm_content: null,
+          utm_term: null,
+          campanha_id: null,
+          conjunto_id: null,
+          anuncio_id: null,
+          toque_em: null,
+          pagina_entrada: null,
+        }),
+      ],
+      eventos: [evento(p.shopify_order_id, { url: "https://loja.com/" })],
+    });
+    expect(pt.origem).toMatchObject({ id: "sem_dado", pista: "Pedido de app (COD) sem visita registrada" });
   });
 
   it("origemNaTela: reenvio continua reenvio, mesmo com origem gravada", () => {

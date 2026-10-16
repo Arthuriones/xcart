@@ -24,8 +24,8 @@ import {
   type ProductCostRow,
 } from "@/lib/financeiro/tipos";
 import { motivoParaIgnorarPedido } from "@/lib/tracking/filtro-pedido";
-import type { FonteOrigem, OrigemDoPedido } from "@/lib/tracking/origem-pedido";
-import { FONTES_GOOGLE, FONTES_META, FONTES_TIKTOK, nomesDaUtm } from "@/lib/tracking/utm";
+import { naJanela, type FonteOrigem, type OrigemDoPedido } from "@/lib/tracking/origem-pedido";
+import { FONTES_GOOGLE, FONTES_META, FONTES_TIKTOK, instanteDoFbc, nomesDaUtm } from "@/lib/tracking/utm";
 
 // ============================================================================
 // Tela Pedidos: um pedido por linha, com o lucro dele, de onde veio e se a
@@ -91,6 +91,18 @@ export interface Origem {
 export interface SinaisDeOrigem {
   fbc?: string | null;
   url?: string | null;
+  /** Quando o pedido nasceu: o fbc so conta ate 7 dias antes (a janela da origem gravada). */
+  pedidoEm?: string | null;
+}
+
+/** O fbc conta: sem a data do pedido, como antes; com ela, so o clique da janela de 7 dias. */
+function fbcConta(s: SinaisDeOrigem): boolean {
+  const fbc = (s.fbc || "").trim();
+  if (!fbc) return false;
+  const pedidoMs = s.pedidoEm ? Date.parse(s.pedidoEm) : Number.NaN;
+  if (!Number.isFinite(pedidoMs)) return true;
+  const clique = instanteDoFbc(fbc);
+  return clique !== null && naJanela(new Date(clique).toISOString(), pedidoMs);
 }
 
 /** Uma linha de fin_order_origem, como a tela le. */
@@ -119,7 +131,8 @@ function parametros(url: string | null | undefined): URLSearchParams {
 /**
  * De onde o pedido veio, do mais especifico para o mais generico: click id na
  * URL de chegada (e desta sessao), utm_source, e o cookie de clique do Meta
- * (fbc, que pode ser de um clique de dias antes). Evento sem sinal: Direto.
+ * (fbc, que pode ser de um clique de dias antes: so conta ate 7 dias antes do
+ * pedido, a mesma janela da origem gravada). Evento sem sinal: Direto.
  * Sem evento nenhum (loja sem pixel do Meta, pedido de antes do pixel): Sem
  * dado -- nao ha como saber, e "Direto" afirmaria que nao houve anuncio.
  */
@@ -143,7 +156,7 @@ export function origemDoPedido(s: SinaisDeOrigem | null | undefined): Origem {
     const porFonte = origemPelaFonte(fonte, p.get("utm_medium"));
     return { ...porFonte, campanha, pista: `utm_source=${fonte}` };
   }
-  if ((s.fbc || "").trim()) {
+  if (fbcConta(s)) {
     return { id: "meta", rotulo: "Meta Ads", campanha, pista: "Cookie de clique do Meta (fbc)" };
   }
   return { id: "direto", rotulo: "Direto", campanha, pista: "Sem clique de anúncio na chegada" };
@@ -190,7 +203,9 @@ export function origemDaGravada(
   nomes: ReadonlyMap<string, string> = new Map(),
   quando: (iso: string) => string = (iso) => iso
 ): Origem {
-  const plataforma = g.plataforma ?? g.clique;
+  // So a plataforma: o `clique` sozinho e um click id sem hora (ou fora da
+  // janela) -- houve clique, nao que o pedido veio dele.
+  const plataforma = g.plataforma;
   const pagina = g.pagina_entrada;
   const detalheBase = {
     posicionamento: null,
@@ -204,7 +219,9 @@ export function origemDaGravada(
       id: "direto",
       rotulo: "Direto",
       campanha: null,
-      pista: "Visita sem clique de anúncio",
+      pista: g.clique
+        ? `Clique do ${ROTULO_PLATAFORMA[g.clique].replace(/ Ads$/, "")} sem data: não conta`
+        : "Visita sem clique de anúncio",
       detalhe: { campanha: null, conjunto: null, anuncio: null, ...detalheBase },
     };
   }
@@ -764,9 +781,14 @@ function textoDosItens(p: FinOrderRow): string {
  * e o pedido de app de COD sem visita nenhuma (o Releasit nao tem landing,
  * jornada nem atributo) fica "Sem dado" com o motivo, nunca "Direto": o
  * Purchase dele leva a URL da loja sem caminho, que parecia visita direta.
+ *
+ * A gravada SEM anuncio perde para o Purchase que mostra clique: a passada
+ * dos 60 dias grava sem a identidade do visitante, que o Purchase usou. O fbc
+ * do Purchase so conta na janela de 7 dias, a mesma da gravada. E a gravada
+ * sem visita (so um click id sem hora) nao e "Direto": cai na regra antiga.
  */
 export function origemNaTela(
-  p: Pick<FinOrderRow, "tipo" | "origem" | "gateways" | "cod">,
+  p: Pick<FinOrderRow, "tipo" | "origem" | "gateways" | "cod"> & { criado_em?: string | null },
   gravada: OrigemDoPedido | null | undefined,
   compra: Pick<EventoCompra, "fbc" | "url"> | null | undefined,
   nomes: ReadonlyMap<string, string> = new Map(),
@@ -775,8 +797,10 @@ export function origemNaTela(
   if (p.tipo === "reenvio") {
     return { id: "reenvio", rotulo: "Reenvio", campanha: null, pista: "Pedido de valor zero (reenvio ou troca)" };
   }
-  if (gravada) return origemDaGravada(gravada, nomes, quando);
-  const antiga = origemDoPedido(compra ? { fbc: compra.fbc, url: compra.url } : null);
+  if (gravada?.plataforma) return origemDaGravada(gravada, nomes, quando);
+  const antiga = origemDoPedido(compra ? { fbc: compra.fbc, url: compra.url, pedidoEm: p.criado_em } : null);
+  const antigaComClique = antiga.id === "meta" || antiga.id === "google" || antiga.id === "tiktok";
+  if (gravada?.sessao && !antigaComClique) return origemDaGravada(gravada, nomes, quando);
   if ((antiga.id === "direto" || antiga.id === "sem_dado") && pedidoDeApp(p.origem)) {
     const cod = Boolean(p.cod) || (p.gateways ?? []).some(gatewayEhCod);
     return {

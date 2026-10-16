@@ -115,10 +115,18 @@
 
   // ---- 1. o que este visitante tem de click id ----------------------------
   var frescos = {};
+  // O click id da URL que JA estava no cookie e o mesmo clique (recarga,
+  // voltar, aba reaberta dias depois), nao um novo: ver 1e.
+  var mesmoClique = false;
+  var algumNovo = false;
   for (var i = 0; i < CHAVES.length; i++) {
     var daQuery = daUrl(CHAVES[i]);
-    if (daQuery) frescos[CHAVES[i]] = daQuery;
+    if (!daQuery) continue;
+    frescos[CHAVES[i]] = daQuery;
+    if (lerCookie(PREFIXO + CHAVES[i]) === daQuery) mesmoClique = true;
+    else algumNovo = true;
   }
+  if (algumNovo) mesmoClique = false;
 
   // Um clique novo no Google SUBSTITUI o conjunto anterior, nao soma a ele. O
   // Google manda um so dos tres por clique; se o gbraid de hoje convivesse com
@@ -324,14 +332,37 @@
   //
   //   - cookie `_xc_utm` por 7 DIAS (a janela de clique do Meta), nao 90: UTM
   //     velha faria a compra organica de meses depois herdar o anuncio;
-  //   - UTM nova SUBSTITUI o conjunto inteiro: o utm_term de um clique com o
-  //     utm_campaign de outro descreveria um anuncio que nao existe;
-  //   - vai ao carrinho (_xc_utm_* e _xc_utm_em) e em todo evento (`utm`),
-  //     para a identidade do visitante, que o pedido sem atributo consulta.
+  //   - clique NOVO SUBSTITUI o conjunto inteiro: o utm_term de um clique com
+  //     o utm_campaign de outro descreveria um anuncio que nao existe. Clique
+  //     novo e UTM na URL, gad_campaignid ou so um click id (Google so com
+  //     auto-tagging, TikTok sem o modelo): o conjunto guarda a plataforma
+  //     dele (`clique`) com a hora. Sem isso a campanha do clique anterior
+  //     venceria o clique mais novo, e o click id sozinho nao tem hora -- o
+  //     servidor nao deixa click id sem hora dizer a plataforma do pedido;
+  //   - vai ao carrinho (_xc_utm_*, _xc_utm_gad, _xc_utm_clique e
+  //     _xc_utm_em) e em todo evento (`utm`), para a identidade do visitante,
+  //     que o pedido sem atributo consulta.
   //
   // O servidor confere a janela pela hora do clique (_xc_utm_em).
   var UTM = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "utm_id"];
   var DIAS_UTM = 7;
+
+  /** A plataforma do click id da URL. O Google vence, como no servidor. */
+  function cliqueDaUrl() {
+    if (googleNaUrl) return "google";
+    if (frescos.fbclid) return "meta";
+    if (frescos.ttclid) return "tiktok";
+    return null;
+  }
+
+  // A ponte do advertorial repassa o click id com a hora em que ELA viu o
+  // clique (xcart_clique_em): o click id dela pode ser de semanas atras, e sem
+  // isto viraria um clique de agora.
+  function horaDoClique() {
+    var agora = Date.now();
+    var daPonte = Number(daUrl("xcart_clique_em"));
+    return daPonte > 1577836800000 && daPonte <= agora ? daPonte : agora;
+  }
 
   function utmDoClique() {
     var nova = {};
@@ -344,8 +375,24 @@
         temNova = true;
       }
     }
-    if (temNova) {
-      nova.em = Date.now();
+    // O Google acrescenta sozinho, com o id da campanha.
+    var gad = daUrl("gad_campaignid");
+    if (gad && /^\d{5,25}$/.test(gad)) {
+      nova.gad_campaignid = gad;
+      temNova = true;
+    }
+    var clique = cliqueDaUrl();
+    if (clique) {
+      nova.clique = clique;
+      temNova = true;
+    }
+    var em = horaDoClique();
+    // Nao e clique novo: o mesmo click id que ja estava guardado (recarga,
+    // aba reaberta -- a hora fica a de quando ele chegou), ou o que a ponte
+    // repassa com mais de 7 dias. Vale o conjunto guardado, como numa pagina
+    // sem parametro.
+    if (temNova && !mesmoClique && Date.now() - em < DIAS_UTM * 864e5) {
+      nova.em = em;
       gravarCookie(PREFIXO + "utm", JSON.stringify(nova), DIAS_UTM);
       return nova;
     }
@@ -359,13 +406,18 @@
     return null;
   }
 
+  // O conjunto no carrinho: cada chave do cookie e o nome do atributo.
+  var NO_CARRINHO = [["gad_campaignid", "utm_gad"], ["clique", "utm_clique"]];
+  for (var x = 0; x < UTM.length; x++) NO_CARRINHO.push([UTM[x], UTM[x]]);
+
   var UTM_DO_CLIQUE = utmDoClique();
   if (UTM_DO_CLIQUE) {
-    for (var w = 0; w < UTM.length; w++) {
-      var atrUtm = PREFIXO + UTM[w];
+    for (var w = 0; w < NO_CARRINHO.length; w++) {
+      var atrUtm = PREFIXO + NO_CARRINHO[w][1];
+      var valorUtm = UTM_DO_CLIQUE[NO_CARRINHO[w][0]];
       // A chave que o clique nao trouxe sai do carrinho (vazio apaga), em vez
       // de ficar a do clique anterior.
-      if (UTM_DO_CLIQUE[UTM[w]]) achados[atrUtm] = String(UTM_DO_CLIQUE[UTM[w]]);
+      if (valorUtm) achados[atrUtm] = String(valorUtm);
       else limpar[atrUtm] = true;
     }
     achados[PREFIXO + "utm_em"] = String(UTM_DO_CLIQUE.em);

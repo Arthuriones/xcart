@@ -383,6 +383,66 @@ describe("a ponte leva as UTMs ao pedido, com a hora do clique", () => {
     expect(p.has("attributes[_xc_utm_term]")).toBe(false);
     expect(jar._xcb_utm_term ?? "").toBe("");
   });
+
+  it("clique novo so com gclid tambem troca o conjunto: a campanha do clique anterior nao vai", () => {
+    const recente = String(Date.now() - 864e5);
+    const {
+      links: [permalink, produto],
+      jar,
+    } = rodar({
+      url: "https://vsl.com/oferta?gclid=Cj0KCQ&gad_campaignid=21234567890",
+      cookies: { _xcb_utm_source: "fb", _xcb_utm_campaign: "111111", _xcb_utm_em: recente },
+      hrefs: ["https://loja.shop/cart/4567:1", "https://loja.shop/products/x"],
+    });
+    const p = new URL(permalink).searchParams;
+    expect(p.get("attributes[_xc_utm_clique]")).toBe("google");
+    expect(p.get("attributes[_xc_utm_gad]")).toBe("21234567890");
+    expect(p.has("attributes[_xc_utm_campaign]")).toBe(false);
+    expect(Number(p.get("attributes[_xc_utm_em]"))).toBeGreaterThan(Date.now() - 60_000);
+    expect(jar._xcb_utm_campaign ?? "").toBe("");
+    // Na pagina da loja: o gad_campaignid e a hora do clique vao junto.
+    const q = new URL(produto).searchParams;
+    expect(q.get("gad_campaignid")).toBe("21234567890");
+    expect(q.has("utm_campaign")).toBe(false);
+    expect(Number(q.get("xcart_clique_em"))).toBeGreaterThan(Date.now() - 60_000);
+  });
+
+  it("click id de semanas atras repassado a loja leva a hora do clique, e o conjunto vencido nao vai", () => {
+    const velho = String(Date.now() - 20 * 864e5);
+    const {
+      links: [permalink, produto],
+    } = rodar({
+      url: "https://vsl.com/oferta",
+      cookies: { _xcb_gclid: "Cj0VELHO", _xcb_clique: "google", _xcb_utm_em: velho },
+      hrefs: ["https://loja.shop/cart/4567:1", "https://loja.shop/products/x"],
+    });
+    expect(permalink).not.toContain("_xc_utm");
+    const q = new URL(produto).searchParams;
+    expect(q.get("gclid")).toBe("Cj0VELHO");
+    expect(q.get("xcart_clique_em")).toBe(velho);
+  });
+
+  it("recarregar com o mesmo click id nao muda a hora do clique", () => {
+    const antes = String(Date.now() - 2 * 864e5);
+    const {
+      links: [permalink],
+    } = rodar({
+      url: "https://vsl.com/oferta?gclid=Cj0KCQ",
+      cookies: { _xcb_gclid: "Cj0KCQ", _xcb_clique: "google", _xcb_utm_em: antes },
+      hrefs: ["https://loja.shop/cart/4567:1"],
+    });
+    expect(new URL(permalink).searchParams.get("attributes[_xc_utm_em]")).toBe(antes);
+  });
+
+  it("o coletor recebe o conjunto do clique (vai para a identidade)", () => {
+    const { envios } = rodar({
+      url: "https://vsl.com/oferta?fbclid=ABC123&utm_source=fb&utm_campaign=111111",
+      hrefs: [],
+      tag: { "data-xcart-store": "11111111-2222-3333-4444-555555555555", "data-xcart-shop": "loja-x.myshopify.com" },
+    });
+    expect(envios[0].corpo.utm).toMatchObject({ utm_source: "fb", utm_campaign: "111111", clique: "meta" });
+    expect(typeof (envios[0].corpo.utm as Record<string, unknown>).em).toBe("number");
+  });
 });
 });
 

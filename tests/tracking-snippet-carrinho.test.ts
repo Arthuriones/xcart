@@ -719,6 +719,57 @@ describe("UTMs do anuncio ate o pedido", () => {
     expect(attrs).not.toHaveProperty("_xc_utm_content");
   });
 
+  it("clique novo so com gclid (auto-tagging) troca o conjunto: a campanha do Meta nao vence o Google", async () => {
+    const nav = navegador();
+    abrir(nav, META);
+    await assentar();
+    const p = abrir(nav, "https://loja.test/products/outra?gclid=Cj0KCQ&gad_campaignid=21234567890");
+    await assentar();
+    const attrs = (nav.carrinho as Carrinho).attributes;
+    expect(attrs._xc_utm_clique).toBe("google");
+    expect(attrs._xc_utm_gad).toBe("21234567890");
+    for (const k of ["_xc_utm_source", "_xc_utm_campaign", "_xc_utm_content", "_xc_utm_term", "_xc_utm_id"]) {
+      expect(attrs).not.toHaveProperty(k);
+    }
+    expect(corpo(p.beacons[0]).utm).toMatchObject({ clique: "google", gad_campaignid: "21234567890" });
+    expect(JSON.parse(p.cookie("_xc_utm") ?? "null")).not.toHaveProperty("utm_campaign");
+    // O pedido sem sessao (app de COD) sai com o Google, pelo carrinho.
+    const pedido = { ...comoPedido(nav), created_at: new Date().toISOString() };
+    expect(origemDoWebhook(pedido, null)).toMatchObject({ plataforma: "google", campanha_id: "21234567890" });
+  });
+
+  it("o mesmo click id de novo (recarga, aba reaberta) nao e clique novo: a hora fica a da chegada", async () => {
+    const nav = navegador();
+    const chegada = abrir(nav, "https://loja.test/products/camisa?gclid=Cj0KCQ");
+    await assentar();
+    const em = JSON.parse(chegada.cookie("_xc_utm") ?? "null").em;
+    // Um clique do Meta depois, e a aba velha do Google reaberta.
+    abrir(nav, META);
+    await assentar();
+    abrir(nav, "https://loja.test/products/camisa?gclid=Cj0KCQ");
+    await assentar();
+    expect((nav.carrinho as Carrinho).attributes).toMatchObject({ _xc_utm_clique: "meta", _xc_utm_campaign: "111111" });
+    expect(typeof em).toBe("number");
+  });
+
+  it("click id repassado pela ponte com a hora do clique: de semanas atras nao vira clique novo", async () => {
+    const nav = navegador();
+    abrir(nav, META);
+    await assentar();
+    const velho = Date.now() - 20 * 864e5;
+    abrir(nav, `https://loja.test/products/camisa?gclid=Cj0KCQ&xcart_clique_em=${velho}`);
+    await assentar();
+    const attrs = (nav.carrinho as Carrinho).attributes;
+    // Ficou o conjunto do clique do Meta (o fbclid do META), nao o do gclid repassado.
+    expect(attrs._xc_utm_campaign).toBe("111111");
+    expect(attrs._xc_utm_clique).toBe("meta");
+    // Outro clique, recente: vale, com a hora que a ponte viu.
+    const recente = Date.now() - 864e5;
+    abrir(nav, `https://loja.test/products/camisa?gclid=Cj0NOVO&xcart_clique_em=${recente}`);
+    await assentar();
+    expect((nav.carrinho as Carrinho).attributes).toMatchObject({ _xc_utm_clique: "google", _xc_utm_em: String(recente) });
+  });
+
   it("cookie de mais de 7 dias nao vale: o evento sai sem UTM", async () => {
     const velha = JSON.stringify({ utm_source: "fb", utm_campaign: "111111", em: Date.now() - 8 * 864e5 });
     const nav = navegador({ cookies: new Map([["_xc_utm", encodeURIComponent(velha)]]) });
