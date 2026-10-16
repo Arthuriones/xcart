@@ -16,6 +16,7 @@ import { MAX_TTCLID, montarFbc, montarUserData, montarUserTiktok } from "@/lib/t
 import { montarEventoDeFunilTiktok } from "@/lib/tracking/tiktok-evento";
 import { JANELA_PIXEL_CHECKOUT_MS } from "@/lib/tracking/google-tag";
 import { hashDoIp, ipDaRequisicao } from "@/lib/tracking/ip-balde";
+import { utmDaPagina, utmDoCorpo } from "@/lib/tracking/utm";
 
 export const runtime = "nodejs";
 
@@ -222,6 +223,12 @@ export async function POST(request: NextRequest) {
     teste?: boolean | null;
     /** 'concedido' | 'negado', da Customer Privacy API da Shopify. */
     consentimento?: string | null;
+    /**
+     * As UTMs do ultimo clique em anuncio que o snippet guardou (cookie
+     * `_xc_utm`, 7 dias): `{utm_source, ..., em}`. So vao para a identidade --
+     * sao a origem do pedido (migration 071), nunca payload de plataforma.
+     */
+    utm?: unknown;
   };
   // Teto de tamanho ANTES do parse. O endpoint e publico, o payload vira
   // linha de banco, e linha 'falhou' fica 30 dias: um POST de MBs repetido
@@ -428,6 +435,15 @@ export async function POST(request: NextRequest) {
   let ttclid = ttclidBruto && ttclidBruto.length <= MAX_TTCLID ? ttclidBruto : null;
   let ttp = (typeof corpo.ttp === "string" ? corpo.ttp : "").trim().slice(0, 100) || null;
 
+  // As UTMs do clique, para a origem do pedido. O snippet manda as do cookie
+  // (com a hora do clique); o antigo, que nao manda, ainda leva a URL da
+  // pagina -- e na pagina de chegada as UTMs estao nela. So chaves conhecidas,
+  // cortadas, sem "@" (utm.ts).
+  const agoraMs = Date.now();
+  const utmDoClique =
+    utmDoCorpo(corpo.utm, agoraMs) ??
+    utmDaPagina(typeof corpo.pageUrl === "string" ? corpo.pageUrl.slice(0, 500) : null, agoraMs);
+
   /**
    * Grava a associacao visitante -> click ids.
    *
@@ -436,7 +452,7 @@ export async function POST(request: NextRequest) {
    * inventado e uma linha nova -- por isso o teto de identidades NOVAS por
    * hora, por IP e por loja. Estourado, so atualiza quem ja existe.
    */
-  async function publicarIdentidade(semTtp = false, semIp = false): Promise<void> {
+  async function publicarIdentidade(semTtp = false, semIp = false, semUtm = false): Promise<void> {
     const campos = {
       shopify_client_id: clientId,
       gclid: clique.gclid,
@@ -450,6 +466,10 @@ export async function POST(request: NextRequest) {
       // So quando existe: a coluna nasceu na 059. Sem o valor, a escrita nem
       // cita a coluna.
       ...(ttp && !semTtp ? { ttp } : {}),
+      // As UTMs (071) tambem so quando vieram, e ao contrario dos click ids
+      // NUNCA com null: o evento seguinte, numa pagina sem UTM, apagaria a
+      // campanha do clique que trouxe o visitante.
+      ...(utmDoClique && !semUtm ? { utm: utmDoClique.utm, utm_em: utmDoClique.em } : {}),
       updated_at: new Date().toISOString(),
     };
 
@@ -461,10 +481,12 @@ export async function POST(request: NextRequest) {
       .eq("store_id", registro.id)
       .eq("visitor_id", visitorId)
       .select("id");
-    // Sem a coluna `ttp` (059 ainda nao aplicada) o PostgREST recusa a escrita
-    // INTEIRA. De novo sem ela, ja aqui: o clique do Meta e do Google nao pode
-    // cair por causa do cookie do TikTok, nem pagar contagem e upsert com erro.
-    if (erroUpdate && "ttp" in campos) return publicarIdentidade(true, semIp);
+    // Sem a coluna `utm` (071 ainda nao aplicada) ou `ttp` (059) o PostgREST
+    // recusa a escrita INTEIRA. De novo sem ela, ja aqui: o clique do Meta e
+    // do Google nao pode cair por causa da UTM ou do cookie do TikTok, nem
+    // pagar contagem e upsert com erro. Uma coluna por vez: a UTM primeiro.
+    if (erroUpdate && "utm" in campos) return publicarIdentidade(semTtp, semIp, true);
+    if (erroUpdate && "ttp" in campos) return publicarIdentidade(true, semIp, semUtm);
     if (!erroUpdate && existente && existente.length > 0) return;
 
     // Linha NOVA: conta as que nasceram na ultima hora, na loja e deste IP.
@@ -507,10 +529,11 @@ export async function POST(request: NextRequest) {
     );
     // Sem a coluna `ip_hash` (065 ainda nao aplicada): de novo sem ela.
     if (erroUpsert && comIp && /ip_hash/.test(erroUpsert.message)) {
-      return publicarIdentidade(semTtp, true);
+      return publicarIdentidade(semTtp, true, semUtm);
     }
-    // Segunda rede do caso do `ttp`, se o update passou e o upsert nao.
-    if (erroUpsert && "ttp" in campos) return publicarIdentidade(true, semIp);
+    // Segunda rede dos casos da `utm` e do `ttp`, se o update passou e o upsert nao.
+    if (erroUpsert && "utm" in campos) return publicarIdentidade(semTtp, semIp, true);
+    if (erroUpsert && "ttp" in campos) return publicarIdentidade(true, semIp, semUtm);
   }
 
   // O aviso de identidade termina aqui: sem fila, sem destino, sem conversao.

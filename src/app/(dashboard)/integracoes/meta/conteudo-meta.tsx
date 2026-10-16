@@ -6,6 +6,7 @@ import { CabecalhoPlataforma } from "../cabecalho-plataforma";
 import { ContasTabela } from "../contas-tabela";
 import type { DadosAnuncios } from "../dados-anuncios";
 import { EnvioCompras } from "../envio-compras";
+import { ParametrosUrl } from "../parametros-url";
 import { estadoTokenMeta } from "../regras";
 import { Callout } from "@/components/ui/callout";
 import { CardPerfilMeta } from "./card-perfil-meta";
@@ -70,6 +71,9 @@ export function ConteudoMeta({ d }: { d: DadosAnuncios }) {
 
           {/* Envio de compras ao Pixel / CAPI */}
           <EnvioCompras plataforma="meta" destinos={d.destinos} lojas={d.lojas} erro={d.erroDestinos} />
+
+          {/* Campanha, conjunto e anuncio em cada pedido */}
+          <ParametrosUrl plataforma="meta" />
 
           {/* Tabela de contas de anuncio para vincular as lojas */}
           {temContas && (

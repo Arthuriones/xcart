@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import { marcasDoPedido } from "../src/lib/tracking/teste";
+import { origemDoWebhook } from "../src/lib/tracking/origem-pedido";
 
 // ============================================================================
 // O snippet do tema e o carrinho.
@@ -648,5 +649,105 @@ describe("consentimento pela Customer Privacy API", () => {
     await assentar();
     expect(p.beacons).toHaveLength(1);
     expect(p.beacons[0]).not.toHaveProperty("consentimento");
+  });
+});
+
+// ============================================================================
+// As UTMs do anuncio (secao 1e): cookie de 7 dias com a hora do clique, todo
+// evento leva, e o carrinho tambem -- e do carrinho o pedido sai com a
+// campanha, o conjunto e o anuncio (origem-pedido.ts).
+// ============================================================================
+
+describe("UTMs do anuncio ate o pedido", () => {
+  const META =
+    "https://loja.test/products/camisa?fbclid=F1&utm_medium=paid&utm_source=fb&utm_id=111111&utm_content=333333&utm_term=222222&utm_campaign=111111";
+  const corpo = (b: unknown) => b as Record<string, unknown> & { utm?: Record<string, unknown> };
+
+  it("na chegada: cookie, evento e carrinho com os tres ids e a hora", async () => {
+    const nav = navegador();
+    const p = abrir(nav, META);
+    await assentar();
+    const guardada = JSON.parse(p.cookie("_xc_utm") ?? "null");
+    expect(guardada).toMatchObject({ utm_campaign: "111111", utm_term: "222222", utm_content: "333333" });
+    expect(typeof guardada.em).toBe("number");
+    expect(corpo(p.beacons[0]).utm).toMatchObject({ utm_source: "fb", utm_campaign: "111111", em: guardada.em });
+    const attrs = (nav.carrinho as Carrinho).attributes;
+    expect(attrs).toMatchObject({
+      _xc_utm_source: "fb",
+      _xc_utm_medium: "paid",
+      _xc_utm_campaign: "111111",
+      _xc_utm_content: "333333",
+      _xc_utm_term: "222222",
+      _xc_utm_id: "111111",
+      _xc_utm_em: String(guardada.em),
+    });
+
+    // E o pedido que nasce deste carrinho sai com a origem.
+    const pedido = { ...comoPedido(nav), created_at: new Date().toISOString() };
+    expect(origemDoWebhook(pedido, null)).toMatchObject({
+      fonte: "atributo",
+      plataforma: "meta",
+      campanha_id: "111111",
+      conjunto_id: "222222",
+      anuncio_id: "333333",
+    });
+  });
+
+  it("pagina seguinte sem UTM: o evento leva a do cookie e o carrinho nao e reescrito", async () => {
+    const nav = navegador();
+    abrir(nav, META);
+    await assentar();
+    const colecao = abrir(nav, "https://loja.test/collections/all");
+    await assentar();
+    expect(colecao.updates).toHaveLength(0);
+    const produto = abrir(nav, "https://loja.test/products/outra");
+    await assentar();
+    expect(corpo(produto.beacons[0]).utm).toMatchObject({ utm_campaign: "111111" });
+    expect(produto.updates).toHaveLength(0);
+  });
+
+  it("clique novo troca o conjunto inteiro: a chave que ele nao trouxe sai do carrinho", async () => {
+    const nav = navegador();
+    abrir(nav, META);
+    await assentar();
+    abrir(nav, "https://loja.test/products/camisa?utm_source=tiktok&utm_campaign=999999");
+    await assentar();
+    const attrs = (nav.carrinho as Carrinho).attributes;
+    expect(attrs._xc_utm_source).toBe("tiktok");
+    expect(attrs._xc_utm_campaign).toBe("999999");
+    expect(attrs).not.toHaveProperty("_xc_utm_term");
+    expect(attrs).not.toHaveProperty("_xc_utm_content");
+  });
+
+  it("cookie de mais de 7 dias nao vale: o evento sai sem UTM", async () => {
+    const velha = JSON.stringify({ utm_source: "fb", utm_campaign: "111111", em: Date.now() - 8 * 864e5 });
+    const nav = navegador({ cookies: new Map([["_xc_utm", encodeURIComponent(velha)]]) });
+    const p = abrir(nav);
+    await assentar();
+    expect(corpo(p.beacons[0])).not.toHaveProperty("utm");
+    expect((nav.carrinho as Carrinho).attributes).not.toHaveProperty("_xc_utm_campaign");
+  });
+
+  it("visita sem UTM nenhuma: nada de _xc_utm no carrinho nem no evento", async () => {
+    const nav = navegador();
+    const p = abrir(nav);
+    await assentar();
+    expect(corpo(p.beacons[0])).not.toHaveProperty("utm");
+    expect(Object.keys((nav.carrinho as Carrinho).attributes).some((k) => k.startsWith("_xc_utm"))).toBe(false);
+  });
+
+  it("UTM com e-mail (link de campanha de e-mail) nao vai ao cookie, ao evento nem ao carrinho", async () => {
+    const nav = navegador();
+    const p = abrir(nav, "https://loja.test/products/camisa?utm_source=klaviyo&utm_term=ana%40exemplo.com");
+    await assentar();
+    expect(p.cookie("_xc_utm") ?? "").not.toContain("exemplo.com");
+    expect(corpo(p.beacons[0]).utm).toEqual({ utm_source: "klaviyo", em: expect.any(Number) });
+    expect(JSON.stringify((nav.carrinho as Carrinho).attributes)).not.toContain("exemplo.com");
+    expect((nav.carrinho as Carrinho).attributes._xc_utm_source).toBe("klaviyo");
+  });
+
+  it("o aviso de identidade tambem leva a UTM (sai antes do clientId existir)", () => {
+    const trecho = fonte.slice(fonte.indexOf("function identidadeDe("));
+    expect(trecho.slice(0, 1200)).toMatch(/utm: UTM_DO_CLIQUE \|\| undefined/);
   });
 });

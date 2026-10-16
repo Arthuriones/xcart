@@ -24,6 +24,8 @@ import {
   type ProductCostRow,
 } from "@/lib/financeiro/tipos";
 import { motivoParaIgnorarPedido } from "@/lib/tracking/filtro-pedido";
+import type { FonteOrigem, OrigemDoPedido } from "@/lib/tracking/origem-pedido";
+import { FONTES_GOOGLE, FONTES_META, FONTES_TIKTOK, nomesDaUtm } from "@/lib/tracking/utm";
 
 // ============================================================================
 // Tela Pedidos: um pedido por linha, com o lucro dele, de onde veio e se a
@@ -35,10 +37,13 @@ import { motivoParaIgnorarPedido } from "@/lib/tracking/filtro-pedido";
 // a pedido: receita - produto e frete do fornecedor - taxa de pagamento. Sem o
 // anuncio: o gasto e por conta e por dia, nao por pedido.
 //
+// A ORIGEM vem da que foi gravada no pedido (fin_order_origem, 071): a
+// plataforma, a campanha, o conjunto e o anuncio, com o nome quando o sync de
+// gasto ja trouxe. Pedido de antes da 071 (ou sem ela) cai no Purchase da
+// fila, como antes: so a URL de chegada e o cookie do Meta.
+//
 // O que o banco NAO tem fica de fora, nao inventado:
 //   - nome do produto (fin_orders.linhas guarda so o SKU);
-//   - origem de loja sem pixel do Meta: a origem vem do Purchase que o webhook
-//     grava (fbc e URL de chegada), e so o Meta sai do servidor;
 //   - se a compra chegou no Google: ela sai pela tag no navegador.
 // ============================================================================
 
@@ -46,16 +51,40 @@ import { motivoParaIgnorarPedido } from "@/lib/tracking/filtro-pedido";
 // Origem
 // ---------------------------------------------------------------------------
 
-export type OrigemId = "meta" | "google" | "email" | "outra" | "direto" | "sem_dado" | "reenvio";
+export type OrigemId = "meta" | "google" | "tiktok" | "email" | "outra" | "direto" | "sem_dado" | "reenvio";
+
+/** Um nivel do anuncio: o id da plataforma e o nome, quando se sabe. */
+export interface NivelAnuncio {
+  id: string | null;
+  nome: string | null;
+}
+
+/** O detalhe da origem gravada no pedido. */
+export interface DetalheOrigem {
+  campanha: NivelAnuncio | null;
+  conjunto: NivelAnuncio | null;
+  anuncio: NivelAnuncio | null;
+  /** utm_term quando nao e o conjunto. */
+  posicionamento: string | null;
+  /** "Palavra-chave" no Google, "Posicionamento" no resto. */
+  rotuloPosicionamento: string;
+  /** Caminho da pagina de entrada. */
+  pagina: string | null;
+  /** Hora do clique ou da visita, curta, no fuso da loja. */
+  quando: string | null;
+  fonte: FonteOrigem;
+}
 
 export interface Origem {
   id: OrigemId;
-  /** "Meta Ads", "Google Ads", "E-mail", "tiktok", "Direto", "Sem dado". */
+  /** "Meta Ads", "Google Ads", "TikTok Ads", "E-mail", "klaviyo", "Direto", "Sem dado". */
   rotulo: string;
-  /** utm_campaign, decodificado. */
+  /** A campanha: o nome, ou o id, ou o utm_campaign decodificado. */
   campanha: string | null;
   /** Como se sabe: vai para o detalhe. */
   pista: string;
+  /** So na origem gravada no pedido (071). */
+  detalhe?: DetalheOrigem | null;
 }
 
 /** O que o Purchase do pedido guardou: o cookie de clique e a URL de chegada. */
@@ -64,8 +93,9 @@ export interface SinaisDeOrigem {
   url?: string | null;
 }
 
-const FONTES_META = new Set(["facebook", "fb", "ig", "instagram", "meta", "facebook_ads", "fbads", "an", "messenger"]);
-const FONTES_GOOGLE = new Set(["google", "adwords", "googleads", "google_ads", "youtube"]);
+/** Uma linha de fin_order_origem, como a tela le. */
+export type OrigemGravada = OrigemDoPedido & { store_id: string; shopify_order_id: string };
+
 const FONTES_EMAIL = new Set(["email", "e-mail", "klaviyo", "newsletter", "mail", "omnisend", "mailchimp"]);
 
 function decodificar(v: string | null): string | null {
@@ -105,21 +135,105 @@ export function origemDoPedido(s: SinaisDeOrigem | null | undefined): Origem {
   if (p.get("fbclid")) {
     return { id: "meta", rotulo: "Meta Ads", campanha, pista: "Clique do Meta na URL de chegada" };
   }
+  if (p.get("ttclid")) {
+    return { id: "tiktok", rotulo: "TikTok Ads", campanha, pista: "Clique do TikTok na URL de chegada" };
+  }
   const fonte = decodificar(p.get("utm_source"));
-  const chave = (fonte || "").toLowerCase();
-  const meio = (p.get("utm_medium") || "").toLowerCase();
   if (fonte) {
-    if (FONTES_META.has(chave)) return { id: "meta", rotulo: "Meta Ads", campanha, pista: `utm_source=${fonte}` };
-    if (FONTES_GOOGLE.has(chave)) return { id: "google", rotulo: "Google Ads", campanha, pista: `utm_source=${fonte}` };
-    if (FONTES_EMAIL.has(chave) || meio === "email") {
-      return { id: "email", rotulo: "E-mail", campanha, pista: `utm_source=${fonte}` };
-    }
-    return { id: "outra", rotulo: fonte, campanha, pista: `utm_source=${fonte}` };
+    const porFonte = origemPelaFonte(fonte, p.get("utm_medium"));
+    return { ...porFonte, campanha, pista: `utm_source=${fonte}` };
   }
   if ((s.fbc || "").trim()) {
     return { id: "meta", rotulo: "Meta Ads", campanha, pista: "Cookie de clique do Meta (fbc)" };
   }
   return { id: "direto", rotulo: "Direto", campanha, pista: "Sem clique de anúncio na chegada" };
+}
+
+const ROTULO_PLATAFORMA = { meta: "Meta Ads", google: "Google Ads", tiktok: "TikTok Ads" } as const;
+
+/** utm_source -> plataforma de anuncio, e-mail ou "outra" (com a propria fonte de rotulo). */
+function origemPelaFonte(fonte: string, meio: string | null | undefined): Pick<Origem, "id" | "rotulo"> {
+  const chave = fonte.trim().toLowerCase();
+  if (FONTES_META.has(chave)) return { id: "meta", rotulo: ROTULO_PLATAFORMA.meta };
+  if (FONTES_GOOGLE.has(chave)) return { id: "google", rotulo: ROTULO_PLATAFORMA.google };
+  if (FONTES_TIKTOK.has(chave)) return { id: "tiktok", rotulo: ROTULO_PLATAFORMA.tiktok };
+  if (FONTES_EMAIL.has(chave) || (meio || "").trim().toLowerCase() === "email") return { id: "email", rotulo: "E-mail" };
+  return { id: "outra", rotulo: fonte };
+}
+
+/** Pedido criado por app (o source_name e o id numerico do app: o Releasit e 5690175). */
+export function pedidoDeApp(origem: string | null | undefined): boolean {
+  return /^\d+$/.test(String(origem ?? "").trim());
+}
+
+/** Como a origem foi achada, curto, para o detalhe. */
+function pistaDaFonte(o: Pick<OrigemDoPedido, "fonte" | "sessao">): string {
+  switch (o.fonte) {
+    case "jornada":
+      return "Pela jornada da Shopify";
+    case "landing":
+      return "Pelo link de chegada";
+    case "atributo":
+      return o.sessao ? "Pelo app do pedido" : "Pelo carrinho";
+    default:
+      return "Por uma visita anterior";
+  }
+}
+
+/**
+ * A origem gravada no pedido (071), para a tela. Os nomes de campanha,
+ * conjunto e anuncio vem do sync de gasto (`nomes`, por id); sem eles, o que a
+ * propria UTM trouxe ("nome|id"); sem nada, so o id.
+ */
+export function origemDaGravada(
+  g: OrigemDoPedido,
+  nomes: ReadonlyMap<string, string> = new Map(),
+  quando: (iso: string) => string = (iso) => iso
+): Origem {
+  const plataforma = g.plataforma ?? g.clique;
+  const pagina = g.pagina_entrada;
+  const detalheBase = {
+    posicionamento: null,
+    rotuloPosicionamento: "Posicionamento",
+    pagina,
+    quando: g.toque_em ? quando(g.toque_em) : null,
+    fonte: g.fonte,
+  };
+  if (!plataforma) {
+    return {
+      id: "direto",
+      rotulo: "Direto",
+      campanha: null,
+      pista: "Visita sem clique de anúncio",
+      detalhe: { campanha: null, conjunto: null, anuncio: null, ...detalheBase },
+    };
+  }
+  const utmNomes = nomesDaUtm({
+    campaign: g.utm_campaign,
+    medium: g.utm_medium,
+    content: g.utm_content,
+  });
+  const nivel = (id: string | null, nomeUtm: string | null): NivelAnuncio | null =>
+    id || nomeUtm ? { id, nome: (id && nomes.get(id)) || nomeUtm } : null;
+  const detalhe: DetalheOrigem = {
+    ...detalheBase,
+    campanha: nivel(g.campanha_id, utmNomes.campanha),
+    conjunto: nivel(g.conjunto_id, utmNomes.conjunto),
+    anuncio: nivel(g.anuncio_id, utmNomes.anuncio),
+    posicionamento: g.posicionamento,
+    rotuloPosicionamento: plataforma === "google" ? "Palavra-chave" : "Posicionamento",
+  };
+  const base: Pick<Origem, "id" | "rotulo"> =
+    plataforma === "outra"
+      ? origemPelaFonte(g.utm_source ?? "Outra", g.utm_medium)
+      : { id: plataforma, rotulo: ROTULO_PLATAFORMA[plataforma] };
+  const semUtm = !g.utm_source && !g.utm_campaign && !g.campanha_id;
+  return {
+    ...base,
+    campanha: detalhe.campanha ? (detalhe.campanha.nome ?? detalhe.campanha.id) : null,
+    pista: semUtm && plataforma !== "outra" ? `Clique do ${base.rotulo.replace(/ Ads$/, "")} sem UTM` : pistaDaFonte(g),
+    detalhe,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -619,6 +733,10 @@ export interface EntradaPedidos {
   /** Lojas com o rastreamento ligado (tracking_configs.enabled). */
   lojasLigadas: string[];
   agoraMs: number;
+  /** A origem gravada no pedido (fin_order_origem, 071). Vazio sem a migration. */
+  origens?: OrigemGravada[];
+  /** Nome de campanha, conjunto e anuncio por id, do sync de gasto. */
+  nomesAnuncio?: Record<string, string>;
 }
 
 function primeiroCriado(datas: string[]): string | null {
@@ -638,6 +756,37 @@ function textoDosItens(p: FinOrderRow): string {
   const linhas = Array.isArray(p.linhas) ? p.linhas : [];
   if (!linhas.length) return "—";
   return linhas.map((l) => `${paraNumero(l.qtd)}× ${chaveSku(l.sku) || "sem SKU"}`).join(", ");
+}
+
+/**
+ * A origem que a tela mostra: a gravada no pedido (071) primeiro; sem ela, a
+ * do Purchase da fila, como antes. "Sem dado" so quando nao ha nada mesmo --
+ * e o pedido de app de COD sem visita nenhuma (o Releasit nao tem landing,
+ * jornada nem atributo) fica "Sem dado" com o motivo, nunca "Direto": o
+ * Purchase dele leva a URL da loja sem caminho, que parecia visita direta.
+ */
+export function origemNaTela(
+  p: Pick<FinOrderRow, "tipo" | "origem" | "gateways" | "cod">,
+  gravada: OrigemDoPedido | null | undefined,
+  compra: Pick<EventoCompra, "fbc" | "url"> | null | undefined,
+  nomes: ReadonlyMap<string, string> = new Map(),
+  quando: (iso: string) => string = (iso) => iso
+): Origem {
+  if (p.tipo === "reenvio") {
+    return { id: "reenvio", rotulo: "Reenvio", campanha: null, pista: "Pedido de valor zero (reenvio ou troca)" };
+  }
+  if (gravada) return origemDaGravada(gravada, nomes, quando);
+  const antiga = origemDoPedido(compra ? { fbc: compra.fbc, url: compra.url } : null);
+  if ((antiga.id === "direto" || antiga.id === "sem_dado") && pedidoDeApp(p.origem)) {
+    const cod = Boolean(p.cod) || (p.gateways ?? []).some(gatewayEhCod);
+    return {
+      id: "sem_dado",
+      rotulo: "Sem dado",
+      campanha: null,
+      pista: `Pedido de app${cod ? " (COD)" : ""} sem visita registrada`,
+    };
+  }
+  return antiga;
 }
 
 export function montarPedidos(e: EntradaPedidos): { pedidos: PedidoTela[]; resumo: ResumoPedidos } {
@@ -686,6 +835,9 @@ export function montarPedidos(e: EntradaPedidos): { pedidos: PedidoTela[]; resum
     lista.push(ev);
     eventosPorPedido.set(chave, lista);
   }
+
+  const origemPorPedido = new Map((e.origens ?? []).map((o) => [`${o.store_id}:${o.shopify_order_id}`, o]));
+  const nomesAnuncio = new Map(Object.entries(e.nomesAnuncio ?? {}));
 
   const nomeDestino = new Map(e.destinos.map((d) => [d.id, d.nome]));
   const desdeDe = (lojaId: string, plataforma: DestinoLoja["plataforma"]) =>
@@ -775,11 +927,13 @@ export function montarPedidos(e: EntradaPedidos): { pedidos: PedidoTela[]; resum
       teste,
     });
 
-    const comSinal = todos.find((ev) => ev.url || ev.fbc) ?? todos[0];
-    const origem: Origem =
-      p.tipo === "reenvio"
-        ? { id: "reenvio", rotulo: "Reenvio", campanha: null, pista: "Pedido de valor zero (reenvio ou troca)" }
-        : origemDoPedido(comSinal ? { fbc: comSinal.fbc, url: comSinal.url } : null);
+    const origem = origemNaTela(
+      p,
+      origemPorPedido.get(chave),
+      todos.find((ev) => ev.url || ev.fbc) ?? todos[0],
+      nomesAnuncio,
+      quando.curto
+    );
 
     const envios = todos.map((ev) => {
       const envio: EnvioTela = {

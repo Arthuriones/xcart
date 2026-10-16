@@ -7,11 +7,13 @@ import {
   estadoMeta,
   montarPedidos,
   origemDoPedido,
+  origemNaTela,
   quandoCurto,
   statusDoPedido,
   urlNaShopify,
   valoresDoPedido,
   type EventoCompra,
+  type OrigemGravada,
 } from "@/lib/leitura/pedidos";
 import {
   CABECALHO_CSV,
@@ -144,7 +146,15 @@ describe("origemDoPedido", () => {
     expect(origemDoPedido({ url: "https://loja.com/?utm_source=google" }).id).toBe("google");
     expect(origemDoPedido({ url: "https://loja.com/?utm_source=klaviyo" }).id).toBe("email");
     expect(origemDoPedido({ url: "https://loja.com/?utm_source=x&utm_medium=email" }).id).toBe("email");
-    expect(origemDoPedido({ url: "https://loja.com/?utm_source=tiktok" })).toMatchObject({ id: "outra", rotulo: "tiktok" });
+    expect(origemDoPedido({ url: "https://loja.com/?utm_source=tiktok" })).toMatchObject({ id: "tiktok", rotulo: "TikTok Ads" });
+    expect(origemDoPedido({ url: "https://loja.com/?utm_source=pinterest" })).toMatchObject({ id: "outra", rotulo: "pinterest" });
+  });
+
+  it("clique do TikTok (ttclid) sem UTM nao vira Direto", () => {
+    expect(origemDoPedido({ url: "https://loja.com/p?ttclid=E.C.P.abc" })).toMatchObject({
+      id: "tiktok",
+      pista: "Clique do TikTok na URL de chegada",
+    });
   });
 
   it("so o cookie de clique do Meta: Meta", () => {
@@ -511,5 +521,205 @@ describe("pecas de tela", () => {
     expect(quandoCurto("2026-10-04T13:05:00Z", "America/Sao_Paulo", HOJE)).toBe("Hoje, 10:05");
     expect(quandoCurto("2026-10-04T02:00:00Z", "America/Sao_Paulo", HOJE)).toBe("Ontem, 23:00");
     expect(quandoCurto("2026-10-01T12:00:00Z", "America/Sao_Paulo", HOJE)).toBe("01/10, 09:00");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Origem gravada no pedido (fin_order_origem, 071)
+// ---------------------------------------------------------------------------
+
+describe("origem gravada no pedido", () => {
+  const CAMP = "120252293723770706";
+  const CONJ = "120252293728570706";
+  const ANUN = "120252293729160706";
+
+  function gravada(shopify_order_id: string, o: Partial<OrigemGravada> = {}): OrigemGravada {
+    return {
+      store_id: LOJA,
+      shopify_order_id,
+      fonte: "jornada",
+      sessao: true,
+      plataforma: "meta",
+      clique: "meta",
+      utm_source: "fb",
+      utm_medium: "paid",
+      utm_campaign: CAMP,
+      utm_content: ANUN,
+      utm_term: CONJ,
+      campanha_id: CAMP,
+      conjunto_id: CONJ,
+      anuncio_id: ANUN,
+      posicionamento: null,
+      toque_em: "2026-10-03T14:50:00Z",
+      pagina_entrada: "/products/blanket",
+      ...o,
+    };
+  }
+
+  function montar(pedidos: FinOrderRow[], extra: Partial<Parameters<typeof montarPedidos>[0]> = {}) {
+    const e = entrada(pedidos);
+    return montarPedidos({
+      entrada: e,
+      lojas: e.lojas,
+      fuso: "America/Sao_Paulo",
+      eventos: [],
+      destinos: [],
+      lojasLigadas: [],
+      agoraMs: AGORA,
+      ...extra,
+    }).pedidos;
+  }
+
+  it("loja sem pixel do Meta: a origem gravada vale, nunca 'Sem dado'", () => {
+    const p = pedido();
+    const [pt] = montar([p], {
+      origens: [gravada(p.shopify_order_id)],
+      nomesAnuncio: { [CAMP]: "CBO Mantas" },
+    });
+    expect(pt.origem).toMatchObject({ id: "meta", rotulo: "Meta Ads", campanha: "CBO Mantas", pista: "Pela jornada da Shopify" });
+    expect(pt.origem.detalhe).toMatchObject({
+      campanha: { id: CAMP, nome: "CBO Mantas" },
+      conjunto: { id: CONJ, nome: null },
+      anuncio: { id: ANUN, nome: null },
+      pagina: "/products/blanket",
+      quando: "Ontem, 11:50",
+    });
+    // Jornada: nome quando ha, o fim do id quando nao.
+    const [clique] = jornadaDoPedido(pt, String);
+    expect(clique).toMatchObject({
+      titulo: "Clique no anúncio · Meta Ads",
+      detalhe: "Campanha CBO Mantas · Conjunto …570706 · Anúncio …160706",
+      hora: "Ontem, 11:50",
+      marca: "meta",
+    });
+    // Planilha: o id inteiro (e por ele que se acha no gerenciador).
+    const l = linhaCsv(pt);
+    expect(l[CABECALHO_CSV.indexOf("Campanha")]).toBe("CBO Mantas");
+    expect(l[CABECALHO_CSV.indexOf("Conjunto")]).toBe(CONJ);
+    expect(l[CABECALHO_CSV.indexOf("Anúncio")]).toBe(ANUN);
+  });
+
+  it("a gravada vence o Purchase da fila", () => {
+    const p = pedido();
+    const [pt] = montar([p], {
+      eventos: [evento(p.shopify_order_id, { url: "https://loja.com/?utm_source=google&utm_campaign=velha" })],
+      origens: [gravada(p.shopify_order_id)],
+    });
+    expect(pt.origem.id).toBe("meta");
+  });
+
+  it("formato Utmify sem nome do sync: o nome vem da propria UTM", () => {
+    const p = pedido();
+    const [pt] = montar([p], {
+      origens: [
+        gravada(p.shopify_order_id, {
+          utm_campaign: `Escala|${CAMP}`,
+          utm_medium: `Publico frio|${CONJ}`,
+          utm_content: `Video 3|${ANUN}`,
+          utm_term: "Instagram_Reels",
+          posicionamento: "Instagram_Reels",
+        }),
+      ],
+    });
+    expect(pt.origem.detalhe).toMatchObject({
+      campanha: { id: CAMP, nome: "Escala" },
+      conjunto: { id: CONJ, nome: "Publico frio" },
+      anuncio: { id: ANUN, nome: "Video 3" },
+      posicionamento: "Instagram_Reels",
+      rotuloPosicionamento: "Posicionamento",
+    });
+  });
+
+  it("TikTok e Google: rotulo proprio; no Google o utm_term e a palavra-chave", () => {
+    const a = pedido();
+    const b = pedido();
+    const [pa, pb] = montar([a, b], {
+      origens: [
+        gravada(a.shopify_order_id, { plataforma: "tiktok", clique: "tiktok", utm_source: "tiktok" }),
+        gravada(b.shopify_order_id, {
+          plataforma: "google",
+          clique: "google",
+          utm_source: "google",
+          campanha_id: "21000000001",
+          conjunto_id: null,
+          anuncio_id: null,
+          posicionamento: "cilios",
+        }),
+      ],
+    });
+    const porId = new Map([pa, pb].map((x) => [x.id, x]));
+    expect(porId.get(a.shopify_order_id)?.origem).toMatchObject({ id: "tiktok", rotulo: "TikTok Ads" });
+    expect(porId.get(b.shopify_order_id)?.origem.detalhe).toMatchObject({
+      posicionamento: "cilios",
+      rotuloPosicionamento: "Palavra-chave",
+    });
+  });
+
+  it("so o click id: a plataforma, sem campanha", () => {
+    const p = pedido();
+    const [pt] = montar([p], {
+      origens: [
+        gravada(p.shopify_order_id, {
+          fonte: "atributo",
+          sessao: false,
+          plataforma: "meta",
+          utm_source: null,
+          utm_medium: null,
+          utm_campaign: null,
+          utm_content: null,
+          utm_term: null,
+          campanha_id: null,
+          conjunto_id: null,
+          anuncio_id: null,
+          toque_em: null,
+        }),
+      ],
+    });
+    expect(pt.origem).toMatchObject({ id: "meta", campanha: null, pista: "Clique do Meta sem UTM" });
+  });
+
+  it("visita registrada sem anuncio: Direto, com a pagina de entrada", () => {
+    const p = pedido();
+    const [pt] = montar([p], {
+      origens: [
+        gravada(p.shopify_order_id, {
+          fonte: "landing",
+          plataforma: null,
+          clique: null,
+          utm_source: null,
+          utm_medium: null,
+          utm_campaign: null,
+          utm_content: null,
+          utm_term: null,
+          campanha_id: null,
+          conjunto_id: null,
+          anuncio_id: null,
+          toque_em: null,
+          pagina_entrada: "/collections/all",
+        }),
+      ],
+    });
+    expect(pt.origem).toMatchObject({ id: "direto", rotulo: "Direto" });
+    expect(pt.origem.detalhe?.pagina).toBe("/collections/all");
+  });
+
+  it("pedido de app de COD sem visita (Releasit): 'Sem dado' com o motivo, nunca 'Direto'", () => {
+    const releasit = { origem: "5690175", gateways: ["Cash on Delivery (COD)"], recebido: 0 };
+    const a = pedido(releasit);
+    const b = pedido(releasit);
+    const [pa, pb] = montar([a, b], {
+      // O Purchase do Releasit leva a URL da loja sem caminho: parecia Direto.
+      eventos: [evento(a.shopify_order_id, { url: "https://loja.com/" })],
+    });
+    for (const pt of [pa, pb]) {
+      expect(pt.origem).toMatchObject({ id: "sem_dado", pista: "Pedido de app (COD) sem visita registrada" });
+    }
+    // Pedido web sem origem e sem Purchase continua "Sem dado" (pedido de antes do rastreamento).
+    const web = pedido();
+    expect(montar([web])[0].origem).toMatchObject({ id: "sem_dado", pista: "Sem evento de rastreamento deste pedido" });
+  });
+
+  it("origemNaTela: reenvio continua reenvio, mesmo com origem gravada", () => {
+    expect(origemNaTela({ tipo: "reenvio", origem: "web", gateways: [] }, gravada("1"), null).id).toBe("reenvio");
   });
 });

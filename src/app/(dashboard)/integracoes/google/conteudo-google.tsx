@@ -6,6 +6,7 @@ import { ROTA_CONECTAR_OPERACAO, ROTULO_CONECTAR_OPERACAO } from "@/lib/conectar
 import { CabecalhoPlataforma } from "../cabecalho-plataforma";
 import type { DadosAnuncios } from "../dados-anuncios";
 import { EnvioCompras } from "../envio-compras";
+import { ParametrosUrl } from "../parametros-url";
 import { estadoScriptsGoogle, situacaoDaConta } from "../regras";
 import { TelaGoogle } from "./tela-google";
 import { CardPerfilGoogle } from "./card-perfil-google";
@@ -78,6 +79,9 @@ export function ConteudoGoogle({ d }: { d: DadosAnuncios }) {
               periodo: d.periodo,
             }}
           />
+
+          {/* Campanha, grupo e anuncio em cada pedido */}
+          <ParametrosUrl plataforma="google" />
         </>
       )}
     </>

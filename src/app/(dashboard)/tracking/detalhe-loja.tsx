@@ -16,6 +16,7 @@ import { ativarPixel, instalarScript, lerCabecalho, removerPixel, type Cabecalho
 import { CodigoDoPixel } from "./codigo-pixel";
 import { PaginaExterna } from "./pagina-externa";
 import { FormularioDestino } from "./destinos-ui";
+import { ParametrosUrl } from "../integracoes/parametros-url";
 import { CaixaLogo, Logo } from "./logos";
 import { PLATAFORMAS, formatarInteiro, type LinhaLoja } from "./resumo";
 import { NOME_DA_PLATAFORMA, type Plataforma } from "./saude";
@@ -405,6 +406,9 @@ export function DetalheLoja({
                     + Adicionar pixel
                   </Button>
                 </div>
+                {/* O TikTok nao tem pagina em Integracoes: os Parametros de URL
+                    (campanha em cada pedido) moram junto do pixel dele. */}
+                {p === "tiktok" && <ParametrosUrl plataforma="tiktok" embutido />}
               </>
             )}
           </Bloco>

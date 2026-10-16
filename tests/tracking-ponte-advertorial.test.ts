@@ -322,6 +322,81 @@ describe("a ponte rastreia a propria pagina quando sabe a loja", () => {
     expect(envios.length).toBe(1);
   });
 });
+
+/**
+ * VSL com link direto para o checkout: a campanha, o conjunto e o anuncio so
+ * chegam ao pedido como atributo (nenhuma pagina da loja roda). Medido na
+ * imftvs-gc: 292 eventos do advertorial com utm_campaign em 15 dias, e 0 dos
+ * visitantes com identidade.
+ */
+describe("a ponte leva as UTMs ao pedido, com a hora do clique", () => {
+  const comUtm =
+    "https://vsl.com/oferta?fbclid=ABC123&utm_source=fb&utm_medium=paid&utm_campaign=111111&utm_content=333333&utm_term=222222";
+
+  it("no permalink: attributes[_xc_utm_*] e _xc_utm_em; o pedido sai com a origem", async () => {
+    const {
+      links: [permalink],
+    } = rodar({ url: comUtm, hrefs: ["https://loja.shop/cart/4567:1"] });
+    const p = new URL(permalink).searchParams;
+    expect(p.get("attributes[_xc_utm_campaign]")).toBe("111111");
+    expect(p.get("attributes[_xc_utm_term]")).toBe("222222");
+    expect(p.get("attributes[_xc_utm_content]")).toBe("333333");
+    expect(Number(p.get("attributes[_xc_utm_em]"))).toBeGreaterThan(Date.now() - 60_000);
+    // O que a Shopify poe no pedido: os atributos do permalink.
+    const note_attributes = [...p.entries()]
+      .filter(([k]) => k.startsWith("attributes["))
+      .map(([k, v]) => ({ name: k.slice(11, -1), value: v }));
+    const { origemDoWebhook } = await import("../src/lib/tracking/origem-pedido");
+    expect(origemDoWebhook({ created_at: new Date().toISOString(), note_attributes }, null)).toMatchObject({
+      plataforma: "meta",
+      campanha_id: "111111",
+      conjunto_id: "222222",
+      anuncio_id: "333333",
+    });
+  });
+
+  it("UTM guardada de mais de 7 dias nao vai, nem no link nem como atributo", () => {
+    const velha = String(Date.now() - 8 * 864e5);
+    const {
+      links: [permalink, produto],
+    } = rodar({
+      url: "https://vsl.com/oferta",
+      cookies: { _xcb_utm_campaign: "111111", _xcb_utm_em: velha },
+      hrefs: ["https://loja.shop/cart/4567:1", "https://loja.shop/products/x"],
+    });
+    expect(permalink).not.toContain("utm");
+    expect(produto).not.toContain("utm_campaign");
+  });
+
+  it("UTM nova troca o conjunto: o utm_term do clique antigo nao se mistura", () => {
+    const recente = String(Date.now() - 864e5);
+    const {
+      links: [permalink],
+      jar,
+    } = rodar({
+      url: "https://vsl.com/oferta?utm_source=tiktok&utm_campaign=999999",
+      cookies: { _xcb_utm_term: "222222", _xcb_utm_em: recente },
+      hrefs: ["https://loja.shop/cart/4567:1"],
+    });
+    const p = new URL(permalink).searchParams;
+    expect(p.get("attributes[_xc_utm_campaign]")).toBe("999999");
+    expect(p.has("attributes[_xc_utm_term]")).toBe(false);
+    expect(jar._xcb_utm_term ?? "").toBe("");
+  });
+});
+});
+
+describe("ponte, snippet e servidor falam das mesmas UTMs", () => {
+  it("a ponte grava as UTMs que o snippet guarda", () => {
+    expect(listaDe(ponte, "UTM").sort()).toEqual(listaDe(snippet, "UTM").sort());
+  });
+
+  it("o servidor le cada atributo _xc_utm_* (e a hora)", async () => {
+    const { utmDosAtributos } = await import("../src/lib/tracking/utm");
+    const atributos = listaDe(snippet, "UTM").map((k) => ({ name: `_xc_${k}`, value: "123456" }));
+    const r = utmDosAtributos([...atributos, { name: "_xc_utm_em", value: String(Date.now()) }]);
+    expect(Object.keys(r.nosso?.utm ?? {}).sort()).toEqual(["campaign", "content", "id", "medium", "source", "term"]);
+  });
 });
 
 describe("o que a ponte grava no carrinho, o pixel e o pedido leem pelo mesmo nome", () => {

@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { IdentidadeGuardada } from "@/lib/tracking/purchase";
+import { limparUtm } from "@/lib/tracking/origem-pedido";
 
 // ============================================================================
 // De onde vem o clique quando o pedido nao traz.
@@ -46,7 +47,21 @@ export interface LinhaIdentidade {
   fbclid?: string | null;
   ttclid?: string | null;
   ttp?: string | null;
+  /** UTMs do ultimo clique e a hora dele (071). */
+  utm?: Record<string, unknown> | null;
+  utm_em?: string | null;
   updated_at?: string | null;
+}
+
+/** A UTM mais recente entre duas identidades (pela hora do clique). */
+export function utmMaisRecente(
+  a: IdentidadeGuardada | null | undefined,
+  b: IdentidadeGuardada | null | undefined
+): Pick<IdentidadeGuardada, "utm" | "utmEm"> {
+  const ms = (x: IdentidadeGuardada | null | undefined) =>
+    x?.utm && x.utmEm && Number.isFinite(Date.parse(x.utmEm)) ? Date.parse(x.utmEm) : -Infinity;
+  const vence = ms(a) >= ms(b) ? a : b;
+  return ms(vence) === -Infinity ? { utm: null, utmEm: null } : { utm: vence?.utm ?? null, utmEm: vence?.utmEm ?? null };
 }
 
 /**
@@ -77,6 +92,16 @@ export function consolidarIdentidades(
 
   const comGoogle = linhas.find((l) => l.gclid || l.gbraid || l.wbraid);
   const comMeta = linhas.find((l) => l.fbc || l.fbclid);
+  // A UTM inteira de UMA linha, a do clique mais recente: misturar o
+  // utm_campaign de um clique com o utm_content de outro criaria um anuncio
+  // que nao existe. A ordem das linhas e por updated_at, que muda a cada
+  // evento -- nao serve como hora do clique.
+  let comUtm: LinhaIdentidade | null = null;
+  for (const l of linhas) {
+    const em = l.utm && l.utm_em ? Date.parse(l.utm_em) : Number.NaN;
+    if (!Number.isFinite(em)) continue;
+    if (!comUtm || em > Date.parse(comUtm.utm_em as string)) comUtm = l;
+  }
 
   return {
     gclid: comGoogle?.gclid || null,
@@ -90,6 +115,8 @@ export function consolidarIdentidades(
     ttp: primeiro("ttp"),
     visitorId: primeiro("visitor_id"),
     clientId: primeiro("shopify_client_id"),
+    utm: comUtm ? limparUtm(comUtm.utm) : null,
+    utmEm: comUtm?.utm_em ?? null,
   };
 }
 
@@ -209,6 +236,8 @@ export async function recuperarIdentidadeDoPedido(
             ttclid: doVisitante?.ttclid || doCheckout.ttclid,
             ttp: doVisitante?.ttp || doCheckout.ttp,
             clientId,
+            // A origem do pedido: o clique mais recente dos dois lados.
+            ...utmMaisRecente(doVisitante, doCheckout),
           },
           origem: "checkout",
         };

@@ -33,7 +33,9 @@
  * `checkout.attributes` e o pedido nasce com eles em note_attributes, os
  * mesmos nomes que o tema grava via /cart/update.js. Vao junto os cookies dos
  * pixels de navegador DESTA pagina (_fbp, _fbc, _ttp): o Meta e o TikTok rodam
- * aqui, e a compra sai com o mesmo id de navegador que eles usaram.
+ * aqui, e a compra sai com o mesmo id de navegador que eles usaram. E as UTMs
+ * do anuncio (_xc_utm_* e a hora do clique em _xc_utm_em): sao a campanha, o
+ * conjunto e o anuncio do pedido.
  *
  * RASTREAMENTO DA PROPRIA PAGINA
  *
@@ -71,7 +73,9 @@
   // inventados (o _fbp e a excecao, gerado so no modo de rastreamento): _fbc
   // afirma um clique, e _ttp e do pixel do TikTok.
   var COOKIES_DO_PIXEL = ["_fbp", "_fbc", "_ttp"];
-  var UTM = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"];
+  // Os mesmos que o snippet da loja guarda (1e): no permalink vao como
+  // attributes[_xc_utm_*] com a hora do clique (_xc_utm_em).
+  var UTM = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "utm_id"];
   var DIAS = 90;
   var PREFIXO = "_xcb_";
   // Mesmo evento de novo na mesma aba dentro disto e recarga, nao nova visita.
@@ -196,8 +200,53 @@
     }
   }
 
+  function apagarCookie(nome) {
+    document.cookie =
+      nome + "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax" +
+      (location.protocol === "https:" ? "; Secure" : "");
+  }
+
+  /**
+   * As UTMs, como CONJUNTO e com a hora do clique (o mesmo acordo do snippet
+   * da loja, secao 1e): UTM nova substitui todas, e a guardada so vale 7 dias.
+   * Sem isto o link do CTA levaria a UTM de um clique de 2 meses atras, e a
+   * loja a tomaria por um clique de agora.
+   */
+  var utmEm = null;
+  function coletarUtm() {
+    var q;
+    try {
+      q = new URLSearchParams(location.search);
+    } catch (e) {
+      return;
+    }
+    var naUrl = false;
+    for (var i = 0; i < UTM.length; i++) if (q.get(UTM[i])) naUrl = true;
+    if (naUrl) {
+      for (var j = 0; j < UTM.length; j++) {
+        var daUrl = q.get(UTM[j]);
+        if (daUrl) {
+          gravarCookie(PREFIXO + UTM[j], daUrl);
+          guardados[UTM[j]] = daUrl;
+        } else {
+          apagarCookie(PREFIXO + UTM[j]);
+        }
+      }
+      utmEm = String(Date.now());
+      gravarCookie(PREFIXO + "utm_em", utmEm);
+      return;
+    }
+    var em = lerCookie(PREFIXO + "utm_em");
+    if (!em || !/^\d+$/.test(em) || Date.now() - Number(em) > 7 * 864e5) return;
+    utmEm = em;
+    for (var k = 0; k < UTM.length; k++) {
+      var doCookie = lerCookie(PREFIXO + UTM[k]);
+      if (doCookie) guardados[UTM[k]] = doCookie;
+    }
+  }
+
   coletar(CLICK_IDS);
-  coletar(UTM);
+  coletarUtm();
 
   // Nada para levar: visita organica, ou o anuncio nao trouxe parametro. No
   // modo de rastreamento segue mesmo assim: o Meta e o TikTok atribuem por
@@ -261,6 +310,20 @@
       // O visitante daqui, para o checkout e o pedido falarem da mesma pessoa
       // que o PageView e o ViewContent.
       if (vid) u.searchParams.set("attributes[_xc_vid]", vid);
+      // A campanha, o conjunto e o anuncio vao ao PEDIDO pelo mesmo caminho:
+      // nenhuma pagina da loja roda antes do checkout. Com a hora do clique,
+      // que o servidor confere contra a janela de 7 dias.
+      if (utmEm) {
+        var algumaUtm = false;
+        for (var t = 0; t < UTM.length; t++) {
+          // Com "@" e e-mail: nao vira atributo do pedido.
+          if (guardados[UTM[t]] && guardados[UTM[t]].indexOf("@") === -1) {
+            u.searchParams.set("attributes[_xc_" + UTM[t] + "]", guardados[UTM[t]].slice(0, 200));
+            algumaUtm = true;
+          }
+        }
+        if (algumaUtm) u.searchParams.set("attributes[_xc_utm_em]", utmEm);
+      }
     }
     return u.toString();
   }

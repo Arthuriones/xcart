@@ -1,7 +1,7 @@
 import { ROTULO_SITUACAO_COD, SITUACOES_COD, type SituacaoCod } from "@/lib/financeiro/contra-entrega";
 import { arredondar } from "@/lib/financeiro/tipos";
 // So tipos do modulo de leitura: o calculo nao entra no bundle do navegador.
-import type { EstadoEnvio, PedidoTela, TomPedido } from "@/lib/leitura/pedidos";
+import type { EstadoEnvio, NivelAnuncio, Origem, PedidoTela, TomPedido } from "@/lib/leitura/pedidos";
 
 // ============================================================================
 // Filtros, busca, jornada e textos da tela Pedidos. Puro, testado em
@@ -104,18 +104,44 @@ export interface PassoJornada {
   detalhe: string;
   hora: string;
   tom: TomPedido;
-  marca?: "meta" | "google";
+  marca?: "meta" | "google" | "tiktok";
+}
+
+/** "…770706": o fim do id basta para reconhecer; o id inteiro esta na Origem. */
+export function idCurto(id: string): string {
+  return id.length > 8 ? `…${id.slice(-6)}` : id;
+}
+
+/** Um nivel do anuncio em texto: o nome, ou o fim do id. */
+function textoDoNivel(n: NivelAnuncio | null): string | null {
+  if (!n) return null;
+  return n.nome ?? (n.id ? idCurto(n.id) : null);
+}
+
+/** "Campanha X · Conjunto …350706 · Anúncio …110706", so com o que se sabe. */
+export function textoDosNiveis(o: Origem): string | null {
+  const d = o.detalhe;
+  if (!d) return null;
+  const partes = [
+    ["Campanha", textoDoNivel(d.campanha)],
+    ["Conjunto", textoDoNivel(d.conjunto)],
+    ["Anúncio", textoDoNivel(d.anuncio)],
+  ]
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${k} ${v}`);
+  return partes.length ? partes.join(" · ") : null;
 }
 
 /** So o que o banco registrou deste pedido. */
 export function jornadaDoPedido(p: PedidoTela, dinheiro: (v: number) => string): PassoJornada[] {
   const j: PassoJornada[] = [];
   const o = p.origem;
-  if (o.id === "meta" || o.id === "google") {
+  if (o.id === "meta" || o.id === "google" || o.id === "tiktok") {
+    const niveis = textoDosNiveis(o);
     j.push({
       titulo: `Clique no anúncio · ${o.rotulo}`,
-      detalhe: o.campanha ? `utm_campaign=${o.campanha} · ${o.pista}` : o.pista,
-      hora: "",
+      detalhe: niveis ?? (o.campanha ? `utm_campaign=${o.campanha} · ${o.pista}` : o.pista),
+      hora: o.detalhe?.quando ?? "",
       tom: "info",
       marca: o.id,
     });
@@ -256,6 +282,8 @@ export const CABECALHO_CSV = [
   "Itens",
   "Origem",
   "Campanha",
+  "Conjunto",
+  "Anúncio",
   "Meta",
   "Google",
   "Valor pago",
@@ -269,6 +297,8 @@ export const CABECALHO_CSV = [
 
 export function linhaCsv(p: PedidoTela): (string | number | null)[] {
   const v = p.valores;
+  // Na planilha, o nome ou o id INTEIRO: e por ele que se acha no gerenciador.
+  const nivel = (n: NivelAnuncio | null | undefined) => (n ? (n.nome ?? n.id) : null);
   return [
     textoCsv(p.nome),
     p.quandoLongo,
@@ -276,6 +306,8 @@ export function linhaCsv(p: PedidoTela): (string | number | null)[] {
     textoCsv(p.itensTexto),
     textoCsv(p.origem.rotulo),
     textoCsv(p.origem.campanha),
+    textoCsv(nivel(p.origem.detalhe?.conjunto)),
+    textoCsv(nivel(p.origem.detalhe?.anuncio)),
     ENVIO_CSV[p.meta],
     ENVIO_CSV[p.google],
     centavos(v?.valorPago),

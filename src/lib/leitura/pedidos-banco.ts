@@ -7,16 +7,20 @@ import {
   montarPedidos,
   type DestinoLoja,
   type EventoCompra,
+  type OrigemGravada,
   type PedidoTela,
   type ResumoPedidos,
 } from "@/lib/leitura/pedidos";
+import { semMigration071 } from "@/lib/tracking/origem-banco";
+import { CAMPOS_ORIGEM } from "@/lib/tracking/origem-pedido";
 
 // ============================================================================
 // Leitura da tela Pedidos. So banco, pela sessao (RLS): os pedidos vem da
 // MESMA base do Dashboard (lerBaseLucro, na versao enxuta: so o periodo atual,
 // sem gasto de anuncio), e o rastreamento de
 // tracking_events (so o Purchase do Meta, que o webhook grava), dos destinos e
-// do interruptor da loja.
+// do interruptor da loja. A origem de cada pedido vem de fin_order_origem
+// (071), com os nomes de campanha, conjunto e anuncio do sync de gasto.
 //
 // Erro de banco LANCA: a tela mostra o erro, nunca uma lista vazia.
 // ============================================================================
@@ -97,7 +101,32 @@ export async function lerPedidos(): Promise<DadosPedidos> {
     }
   };
 
-  const eventos = await lerEventos();
+  // A origem gravada no pedido (071), pela mesma janela do Purchase. Sem a
+  // migration, nada: a tela cai no Purchase, como antes.
+  const lerOrigens = async (): Promise<OrigemGravada[]> => {
+    const saida: OrigemGravada[] = [];
+    for (let de = 0; ; de += PAGINA) {
+      const { data, error } = await supabase
+        .from("fin_order_origem")
+        .select(["store_id", "shopify_order_id", ...CAMPOS_ORIGEM].join(", "))
+        .in("store_id", lojaIds)
+        .gte("pedido_em", desde)
+        .lt("pedido_em", ate)
+        .order("pedido_em", { ascending: true })
+        .order("shopify_order_id", { ascending: true })
+        .range(de, de + PAGINA - 1);
+      if (error) {
+        if (semMigration071(error)) return [];
+        throw new Error(`Falha ao ler a origem dos pedidos: ${error.message}`);
+      }
+      const lote = (data ?? []) as unknown as OrigemGravada[];
+      saida.push(...lote);
+      if (lote.length < PAGINA) return saida;
+    }
+  };
+
+  const [eventos, origens] = await Promise.all([lerEventos(), lerOrigens()]);
+  const nomesAnuncio = await lerNomesDeAnuncio(supabase, origens);
 
   const { pedidos, resumo } = montarPedidos({
     entrada,
@@ -107,6 +136,8 @@ export async function lerPedidos(): Promise<DadosPedidos> {
     destinos,
     lojasLigadas: configs.filter((c) => c.enabled).map((c) => String(c.store_id)),
     agoraMs: Date.now(),
+    origens,
+    nomesAnuncio,
   });
 
   return {
@@ -117,4 +148,52 @@ export async function lerPedidos(): Promise<DadosPedidos> {
     pedidos,
     resumo,
   };
+}
+
+/** Ids por consulta: `in` com 25 ids de 18 digitos cabe folgado na URL. */
+const IDS_POR_CONSULTA = 25;
+
+/**
+ * O nome de cada campanha, conjunto e anuncio das origens, pelo sync de gasto
+ * (ad_insights_granular, e ad_spend_daily no nivel campanha). O mais recente
+ * vence: o anuncio renomeado aparece com o nome de hoje. Sem nome, a tela
+ * mostra o id -- entao falha aqui nao derruba a tela, so vai para o log.
+ */
+async function lerNomesDeAnuncio(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  origens: readonly OrigemGravada[]
+): Promise<Record<string, string>> {
+  const ids = [
+    ...new Set(origens.flatMap((o) => [o.campanha_id, o.conjunto_id, o.anuncio_id]).filter((v): v is string => Boolean(v))),
+  ];
+  const nomes: Record<string, string> = {};
+  for (let i = 0; i < ids.length; i += IDS_POR_CONSULTA) {
+    const lote = ids.slice(i, i + IDS_POR_CONSULTA);
+    const [granular, campanhas] = await Promise.all([
+      supabase
+        .from("ad_insights_granular")
+        .select("objeto_id, objeto_nome")
+        .in("objeto_id", lote)
+        .order("data", { ascending: false })
+        .limit(1000),
+      supabase
+        .from("ad_spend_daily")
+        .select("campanha_id, campanha_nome")
+        .eq("nivel", "campanha")
+        .in("campanha_id", lote)
+        .order("data", { ascending: false })
+        .limit(1000),
+    ]);
+    if (granular.error) console.error("[pedidos] nomes dos anuncios", granular.error.message);
+    for (const r of (granular.data ?? []) as { objeto_id: string; objeto_nome: string | null }[]) {
+      const nome = (r.objeto_nome || "").trim();
+      if (nome && !nomes[r.objeto_id]) nomes[r.objeto_id] = nome;
+    }
+    if (campanhas.error) console.error("[pedidos] nomes das campanhas", campanhas.error.message);
+    for (const r of (campanhas.data ?? []) as { campanha_id: string; campanha_nome: string | null }[]) {
+      const nome = (r.campanha_nome || "").trim();
+      if (nome && !nomes[r.campanha_id]) nomes[r.campanha_id] = nome;
+    }
+  }
+  return nomes;
 }

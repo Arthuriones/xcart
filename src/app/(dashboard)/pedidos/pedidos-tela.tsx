@@ -21,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatarDinheiro } from "@/lib/financeiro/tipos";
-import type { EstadoEnvio, PedidoTela, ResumoPedidos, TomPedido } from "@/lib/leitura/pedidos";
+import type { EstadoEnvio, NivelAnuncio, Origem, PedidoTela, ResumoPedidos, TomPedido } from "@/lib/leitura/pedidos";
 import { montarCsv } from "../financeiro/lucro-dados";
 import { Logo } from "../tracking/logos";
 import {
@@ -379,7 +379,7 @@ export function PedidosTela({
                       </td>
                       <td className="whitespace-nowrap">
                         <span className="inline-flex items-center gap-1.5 text-t1">
-                          {(p.origem.id === "meta" || p.origem.id === "google") && (
+                          {(p.origem.id === "meta" || p.origem.id === "google" || p.origem.id === "tiktok") && (
                             <Logo marca={p.origem.id} tamanho={14} />
                           )}
                           {p.origem.rotulo}
@@ -636,6 +636,8 @@ function DetalhePedido({ p, dinheiro }: { p: PedidoTela; dinheiro: (v: number | 
           ))}
         </section>
 
+        <SecaoOrigem o={p.origem} />
+
         <section aria-labelledby="pd-jornada" className="flex flex-col gap-2">
           <h3 id="pd-jornada" className="text-dense font-semibold">
             Jornada
@@ -668,5 +670,98 @@ function DetalhePedido({ p, dinheiro }: { p: PedidoTela; dinheiro: (v: number | 
         </section>
       </SheetBody>
     </>
+  );
+}
+
+/** Onde estao os Parametros de URL de cada plataforma. */
+const ROTA_PARAMETROS: Partial<Record<Origem["id"], string>> = {
+  meta: "/integracoes/meta",
+  google: "/integracoes/google",
+  tiktok: "/tracking",
+};
+
+/** Uma linha da Origem: o texto (cortado se for longo) e, embaixo, o id quando ha nome. */
+function LinhaDaOrigem({
+  rotulo,
+  valor,
+  id,
+  mono,
+}: {
+  rotulo: string;
+  valor: string | null;
+  id?: string | null;
+  mono?: boolean;
+}) {
+  return (
+    <div className="flex justify-between gap-3 border-b border-border-subtle px-3.5 py-2.5 text-dense last:border-b-0">
+      <span className="shrink-0 text-t1">{rotulo}</span>
+      <span className="flex min-w-0 flex-col items-end text-right">
+        <span className={cn("max-w-full truncate", valor ? "text-ink" : "text-t2", mono && "font-mono")} title={valor ?? undefined}>
+          {valor ?? "—"}
+        </span>
+        {id && <span className="font-mono text-label text-t2">{id}</span>}
+      </span>
+    </div>
+  );
+}
+
+function LinhaDoNivel({ rotulo, nivel }: { rotulo: string; nivel: NivelAnuncio | null }) {
+  if (!nivel) return <LinhaDaOrigem rotulo={rotulo} valor={null} />;
+  // Com nome: o nome e o id embaixo. Sem nome: o id inteiro (e por ele que se
+  // acha no gerenciador de anuncios).
+  return nivel.nome ? (
+    <LinhaDaOrigem rotulo={rotulo} valor={nivel.nome} id={nivel.id} />
+  ) : (
+    <LinhaDaOrigem rotulo={rotulo} valor={nivel.id} mono />
+  );
+}
+
+/** Plataforma, campanha, conjunto, anuncio e posicionamento gravados no pedido. */
+function SecaoOrigem({ o }: { o: Origem }) {
+  const d = o.detalhe;
+  const marca = o.id === "meta" || o.id === "google" || o.id === "tiktok" ? o.id : null;
+  const rota = ROTA_PARAMETROS[o.id];
+  const nota = [o.pista, d?.quando ? `Clique: ${d.quando}` : null].filter(Boolean).join(" · ");
+  return (
+    <section aria-labelledby="pd-origem" className="flex flex-col gap-2">
+      <h3 id="pd-origem" className="text-dense font-semibold">
+        Origem
+      </h3>
+      <div className="rounded-card border border-border">
+        <div className="flex items-center justify-between gap-3 border-b border-border-subtle px-3.5 py-2.5 text-dense last:border-b-0">
+          <span className="text-t1">Plataforma</span>
+          <span className="inline-flex items-center gap-1.5 font-semibold text-ink">
+            {marca && <Logo marca={marca} tamanho={13} />}
+            {o.rotulo}
+          </span>
+        </div>
+        {d ? (
+          <>
+            {(marca || d.campanha) && (
+              <>
+                <LinhaDoNivel rotulo="Campanha" nivel={d.campanha} />
+                <LinhaDoNivel rotulo="Conjunto" nivel={d.conjunto} />
+                <LinhaDoNivel rotulo="Anúncio" nivel={d.anuncio} />
+              </>
+            )}
+            {d.posicionamento && <LinhaDaOrigem rotulo={d.rotuloPosicionamento} valor={d.posicionamento} />}
+            {d.pagina && <LinhaDaOrigem rotulo="Página de entrada" valor={d.pagina} mono />}
+          </>
+        ) : (
+          o.campanha && <LinhaDaOrigem rotulo="Campanha" valor={o.campanha} />
+        )}
+      </div>
+      <p className="text-label text-t2">
+        {nota}
+        {marca && rota && !d?.campanha?.id && (
+          <>
+            {" · "}
+            <Link href={rota} className="underline underline-offset-2">
+              Como gravar a campanha
+            </Link>
+          </>
+        )}
+      </p>
+    </section>
   );
 }

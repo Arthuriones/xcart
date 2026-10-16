@@ -15,6 +15,9 @@
  * Cookie tambem, por 90 dias: cobre quem clica no anuncio hoje e compra
  * depois, sem passar de novo pelo link com gclid.
  *
+ * As UTMs do anuncio (campanha, conjunto, anuncio) vao pelo mesmo caminho,
+ * com a hora do clique e por 7 dias, nao 90 (ver 1e).
+ *
  * 2. EVENTOS DE FUNIL (ver produto, carrinho, checkout)
  *
  * A Shopify nao tem webhook para essas tres acoes -- elas acontecem no
@@ -311,6 +314,61 @@
     }
   } catch (e) {
     /* sem a API, o evento sai sem consentimento, como antes */
+  }
+
+  // ---- 1e. as UTMs do anuncio (campanha, conjunto, anuncio) ---------------
+  //
+  // Sao a origem do PEDIDO: o lucro por anuncio sai delas. O landing_site do
+  // pedido nao serve -- a Shopify corta em 255 caracteres, e o fbclid do Meta
+  // vem antes das UTMs. Entao guardamos aqui, na chegada, com a hora do clique:
+  //
+  //   - cookie `_xc_utm` por 7 DIAS (a janela de clique do Meta), nao 90: UTM
+  //     velha faria a compra organica de meses depois herdar o anuncio;
+  //   - UTM nova SUBSTITUI o conjunto inteiro: o utm_term de um clique com o
+  //     utm_campaign de outro descreveria um anuncio que nao existe;
+  //   - vai ao carrinho (_xc_utm_* e _xc_utm_em) e em todo evento (`utm`),
+  //     para a identidade do visitante, que o pedido sem atributo consulta.
+  //
+  // O servidor confere a janela pela hora do clique (_xc_utm_em).
+  var UTM = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "utm_id"];
+  var DIAS_UTM = 7;
+
+  function utmDoClique() {
+    var nova = {};
+    var temNova = false;
+    for (var u = 0; u < UTM.length; u++) {
+      var daQueryUtm = daUrl(UTM[u]);
+      // Com "@" e e-mail (link de campanha de e-mail): nao vai a lugar nenhum.
+      if (daQueryUtm && String(daQueryUtm).indexOf("@") === -1) {
+        nova[UTM[u]] = String(daQueryUtm).slice(0, 200);
+        temNova = true;
+      }
+    }
+    if (temNova) {
+      nova.em = Date.now();
+      gravarCookie(PREFIXO + "utm", JSON.stringify(nova), DIAS_UTM);
+      return nova;
+    }
+    try {
+      var guardada = JSON.parse(lerCookie(PREFIXO + "utm") || "null");
+      var em = guardada && Number(guardada.em);
+      if (em && Date.now() - em < DIAS_UTM * 864e5) return guardada;
+    } catch (e) {
+      /* cookie torto: como se nao houvesse */
+    }
+    return null;
+  }
+
+  var UTM_DO_CLIQUE = utmDoClique();
+  if (UTM_DO_CLIQUE) {
+    for (var w = 0; w < UTM.length; w++) {
+      var atrUtm = PREFIXO + UTM[w];
+      // A chave que o clique nao trouxe sai do carrinho (vazio apaga), em vez
+      // de ficar a do clique anterior.
+      if (UTM_DO_CLIQUE[UTM[w]]) achados[atrUtm] = String(UTM_DO_CLIQUE[UTM[w]]);
+      else limpar[atrUtm] = true;
+    }
+    achados[PREFIXO + "utm_em"] = String(UTM_DO_CLIQUE.em);
   }
 
   var vid = visitante();
@@ -925,6 +983,9 @@
       // Ver 1d. Ausentes, o JSON nem leva o campo.
       teste: TESTE || undefined,
       consentimento: consentimento() || undefined,
+      // Ver 1e. So vai para a identidade (a origem do pedido), nunca para a
+      // plataforma.
+      utm: UTM_DO_CLIQUE || undefined,
     });
   }
 
@@ -1012,6 +1073,9 @@
       fbclid: achados.fbclid || null,
       ttclid: achados.ttclid || null,
       ttp: achados._ttp || null,
+      // O evento da pagina de chegada costuma sair ANTES do clientId existir:
+      // e aqui que a UTM do clique chega a identidade.
+      utm: UTM_DO_CLIQUE || undefined,
     });
   }
 

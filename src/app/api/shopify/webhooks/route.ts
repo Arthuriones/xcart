@@ -276,7 +276,20 @@ async function tratarPedidoCriado(
     if (novo && loja.user_id) after(() => notificarVenda(admin, loja, payload));
   }
 
+  // Campanha, conjunto e anuncio NO PEDIDO (fin_order_origem, 071). Com ou sem
+  // rastreamento -- e a base do lucro por anuncio --, mas nao em teste, PDV,
+  // draft e valor zero. DEPOIS da resposta (after) e sem lancar: a compra nao
+  // espera por isto, e o sync de pedidos refaz em ate 15 min.
+  const { gravarOrigemDoWebhook } = await import("@/lib/tracking/origem-banco");
+  const gravarOrigem = (identidade: Parameters<typeof gravarOrigemDoWebhook>[3]) => {
+    if (motivo || !loja.user_id) return;
+    const dono = { id: loja.id, user_id: loja.user_id };
+    after(() => gravarOrigemDoWebhook(admin, dono, pedido, identidade));
+  };
+
   if (!(await rastreamentoLigado(admin, loja.id))) {
+    // Sem rastreamento o coletor nao grava identidade: so URL e atributos.
+    gravarOrigem(null);
     return ok({ ignorado: "rastreamento desligado", topic: "orders/create" });
   }
 
@@ -300,6 +313,9 @@ async function tratarPedidoCriado(
     pedido,
     sinais.visitorId
   );
+  // A MESMA identidade que o Purchase usa acha a UTM do clique do pedido que
+  // chegou sem atributo (app de COD, "Comprar agora").
+  gravarOrigem(identidade);
 
   const { evento, userData } = montarPurchase(pedido, {
     identidade,

@@ -16,6 +16,7 @@ import {
   urlSemTtclid,
   type EventoTiktok,
 } from "@/lib/tracking/tiktok-evento";
+import { parametrosDaUrl, type Utm } from "@/lib/tracking/utm";
 
 // ============================================================================
 // Pedido da Shopify -> evento Purchase do CAPI (Meta) e da Events API (TikTok).
@@ -155,6 +156,12 @@ export interface IdentidadeGuardada {
   clientId?: string | null;
   clientIp?: string | null;
   userAgent?: string | null;
+  /**
+   * As UTMs do ultimo clique em anuncio e a hora dele (migration 071). Nao vao
+   * para o Meta nem para o TikTok: sao a origem do pedido (origem-pedido.ts).
+   */
+  utm?: Utm | null;
+  utmEm?: string | null;
 }
 
 /**
@@ -175,9 +182,10 @@ export interface IdentidadeGuardada {
  * raro: path de produto + fbclid de ~200 caracteres ja encosta no limite --
  * medido na #NM100599, landing de 255 com o fbclid intacto, que a regra antiga
  * jogava fora.
+ *
+ * A regra mora em parametrosDaUrl (utm.ts): as UTMs da origem do pedido leem o
+ * mesmo landing_site pelo mesmo corte.
  */
-const FBCLID_COMPLETO = /_aem_[A-Za-z0-9_-]{22}$/;
-
 export function cliquesDaLanding(landingSite: string | null | undefined): {
   gclid: string | null;
   gbraid: string | null;
@@ -185,25 +193,7 @@ export function cliquesDaLanding(landingSite: string | null | undefined): {
   fbclid: string | null;
   ttclid: string | null;
 } {
-  const vazio = { gclid: null, gbraid: null, wbraid: null, fbclid: null, ttclid: null };
-  const bruto = (landingSite || "").trim();
-  if (!bruto || !bruto.includes("?")) return vazio;
-
-  let parametros: URLSearchParams;
-  try {
-    parametros = new URL(bruto, "https://x.invalid").searchParams;
-  } catch {
-    return vazio;
-  }
-
-  if (bruto.length >= 250) {
-    const chaves = [...parametros.keys()];
-    const ultima = chaves[chaves.length - 1];
-    const fbclidInteiro =
-      ultima === "fbclid" && FBCLID_COMPLETO.test(parametros.get("fbclid") || "");
-    if (ultima && !fbclidInteiro) parametros.delete(ultima);
-  }
-
+  const parametros = parametrosDaUrl(landingSite, true);
   const ler = (k: string) => (parametros.get(k) || "").trim() || null;
   return {
     gclid: ler("gclid"),

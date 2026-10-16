@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { ehNegado } from "@/lib/financeiro/mapear-pedido";
-import { sincronizarLoja, type LojaParaSync } from "@/lib/financeiro/shopify-pedidos";
+import {
+  faltaRecuperarOrigens,
+  recuperarOrigens,
+  sincronizarLoja,
+  type LojaParaSync,
+} from "@/lib/financeiro/shopify-pedidos";
 import { ehUuid, type FinSyncStateRow, type SyncResposta } from "@/lib/financeiro/tipos";
 
 export const runtime = "nodejs";
@@ -150,6 +155,23 @@ async function executar(request: NextRequest) {
     try {
       const r = await sincronizarLoja(admin, loja, estado ?? null, undefined, limiteEm);
 
+      // A carga inicial feita AGORA ja leu a origem dos 60 dias: a passada de
+      // recuperacao (071) nao precisa rodar nesta loja.
+      const cargaComOrigem =
+        r.terminou && r.comOrigem && !estado?.carga_inicial_ok && faltaRecuperarOrigens(estado ?? null);
+
+      // f) a origem dos pedidos de antes da 071, uma vez por loja, com o tempo
+      // que sobrar -- e so depois da carga inicial, que ja le a origem. So no
+      // cron: o "Atualizar agora" nao espera por isto. Falha vai para o log: a
+      // foto financeira desta rodada ja esta gravada.
+      if (doCron && estado?.carga_inicial_ok && Date.now() < limiteEm) {
+        try {
+          await recuperarOrigens(admin, loja, estado ?? null, limiteEm);
+        } catch (e) {
+          console.error("[fin/pedidos] recuperacao da origem", loja.shop_domain, mensagemDe(e));
+        }
+      }
+
       const { count } = await admin
         .from("fin_orders")
         .select("store_id", { count: "exact", head: true })
@@ -165,6 +187,7 @@ async function executar(request: NextRequest) {
           ultimo_erro_tipo: null,
           // Nunca volta a false: carga feita uma vez esta feita.
           ...(r.terminou ? { carga_inicial_ok: true } : {}),
+          ...(cargaComOrigem ? { origem_backfill_em: fim } : {}),
           ...(typeof count === "number" ? { pedidos_total: count } : {}),
           sincronizando_desde: null,
           updated_at: fim,

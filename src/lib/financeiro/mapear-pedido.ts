@@ -7,8 +7,15 @@
 //
 // NUNCA leia customer, email, endereco ou telefone. A foto existe para somar
 // receita e custo; dado pessoal aqui so aumentaria o que vaza se o banco vazar.
+//
+// customAttributes (a origem do pedido, 071) CHEGA com dado pessoal: a nota do
+// pedido do Releasit traz nome, telefone, endereco, e-mail e IP. Ele fica so
+// na memoria desta pagina: dele se le uma lista FECHADA de chaves (UTMs e
+// click ids, utm.ts), e nada mais e gravado.
 // ============================================================================
 
+import { motivoParaIgnorarPedido } from "@/lib/tracking/filtro-pedido";
+import { origemDoSync, type JornadaShopify, type LinhaOrigem } from "@/lib/tracking/origem-pedido";
 import { gatewayEhCod, tagEhCod, tagEhRecusa } from "./contra-entrega";
 import {
   chaveSku,
@@ -72,6 +79,42 @@ export interface NoPedidoShopify {
   /** Lidas so para o sim/nao de COD e de recusa: NUNCA gravadas. */
   tags?: string[] | null;
   fulfillments?: NoEntregaShopify[] | null;
+  /** Atributos do pedido. TEM dado pessoal (Releasit): so a lista fechada de utm.ts e lida. */
+  customAttributes?: { key?: string | null; value?: string | null }[] | null;
+  /** Jornada da Shopify: as UTMs da primeira e da ultima visita. */
+  customerJourneySummary?: JornadaShopify | null;
+}
+
+/**
+ * A origem do pedido (campanha, conjunto, anuncio) pela jornada e pelos
+ * atributos. null = nada achado, ou pedido que nao e venda de anuncio (teste,
+ * PDV, draft, valor zero: a mesma regra do webhook).
+ */
+export function mapearOrigem(
+  no: Pick<
+    NoPedidoShopify,
+    "id" | "createdAt" | "test" | "sourceName" | "totalPriceSet" | "customAttributes" | "customerJourneySummary"
+  >,
+  ctx: { storeId: string; userId: string }
+): LinhaOrigem | null {
+  const id = idNumerico(no.id);
+  const em = Date.parse(no.createdAt);
+  if (!/^\d+$/.test(id) || !Number.isFinite(em)) return null;
+  const motivo = motivoParaIgnorarPedido({
+    test: no.test ?? null,
+    source_name: no.sourceName ?? null,
+    total_price: no.totalPriceSet?.shopMoney?.amount ?? null,
+  });
+  if (motivo) return null;
+  const origem = origemDoSync(no);
+  if (!origem) return null;
+  return {
+    store_id: ctx.storeId,
+    user_id: ctx.userId,
+    shopify_order_id: id,
+    pedido_em: new Date(em).toISOString(),
+    ...origem,
+  };
 }
 
 /** Um fulfillment do pedido (o envio), sem rastreio nem endereco. */
@@ -286,11 +329,11 @@ export function ehCustoExcedido(erro: unknown): boolean {
 // ---------------------------------------------------------------------------
 
 /**
- * Pedidos por pagina. O custo exato da query nao foi verificado: pela tabela
- * linear da doc, cada pedido vale ~99 pontos (dez MoneyBag + 25 linhas), mais
- * ~5 dos envios (068), entao 8 por pagina fica perto de 850, abaixo do teto
- * de 1000. Se a Shopify recusar
- * com MAX_COST_EXCEEDED, a mesma pagina e pedida de novo com metade.
+ * Pedidos por pagina. Medido em 10/2026 (requestedQueryCost): 67 pontos com 8
+ * pedidos, 83 com os atributos e a jornada da origem (071) -- a estimativa
+ * antiga pela tabela linear da doc (~850) era uns 10x alta. Fica em 8, longe
+ * do teto de 1000. Se a Shopify recusar com MAX_COST_EXCEEDED, a mesma pagina
+ * e pedida de novo com metade.
  */
 export const PEDIDOS_POR_PAGINA = 8;
 export const PEDIDOS_POR_PAGINA_MIN = 2;

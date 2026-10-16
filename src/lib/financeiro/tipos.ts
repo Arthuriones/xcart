@@ -312,6 +312,12 @@ export interface FinSyncStateRow {
    */
   retomar_busca?: string | null;
   retomar_cursor?: string | null;
+  /**
+   * Recuperacao da origem dos ultimos 60 dias (071): quando terminou, e ate
+   * onde ja foi. Opcionais: so existem depois da 071 -- ver recuperarOrigens.
+   */
+  origem_backfill_em?: string | null;
+  origem_backfill_ate?: string | null;
   updated_at?: string;
 }
 
