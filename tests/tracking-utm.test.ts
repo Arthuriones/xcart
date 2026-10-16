@@ -277,6 +277,8 @@ describe("o que o snippet manda ao coletor", () => {
 
   it("hora adiantada vira agora; mais velha que a janela nao vale", () => {
     expect(utmDoCorpo({ utm_source: "fb", em: AGORA + 3 * 864e5 }, AGORA)?.em).toBe(new Date(AGORA).toISOString());
+    // Ate 1 h no futuro tambem vira agora: nao ganha de clique mais novo.
+    expect(utmDoCorpo({ utm_source: "fb", em: AGORA + 3_600_000 }, AGORA)?.em).toBe(new Date(AGORA).toISOString());
     expect(utmDoCorpo({ utm_source: "fb", em: AGORA - JANELA_ORIGEM_MS - 1 }, AGORA)).toBeNull();
   });
 

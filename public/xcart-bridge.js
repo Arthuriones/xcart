@@ -263,7 +263,11 @@
       var id = q.get(CLICK_IDS[c]);
       if (id && lerCookie(PREFIXO + CLICK_IDS[c]) !== id) mesmoClique = false;
     }
-    if (naUrl && !mesmoClique) {
+    // Mesmo clique SEM conjunto guardado valido (cookie do click id de antes
+    // deste conjunto existir): vale a URL, como clique novo.
+    var emGuardado = lerCookie(PREFIXO + "utm_em");
+    var temGuardado = !!emGuardado && /^\d+$/.test(emGuardado) && Date.now() - Number(emGuardado) <= 7 * 864e5;
+    if (naUrl && (!mesmoClique || !temGuardado)) {
       for (var j = 0; j < CONJUNTO_UTM.length; j++) {
         var chave = CONJUNTO_UTM[j];
         if (nova[chave]) {

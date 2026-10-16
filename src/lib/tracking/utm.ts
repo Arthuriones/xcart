@@ -420,7 +420,9 @@ export function utmDoCorpo(v: unknown, agoraMs: number): { utm: Utm; em: string 
   if (clique) utm.clique = clique;
   if (!temUtm(utm)) return null;
   const n = Number(o.em);
-  const ms = !Number.isFinite(n) || n > agoraMs + 864e5 ? agoraMs : n;
+  // Hora no futuro (relogio do visitante adiantado ou forjada) vira agora: senao
+  // ela ganharia de cliques mais novos na escolha do mais recente.
+  const ms = !Number.isFinite(n) || n > agoraMs ? agoraMs : n;
   if (ms < agoraMs - JANELA_ORIGEM_MS) return null;
   return { utm, em: new Date(ms).toISOString() };
 }

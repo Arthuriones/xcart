@@ -386,24 +386,27 @@
       nova.clique = clique;
       temNova = true;
     }
+    var guardada = null;
+    try {
+      guardada = JSON.parse(lerCookie(PREFIXO + "utm") || "null");
+      var guardadaEm = guardada && Number(guardada.em);
+      if (!(guardadaEm && Date.now() - guardadaEm < DIAS_UTM * 864e5)) guardada = null;
+    } catch (e) {
+      /* cookie torto: como se nao houvesse */
+      guardada = null;
+    }
     var em = horaDoClique();
     // Nao e clique novo: o mesmo click id que ja estava guardado (recarga,
     // aba reaberta -- a hora fica a de quando ele chegou), ou o que a ponte
     // repassa com mais de 7 dias. Vale o conjunto guardado, como numa pagina
-    // sem parametro.
-    if (temNova && !mesmoClique && Date.now() - em < DIAS_UTM * 864e5) {
+    // sem parametro. Mesmo clique SEM conjunto guardado (cookie do click id
+    // de antes deste conjunto existir) vale a URL, como clique novo.
+    if (temNova && (!mesmoClique || !guardada) && Date.now() - em < DIAS_UTM * 864e5) {
       nova.em = em;
       gravarCookie(PREFIXO + "utm", JSON.stringify(nova), DIAS_UTM);
       return nova;
     }
-    try {
-      var guardada = JSON.parse(lerCookie(PREFIXO + "utm") || "null");
-      var em = guardada && Number(guardada.em);
-      if (em && Date.now() - em < DIAS_UTM * 864e5) return guardada;
-    } catch (e) {
-      /* cookie torto: como se nao houvesse */
-    }
-    return null;
+    return guardada;
   }
 
   // O conjunto no carrinho: cada chave do cookie e o nome do atributo.
