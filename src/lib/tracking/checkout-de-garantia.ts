@@ -1,6 +1,6 @@
 import "server-only";
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { JANELA_CHECKOUT_EXPRESSO_MS } from "@/lib/tracking/eventos";
+import { JANELA_CHECKOUT_EXPRESSO_MS, PREFIXO_CHECKOUT_EXPRESSO } from "@/lib/tracking/eventos";
 import { hashDoIp } from "@/lib/tracking/ip-balde";
 import { caminhoEhEndpoint, type PedidoShopify } from "@/lib/tracking/purchase";
 
@@ -31,6 +31,15 @@ import { caminhoEhEndpoint, type PedidoShopify } from "@/lib/tracking/purchase";
 // produto: sem carrinho, sem atributo, sem pixel), o IP do pedido contra o do
 // coletor, só na janela do expresso.
 //
+// O EXPRESSO é conferido à parte, em toda compra: é o que corre com a
+// garantia (o cron manda o pendente minutos depois), e a chave do pedido nem
+// sempre é a dele. Uma leitura dos `begin_checkout_xp_*` da loja na janela do
+// expresso, casados aqui no código -- nada do comprador vai para o filtro --
+// por visitante, clientId (`shopify_client_id`, 057), IP OU user agent. O IP
+// sozinho não basta: com IPv6 o pedido chega por um endereço e o coletor viu
+// outro (#1016 e #1017 da Softnook). E SEM CHAVE, qualquer expresso pendente
+// da loja barra a garantia: pode ser o dele, e não há como saber.
+//
 // Erro de banco NÃO lança: sem saber, não manda a garantia -- falta um IC, não
 // sai um a mais -- e a compra segue como sempre.
 // ============================================================================
@@ -42,6 +51,45 @@ export const JANELA_CHECKOUT_DE_GARANTIA_MS = 24 * 60 * 60 * 1000;
 
 /** Como o coletor corta o visitorId do corpo (o do pixel e o clientId): a chave tem que bater. */
 const MAX_VISITANTE = 64;
+
+/**
+ * Quantos expressos da loja a conferência lê na janela. Página cheia = pode ter
+ * ficado o do comprador de fora, e então nenhuma garantia sai.
+ */
+const MAX_EXPRESSOS = 200;
+
+interface LinhaDoExpresso {
+  destination_id?: string | null;
+  status?: string | null;
+  sent_at?: string | null;
+  visitor_id?: string | null;
+  shopify_client_id?: string | null;
+  ip_hash?: string | null;
+  /** O user agent do evento: `user_data.client_user_agent` no Meta, `user.user_agent` no TikTok. */
+  ua_meta?: string | null;
+  ua_tiktok?: string | null;
+}
+
+/**
+ * Este expresso pode ser do comprador do pedido? Por qualquer sinal: faltar um
+ * IC custa menos que sair dois. Sem chave do comprador, todo pendente pode.
+ */
+export function expressoDoComprador(
+  linha: LinhaDoExpresso,
+  comprador: { chaves: string[]; ipHash: string | null; userAgent: string }
+): boolean {
+  if (!checkoutConta(linha)) return false;
+  if (!comprador.chaves.length && linha.status === "pendente") return true;
+  const chaves = new Set(comprador.chaves);
+  const ua = (v: string | null | undefined) => (v || "").trim();
+  return (
+    (Boolean(linha.visitor_id) && chaves.has(linha.visitor_id as string)) ||
+    (Boolean(linha.shopify_client_id) && chaves.has(linha.shopify_client_id as string)) ||
+    (Boolean(comprador.ipHash) && linha.ip_hash === comprador.ipHash) ||
+    (Boolean(comprador.userAgent) &&
+      (ua(linha.ua_meta) === comprador.userAgent || ua(linha.ua_tiktok) === comprador.userAgent))
+  );
+}
 
 export interface CheckoutsDoComprador {
   /**
@@ -82,9 +130,9 @@ export async function checkoutsDoComprador(
   ];
   const cliente = (chaves.clientId || "").trim().slice(0, MAX_VISITANTE);
   const comprador = [...new Set([...visitantes, cliente].filter(Boolean))];
-  const ip = comprador.length
-    ? null
-    : hashDoIp(pedido.client_details?.browser_ip || pedido.browser_ip);
+  const ipHash = hashDoIp(pedido.client_details?.browser_ip || pedido.browser_ip);
+  const userAgent = (pedido.client_details?.user_agent || "").trim();
+  const desdeExpresso = new Date(referencia - JANELA_CHECKOUT_EXPRESSO_MS).toISOString();
 
   const ics = (coluna: "visitor_id" | "ip_hash", valor: string, aPartirDe: string) =>
     admin
@@ -102,11 +150,21 @@ export async function checkoutsDoComprador(
   const precisaDePagina = caminhoEhEndpoint(pedido.landing_site) && visitantes.length > 0;
 
   try {
-    const [porComprador, porIp, pagina] = await Promise.all([
+    const [porComprador, porIp, expressos, pagina] = await Promise.all([
       Promise.all(comprador.map((c) => ics("visitor_id", c, desde))),
-      ip
-        ? ics("ip_hash", ip, new Date(referencia - JANELA_CHECKOUT_EXPRESSO_MS).toISOString())
-        : null,
+      // Sem chave, o IP acha também o clique comum do tema e o IC do pixel.
+      !comprador.length && ipHash ? ics("ip_hash", ipHash, desdeExpresso) : null,
+      admin
+        .from("tracking_events")
+        .select(
+          "destination_id, status, sent_at, visitor_id, shopify_client_id, ip_hash, ua_meta:payload->user_data->>client_user_agent, ua_tiktok:payload->user->>user_agent"
+        )
+        .eq("store_id", storeId)
+        .eq("event_name", "begin_checkout")
+        .like("event_id", `${PREFIXO_CHECKOUT_EXPRESSO}%`)
+        .in("status", ["pendente", "enviado"])
+        .gte("created_at", desdeExpresso)
+        .limit(MAX_EXPRESSOS),
       precisaDePagina
         ? admin
             .from("tracking_events")
@@ -129,6 +187,19 @@ export async function checkoutsDoComprador(
       }
       for (const l of (r.data || []) as { destination_id?: string | null; status?: string; sent_at?: string | null }[]) {
         if (l.destination_id && checkoutConta(l)) jaIniciados.add(l.destination_id);
+      }
+    }
+
+    if (expressos.error) {
+      console.error("[tracking/garantia] falha ao conferir o expresso", expressos.error.message);
+      jaIniciados = null;
+    } else if ((expressos.data || []).length >= MAX_EXPRESSOS) {
+      console.error("[tracking/garantia] expressos demais na janela para conferir o comprador");
+      jaIniciados = null;
+    } else if (jaIniciados) {
+      const doPedido = { chaves: comprador, ipHash, userAgent };
+      for (const l of (expressos.data || []) as LinhaDoExpresso[]) {
+        if (l.destination_id && expressoDoComprador(l, doPedido)) jaIniciados.add(l.destination_id);
       }
     }
 

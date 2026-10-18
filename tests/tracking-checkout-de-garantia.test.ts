@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { fakeSupabase, type FakeSupabase } from "./_fake-supabase";
 import { idDoEventoDoCheckout } from "../src/lib/tracking/eventos";
 import { hashDoIp } from "../src/lib/tracking/ip-balde";
+import { expressoDoComprador } from "../src/lib/tracking/checkout-de-garantia";
 import {
   caminhoEhEndpoint,
   horaDoCheckoutDeGarantia,
@@ -32,7 +33,10 @@ import {
 //   4. sem checkout_token (COD) o id e por pedido; o TikTok recebe o dele;
 //   5. chegada que e endpoint (/cart/add.js) vira a pagina do comprador, ou a
 //      raiz;
-//   6. reentrega do webhook nao manda nada de novo.
+//   6. reentrega do webhook nao manda nada de novo;
+//   7. o expresso de outro clique do comprador (chave diferente, IPv6, sem
+//      chave nenhuma) nao vira dois IC: IP, user agent ou clientId o acham, e
+//      sem chave qualquer expresso pendente da loja barra a garantia.
 // ============================================================================
 
 vi.mock("server-only", () => ({}));
@@ -153,6 +157,27 @@ const ADD_TO_CART = () =>
     created_at: "2026-10-18T03:00:16Z",
     payload: { event_name: "AddToCart", event_source_url: `${PUBLICA}/products/blanket?variant=9011&fbclid=x` },
   });
+
+/**
+ * Um expresso PENDENTE de outro comprador, de 2 min antes: outro visitante,
+ * outro IP, outro aparelho. Cada teste troca o que o liga ao pedido.
+ */
+const EXPRESSO = (over: Linha = {}) =>
+  linhaDoFunil({
+    event_name: "begin_checkout",
+    event_id: "begin_checkout_xp_outro.visitante_9",
+    visitor_id: "outro.visitante",
+    shopify_client_id: null,
+    ip_hash: hashDoIp("198.51.100.77"),
+    status: "pendente",
+    sent_at: null,
+    created_at: new Date(AGORA - 2 * MIN).toISOString(),
+    payload: { event_name: "InitiateCheckout", user_data: { client_user_agent: "Mozilla/5.0 (Linux; Android 14)" } },
+    ...over,
+  });
+
+/** Shop Pay da pagina do produto: sem carrinho, sem atributo, sem identidade. */
+const SEM_CARRINHO: PedidoShopify = { ...PEDIDO, note_attributes: [], checkout_token: "outro-token" };
 
 function cenario(over: { eventos?: Linha[]; identidades?: Linha[]; falhar?: Parameters<typeof fakeSupabase>[1] } = {}) {
   banco = fakeSupabase(
@@ -570,27 +595,127 @@ describe("IC de garantia no webhook orders/create", () => {
   });
 
   it("sem chave nenhuma do comprador: o IP do pedido acha o expresso dele (30 min)", async () => {
-    const semCarrinho: PedidoShopify = { ...PEDIDO, note_attributes: [], checkout_token: "outro-token" };
     cenario({
       identidades: [],
+      // Ja enviado e sem user agent: so o IP o liga ao pedido.
       eventos: [
-        linhaDoFunil({
-          event_name: "begin_checkout",
-          event_id: `begin_checkout_xp_${VID}_9`,
+        EXPRESSO({
           visitor_id: VID,
           ip_hash: hashDoIp(IP),
-          status: "pendente",
-          sent_at: null,
-          created_at: new Date(AGORA - 2 * MIN).toISOString(),
+          status: "enviado",
+          sent_at: new Date(AGORA - MIN).toISOString(),
+          payload: { event_name: "InitiateCheckout" },
         }),
       ],
     });
-    expect((await webhook(semCarrinho)).corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "já iniciado" } });
+    expect((await webhook(SEM_CARRINHO)).corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "já iniciado" } });
+    expect(linha(idDoEventoDoCheckout("begin_checkout", "outro-token"))).toBeUndefined();
+  });
 
-    // Outro IP: e outra pessoa, e a garantia sai -- sem visitante na linha.
+  it("sem chave e IPv6 que o coletor nao viu: o user agent acha o expresso ja enviado; outro aparelho ganha a garantia", async () => {
+    cenario({
+      identidades: [],
+      eventos: [
+        // Ja saiu (passou dos 5 min): so conta se for dele.
+        EXPRESSO({
+          visitor_id: VID,
+          ip_hash: hashDoIp(IP),
+          status: "enviado",
+          sent_at: new Date(AGORA - 3 * MIN).toISOString(),
+          created_at: new Date(AGORA - 9 * MIN).toISOString(),
+          payload: { event_name: "InitiateCheckout", user_data: { client_user_agent: "Mozilla/5.0 (iPhone)" } },
+        }),
+      ],
+    });
+    const ipv6 = { browser_ip: "2001:db8:85a3::8a2e:370:7334", user_agent: "Mozilla/5.0 (iPhone)" };
+    const r = await webhook({ ...SEM_CARRINHO, browser_ip: ipv6.browser_ip, client_details: ipv6 });
+    expect(r.corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "já iniciado" } });
+    expect(nomes()).toEqual(["Purchase"]);
+
+    // Outro IP e outro aparelho, e o expresso da loja ja saiu: e outra pessoa.
     mundo.saiu.length = 0;
-    const r = await webhook({ ...semCarrinho, id: 99, browser_ip: "198.51.100.4", client_details: { browser_ip: "198.51.100.4" } }, "wh-9");
+    const outro = { browser_ip: "198.51.100.4", user_agent: "Mozilla/5.0 (Linux; Android 14)" };
+    const r2 = await webhook(
+      { ...SEM_CARRINHO, id: 99, checkout_token: "token-99", browser_ip: outro.browser_ip, client_details: outro },
+      "wh-9"
+    );
+    expect(r2.corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "enviado" } });
+    expect(linha(idDoEventoDoCheckout("begin_checkout", "token-99"))).toMatchObject({ visitor_id: null });
+    expect(nomes()).toEqual(["InitiateCheckout", "Purchase"]);
+  });
+
+  it("sem chave: qualquer expresso PENDENTE da loja barra a garantia, e o cron manda so ele", async () => {
+    cenario({ identidades: [], eventos: [EXPRESSO()] });
+    const ipv6 = { browser_ip: "2001:db8:85a3::8a2e:370:7334", user_agent: "Mozilla/5.0 (iPhone)" };
+    const r = await webhook({ ...SEM_CARRINHO, browser_ip: ipv6.browser_ip, client_details: ipv6 });
+    expect(r.corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "já iniciado" } });
+    expect(linha(idDoEventoDoCheckout("begin_checkout", "outro-token"))).toBeUndefined();
+
+    expect(await drenar(AGORA + 5 * MIN)).toMatchObject({ enviados: 1 });
+    expect(ics()).toHaveLength(1);
+    expect(linha("begin_checkout_xp_outro.visitante_9")).toMatchObject({ status: "enviado", sent_at: expect.any(String) });
+  });
+
+  it.each([
+    ["o IP", { ip_hash: hashDoIp(IP) }],
+    ["o user agent", { payload: { event_name: "InitiateCheckout", user_data: { client_user_agent: "Mozilla/5.0 (iPhone)" } } }],
+    ["o clientId da linha (057)", { shopify_client_id: CID }],
+  ])("com chave que nao e a do expresso: %s acha o pendente dele", async (_sinal, over) => {
+    cenario({ eventos: [ADD_TO_CART(), EXPRESSO(over as Linha)] });
+    const r = await webhook();
+    expect(r.corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "já iniciado" } });
+    expect(linha(GARANTIA)).toBeUndefined();
+    expect(nomes()).toEqual(["Purchase"]);
+  });
+
+  it("com chave: o expresso pendente de OUTRO comprador nao barra a garantia", async () => {
+    cenario({ eventos: [ADD_TO_CART(), EXPRESSO()] });
+    const r = await webhook();
     expect(r.corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "enviado" } });
-    expect(linha(idDoEventoDoCheckout("begin_checkout", "outro-token"))).toMatchObject({ visitor_id: null });
+    expect(ics()).toHaveLength(1);
+  });
+
+  it("TikTok: o user agent do expresso vem de user.user_agent", async () => {
+    mundo.destinos = [META, TIKTOK];
+    cenario({
+      eventos: [
+        ADD_TO_CART(),
+        EXPRESSO({
+          destination: "tiktok",
+          destination_id: TIKTOK.id,
+          payload: { event: "InitiateCheckout", user: { user_agent: "Mozilla/5.0 (iPhone)" } },
+        }),
+      ],
+    });
+    const r = await webhook();
+    expect(r.corpo).toMatchObject({
+      checkoutDeGarantia: { "meta:dest-met": "enviado", "tiktok:dest-ttk": "já iniciado" },
+    });
+  });
+
+  it("expressos demais na janela para conferir: nenhum IC, e a compra sai igual", async () => {
+    cenario({
+      eventos: [
+        ADD_TO_CART(),
+        ...Array.from({ length: 200 }, (_, i) => EXPRESSO({ event_id: `begin_checkout_xp_v${i}_9`, visitor_id: `v${i}` })),
+      ],
+    });
+    const r = await webhook();
+    expect(r.corpo).toMatchObject({
+      destinos: { "meta:dest-met": "enviado" },
+      checkoutDeGarantia: { "meta:dest-met": "não conferido" },
+    });
+    expect(nomes()).toEqual(["Purchase"]);
+  });
+
+  it("regra pura: cancelado e falhou nunca contam; sem chave, so o pendente de qualquer um", () => {
+    const sem = { chaves: [] as string[], ipHash: null, userAgent: "" };
+    expect(expressoDoComprador({ status: "pendente" }, sem)).toBe(true);
+    expect(expressoDoComprador({ status: "enviado", sent_at: "2026-10-18T03:00:00Z" }, sem)).toBe(false);
+    expect(expressoDoComprador({ status: "enviado", sent_at: null, visitor_id: VID }, { ...sem, chaves: [VID] })).toBe(false);
+    expect(expressoDoComprador({ status: "falhou", ip_hash: "h" }, { ...sem, ipHash: "h" })).toBe(false);
+    // User agent e IP vazios nos dois lados nao sao "o mesmo".
+    expect(expressoDoComprador({ status: "pendente", ua_meta: "" }, { ...sem, chaves: [VID] })).toBe(false);
+    expect(expressoDoComprador({ status: "pendente", ip_hash: null }, { ...sem, chaves: [VID] })).toBe(false);
   });
 });
