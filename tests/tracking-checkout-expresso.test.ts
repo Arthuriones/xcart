@@ -4,6 +4,8 @@ import { join } from "node:path";
 import vm from "node:vm";
 import {
   ATRASO_CHECKOUT_EXPRESSO_MS,
+  ATRASO_RESERVA_DO_CHECKOUT_MS,
+  idDaReservaDoCheckout,
   idDoCheckoutExpresso,
 } from "../src/lib/tracking/eventos";
 
@@ -20,8 +22,9 @@ import {
 // dele -- mais rico, com e-mail e endereco. O que este arquivo trava, rodando
 // o POST de verdade e o drain de verdade contra um banco de mentira:
 //
-//   1. com o pixel cobrindo, o begin_checkout comum do tema continua suprimido
-//      e o expresso entra PENDENTE, com atraso, sem sair na hora;
+//   1. com o pixel cobrindo, o expresso entra PENDENTE, com atraso, sem sair
+//      na hora -- e o clique comum tambem, como a reserva dele (o "Finalizar
+//      compra" que a Shopify desvia para o Shop Pay), no fim do arquivo;
 //   2. o cron so manda depois do atraso, com o event_time do clique;
 //   3. o begin_checkout do pixel do mesmo comprador cancela o expresso
 //      pendente (pelo visitante do tema ou pelo clientId) e segue normal;
@@ -422,10 +425,7 @@ describe("coletor: checkout expresso (o pixel vence)", () => {
     vi.useRealTimers();
   });
 
-  it("pixel cobrindo: o comum segue suprimido; o expresso entra PENDENTE, com atraso, sem sair na hora", async () => {
-    expect(await postar(DO_TEMA)).toMatchObject({ ignorado: "checkout coberto pelo Web Pixel" });
-    expect(mundo.eventos).toHaveLength(0);
-
+  it("pixel cobrindo: o expresso entra PENDENTE, com atraso, sem sair na hora", async () => {
     const r = await postar(EXPRESSO);
     expect(r.destinos).toEqual({ "meta:dest-met": "aguardando o pixel" });
     expect(mundo.eventos).toHaveLength(1);
@@ -566,13 +566,17 @@ describe("coletor: checkout expresso (o pixel vence)", () => {
     expect(noMeta()).toEqual(["begin_checkout_vid-1_2"]);
   });
 
-  it("marca fora da lista nao fura a supressao", async () => {
-    for (const origem of ["Expresso", "qualquer", "", 1]) {
-      expect(await postar({ ...DO_TEMA, origem })).toMatchObject({
-        ignorado: "checkout coberto pelo Web Pixel",
-      });
+  it("marca fora da lista nao vira expresso: e o clique comum, que vira a reserva dele", async () => {
+    const origens = ["Expresso", "qualquer", "", 1];
+    for (const [i, origem] of origens.entries()) {
+      await postar({ ...DO_TEMA, visitorId: `vid-m${i}`, origem });
     }
-    expect(mundo.eventos).toHaveLength(0);
+    expect(mundo.eventos.map((l) => l.event_id)).toEqual(
+      origens.map((_, i) => idDaReservaDoCheckout(`vid-m${i}`, AGORA))
+    );
+    for (const l of mundo.eventos) {
+      expect(l.next_attempt_at).toBe(new Date(AGORA + ATRASO_RESERVA_DO_CHECKOUT_MS).toISOString());
+    }
   });
 
   it("a marca e a lista de itens so valem no begin_checkout do tema", async () => {
@@ -768,5 +772,233 @@ describe("coletor: checkout expresso (o pixel vence)", () => {
       sent_at: null,
       response: { enviado: false, substituido_por: "pixel" },
     });
+  });
+});
+
+// ============================================================================
+// A reserva do clique COMUM, com o pixel cobrindo a loja.
+//
+// O "Finalizar compra" / "Secure checkout" (button name="checkout") era
+// descartado como "checkout coberto pelo Web Pixel". Mas a Shopify desvia para
+// o Shop Pay, em shop.app, o comprador que o Shop reconhece, e la o pixel nao
+// roda: sem compra, o IC sumia (#1016, #1004, #1005 e #1012 da Softnook). Agora
+// o clique fica pendente como o expresso, por ATRASO_RESERVA_DO_CHECKOUT_MS, e
+// o begin_checkout do pixel do mesmo comprador o cancela.
+// ============================================================================
+
+describe("coletor: reserva do clique comum (pixel cobrindo)", () => {
+  const rs = (vid: string, quando = AGORA) => idDaReservaDoCheckout(vid, quando);
+  /** O clique no "Finalizar compra" da gaveta do carrinho, com o clientId do trekkie. */
+  const CLIQUE = { ...DO_TEMA, clientId: "cli-1", pageUrl: "https://loja.test/cart" };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(AGORA);
+    mundo.eventos.length = 0;
+    mundo.meta.length = 0;
+    mundo.identidades.length = 0;
+    mundo.antesDeEnfileirar = null;
+    mundo.aoLerPendentes = null;
+    mundo.duranteMeta = null;
+    mundo.respostaMeta = null;
+    mundo.pixelVistoEm = AGORA - 10 * MIN;
+    bancoFalso();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("Shop Pay desviado, sem compra: a reserva espera 2 min e o cron a manda, com o event_time do clique", async () => {
+    const r = await postar(CLIQUE);
+    expect(r.destinos).toEqual({ "meta:dest-met": "aguardando o pixel" });
+    expect(mundo.eventos).toHaveLength(1);
+    // O id e o do servidor, por balde -- nem o do navegador, nem o do pixel.
+    expect(linha(rs("vid-1"))).toMatchObject({
+      event_name: "begin_checkout",
+      visitor_id: "vid-1",
+      shopify_client_id: "cli-1",
+      checkout_token: null,
+      status: "pendente",
+      next_attempt_at: new Date(AGORA + ATRASO_RESERVA_DO_CHECKOUT_MS).toISOString(),
+    });
+    const payload = linha(rs("vid-1")).payload;
+    expect(payload).toMatchObject({
+      event_name: "InitiateCheckout",
+      event_id: rs("vid-1"),
+      event_time: Math.floor(AGORA / 1000),
+      event_source_url: "https://loja.test/cart",
+    });
+    expect(JSON.stringify(payload)).not.toMatch(/"value"|"currency"/);
+    expect(mundo.meta).toEqual([]);
+
+    expect(await drenar(AGORA + 1 * MIN)).toMatchObject({ pegos: 0 });
+    expect(await drenar(AGORA + 2 * MIN)).toMatchObject({ pegos: 1, enviados: 1 });
+    expect(mundo.meta).toEqual([expect.objectContaining({ event_id: rs("vid-1"), via: "cron" })]);
+    expect(mundo.meta[0].payload.event_time).toBe(Math.floor(AGORA / 1000));
+    expect(linha(rs("vid-1")).sent_at).not.toBeNull();
+  });
+
+  it("checkout normal: o pixel cancela a reserva -- um IC so, o do pixel", async () => {
+    await postar(CLIQUE);
+    // Outro comprador, com a reserva dele: nao e da conta deste pixel.
+    await postar({ ...CLIQUE, visitorId: "vid-2", clientId: "cli-2" });
+    // O pixel chega segundos depois (mediana medida: 2,4 s).
+    vi.setSystemTime(AGORA + 3e3);
+    const r = await postar(DO_PIXEL);
+    // A dedupe de 10 min ("ja contado pelo tema") nao vale contra a reserva.
+    expect(r).not.toHaveProperty("ignorado");
+    expect(noMeta()).toEqual(["begin_checkout_ck_T1"]);
+    expect(linha(rs("vid-1"))).toMatchObject({
+      status: "enviado",
+      sent_at: null,
+      response: { enviado: false, substituido_por: "pixel" },
+    });
+    expect(linha(rs("vid-2")).status).toBe("pendente");
+
+    await drenar(AGORA + 10 * MIN);
+    expect(noMeta()).toEqual(["begin_checkout_ck_T1", rs("vid-2")]);
+  });
+
+  it("clique sem clientId: o resolvido pela identidade vai na linha, e o pixel cancela por ele", async () => {
+    mundo.identidades.push({ store_id: STORE, visitor_id: "vid-6", shopify_client_id: "cli-6" });
+    await postar({ ...CLIQUE, visitorId: "vid-6", clientId: null });
+    expect(linha(rs("vid-6")).shopify_client_id).toBe("cli-6");
+
+    // cli-6 nao tem identidade por clientId no mock: so a coluna acha.
+    vi.setSystemTime(AGORA + 5e3);
+    await postar({ ...DO_PIXEL, visitorId: "cli-6", clientId: "cli-6", checkoutToken: "T6" });
+    expect(linha(rs("vid-6"))).toMatchObject({ status: "enviado", sent_at: null });
+    await drenar(AGORA + 10 * MIN);
+    expect(noMeta()).toEqual(["begin_checkout_ck_T6"]);
+  });
+
+  it("sem consentimento: o pixel com clientId zerado cancela a reserva pelo _xc_vid", async () => {
+    const VID = "mg1abc0.k2j3h4x9";
+    await postar({ ...CLIQUE, visitorId: VID, clientId: null });
+    expect(linha(rs(VID))).toMatchObject({ status: "pendente", shopify_client_id: null });
+
+    vi.setSystemTime(AGORA + 3e3);
+    const corpo = await beaconDoPixel({ clientId: ZERADO, token: "T7", cookies: { _xc_vid: VID } });
+    expect(await postar(corpo)).not.toHaveProperty("ignorado");
+    expect(linha(rs(VID))).toMatchObject({ status: "enviado", sent_at: null });
+    await drenar(AGORA + 10 * MIN);
+    expect(noMeta()).toEqual(["begin_checkout_ck_T7"]);
+  });
+
+  it("varios cliques, e voltar do Shop Pay e clicar de novo: um IC so", async () => {
+    await postar(CLIQUE);
+    // O tema dispara de novo (outro id do navegador): a janela barra.
+    vi.setSystemTime(AGORA + 2e3);
+    expect(await postar({ ...CLIQUE, eventId: "begin_checkout_vid-1_2" })).toMatchObject({
+      ignorado: "checkout ja iniciado nos ultimos 30 min",
+    });
+    // A reserva sai; o comprador volta do Shop Pay e clica de novo -- ja em
+    // outro balde (12:32), que o id sozinho deixaria passar.
+    await drenar(AGORA + 2 * MIN);
+    vi.setSystemTime(AGORA + 25 * MIN);
+    expect(rs("vid-1", AGORA + 25 * MIN)).not.toBe(rs("vid-1"));
+    expect(await postar({ ...CLIQUE, eventId: "begin_checkout_vid-1_3" })).toMatchObject({
+      ignorado: "checkout ja iniciado nos ultimos 30 min",
+    });
+    await drenar(AGORA + 40 * MIN);
+    expect(noMeta()).toEqual([rs("vid-1")]);
+
+    // Passados os 30 min, e outra tentativa.
+    vi.setSystemTime(AGORA + 31 * MIN);
+    expect((await postar(CLIQUE)).destinos).toEqual({ "meta:dest-met": "aguardando o pixel" });
+  });
+
+  it("expresso e comum do mesmo comprador, em qualquer ordem: um IC so", async () => {
+    // Comum, depois o Shop Pay da pagina do produto.
+    await postar(CLIQUE);
+    vi.setSystemTime(AGORA + 1 * MIN);
+    expect(await postar(EXPRESSO)).toMatchObject({ ignorado: "checkout ja iniciado nos ultimos 30 min" });
+
+    // Outro comprador: expresso, depois o comum.
+    await postar({ ...EXPRESSO, visitorId: "vid-2", clientId: "cli-2" });
+    vi.setSystemTime(AGORA + 2 * MIN);
+    expect(await postar({ ...CLIQUE, visitorId: "vid-2", clientId: "cli-2" })).toMatchObject({
+      ignorado: "checkout ja iniciado nos ultimos 30 min",
+    });
+
+    await drenar(AGORA + 10 * MIN);
+    expect(noMeta().sort()).toEqual([rs("vid-1"), xp("vid-2", AGORA + 1 * MIN)].sort());
+  });
+
+  // ---- corrida: escreve primeiro, confere depois ----------------------------
+
+  it("corrida: o pixel inteiro entre a janela e o INSERT da reserva -- a reserva se fecha", async () => {
+    mundo.antesDeEnfileirar = async (eventId) => {
+      if (!eventId.startsWith("begin_checkout_rs_")) return;
+      mundo.antesDeEnfileirar = null;
+      await postar(DO_PIXEL);
+    };
+    const r = await postar(CLIQUE);
+    expect(r.destinos).toEqual({ "meta:dest-met": "cancelado: checkout ja iniciado" });
+    expect(linha(rs("vid-1"))).toMatchObject({
+      status: "enviado",
+      sent_at: null,
+      response: { enviado: false, substituido_por: "pixel" },
+    });
+    await drenar(AGORA + 10 * MIN);
+    expect(noMeta()).toEqual(["begin_checkout_ck_T1"]);
+  });
+
+  it("corrida: o expresso inteiro entre a janela e o INSERT da reserva -- a reserva cede ao expresso", async () => {
+    mundo.antesDeEnfileirar = async (eventId) => {
+      if (!eventId.startsWith("begin_checkout_rs_")) return;
+      mundo.antesDeEnfileirar = null;
+      await postar(EXPRESSO);
+    };
+    const r = await postar(CLIQUE);
+    expect(r.destinos).toEqual({ "meta:dest-met": "cancelado: checkout ja iniciado" });
+    expect(linha(rs("vid-1"))).toMatchObject({ status: "enviado", sent_at: null });
+    expect(linha(xp("vid-1")).status).toBe("pendente");
+    await drenar(AGORA + 10 * MIN);
+    expect(noMeta()).toEqual([xp("vid-1")]);
+  });
+
+  it("corrida: a reserva inteira entre a janela e o INSERT do expresso -- o expresso a cancela depois de gravar", async () => {
+    mundo.antesDeEnfileirar = async (eventId) => {
+      if (!eventId.startsWith("begin_checkout_xp_")) return;
+      mundo.antesDeEnfileirar = null;
+      await postar(CLIQUE);
+      expect(linha(rs("vid-1")).status).toBe("pendente");
+    };
+    expect((await postar(EXPRESSO)).destinos).toEqual({ "meta:dest-met": "aguardando o pixel" });
+    expect(linha(rs("vid-1"))).toMatchObject({
+      status: "enviado",
+      sent_at: null,
+      response: { enviado: false, substituido_por: "tema" },
+    });
+    await drenar(AGORA + 10 * MIN);
+    expect(noMeta()).toEqual([xp("vid-1")]);
+  });
+
+  it("cancelada entre a leitura do cron e o envio, nao sai", async () => {
+    await postar(CLIQUE);
+    mundo.aoLerPendentes = () => postar(DO_PIXEL).then(() => undefined);
+    expect(await drenar(AGORA + 2 * MIN)).toMatchObject({ pegos: 1, enviados: 0 });
+    expect(noMeta()).toEqual(["begin_checkout_ck_T1"]);
+    expect(linha(rs("vid-1"))).toMatchObject({ status: "enviado", sent_at: null });
+  });
+
+  // ---- sem pixel: como antes ------------------------------------------------
+
+  it("loja sem pixel cobrindo: o clique comum sai na hora, com o id do navegador, como antes", async () => {
+    mundo.pixelVistoEm = AGORA - 8 * 24 * 60 * MIN;
+    const r = await postar(CLIQUE);
+    expect(r.destinos).toEqual({ "meta:dest-met": "enviado" });
+    expect(noMeta()).toEqual([CLIQUE.eventId]);
+    expect(mundo.eventos).toHaveLength(1);
+    expect(mundo.eventos[0]).toMatchObject({
+      event_id: CLIQUE.eventId,
+      shopify_client_id: null,
+      next_attempt_at: new Date(AGORA).toISOString(),
+    });
+    // E continua sem janela: o segundo clique comum tambem sai.
+    vi.setSystemTime(AGORA + 1 * MIN);
+    await postar({ ...CLIQUE, eventId: "begin_checkout_vid-1_9" });
+    expect(noMeta()).toEqual([CLIQUE.eventId, "begin_checkout_vid-1_9"]);
   });
 });

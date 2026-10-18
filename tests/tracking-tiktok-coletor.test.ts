@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ATRASO_CHECKOUT_EXPRESSO_MS, idDoCheckoutExpresso } from "../src/lib/tracking/eventos";
+import {
+  ATRASO_CHECKOUT_EXPRESSO_MS,
+  ATRASO_RESERVA_DO_CHECKOUT_MS,
+  idDaReservaDoCheckout,
+  idDoCheckoutExpresso,
+} from "../src/lib/tracking/eventos";
 import { sha256 } from "../src/lib/tracking/normalizar";
 
 // ============================================================================
@@ -38,6 +43,8 @@ const mundo = vi.hoisted(() => ({
   identidades: [] as Record<string, unknown>[],
   /** O que a identidade do checkout devolve por clientId. */
   identidadeDoCliente: null as Record<string, unknown> | null,
+  /** Quando o Web Pixel foi visto. null = nao cobre, e o begin_checkout do tema sai. */
+  pixelVistoEm: null as string | null,
 }));
 
 vi.mock("server-only", () => ({}));
@@ -115,7 +122,9 @@ function bancoFalso() {
           if (tabela === "stores") data = [{ id: STORE }];
           else if (tabela === "tracking_configs" && op === "select") {
             // Pixel do checkout visto ha muito: o begin_checkout do tema sai.
-            data = [{ store_id: STORE, enabled: true, web_pixel_visto_em: null, web_pixel_com_id_em: null }];
+            data = [
+              { store_id: STORE, enabled: true, web_pixel_visto_em: mundo.pixelVistoEm, web_pixel_com_id_em: null },
+            ];
           } else if (tabela === "tracking_identities" && op === "update") {
             mundo.identidades.push(campos);
             data = [{ id: "i1" }];
@@ -190,6 +199,7 @@ describe("coletor com destino TikTok", () => {
     mundo.semEnviar.length = 0;
     mundo.identidades.length = 0;
     mundo.identidadeDoCliente = null;
+    mundo.pixelVistoEm = null;
     bancoFalso();
   });
   afterEach(() => {
@@ -367,5 +377,37 @@ describe("coletor com destino TikTok", () => {
       event_id: idDoCheckoutExpresso("vid-1", AGORA),
       properties: { contents: [{ content_id: "11" }, { content_id: "12" }] },
     });
+  });
+
+  it("clique comum com o pixel cobrindo: o TikTok tambem guarda a reserva, com o mesmo id do Meta", async () => {
+    mundo.pixelVistoEm = new Date(AGORA - 60e3).toISOString();
+    const r = await postar({
+      evento: "begin_checkout",
+      eventId: "begin_checkout_vid-1_1",
+      visitorId: "vid-1",
+      clientId: "cli-1",
+      ttclid: "E.C.P.X",
+      pageUrl: "https://loja.shop/cart",
+    });
+    expect(r.destinos).toEqual({
+      "meta:dest-met": "aguardando o pixel",
+      "tiktok:dest-tik": "aguardando o pixel",
+    });
+    expect(mundo.saiu).toEqual([]);
+    const id = idDaReservaDoCheckout("vid-1", AGORA);
+    expect(mundo.fila.map((l) => [l.destination, l.event_id])).toEqual([
+      ["meta", id],
+      ["tiktok", id],
+    ]);
+    const [tt] = daPlataforma("tiktok");
+    expect(tt.proximaTentativaEm?.getTime()).toBe(AGORA + ATRASO_RESERVA_DO_CHECKOUT_MS);
+    expect(tt.payload).toMatchObject({
+      event: "InitiateCheckout",
+      event_id: id,
+      event_time: Math.floor(AGORA / 1000),
+      user: { ttclid: "E.C.P.X" },
+      page: { url: "https://loja.shop/cart" },
+    });
+    expect(JSON.stringify(tt.payload)).not.toMatch(/"value"|"currency"/);
   });
 });

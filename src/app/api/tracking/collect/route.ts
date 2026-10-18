@@ -3,13 +3,17 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   eventoValido,
   definicaoDoEvento,
+  idDaReservaDoCheckout,
   idDoCheckoutExpresso,
   idDoEventoDoCheckout,
   origemDoCheckout,
   tokenDoCheckout,
   ATRASO_CHECKOUT_EXPRESSO_MS,
+  ATRASO_RESERVA_DO_CHECKOUT_MS,
   JANELA_CHECKOUT_EXPRESSO_MS,
   PREFIXO_CHECKOUT_EXPRESSO,
+  PREFIXO_RESERVA_DO_CHECKOUT,
+  PREFIXOS_DE_RESERVA,
   vaiPeloServidor,
   type ChaveEvento,
   type PlataformaServidor,
@@ -403,7 +407,7 @@ export async function POST(request: NextRequest) {
   //
   // O PIXEL VENCE: o expresso so e reserva. Ele fica pendente na fila por
   // ATRASO_CHECKOUT_EXPRESSO_MS, e o begin_checkout do pixel do mesmo
-  // comprador o cancela -- ver `cancelarExpressoPendente`.
+  // comprador o cancela -- ver `cancelarReservaPendente`.
   const expresso =
     !doPixel && evento === "begin_checkout" && origemDoCheckout(corpo.origem) === "expresso";
   if (expresso) eventId = idDoCheckoutExpresso(visitorId, Date.now());
@@ -612,15 +616,23 @@ export async function POST(request: NextRequest) {
   // isto se curar: se o pixel parar de mandar, o tema volta a cobrir sozinho.
   // Era um dia, e loja com menos de um checkout por dia contava dois.
   //
-  // O EXPRESSO nao entra: o Shop Pay roda em shop.app e a carteira na janela do
-  // sistema, e o pixel nao roda em nenhum dos dois -- o clique e o unico
+  // Por isso o clique comum, com o pixel cobrindo, nao sai: vira RESERVA, como
+  // o expresso (ver `idDaReservaDoCheckout`). Era descartado, e o comprador que
+  // a Shopify desvia para o Shop Pay (shop.app, sem pixel) ficava sem IC
+  // nenhum quando nao comprava. O pixel do mesmo comprador cancela a reserva.
+  //
+  // O EXPRESSO: o Shop Pay roda em shop.app e a carteira na janela do sistema,
+  // e o pixel nao roda em nenhum dos dois -- o clique e o unico
   // InitiateCheckout que existe. Quando o clique cai no checkout normal (Shop
   // Pay como convidado, ou o "Comprar agora" que o tema nao separa da carteira
   // no shadow fechado), o pixel manda o dele e cancela o expresso pendente.
   const pixelCobrindo = Date.now() - vistoEm < JANELA_PIXEL_CHECKOUT_MS;
-  if (!doPixel && evento === "begin_checkout" && pixelCobrindo && !expresso) {
-    return ok({ ignorado: "checkout coberto pelo Web Pixel" });
-  }
+  const reservaComum = !doPixel && evento === "begin_checkout" && pixelCobrindo && !expresso;
+  // O id do servidor, por balde, como o do expresso: com o do navegador cada
+  // POST com id novo seria outra reserva.
+  if (reservaComum) eventId = idDaReservaDoCheckout(visitorId, Date.now());
+  /** Fica pendente esperando o pixel, que a cancela: o expresso ou o clique comum. */
+  const reserva = expresso || reservaComum;
 
   // Os destinos sao LINHAS: a loja pode ter dois pixels Meta. Todo destino
   // ativo que aceita este evento recebe uma copia. So Meta e TikTok: o Google
@@ -694,14 +706,14 @@ export async function POST(request: NextRequest) {
     return ok({ ignorado: "teto da loja" });
   }
 
-  // ---- expresso: janela deslizante ----------------------------------------
+  // ---- reserva (expresso e clique comum): janela deslizante ---------------
   //
   // Um InitiateCheckout por tentativa de compra. Qualquer begin_checkout do
-  // mesmo comprador nos ultimos 30 min barra o expresso: o clique comum do tema
-  // (visitor_id = o do tema), o do pixel (visitor_id = clientId da Shopify) e
-  // outro expresso. O balde do id sozinho nao bastava: 12:29:50 e 12:30:05 sao
-  // baldes diferentes, e o comprador que foi ao checkout normal e voltou para o
-  // Shop Pay contava dois.
+  // mesmo comprador nos ultimos 30 min barra a reserva: o clique comum do tema
+  // (visitor_id = o do tema), o do pixel (visitor_id = clientId da Shopify),
+  // outro expresso e outra reserva. O balde do id sozinho nao bastava: 12:29:50
+  // e 12:30:05 sao baldes diferentes, e o comprador que foi ao checkout normal
+  // e voltou para o Shop Pay contava dois.
   //
   // Uma consulta por chave, com `.eq`: os dois valores vem do navegador, e
   // monta-los num filtro `or`/`in` do PostgREST seria deixar o cliente escrever
@@ -711,8 +723,8 @@ export async function POST(request: NextRequest) {
   // carregou nesta pagina), vem da identidade que o tema publicou para este
   // visitante: a linha do pixel tem visitor_id = clientId, e sem esta chave o
   // begin_checkout do checkout normal de minutos antes nao era achado.
-  let clienteDoExpresso = clientId;
-  if (expresso && !clienteDoExpresso) {
+  let clienteDaReserva = clientId;
+  if (reserva && !clienteDaReserva) {
     const { data: ident, error } = await admin
       .from("tracking_identities")
       .select("shopify_client_id")
@@ -722,18 +734,20 @@ export async function POST(request: NextRequest) {
     // Melhor esforco: sem a identidade a janela olha so o visitante do tema.
     if (error) console.error("[tracking/collect] falha ao ler a identidade do expresso", error.message);
     const resolvido = (ident?.shopify_client_id || "").trim() || null;
-    clienteDoExpresso = resolvido && !ehClientIdSentinela(resolvido) ? resolvido : null;
+    clienteDaReserva = resolvido && !ehClientIdSentinela(resolvido) ? resolvido : null;
   }
 
   /**
-   * Um begin_checkout deste comprador nos ultimos 30 min, ou null. `soComum`
-   * deixa os expressos de fora: e a reconferencia depois de gravar, e la outro
-   * expresso concorrente nao pode fechar este (os dois se fechariam).
+   * Um begin_checkout deste comprador nos ultimos 30 min, ou null, sem as
+   * linhas dos prefixos em `fora`. Com `fora`, e a reconferencia depois de
+   * gravar: la a reserva concorrente do mesmo tipo nao pode fechar esta (as
+   * duas se fechariam). O expresso so cede ao comum e ao pixel; a reserva do
+   * clique comum cede tambem ao expresso -- os dois juntos, sai o expresso.
    */
-  async function checkoutDoComprador(soComum: boolean): Promise<{ checkout_token: string | null } | null> {
+  async function checkoutDoComprador(fora: readonly string[]): Promise<{ checkout_token: string | null } | null> {
     const desde = new Date(Date.now() - JANELA_CHECKOUT_EXPRESSO_MS).toISOString();
     const chaves = [
-      ...new Set([visitorId, clienteDoExpresso].filter((v): v is string => Boolean(v))),
+      ...new Set([visitorId, clienteDaReserva].filter((v): v is string => Boolean(v))),
     ];
     const achados = await Promise.all(
       chaves.map((chave) => {
@@ -744,19 +758,19 @@ export async function POST(request: NextRequest) {
           .eq("visitor_id", chave)
           .eq("event_name", "begin_checkout")
           .gte("created_at", desde);
-        if (soComum) q = q.not("event_id", "like", `${PREFIXO_CHECKOUT_EXPRESSO}%`);
+        for (const prefixo of fora) q = q.not("event_id", "like", `${prefixo}%`);
         return q.limit(1);
       })
     );
     for (const a of achados) {
-      if (a.error) console.error("[tracking/collect] falha ao conferir a janela do expresso", a.error.message);
+      if (a.error) console.error("[tracking/collect] falha ao conferir a janela da reserva", a.error.message);
       const l = (a.data || [])[0] as { checkout_token: string | null } | undefined;
       if (l) return l;
     }
     return null;
   }
 
-  if (expresso && (await checkoutDoComprador(false))) {
+  if (reserva && (await checkoutDoComprador([]))) {
     return ok({ ignorado: "checkout ja iniciado nos ultimos 30 min" });
   }
 
@@ -808,9 +822,9 @@ export async function POST(request: NextRequest) {
   // checkout_started, e o carimbo so se renova AGORA. Mesmo visitante, mesma
   // acao: o do tema ja contou.
   //
-  // O EXPRESSO fica de fora: contra ele e o pixel que vence (abaixo). O IC do
-  // pixel traz e-mail, telefone e endereco quando o checkout ja tem; descartar
-  // ele pelo clique trocaria o evento rico pelo pobre.
+  // A RESERVA fica de fora (o expresso e o clique comum): contra ela e o pixel
+  // que vence (abaixo). O IC do pixel traz e-mail, telefone e endereco quando o
+  // checkout ja tem; descartar ele pelo clique trocaria o evento rico pelo pobre.
   if (doPixel && evento === "begin_checkout" && visitanteDoTema) {
     const { count: doTema } = await admin
       .from("tracking_events")
@@ -819,6 +833,7 @@ export async function POST(request: NextRequest) {
       .eq("visitor_id", visitanteDoTema)
       .eq("event_name", "begin_checkout")
       .not("event_id", "like", `${PREFIXO_CHECKOUT_EXPRESSO}%`)
+      .not("event_id", "like", `${PREFIXO_RESERVA_DO_CHECKOUT}%`)
       .gte("created_at", new Date(Date.now() - JANELA_CHECKOUT_DO_TEMA_MS).toISOString());
     if ((doTema ?? 0) > 0) {
       return ok({ ignorado: "checkout ja contado pelo tema" });
@@ -839,58 +854,71 @@ export async function POST(request: NextRequest) {
   });
 
   /**
-   * Fecha o expresso PENDENTE do mesmo comprador.
+   * Fecha a reserva PENDENTE do mesmo comprador: o expresso e o clique comum.
    *
    * Pelos visitantes do tema (o visitor_id da linha: o resolvido pelo clientId
    * e o do cookie `_xc_vid` que o pixel leu) e pelo clientId que a linha
-   * guarda (migration 057). Uma atualizacao por chave, com `.eq`, pelo mesmo
-   * motivo da janela deslizante: os valores vem do navegador.
+   * guarda (migration 057). Uma atualizacao por chave e prefixo, com `.eq`, pelo
+   * mesmo motivo da janela deslizante: os valores vem do navegador.
    */
-  async function cancelarExpressoPendente(visitantes: (string | null)[], cliente: string | null) {
+  async function cancelarReservaPendente(
+    visitantes: (string | null)[],
+    cliente: string | null,
+    prefixos: readonly string[]
+  ) {
     const desde = new Date(Date.now() - JANELA_CHECKOUT_EXPRESSO_MS).toISOString();
     const quem = doPixel ? "pixel" : "tema";
-    const cancelar = (coluna: "visitor_id" | "shopify_client_id", valor: string) =>
+    const cancelar = (prefixo: string, coluna: "visitor_id" | "shopify_client_id", valor: string) =>
       admin
         .from("tracking_events")
         .update(fechamentoDoExpresso(quem, "veio primeiro"))
         .eq("store_id", registro.id)
         .eq("event_name", "begin_checkout")
         .eq("status", "pendente")
-        .like("event_id", `${PREFIXO_CHECKOUT_EXPRESSO}%`)
+        .like("event_id", `${prefixo}%`)
         .gte("created_at", desde)
         .eq(coluna, valor);
     const porVisitante = [...new Set(visitantes.filter((v): v is string => Boolean(v)))];
-    const feitos = await Promise.all([
-      ...porVisitante.map((v) => cancelar("visitor_id", v)),
-      cliente ? cancelar("shopify_client_id", cliente) : null,
-    ]);
+    const feitos = await Promise.all(
+      prefixos.flatMap((p) => [
+        ...porVisitante.map((v) => cancelar(p, "visitor_id", v)),
+        cliente ? cancelar(p, "shopify_client_id", cliente) : null,
+      ])
+    );
     // Melhor esforco: sem o cancelamento sai um IC a mais, nao some nenhum.
     for (const f of feitos) {
       if (f?.error) console.error("[tracking/collect] falha ao cancelar o expresso", f.error.message);
     }
   }
 
-  // O pixel vence o expresso. O begin_checkout que de fato vai para a fila --
-  // o do pixel, ou o clique comum do tema quando o pixel nao cobre -- cancela o
-  // expresso PENDENTE do mesmo comprador: o "Comprar agora" que o tema tomou
-  // por carteira no shadow fechado, ou o Shop Pay que caiu no checkout normal.
-  // O expresso que ja saiu (passou do atraso) fica: nao ha como desmandar.
+  // O pixel vence a reserva. O begin_checkout que de fato vai para a fila --
+  // o do pixel, ou o clique comum do tema quando o pixel nao cobre -- cancela a
+  // reserva PENDENTE do mesmo comprador: o "Comprar agora" que o tema tomou
+  // por carteira no shadow fechado, o Shop Pay que caiu no checkout normal, ou
+  // o "Finalizar compra" que chegou ao checkout normal (nao desviado).
+  // A reserva que ja saiu (passou do atraso) fica: nao ha como desmandar.
   //
   // ESCREVE PRIMEIRO, CONFERE DEPOIS, nos dois lados. Este cancela DEPOIS de
   // gravar a propria linha (e so se ela for nova: checkout reaproveitado
-  // termina `duplicado`, nao sai nada, e nao pode derrubar a reserva). O
-  // expresso grava e so depois reconfere se ha begin_checkout comum do mesmo
+  // termina `duplicado`, nao sai nada, e nao pode derrubar a reserva). A
+  // reserva grava e so depois reconfere se ha begin_checkout comum do mesmo
   // comprador. Com os dois gravando antes de olhar, em qualquer ordem pelo menos
   // um enxerga o outro -- conferir antes deixava os dois POSTs sobrepostos
   // passarem um pelo outro, e saiam 2 IC.
-  const cancelaExpresso = evento === "begin_checkout" && !expresso;
+  //
+  // Entre as duas reservas vale o mesmo, com o expresso no papel do pixel: ele
+  // cancela, depois de gravar, a reserva do clique comum do mesmo comprador, e
+  // ela, na reconferencia, cede ao expresso.
+  const cancelaReserva = evento === "begin_checkout" && !reservaComum;
   let cancelamento: Promise<void> | null = null;
   /** Uma vez por POST, na primeira linha nova que este evento gravar. */
   const cancelarDepoisDeGravar = () =>
-    cancelaExpresso
-      ? (cancelamento ??= cancelarExpressoPendente(
+    cancelaReserva
+      ? (cancelamento ??= cancelarReservaPendente(
           doPixel ? [visitanteDoTema, vidDoTema] : [visitorId],
-          clientId
+          // Fora da reserva e o clientId do corpo; no expresso, o resolvido.
+          clienteDaReserva,
+          expresso ? [PREFIXO_RESERVA_DO_CHECKOUT] : PREFIXOS_DE_RESERVA
         ))
       : Promise.resolve();
 
@@ -1091,8 +1119,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const saida: Record<string, string> = {};
-    /** Destinos em que a linha do expresso nasceu agora (nao duplicada). */
-    const expressoGravado: string[] = [];
+    /** Destinos em que a linha da reserva nasceu agora (nao duplicada). */
+    const reservaGravada: string[] = [];
 
     // EM PARALELO, nao em fila.
     //
@@ -1148,15 +1176,17 @@ export async function POST(request: NextRequest) {
           // que se perde quando a sessao comeca no proprio checkout.
           checkoutToken,
           payload,
-          // O expresso espera o pixel: o cron so manda depois do atraso, e o
+          // A reserva espera o pixel: o cron so manda depois do atraso, e o
           // begin_checkout do pixel cancela antes disso. O event_time do
           // payload continua o do clique.
           // O clientId vai na linha (migration 057) para o pixel achar o
           // comprador por ele -- o do corpo ou o resolvido pela identidade.
-          ...(expresso
+          ...(reserva
             ? {
-                proximaTentativaEm: new Date(Date.now() + ATRASO_CHECKOUT_EXPRESSO_MS),
-                shopifyClientId: clienteDoExpresso,
+                proximaTentativaEm: new Date(
+                  Date.now() + (expresso ? ATRASO_CHECKOUT_EXPRESSO_MS : ATRASO_RESERVA_DO_CHECKOUT_MS)
+                ),
+                shopifyClientId: clienteDaReserva,
               }
             : {}),
         });
@@ -1165,13 +1195,13 @@ export async function POST(request: NextRequest) {
           saida[chave] = "duplicado";
           return;
         }
-        if (expresso) {
-          expressoGravado.push(chave);
+        // Gravou: agora sim cancela a reserva do mesmo comprador.
+        await cancelarDepoisDeGravar();
+        if (reserva) {
+          reservaGravada.push(chave);
           saida[chave] = "aguardando o pixel";
           return;
         }
-        // Gravou: agora sim cancela a reserva do mesmo comprador.
-        await cancelarDepoisDeGravar();
         if (!id) {
           saida[chave] = "na fila";
           return;
@@ -1197,17 +1227,19 @@ export async function POST(request: NextRequest) {
       })
     );
 
-    // O outro lado do "escreve primeiro, confere depois": o expresso ja esta
-    // gravado, e so AGORA olha se ha begin_checkout comum do mesmo comprador --
+    // O outro lado do "escreve primeiro, confere depois": a reserva ja esta
+    // gravada, e so AGORA olha se ha begin_checkout comum do mesmo comprador --
     // o do pixel (ou o clique comum) que gravou entre a janela la de cima e o
     // INSERT daqui, e cujo cancelamento rodou antes desta linha existir. Achou,
-    // fecha a propria linha. So os comuns: outro expresso concorrente fecharia
-    // este, e este a ele, e nao sairia nenhum.
+    // fecha a propria linha. So os comuns: outra reserva concorrente do mesmo
+    // tipo fecharia esta, e esta a ela, e nao sairia nenhuma. Entre os tipos a
+    // regra e de um lado so: a reserva do clique comum cede ao expresso, o
+    // expresso nao cede a ela.
     //
     // Pelo event_id, que e um por comprador e balde: fecha as linhas de todos
     // os destinos de uma vez. So 'pendente': nada que ja tenha saido.
-    if (expressoGravado.length) {
-      const outro = await checkoutDoComprador(true);
+    if (reservaGravada.length) {
+      const outro = await checkoutDoComprador(expresso ? PREFIXOS_DE_RESERVA : [PREFIXO_RESERVA_DO_CHECKOUT]);
       if (outro) {
         const quem = outro.checkout_token ? "pixel" : "tema";
         const { error } = await admin
@@ -1219,7 +1251,7 @@ export async function POST(request: NextRequest) {
         if (error) {
           console.error("[tracking/collect] falha ao fechar o expresso", error.message);
         } else {
-          for (const chave of expressoGravado) saida[chave] = "cancelado: checkout ja iniciado";
+          for (const chave of reservaGravada) saida[chave] = "cancelado: checkout ja iniciado";
         }
       }
     }

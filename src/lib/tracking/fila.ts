@@ -5,7 +5,7 @@ import { enviarParaTiktok } from "@/lib/tracking/tiktok-api";
 import type { EventoTiktok } from "@/lib/tracking/tiktok-evento";
 import type { Destino } from "@/lib/tracking/destinos";
 import {
-  PREFIXO_CHECKOUT_EXPRESSO,
+  ehReservaDeCheckout,
   vaiPeloServidor,
   type PlataformaServidor,
 } from "@/lib/tracking/eventos";
@@ -288,13 +288,14 @@ export async function entregar(
     return { ok: false, motivo: erro };
   };
 
-  // O checkout expresso pode ter sido cancelado DEPOIS de o drain ler a fila: a
-  // rodada leva ate 50 linhas e 2 minutos, sem marcar o que pegou. Rele o
-  // status logo antes de mandar. So nele: e a unica linha que alguem fecha de
-  // fora, e reler toda linha seria uma ida ao banco a mais por evento.
+  // A reserva (o expresso e o clique comum) pode ter sido cancelada DEPOIS de o
+  // drain ler a fila: a rodada leva ate 50 linhas e 2 minutos, sem marcar o que
+  // pegou. Rele o status logo antes de mandar. So nela: e a unica linha que
+  // alguem fecha de fora, e reler toda linha seria uma ida ao banco a mais por
+  // evento.
   const eventId =
     linha.event_id ?? (linha.payload as { event_id?: unknown } | null)?.event_id;
-  if (typeof eventId === "string" && eventId.startsWith(PREFIXO_CHECKOUT_EXPRESSO)) {
+  if (ehReservaDeCheckout(eventId)) {
     const { data: atual, error } = await admin
       .from("tracking_events")
       .select("status")

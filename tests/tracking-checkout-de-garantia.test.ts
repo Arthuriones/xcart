@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHmac } from "node:crypto";
 import { NextRequest } from "next/server";
 import { fakeSupabase, type FakeSupabase } from "./_fake-supabase";
-import { idDoEventoDoCheckout } from "../src/lib/tracking/eventos";
+import {
+  ATRASO_RESERVA_DO_CHECKOUT_MS,
+  idDaReservaDoCheckout,
+  idDoEventoDoCheckout,
+} from "../src/lib/tracking/eventos";
 import { hashDoIp } from "../src/lib/tracking/ip-balde";
 import { expressoDoComprador } from "../src/lib/tracking/checkout-de-garantia";
 import {
@@ -29,7 +33,8 @@ import {
 //      user_data, o valor e os itens da compra;
 //   2. o IC do Web Pixel do mesmo checkout (mesmo id) nunca dobra, chegue antes
 //      ou depois do webhook;
-//   3. o expresso pendente conta como "ja teve", e o cron manda so ele;
+//   3. a reserva pendente (o expresso e o clique comum com o pixel cobrindo)
+//      conta como "ja teve", e o cron manda so ela;
 //   4. sem checkout_token (COD) o id e por pedido; o TikTok recebe o dele;
 //   5. chegada que e endpoint (/cart/add.js) vira a pagina do comprador, ou a
 //      raiz;
@@ -482,6 +487,95 @@ describe("IC de garantia no webhook orders/create", () => {
     expect(await drenar(AGORA + 5 * MIN)).toMatchObject({ enviados: 1 });
     expect(ics()).toHaveLength(1);
     expect(String(mundo.saiu.at(-1)!.evento.event_id)).toMatch(/^begin_checkout_xp_/);
+  });
+
+  // ---- a reserva do clique comum (pixel cobrindo) ---------------------------
+  //
+  // O "Secure checkout" do #1016 virou Shop Pay. O clique, que era descartado,
+  // agora fica pendente; a garantia nao sai junto dele.
+  const CLIQUE_COMUM = {
+    evento: "begin_checkout",
+    eventId: `begin_checkout_${VID}_1`,
+    visitorId: VID,
+    clientId: CID,
+    pageUrl: `${PUBLICA}/cart`,
+  };
+  const RESERVA = idDaReservaDoCheckout(VID, AGORA - 50e3);
+
+  it("compra pelo Shop Pay dentro do prazo: a reserva conta como ja iniciado, e o cron manda so ela", async () => {
+    mundo.destinos = [META, TIKTOK];
+    vi.setSystemTime(AGORA - 50e3);
+    expect(await coletor(CLIQUE_COMUM)).toMatchObject({
+      destinos: { "meta:dest-met": "aguardando o pixel", "tiktok:dest-ttk": "aguardando o pixel" },
+    });
+    expect(mundo.saiu).toEqual([]);
+
+    vi.setSystemTime(AGORA);
+    const r = await webhook();
+    expect(r.corpo).toMatchObject({
+      checkoutDeGarantia: { "meta:dest-met": "já iniciado", "tiktok:dest-ttk": "já iniciado" },
+    });
+    expect(linha(GARANTIA)).toBeUndefined();
+    expect(nomes()).toEqual(["Purchase"]);
+
+    expect(await drenar(AGORA + 5 * MIN)).toMatchObject({ enviados: 2 });
+    expect(ics("meta")).toHaveLength(1);
+    expect(ics("tiktok")).toHaveLength(1);
+    expect(mundo.saiu.filter((s) => s.evento.event_id === RESERVA).map((s) => s.plataforma).sort()).toEqual([
+      "meta",
+      "tiktok",
+    ]);
+  });
+
+  it("Shop Pay desviado sem compra: a reserva sai no Meta e no TikTok depois do prazo, e so ela", async () => {
+    mundo.destinos = [META, TIKTOK];
+    vi.setSystemTime(AGORA - 50e3);
+    await coletor(CLIQUE_COMUM);
+    expect(linha(RESERVA, TIKTOK.id)).toMatchObject({
+      destination: "tiktok",
+      status: "pendente",
+      next_attempt_at: new Date(AGORA - 50e3 + ATRASO_RESERVA_DO_CHECKOUT_MS).toISOString(),
+    });
+
+    expect(await drenar(AGORA - 50e3 + 1 * MIN)).toMatchObject({ pegos: 0 });
+    expect(await drenar(AGORA - 50e3 + 2 * MIN)).toMatchObject({ enviados: 2 });
+    expect(ics("meta")).toHaveLength(1);
+    expect(ics("tiktok")).toHaveLength(1);
+    const tt = mundo.saiu.find((s) => s.plataforma === "tiktok")!.evento as Record<string, unknown>;
+    // A hora do clique, nao a do envio.
+    expect(tt).toMatchObject({
+      event: "InitiateCheckout",
+      event_id: RESERVA,
+      event_time: Math.floor((AGORA - 50e3) / 1000),
+    });
+    expect(JSON.stringify(tt)).not.toMatch(/"value"|"currency"/);
+  });
+
+  it("chave do pedido que nao e a da reserva (cookie novo, IPv6): o user agent acha a reserva pendente", async () => {
+    vi.setSystemTime(AGORA - 50e3);
+    // O clique veio de um _xc_vid que o carrinho nao guardou, sem clientId.
+    await coletor({ ...CLIQUE_COMUM, visitorId: "vid.antigo", clientId: null });
+    expect(linha(idDaReservaDoCheckout("vid.antigo", AGORA - 50e3))).toMatchObject({ status: "pendente" });
+
+    vi.setSystemTime(AGORA);
+    const ipv6 = { browser_ip: "2001:db8:85a3::8a2e:370:7334", user_agent: "Mozilla/5.0 (iPhone)" };
+    const r = await webhook({ ...PEDIDO, browser_ip: ipv6.browser_ip, client_details: ipv6 });
+    expect(r.corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "já iniciado" } });
+    expect(linha(GARANTIA)).toBeUndefined();
+  });
+
+  it("checkout normal com o pixel: a reserva e cancelada, o IC e o do pixel, e a garantia junta com ele", async () => {
+    vi.setSystemTime(AGORA - 50e3);
+    await coletor(CLIQUE_COMUM);
+    vi.setSystemTime(AGORA - 47e3);
+    await coletor({ evento: "begin_checkout", fonte: "pixel", eventId: "begin_checkout_e1", visitorId: CID, clientId: CID, checkoutToken: TOKEN });
+    expect(linha(RESERVA)).toMatchObject({ status: "enviado", sent_at: null });
+
+    vi.setSystemTime(AGORA);
+    expect((await webhook()).corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "já iniciado" } });
+    await drenar(AGORA + 10 * MIN);
+    expect(ics()).toHaveLength(1);
+    expect(String(mundo.saiu[0].evento.event_id)).toBe(GARANTIA);
   });
 
   it("IC do tema ja enviado (pixel sem cobrir): sem garantia", async () => {

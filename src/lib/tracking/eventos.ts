@@ -390,6 +390,37 @@ export function idDoCheckoutExpresso(visitorId: string, quandoMs: number): strin
 }
 
 /**
+ * A RESERVA do clique COMUM em "Finalizar compra", quando o Web Pixel cobre a
+ * loja. Antes o coletor descartava esse clique (o pixel manda o IC do
+ * checkout), mas a Shopify desvia o comprador que o Shop reconhece para o Shop
+ * Pay, em shop.app, onde o pixel nao roda: sem compra, o IC sumia (#1016,
+ * #1004, #1005 e #1012 da Softnook). Agora o clique fica pendente como o
+ * expresso, e o begin_checkout do pixel do mesmo comprador o cancela.
+ *
+ * Atraso medido nas lojas do Arthur (Softnook e AmpleStep, out/2026): do clique
+ * ao begin_checkout do pixel, 50 de 51 checkouts em ate 35 s (mediana 2,4 s,
+ * p90 11 s). 2 min cobre com folga, e o cron (a cada 10 min) manda entre 2 e
+ * 12 min depois do clique, com o event_time do clique.
+ *
+ * Prefixo proprio: nao colide com o do pixel (`_ck_<token>`, que o IC de
+ * garantia repete) nem com o expresso. Mesmo balde do expresso.
+ */
+export const ATRASO_RESERVA_DO_CHECKOUT_MS = 2 * 60 * 1000;
+
+export const PREFIXO_RESERVA_DO_CHECKOUT = "begin_checkout_rs_";
+
+export function idDaReservaDoCheckout(visitorId: string, quandoMs: number): string {
+  return `${PREFIXO_RESERVA_DO_CHECKOUT}${visitorId}_${Math.floor(quandoMs / BALDE_CHECKOUT_EXPRESSO_MS)}`;
+}
+
+/** As linhas que esperam o pixel na fila e que ele cancela: o expresso e a reserva do clique comum. */
+export const PREFIXOS_DE_RESERVA = [PREFIXO_CHECKOUT_EXPRESSO, PREFIXO_RESERVA_DO_CHECKOUT] as const;
+
+export function ehReservaDeCheckout(eventId: unknown): boolean {
+  return typeof eventId === "string" && PREFIXOS_DE_RESERVA.some((p) => eventId.startsWith(p));
+}
+
+/**
  * De onde veio o begin_checkout do tema. Lista fechada: o campo vem do
  * navegador, e so o valor conhecido muda o tratamento no coletor.
  */

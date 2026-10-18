@@ -1,6 +1,6 @@
 import "server-only";
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { JANELA_CHECKOUT_EXPRESSO_MS, PREFIXO_CHECKOUT_EXPRESSO } from "@/lib/tracking/eventos";
+import { JANELA_CHECKOUT_EXPRESSO_MS, PREFIXOS_DE_RESERVA } from "@/lib/tracking/eventos";
 import { hashDoIp } from "@/lib/tracking/ip-balde";
 import { caminhoEhEndpoint, type PedidoShopify } from "@/lib/tracking/purchase";
 
@@ -15,12 +15,14 @@ import { caminhoEhEndpoint, type PedidoShopify } from "@/lib/tracking/purchase";
 //   - o IC do Web Pixel nem precisa de consulta: o id da garantia é o dele
 //     (`begin_checkout_ck_<token>`), e o índice único da fila responde
 //     `duplicado`, em qualquer ordem de chegada;
-//   - o do tema (clique comum, sem pixel cobrindo) e o expresso
-//     (`begin_checkout_xp_*`) têm visitor_id = o `_xc_vid` do tema; o do pixel
+//   - o do tema (clique comum, sem pixel cobrindo), o expresso
+//     (`begin_checkout_xp_*`) e a reserva do clique comum com o pixel cobrindo
+//     (`begin_checkout_rs_*`) têm visitor_id = o `_xc_vid` do tema; o do pixel
 //     de OUTRO checkout do mesmo comprador, visitor_id = o clientId;
-//   - o expresso PENDENTE conta como "teve": o cron manda em até 5 min, com o
-//     event_time do clique. Trocá-lo pela garantia correria com o drain, que
-//     não reserva a linha antes de mandar -- e saíriam dois.
+//   - a reserva PENDENTE (expresso ou clique comum) conta como "teve": o cron
+//     a manda minutos depois, com o event_time do clique. Trocá-la pela
+//     garantia correria com o drain, que não reserva a linha antes de mandar
+//     -- e saíriam dois.
 //
 // Fica de fora o cancelado (`enviado` sem `sent_at`: foi trocado por outro,
 // que a busca acha) e o `falhou` (não chegou).
@@ -31,14 +33,15 @@ import { caminhoEhEndpoint, type PedidoShopify } from "@/lib/tracking/purchase";
 // produto: sem carrinho, sem atributo, sem pixel), o IP do pedido contra o do
 // coletor, só na janela do expresso.
 //
-// O EXPRESSO é conferido à parte, em toda compra: é o que corre com a
+// A RESERVA é conferida à parte, em toda compra: é o que corre com a
 // garantia (o cron manda o pendente minutos depois), e a chave do pedido nem
-// sempre é a dele. Uma leitura dos `begin_checkout_xp_*` da loja na janela do
-// expresso, casados aqui no código -- nada do comprador vai para o filtro --
-// por visitante, clientId (`shopify_client_id`, 057), IP OU user agent. O IP
-// sozinho não basta: com IPv6 o pedido chega por um endereço e o coletor viu
-// outro (#1016 e #1017 da Softnook). E SEM CHAVE, qualquer expresso pendente
-// da loja barra a garantia: pode ser o dele, e não há como saber.
+// sempre é a dela. Uma leitura dos `begin_checkout_xp_*` e outra dos
+// `begin_checkout_rs_*` da loja na janela do expresso, casados aqui no código
+// -- nada do comprador vai para o filtro -- por visitante, clientId
+// (`shopify_client_id`, 057), IP OU user agent. O IP sozinho não basta: com
+// IPv6 o pedido chega por um endereço e o coletor viu outro (#1016 e #1017 da
+// Softnook). E SEM CHAVE, qualquer reserva pendente da loja barra a garantia:
+// pode ser a dele, e não há como saber.
 //
 // Erro de banco NÃO lança: sem saber, não manda a garantia -- falta um IC, não
 // sai um a mais -- e a compra segue como sempre.
@@ -150,21 +153,27 @@ export async function checkoutsDoComprador(
   const precisaDePagina = caminhoEhEndpoint(pedido.landing_site) && visitantes.length > 0;
 
   try {
-    const [porComprador, porIp, expressos, pagina] = await Promise.all([
+    const [porComprador, porIp, reservas, pagina] = await Promise.all([
       Promise.all(comprador.map((c) => ics("visitor_id", c, desde))),
       // Sem chave, o IP acha também o clique comum do tema e o IC do pixel.
       !comprador.length && ipHash ? ics("ip_hash", ipHash, desdeExpresso) : null,
-      admin
-        .from("tracking_events")
-        .select(
-          "destination_id, status, sent_at, visitor_id, shopify_client_id, ip_hash, ua_meta:payload->user_data->>client_user_agent, ua_tiktok:payload->user->>user_agent"
+      // Uma leitura por prefixo (o expresso e a reserva do clique comum), cada
+      // uma com o seu teto: o PostgREST não junta dois LIKE sem `or`.
+      Promise.all(
+        PREFIXOS_DE_RESERVA.map((prefixo) =>
+          admin
+            .from("tracking_events")
+            .select(
+              "destination_id, status, sent_at, visitor_id, shopify_client_id, ip_hash, ua_meta:payload->user_data->>client_user_agent, ua_tiktok:payload->user->>user_agent"
+            )
+            .eq("store_id", storeId)
+            .eq("event_name", "begin_checkout")
+            .like("event_id", `${prefixo}%`)
+            .in("status", ["pendente", "enviado"])
+            .gte("created_at", desdeExpresso)
+            .limit(MAX_EXPRESSOS)
         )
-        .eq("store_id", storeId)
-        .eq("event_name", "begin_checkout")
-        .like("event_id", `${PREFIXO_CHECKOUT_EXPRESSO}%`)
-        .in("status", ["pendente", "enviado"])
-        .gte("created_at", desdeExpresso)
-        .limit(MAX_EXPRESSOS),
+      ),
       precisaDePagina
         ? admin
             .from("tracking_events")
@@ -190,16 +199,18 @@ export async function checkoutsDoComprador(
       }
     }
 
-    if (expressos.error) {
-      console.error("[tracking/garantia] falha ao conferir o expresso", expressos.error.message);
-      jaIniciados = null;
-    } else if ((expressos.data || []).length >= MAX_EXPRESSOS) {
-      console.error("[tracking/garantia] expressos demais na janela para conferir o comprador");
-      jaIniciados = null;
-    } else if (jaIniciados) {
-      const doPedido = { chaves: comprador, ipHash, userAgent };
-      for (const l of (expressos.data || []) as LinhaDoExpresso[]) {
-        if (l.destination_id && expressoDoComprador(l, doPedido)) jaIniciados.add(l.destination_id);
+    for (const leitura of reservas) {
+      if (leitura.error) {
+        console.error("[tracking/garantia] falha ao conferir a reserva", leitura.error.message);
+        jaIniciados = null;
+      } else if ((leitura.data || []).length >= MAX_EXPRESSOS) {
+        console.error("[tracking/garantia] reservas demais na janela para conferir o comprador");
+        jaIniciados = null;
+      } else if (jaIniciados) {
+        const doPedido = { chaves: comprador, ipHash, userAgent };
+        for (const l of (leitura.data || []) as LinhaDoExpresso[]) {
+          if (l.destination_id && expressoDoComprador(l, doPedido)) jaIniciados.add(l.destination_id);
+        }
       }
     }
 

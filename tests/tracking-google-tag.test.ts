@@ -169,18 +169,27 @@ describe("contas Google para o navegador", () => {
       /const expresso =\s+!doPixel && evento === "begin_checkout" && origemDoCheckout\(corpo\.origem\) === "expresso";/
     );
     expect(coletor).toContain("if (expresso) eventId = idDoCheckoutExpresso(visitorId, Date.now());");
-    expect(coletor).toContain('if (!doPixel && evento === "begin_checkout" && pixelCobrindo && !expresso)');
-    // A dedupe de 10 min do pixel NAO vale contra o expresso: o IC do pixel e
-    // o rico, e e ele que cancela o outro.
+    // O clique comum com o pixel cobrindo nao e mais descartado: vira a reserva
+    // dele (tests/tracking-checkout-expresso.test.ts, "reserva do clique comum").
+    expect(coletor).toContain(
+      'const reservaComum = !doPixel && evento === "begin_checkout" && pixelCobrindo && !expresso;'
+    );
+    expect(coletor).toContain("if (reservaComum) eventId = idDaReservaDoCheckout(visitorId, Date.now());");
+    expect(coletor).not.toContain("checkout coberto pelo Web Pixel");
+    // A dedupe de 10 min do pixel NAO vale contra a reserva: o IC do pixel e
+    // o rico, e e ele que cancela a outra.
     const dedupe = coletor.slice(coletor.indexOf('if (doPixel && evento === "begin_checkout" && visitanteDoTema)'));
     const consulta = dedupe.slice(0, dedupe.indexOf("checkout ja contado pelo tema"));
     expect(consulta).toContain('.eq("event_name", "begin_checkout")');
     expect(consulta).toContain('.not("event_id", "like", `${PREFIXO_CHECKOUT_EXPRESSO}%`)');
-    // O expresso vai para a fila com atraso e NAO passa por `entregar` na hora.
+    expect(consulta).toContain('.not("event_id", "like", `${PREFIXO_RESERVA_DO_CHECKOUT}%`)');
+    // A reserva vai para a fila com atraso e NAO passa por `entregar` na hora.
     const fila = coletor.slice(coletor.indexOf("const { id, duplicado } = await enfileirar("));
-    expect(fila).toMatch(/proximaTentativaEm: new Date\(Date\.now\(\) \+ ATRASO_CHECKOUT_EXPRESSO_MS\)/);
-    expect(fila.indexOf("if (expresso) {")).toBeGreaterThan(-1);
-    expect(fila.indexOf("if (expresso) {")).toBeLessThan(fila.indexOf("await entregar("));
+    expect(fila).toMatch(
+      /proximaTentativaEm: new Date\(\s*Date\.now\(\) \+ \(expresso \? ATRASO_CHECKOUT_EXPRESSO_MS : ATRASO_RESERVA_DO_CHECKOUT_MS\)\s*\)/
+    );
+    expect(fila.indexOf("if (reserva) {")).toBeGreaterThan(-1);
+    expect(fila.indexOf("if (reserva) {")).toBeLessThan(fila.indexOf("await entregar("));
   });
 });
 

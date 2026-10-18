@@ -3,9 +3,14 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
   ATRASO_CHECKOUT_EXPRESSO_MS,
+  ATRASO_RESERVA_DO_CHECKOUT_MS,
   BALDE_CHECKOUT_EXPRESSO_MS,
   JANELA_CHECKOUT_EXPRESSO_MS,
   PREFIXO_CHECKOUT_EXPRESSO,
+  PREFIXO_RESERVA_DO_CHECKOUT,
+  PREFIXOS_DE_RESERVA,
+  ehReservaDeCheckout,
+  idDaReservaDoCheckout,
   EVENTOS,
   EVENTOS_DO_NAVEGADOR,
   EVENTOS_DO_GOOGLE,
@@ -284,6 +289,52 @@ describe("id do checkout expresso", () => {
     expect(origemDoCheckout(" expresso ")).toBe("expresso");
     for (const lixo of ["Expresso", "normal", "", null, undefined, 1, { a: 1 }]) {
       expect(origemDoCheckout(lixo)).toBeNull();
+    }
+  });
+});
+
+/**
+ * A reserva do clique COMUM, quando o pixel cobre a loja: o "Finalizar compra"
+ * que a Shopify desvia para o Shop Pay nao passa pelo pixel. Mesmo balde do
+ * expresso, prefixo proprio, atraso menor (o pixel chega em segundos).
+ */
+describe("id da reserva do clique comum", () => {
+  const T = Date.parse("2026-10-05T12:00:00Z");
+  const vid = "mg1abc0.k2j3h4x9";
+
+  it("por comprador e balde, como o expresso", () => {
+    expect(idDaReservaDoCheckout(vid, T)).toBe(idDaReservaDoCheckout(vid, T + 29 * 60 * 1000));
+    expect(idDaReservaDoCheckout(vid, T)).not.toBe(idDaReservaDoCheckout(vid, T + 30 * 60 * 1000));
+    expect(idDaReservaDoCheckout("a", T)).not.toBe(idDaReservaDoCheckout("b", T));
+    expect(idDaReservaDoCheckout("v1", T)).toMatch(/^begin_checkout_rs_v1_\d+$/);
+  });
+
+  it("nao colide com o pixel (que a garantia repete), com o expresso nem com o clique de navegador", () => {
+    const id = idDaReservaDoCheckout(vid, T);
+    expect(id.startsWith(PREFIXO_RESERVA_DO_CHECKOUT)).toBe(true);
+    expect(id.startsWith(PREFIXO_CHECKOUT_EXPRESSO)).toBe(false);
+    expect(id).not.toBe(idDoCheckoutExpresso(vid, T));
+    expect(id.startsWith("begin_checkout_ck_")).toBe(false);
+    // Nenhum outro begin_checkout cai no prefixo -- senao o pixel cancelaria a
+    // si mesmo, ou o expresso cancelaria o clique comum sem pixel.
+    for (const outro of [
+      idDoEventoDeNavegador("begin_checkout", vid, T),
+      "begin_checkout_ck_T1",
+      "begin_checkout_pedido_5544",
+      idDoCheckoutExpresso(vid, T),
+    ]) {
+      expect(outro.startsWith(PREFIXO_RESERVA_DO_CHECKOUT), outro).toBe(false);
+    }
+  });
+
+  it("2 min de atraso (o pixel chega em segundos) e as duas reservas que o pixel cancela", () => {
+    expect(ATRASO_RESERVA_DO_CHECKOUT_MS).toBe(2 * 60 * 1000);
+    expect(ATRASO_RESERVA_DO_CHECKOUT_MS).toBeLessThan(ATRASO_CHECKOUT_EXPRESSO_MS);
+    expect(PREFIXOS_DE_RESERVA).toEqual([PREFIXO_CHECKOUT_EXPRESSO, PREFIXO_RESERVA_DO_CHECKOUT]);
+    expect(ehReservaDeCheckout(idDaReservaDoCheckout(vid, T))).toBe(true);
+    expect(ehReservaDeCheckout(idDoCheckoutExpresso(vid, T))).toBe(true);
+    for (const nao of ["begin_checkout_ck_T1", idDoEventoDeNavegador("begin_checkout", vid, T), "", null, 7]) {
+      expect(ehReservaDeCheckout(nao)).toBe(false);
     }
   });
 });
