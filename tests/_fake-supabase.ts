@@ -1,5 +1,6 @@
 // Supabase falso em memoria para os testes do sensor do roteamento: tabelas
-// como listas de linhas, filtros simples (eq/in/gte/lte/lt/is/neq/like),
+// como listas de linhas, filtros simples (eq/in/gte/lte/lt/is/neq/like, e o
+// `or` do PostgREST com grupos `and(...)`),
 // insert com a PK de shopify_webhook_events e o indice unico da fila de
 // rastreamento, update/delete pelos filtros e contagem com { head: true }.
 // Ordem nao e aplicada: o teste guarda as linhas ja na ordem que a consulta
@@ -42,6 +43,55 @@ function casaLike(texto: unknown, padrao: string): boolean {
     .map((c) => (c === "%" ? ".*" : c === "_" ? "." : c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
     .join("");
   return new RegExp(`^${re}$`).test(String(texto ?? ""));
+}
+
+/** Divide `a,b(c,d),e` nas virgulas do nivel de fora. */
+function noNivelDeFora(s: string): string[] {
+  const partes: string[] = [];
+  let nivel = 0;
+  let atual = "";
+  for (const c of s) {
+    if (c === "(") nivel++;
+    if (c === ")") nivel--;
+    if (c === "," && nivel === 0) {
+      partes.push(atual.trim());
+      atual = "";
+      continue;
+    }
+    atual += c;
+  }
+  if (atual.trim()) partes.push(atual.trim());
+  return partes;
+}
+
+/**
+ * Um termo do `.or()` do PostgREST: `coluna.op.valor` (com `not.` antes do op)
+ * ou um grupo `and(...)`/`or(...)`. Op fora da lista lanca: o teste tem que
+ * saber que o fake nao entende o filtro.
+ */
+function termoDoOr(termo: string): (l: Linha) => boolean {
+  const grupo = termo.match(/^(and|or)\((.*)\)$/);
+  if (grupo) {
+    const termos = noNivelDeFora(grupo[2]).map(termoDoOr);
+    return grupo[1] === "and" ? (l) => termos.every((t) => t(l)) : (l) => termos.some((t) => t(l));
+  }
+  const m = termo.match(/^(\w+)\.(not\.)?(eq|neq|is|like|gte|lte|gt|lt)\.(.*)$/);
+  if (!m) throw new Error(`filtro or que o fake nao entende: ${termo}`);
+  const [, col, nao, op, bruto] = m;
+  const casa = (l: Linha): boolean => {
+    const atual = l[col] ?? null;
+    if (op === "is") return atual === (bruto === "null" ? null : bruto === "true" ? true : bruto === "false" ? false : bruto);
+    if (atual === null) return false;
+    const texto = String(atual);
+    if (op === "eq") return texto === bruto;
+    if (op === "neq") return texto !== bruto;
+    if (op === "like") return casaLike(texto, bruto.replace(/\*/g, "%"));
+    if (op === "gte") return texto >= bruto;
+    if (op === "lte") return texto <= bruto;
+    if (op === "gt") return texto > bruto;
+    return texto < bruto;
+  };
+  return nao ? (l) => !casa(l) : casa;
 }
 
 /** `apelido:coluna->a->>b` do select -> le o caminho dentro da coluna JSON. */
@@ -216,6 +266,11 @@ export function fakeSupabase(
         if (operador === "is") filtros.push((l) => (l[c] ?? null) !== v);
         else if (operador === "like") filtros.push((l) => !casaLike(l[c], String(v)));
         else filtros.push((l) => l[c] !== v);
+        return q;
+      },
+      or: (expr: string) => {
+        const termos = noNivelDeFora(expr).map(termoDoOr);
+        filtros.push((l) => termos.some((t) => t(l)));
         return q;
       },
       order: () => q,

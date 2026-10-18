@@ -1,6 +1,11 @@
 import "server-only";
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { JANELA_CHECKOUT_EXPRESSO_MS, PREFIXOS_DE_RESERVA } from "@/lib/tracking/eventos";
+import {
+  JANELA_CHECKOUT_EXPRESSO_MS,
+  PREFIXO_CHECKOUT_EXPRESSO,
+  PREFIXO_RESERVA_DO_CHECKOUT,
+  PREFIXOS_DE_RESERVA,
+} from "@/lib/tracking/eventos";
 import { hashDoIp } from "@/lib/tracking/ip-balde";
 import { caminhoEhEndpoint, type PedidoShopify } from "@/lib/tracking/purchase";
 
@@ -20,9 +25,11 @@ import { caminhoEhEndpoint, type PedidoShopify } from "@/lib/tracking/purchase";
 //     (`begin_checkout_rs_*`) têm visitor_id = o `_xc_vid` do tema; o do pixel
 //     de OUTRO checkout do mesmo comprador, visitor_id = o clientId;
 //   - a reserva PENDENTE (expresso ou clique comum) conta como "teve": o cron
-//     a manda minutos depois, com o event_time do clique. Trocá-la pela
-//     garantia correria com o drain, que não reserva a linha antes de mandar
-//     -- e saíriam dois.
+//     a manda minutos depois, com o event_time do clique. Mandar a garantia
+//     ao lado dela correria com o drain, que não reserva a linha antes de
+//     mandar -- e saíriam dois. A do clique comum, casada por visitante,
+//     clientId ou IP, a compra ENRIQUECE: a mesma linha, o mesmo event_id, o
+//     payload da garantia (ver `ReservaDoComprador`).
 //
 // Fica de fora o cancelado (`enviado` sem `sent_at`: foi trocado por outro,
 // que a busca acha) e o `falhou` (não chegou).
@@ -40,8 +47,9 @@ import { caminhoEhEndpoint, type PedidoShopify } from "@/lib/tracking/purchase";
 // -- nada do comprador vai para o filtro -- por visitante, clientId
 // (`shopify_client_id`, 057), IP OU user agent. O IP sozinho não basta: com
 // IPv6 o pedido chega por um endereço e o coletor viu outro (#1016 e #1017 da
-// Softnook). E SEM CHAVE, qualquer reserva pendente da loja barra a garantia:
-// pode ser a dele, e não há como saber.
+// Softnook). E SEM CHAVE, qualquer EXPRESSO pendente da loja barra a garantia:
+// pode ser o dele, e não há como saber. A reserva do clique comum não: nasce
+// no carrinho, que leva o `_xc_vid` ao pedido.
 //
 // Erro de banco NÃO lança: sem saber, não manda a garantia -- falta um IC, não
 // sai um a mais -- e a compra segue como sempre.
@@ -62,6 +70,11 @@ const MAX_VISITANTE = 64;
 const MAX_EXPRESSOS = 200;
 
 interface LinhaDoExpresso {
+  id?: string | null;
+  event_id?: string | null;
+  created_at?: string | null;
+  /** O event_time do payload (o do clique), em segundos -- texto, pelo `->>`. */
+  event_time?: string | number | null;
   destination_id?: string | null;
   status?: string | null;
   sent_at?: string | null;
@@ -74,24 +87,49 @@ interface LinhaDoExpresso {
 }
 
 /**
- * Este expresso pode ser do comprador do pedido? Por qualquer sinal: faltar um
- * IC custa menos que sair dois. Sem chave do comprador, todo pendente pode.
+ * Por qual sinal a linha casa com o comprador: 2 = visitante ou clientId, 1 =
+ * IP, 0.5 = so o user agent, 0 = nenhum.
+ */
+function forcaDoCasamento(
+  linha: LinhaDoExpresso,
+  comprador: { chaves: string[]; ipHash: string | null; userAgent: string }
+): number {
+  const chaves = new Set(comprador.chaves);
+  const ua = (v: string | null | undefined) => (v || "").trim();
+  if (
+    (Boolean(linha.visitor_id) && chaves.has(linha.visitor_id as string)) ||
+    (Boolean(linha.shopify_client_id) && chaves.has(linha.shopify_client_id as string))
+  ) {
+    return 2;
+  }
+  if (Boolean(comprador.ipHash) && linha.ip_hash === comprador.ipHash) return 1;
+  if (
+    Boolean(comprador.userAgent) &&
+    (ua(linha.ua_meta) === comprador.userAgent || ua(linha.ua_tiktok) === comprador.userAgent)
+  ) {
+    return 0.5;
+  }
+  return 0;
+}
+
+/**
+ * Esta reserva pode ser do comprador do pedido? Por qualquer sinal: faltar um
+ * IC custa menos que sair dois.
+ *
+ * Sem chave do comprador, todo EXPRESSO pendente pode (`semChaveBarra`): o
+ * Shop Pay da pagina do produto nao deixa carrinho nem atributo. A reserva do
+ * clique comum nao: ela nasce no carrinho, que leva o `_xc_vid` ao pedido --
+ * pedido sem chave (app de COD, pedido por API) quase nunca e o dono dela, e
+ * nao tem outro IC.
  */
 export function expressoDoComprador(
   linha: LinhaDoExpresso,
-  comprador: { chaves: string[]; ipHash: string | null; userAgent: string }
+  comprador: { chaves: string[]; ipHash: string | null; userAgent: string },
+  semChaveBarra = true
 ): boolean {
   if (!checkoutConta(linha)) return false;
-  if (!comprador.chaves.length && linha.status === "pendente") return true;
-  const chaves = new Set(comprador.chaves);
-  const ua = (v: string | null | undefined) => (v || "").trim();
-  return (
-    (Boolean(linha.visitor_id) && chaves.has(linha.visitor_id as string)) ||
-    (Boolean(linha.shopify_client_id) && chaves.has(linha.shopify_client_id as string)) ||
-    (Boolean(comprador.ipHash) && linha.ip_hash === comprador.ipHash) ||
-    (Boolean(comprador.userAgent) &&
-      (ua(linha.ua_meta) === comprador.userAgent || ua(linha.ua_tiktok) === comprador.userAgent))
-  );
+  if (semChaveBarra && !comprador.chaves.length && linha.status === "pendente") return true;
+  return forcaDoCasamento(linha, comprador) > 0;
 }
 
 export interface CheckoutsDoComprador {
@@ -102,6 +140,27 @@ export interface CheckoutsDoComprador {
   jaIniciados: Set<string> | null;
   /** URLs dos eventos dele, da mais recente para a mais antiga. */
   paginas: string[];
+  /**
+   * A reserva do clique comum (`begin_checkout_rs_*`) deste comprador ainda
+   * PENDENTE, por destino: a compra a ENRIQUECE em vez de ceder a ela (ver
+   * `ReservaDoComprador`). So por visitante, clientId ou IP -- o user agent
+   * sozinho e de muita gente, e trocaria o IC de outro comprador.
+   */
+  reservas: Map<string, ReservaDoComprador>;
+}
+
+/**
+ * A linha que o webhook troca pelo IC rico da compra. O Shop Pay de comprador
+ * reconhecido fecha em segundos, antes de a reserva sair (2 min + o cron): sem
+ * isto, o que ia ao Meta era o IC pobre do clique (sem e-mail, valor e itens)
+ * no lugar da garantia completa. A MESMA linha e o MESMO event_id: nao ha como
+ * sair dois. Ja saiu, o UPDATE (so sobre `pendente`) nao casa e nada muda.
+ */
+export interface ReservaDoComprador {
+  id: string;
+  eventId: string;
+  /** O event_time do clique, em segundos; null = o da garantia. */
+  eventTime: number | null;
 }
 
 /** A linha da fila ainda conta como "o IC saiu ou vai sair"? */
@@ -159,17 +218,22 @@ export async function checkoutsDoComprador(
       !comprador.length && ipHash ? ics("ip_hash", ipHash, desdeExpresso) : null,
       // Uma leitura por prefixo (o expresso e a reserva do clique comum), cada
       // uma com o seu teto: o PostgREST não junta dois LIKE sem `or`.
+      //
+      // Sem as canceladas (`enviado` sem `sent_at`) já no filtro, que é fixo:
+      // todo checkout normal em loja com pixel deixa uma reserva cancelada por
+      // destino, e elas enchiam o teto -- e com o teto cheio nenhuma garantia
+      // da loja sai.
       Promise.all(
         PREFIXOS_DE_RESERVA.map((prefixo) =>
           admin
             .from("tracking_events")
             .select(
-              "destination_id, status, sent_at, visitor_id, shopify_client_id, ip_hash, ua_meta:payload->user_data->>client_user_agent, ua_tiktok:payload->user->>user_agent"
+              "id, event_id, created_at, destination_id, status, sent_at, visitor_id, shopify_client_id, ip_hash, ua_meta:payload->user_data->>client_user_agent, ua_tiktok:payload->user->>user_agent, event_time:payload->>event_time"
             )
             .eq("store_id", storeId)
             .eq("event_name", "begin_checkout")
             .like("event_id", `${prefixo}%`)
-            .in("status", ["pendente", "enviado"])
+            .or("status.eq.pendente,and(status.eq.enviado,sent_at.not.is.null)")
             .gte("created_at", desdeExpresso)
             .limit(MAX_EXPRESSOS)
         )
@@ -199,20 +263,45 @@ export async function checkoutsDoComprador(
       }
     }
 
-    for (const leitura of reservas) {
+    const doPedido = { chaves: comprador, ipHash, userAgent };
+    const paraEnriquecer = new Map<string, { reserva: ReservaDoComprador; forca: number; criada: string }>();
+    for (const [i, leitura] of reservas.entries()) {
+      const prefixo = PREFIXOS_DE_RESERVA[i];
       if (leitura.error) {
         console.error("[tracking/garantia] falha ao conferir a reserva", leitura.error.message);
         jaIniciados = null;
-      } else if ((leitura.data || []).length >= MAX_EXPRESSOS) {
+        continue;
+      }
+      const linhasDaReserva = (leitura.data || []) as LinhaDoExpresso[];
+      if (linhasDaReserva.length >= MAX_EXPRESSOS) {
         console.error("[tracking/garantia] reservas demais na janela para conferir o comprador");
         jaIniciados = null;
       } else if (jaIniciados) {
-        const doPedido = { chaves: comprador, ipHash, userAgent };
-        for (const l of (leitura.data || []) as LinhaDoExpresso[]) {
-          if (l.destination_id && expressoDoComprador(l, doPedido)) jaIniciados.add(l.destination_id);
+        // Sem chave do comprador, so o expresso pendente de qualquer um barra.
+        const semChaveBarra = prefixo === PREFIXO_CHECKOUT_EXPRESSO;
+        for (const l of linhasDaReserva) {
+          if (l.destination_id && expressoDoComprador(l, doPedido, semChaveBarra)) jaIniciados.add(l.destination_id);
         }
       }
+      // A reserva do clique comum, PENDENTE, do comprador: a compra a enriquece.
+      // Por destino, a de sinal mais forte; empate, a mais recente.
+      if (prefixo !== PREFIXO_RESERVA_DO_CHECKOUT) continue;
+      for (const l of linhasDaReserva) {
+        if (l.status !== "pendente" || !l.destination_id || !l.id || !l.event_id) continue;
+        const forca = forcaDoCasamento(l, doPedido);
+        if (forca < 1) continue;
+        const criada = String(l.created_at ?? "");
+        const atual = paraEnriquecer.get(l.destination_id);
+        if (atual && (atual.forca > forca || (atual.forca === forca && atual.criada >= criada))) continue;
+        const hora = Number(l.event_time);
+        paraEnriquecer.set(l.destination_id, {
+          reserva: { id: l.id, eventId: l.event_id, eventTime: Number.isFinite(hora) && hora > 0 ? Math.floor(hora) : null },
+          forca,
+          criada,
+        });
+      }
     }
+    const reservasDoComprador = new Map([...paraEnriquecer].map(([destino, r]) => [destino, r.reserva]));
 
     if (pagina?.error) {
       console.error("[tracking/garantia] falha ao ler a página do comprador", pagina.error.message);
@@ -227,9 +316,9 @@ export async function checkoutsDoComprador(
       .map((l) => l.url || l.pagina || "")
       .filter(Boolean);
 
-    return { jaIniciados, paginas };
+    return { jaIniciados, paginas, reservas: reservasDoComprador };
   } catch (e) {
     console.error("[tracking/garantia] falha ao conferir o comprador", e instanceof Error ? e.message : e);
-    return { jaIniciados: null, paginas: [] };
+    return { jaIniciados: null, paginas: [], reservas: new Map() };
   }
 }

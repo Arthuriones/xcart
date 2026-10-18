@@ -34,14 +34,16 @@ import {
 //   2. o IC do Web Pixel do mesmo checkout (mesmo id) nunca dobra, chegue antes
 //      ou depois do webhook;
 //   3. a reserva pendente (o expresso e o clique comum com o pixel cobrindo)
-//      conta como "ja teve", e o cron manda so ela;
+//      conta como "ja teve", e o cron manda so ela -- a do clique comum,
+//      casada por visitante, clientId ou IP, com o conteudo da compra;
 //   4. sem checkout_token (COD) o id e por pedido; o TikTok recebe o dele;
 //   5. chegada que e endpoint (/cart/add.js) vira a pagina do comprador, ou a
 //      raiz;
 //   6. reentrega do webhook nao manda nada de novo;
 //   7. o expresso de outro clique do comprador (chave diferente, IPv6, sem
 //      chave nenhuma) nao vira dois IC: IP, user agent ou clientId o acham, e
-//      sem chave qualquer expresso pendente da loja barra a garantia.
+//      sem chave qualquer expresso pendente da loja barra a garantia (a
+//      reserva do clique comum de outro comprador, nao).
 // ============================================================================
 
 vi.mock("server-only", () => ({}));
@@ -502,7 +504,7 @@ describe("IC de garantia no webhook orders/create", () => {
   };
   const RESERVA = idDaReservaDoCheckout(VID, AGORA - 50e3);
 
-  it("compra pelo Shop Pay dentro do prazo: a reserva conta como ja iniciado, e o cron manda so ela", async () => {
+  it("compra pelo Shop Pay dentro do prazo: a compra ENRIQUECE a reserva -- um IC, o do clique, com os dados da compra", async () => {
     mundo.destinos = [META, TIKTOK];
     vi.setSystemTime(AGORA - 50e3);
     expect(await coletor(CLIQUE_COMUM)).toMatchObject({
@@ -513,18 +515,88 @@ describe("IC de garantia no webhook orders/create", () => {
     vi.setSystemTime(AGORA);
     const r = await webhook();
     expect(r.corpo).toMatchObject({
-      checkoutDeGarantia: { "meta:dest-met": "já iniciado", "tiktok:dest-ttk": "já iniciado" },
+      checkoutDeGarantia: { "meta:dest-met": "na reserva do clique", "tiktok:dest-ttk": "na reserva do clique" },
     });
     expect(linha(GARANTIA)).toBeUndefined();
     expect(nomes()).toEqual(["Purchase"]);
+    // A linha marca o pedido; segue pendente, para o cron.
+    expect(linha(RESERVA)).toMatchObject({ status: "pendente", order_id: String(PEDIDO.id) });
+
+    // Outro pedido do mesmo comprador na janela nao troca o conteudo de novo.
+    await webhook({ ...PEDIDO, id: 18948568449102, total_price: "10.00", checkout_token: "outro-token" }, "wh-2");
+    expect(linha(RESERVA)).toMatchObject({ order_id: String(PEDIDO.id) });
 
     expect(await drenar(AGORA + 5 * MIN)).toMatchObject({ enviados: 2 });
     expect(ics("meta")).toHaveLength(1);
     expect(ics("tiktok")).toHaveLength(1);
-    expect(mundo.saiu.filter((s) => s.evento.event_id === RESERVA).map((s) => s.plataforma).sort()).toEqual([
-      "meta",
-      "tiktok",
-    ]);
+    const meta = mundo.saiu.find((s) => s.plataforma === "meta" && s.evento.event_name === "InitiateCheckout")!.evento as Record<string, Record<string, unknown>>;
+    const compra = mundo.saiu.find((s) => s.plataforma === "meta" && s.evento.event_name === "Purchase")!.evento as Record<string, Record<string, unknown>>;
+    // O id e a hora do clique; o user_data, o valor e os itens da compra.
+    expect(meta.event_id).toBe(RESERVA);
+    expect(meta.event_time).toBe(Math.floor((AGORA - 50e3) / 1000));
+    expect(meta.user_data).toEqual(compra.user_data);
+    expect(meta.user_data).toMatchObject({ em: expect.anything(), fbc: FBC });
+    expect(meta.custom_data).toMatchObject({ currency: "USD", value: 96.18, content_ids: ["9011"] });
+    expect(meta.custom_data).not.toHaveProperty("order_id");
+
+    const tt = mundo.saiu.find((s) => s.plataforma === "tiktok" && s.evento.event === "InitiateCheckout")!.evento as Record<string, Record<string, unknown>>;
+    expect(tt.event_id).toBe(RESERVA);
+    expect(tt.event_time).toBe(Math.floor((AGORA - 50e3) / 1000));
+    expect(tt.properties).toMatchObject({ currency: "USD", value: 96.18 });
+    expect(tt.properties).not.toHaveProperty("order_id");
+  });
+
+  it("reserva que ja saiu: a compra nao mexe nela, e a garantia nao sai", async () => {
+    vi.setSystemTime(AGORA - 5 * MIN);
+    await coletor(CLIQUE_COMUM);
+    await drenar(AGORA - 2 * MIN);
+    const reserva = idDaReservaDoCheckout(VID, AGORA - 5 * MIN);
+    const antes = structuredClone(linha(reserva)!.payload);
+    expect(ics()).toHaveLength(1);
+
+    vi.setSystemTime(AGORA);
+    expect((await webhook()).corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "já iniciado" } });
+    expect(linha(reserva)!.payload).toEqual(antes);
+    expect(ics()).toHaveLength(1);
+  });
+
+  it("reserva casada so pelo user agent conta, mas nao e enriquecida: pode ser de outro comprador", async () => {
+    cenario({
+      eventos: [
+        ADD_TO_CART(),
+        linhaDoFunil({
+          event_name: "begin_checkout",
+          event_id: "begin_checkout_rs_outro.visitante_9",
+          order_id: "begin_checkout_rs_outro.visitante_9",
+          visitor_id: "outro.visitante",
+          shopify_client_id: null,
+          ip_hash: hashDoIp("198.51.100.77"),
+          status: "pendente",
+          sent_at: null,
+          created_at: new Date(AGORA - 2 * MIN).toISOString(),
+          payload: { event_name: "InitiateCheckout", user_data: { client_user_agent: "Mozilla/5.0 (iPhone)" } },
+        }),
+      ],
+    });
+    const r = await webhook();
+    expect(r.corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "já iniciado" } });
+    expect(linha("begin_checkout_rs_outro.visitante_9")).toMatchObject({
+      order_id: "begin_checkout_rs_outro.visitante_9",
+      payload: { event_name: "InitiateCheckout", user_data: { client_user_agent: "Mozilla/5.0 (iPhone)" } },
+    });
+  });
+
+  it("pelo IP do pedido: a reserva do comprador com outro _xc_vid e enriquecida", async () => {
+    vi.setSystemTime(AGORA - 50e3);
+    // O coletor viu o mesmo IPv4 do pedido; o cookie era outro.
+    await coletor({ ...CLIQUE_COMUM, visitorId: "vid.antigo", clientId: null });
+    const reserva = idDaReservaDoCheckout("vid.antigo", AGORA - 50e3);
+    vi.setSystemTime(AGORA);
+    expect((await webhook()).corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "na reserva do clique" } });
+    expect(linha(reserva)!.payload).toMatchObject({
+      event_id: reserva,
+      custom_data: expect.objectContaining({ value: 96.18 }),
+    });
   });
 
   it("Shop Pay desviado sem compra: a reserva sai no Meta e no TikTok depois do prazo, e so ela", async () => {
@@ -802,9 +874,39 @@ describe("IC de garantia no webhook orders/create", () => {
     expect(nomes()).toEqual(["Purchase"]);
   });
 
+  it("reservas canceladas nao enchem o teto: 200 checkouts normais na janela, e a garantia sai", async () => {
+    // Todo checkout normal em loja com pixel deixa a reserva cancelada.
+    cenario({
+      eventos: [
+        ADD_TO_CART(),
+        ...Array.from({ length: 200 }, (_, i) =>
+          EXPRESSO({ event_id: `begin_checkout_rs_v${i}_9`, visitor_id: `v${i}`, status: "enviado", sent_at: null })
+        ),
+      ],
+    });
+    const r = await webhook();
+    expect(r.corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "enviado" } });
+    expect(ics()).toHaveLength(1);
+  });
+
+  it("sem chave: a reserva do clique comum de outro comprador NAO barra a garantia; o expresso continua barrando", async () => {
+    const ipv6 = { browser_ip: "2001:db8:85a3::8a2e:370:7334", user_agent: "Mozilla/5.0 (iPhone)" };
+    const semChave = { ...SEM_CARRINHO, browser_ip: ipv6.browser_ip, client_details: ipv6 };
+    cenario({ identidades: [], eventos: [EXPRESSO({ event_id: "begin_checkout_rs_outro.visitante_9" })] });
+    expect((await webhook(semChave)).corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "enviado" } });
+    expect(linha(idDoEventoDoCheckout("begin_checkout", "outro-token"))).toBeDefined();
+
+    mundo.saiu.length = 0;
+    cenario({ identidades: [], eventos: [EXPRESSO()] });
+    expect((await webhook(semChave)).corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "já iniciado" } });
+  });
+
   it("regra pura: cancelado e falhou nunca contam; sem chave, so o pendente de qualquer um", () => {
     const sem = { chaves: [] as string[], ipHash: null, userAgent: "" };
     expect(expressoDoComprador({ status: "pendente" }, sem)).toBe(true);
+    // A reserva do clique comum (semChaveBarra = false) exige um sinal.
+    expect(expressoDoComprador({ status: "pendente" }, sem, false)).toBe(false);
+    expect(expressoDoComprador({ status: "pendente", ip_hash: "h" }, { ...sem, ipHash: "h" }, false)).toBe(true);
     expect(expressoDoComprador({ status: "enviado", sent_at: "2026-10-18T03:00:00Z" }, sem)).toBe(false);
     expect(expressoDoComprador({ status: "enviado", sent_at: null, visitor_id: VID }, { ...sem, chaves: [VID] })).toBe(false);
     expect(expressoDoComprador({ status: "falhou", ip_hash: "h" }, { ...sem, ipHash: "h" })).toBe(false);

@@ -386,20 +386,26 @@ async function tratarPedidoCriado(
     // O IC de garantia sai da compra deste destino (mesmo user_data, valor e
     // itens), e so onde o comprador ainda nao teve IC. Sem saber
     // (jaIniciados null), nenhum.
+    //
+    // A reserva do clique comum ainda PENDENTE do comprador (o "Secure
+    // checkout" desviado para o Shop Pay, que fecha antes de ela sair) nao
+    // ganha garantia ao lado: ganha o conteudo dela, na mesma linha e com o
+    // mesmo event_id -- ver ReservaDoComprador. So em destino que sai.
+    const reserva = envia ? (doComprador.reservas.get(d.id) ?? null) : null;
     const comGarantia =
-      doComprador.jaIniciados !== null && !doComprador.jaIniciados.has(d.id);
+      !reserva && doComprador.jaIniciados !== null && !doComprador.jaIniciados.has(d.id);
     let base: EventoCapi | EventoTiktok;
     let garantia: EventoCapi | EventoTiktok | null = null;
     if (d.plataforma === "tiktok") {
       const compra = montarPurchaseTiktok(pedido, { ...contexto, idTemplate: d.idTemplate });
       base = compra;
-      if (comGarantia) garantia = montarCheckoutDeGarantiaTiktok(compra, pedido);
+      if (comGarantia || reserva) garantia = montarCheckoutDeGarantiaTiktok(compra, pedido);
     } else {
       const compra = d.idTemplate
         ? montarPurchase(pedido, { ...contexto, idTemplate: d.idTemplate }).evento
         : evento;
       base = compra;
-      if (comGarantia) garantia = montarCheckoutDeGarantia(compra, pedido);
+      if (comGarantia || reserva) garantia = montarCheckoutDeGarantia(compra, pedido);
     }
     return {
       destination: d.plataforma === "tiktok" ? ("tiktok" as const) : ("meta" as const),
@@ -407,12 +413,26 @@ async function tratarPedidoCriado(
       destino: d,
       envia,
       payload: payloadComMarcas(d.plataforma, base, marcas, envia),
-      garantia: garantia
-        ? {
-            eventId: garantia.event_id,
-            payload: payloadComMarcas(d.plataforma, garantia, marcas, envia),
-          }
-        : null,
+      garantia:
+        garantia && !reserva
+          ? {
+              eventId: garantia.event_id,
+              payload: payloadComMarcas(d.plataforma, garantia, marcas, envia),
+            }
+          : null,
+      // O id e a hora continuam os do clique: e o mesmo IC, so mais rico.
+      reserva:
+        garantia && reserva
+          ? {
+              ...reserva,
+              payload: payloadComMarcas(
+                d.plataforma,
+                { ...garantia, event_id: reserva.eventId, event_time: reserva.eventTime ?? garantia.event_time },
+                marcas,
+                envia
+              ),
+            }
+          : null,
     };
   });
 
@@ -439,6 +459,10 @@ async function tratarPedidoCriado(
    * custa um IC, nao a compra.
    */
   async function gravarGarantia(alvo: (typeof destinos)[number], chave: string): Promise<string | null> {
+    if (alvo.reserva) {
+      await enriquecerReserva(alvo.reserva, chave);
+      return null;
+    }
     if (!alvo.garantia) {
       saidaDaGarantia[chave] = doComprador.jaIniciados ? "já iniciado" : "não conferido";
       return null;
@@ -471,6 +495,34 @@ async function tratarPedidoCriado(
       console.error("[shopify/webhook] falha ao gravar o IC de garantia", e instanceof Error ? e.message : e);
       saidaDaGarantia[chave] = "falhou ao gravar";
       return null;
+    }
+  }
+
+  /**
+   * Troca o payload da reserva pendente pelo da garantia. So sobre `pendente`:
+   * ja saiu (ou foi cancelada), nada muda. E so a primeira compra: o coletor
+   * grava o event_id em `order_id`, e a troca grava ali o pedido -- outro pedido
+   * do mesmo comprador na janela nao troca o valor de novo. O cron manda; nao
+   * entregar aqui evita correr com ele. NUNCA lanca: falhar custa o IC rico,
+   * e o pobre sai do mesmo jeito.
+   */
+  async function enriquecerReserva(
+    reserva: NonNullable<(typeof destinos)[number]["reserva"]>,
+    chave: string
+  ) {
+    try {
+      const { data, error } = await admin
+        .from("tracking_events")
+        .update({ payload: reserva.payload, order_id: linhaDaGarantia.orderId })
+        .eq("id", reserva.id)
+        .eq("status", "pendente")
+        .eq("order_id", reserva.eventId)
+        .select("id");
+      if (error) throw new Error(error.message);
+      saidaDaGarantia[chave] = (data || []).length ? "na reserva do clique" : "já iniciado";
+    } catch (e) {
+      console.error("[shopify/webhook] falha ao enriquecer a reserva", e instanceof Error ? e.message : e);
+      saidaDaGarantia[chave] = "já iniciado";
     }
   }
 

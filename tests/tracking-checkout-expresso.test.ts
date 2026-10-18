@@ -47,6 +47,7 @@ interface Linha {
   visitor_id: string | null;
   shopify_client_id: string | null;
   checkout_token: string | null;
+  ip_hash: string | null;
   status: string;
   attempts: number;
   next_attempt_at: string;
@@ -130,6 +131,7 @@ vi.mock("@/lib/tracking/fila", () => ({
       payload: Record<string, unknown>;
       proximaTentativaEm?: Date | null;
       shopifyClientId?: string | null;
+      ipHash?: string | null;
     }
   ) => {
     const antes = mundo.antesDeEnfileirar;
@@ -152,6 +154,7 @@ vi.mock("@/lib/tracking/fila", () => ({
       visitor_id: e.visitorId,
       checkout_token: e.checkoutToken ?? null,
       shopify_client_id: e.shopifyClientId ?? null,
+      ip_hash: e.ipHash ?? null,
       status: "pendente",
       attempts: 0,
       next_attempt_at: (e.proximaTentativaEm ?? new Date()).toISOString(),
@@ -305,14 +308,19 @@ function bancoFalso() {
   mundo.admin = admin;
 }
 
-async function postar(corpo: Record<string, unknown>) {
+/** `ip`: o x-forwarded-for do POST. Sem ele, o coletor nao tem IP. */
+async function postar(corpo: Record<string, unknown>, ip?: string) {
   const { POST } = await import("../src/app/api/tracking/collect/route");
   const { NextRequest } = await import("next/server");
   const r = await POST(
     new NextRequest("https://user.xcart.app/api/tracking/collect", {
       method: "POST",
       body: JSON.stringify({ shop: SHOP, storeId: STORE, ...corpo }),
-      headers: { "content-type": "text/plain;charset=UTF-8", "user-agent": "teste" },
+      headers: {
+        "content-type": "text/plain;charset=UTF-8",
+        "user-agent": "teste",
+        ...(ip ? { "x-forwarded-for": ip } : {}),
+      },
     })
   );
   return (await r.json()) as Record<string, unknown>;
@@ -981,6 +989,74 @@ describe("coletor: reserva do clique comum (pixel cobrindo)", () => {
     expect(await drenar(AGORA + 2 * MIN)).toMatchObject({ pegos: 1, enviados: 0 });
     expect(noMeta()).toEqual(["begin_checkout_ck_T1"]);
     expect(linha(rs("vid-1"))).toMatchObject({ status: "enviado", sent_at: null });
+  });
+
+  // ---- checkout reaproveitado: o pixel volta duplicado ----------------------
+
+  it("volta ao MESMO checkout 40 min depois: o pixel duplicado derruba a reserva nova -- um IC so", async () => {
+    vi.setSystemTime(AGORA - 40 * MIN);
+    await postar(CLIQUE);
+    vi.setSystemTime(AGORA - 40 * MIN + 3e3);
+    await postar(DO_PIXEL);
+    expect(linha(rs("vid-1", AGORA - 40 * MIN))).toMatchObject({ status: "enviado", sent_at: null });
+
+    // Clica de novo com o mesmo carrinho: a janela de 30 min ja nao ve o ck_T1.
+    vi.setSystemTime(AGORA);
+    expect((await postar(CLIQUE)).destinos).toEqual({ "meta:dest-met": "aguardando o pixel" });
+    // O checkout T1 reabre: nada sai, e o pixel prova que nao foi o Shop Pay.
+    vi.setSystemTime(AGORA + 3e3);
+    expect((await postar(DO_PIXEL)).destinos).toEqual({ "meta:dest-met": "duplicado" });
+    expect(linha(rs("vid-1"))).toMatchObject({
+      status: "enviado",
+      sent_at: null,
+      response: { enviado: false, substituido_por: "pixel" },
+    });
+
+    await drenar(AGORA + 10 * MIN);
+    expect(noMeta()).toEqual(["begin_checkout_ck_T1"]);
+  });
+
+  // ---- sem consentimento: o pixel que passou antes do INSERT -----------------
+
+  it("corrida sem consentimento: o pixel grava e cancela antes do INSERT da reserva -- o IP o acha e ela se fecha", async () => {
+    const VID = "mg1abc0.k2j3h4x9";
+    const IP = "203.0.113.9";
+    const corpo = await beaconDoPixel({ clientId: ZERADO, token: "T7", cookies: { _xc_vid: VID } });
+    mundo.antesDeEnfileirar = async (eventId) => {
+      if (!eventId.startsWith("begin_checkout_rs_")) return;
+      mundo.antesDeEnfileirar = null;
+      vi.setSystemTime(AGORA + 2e3);
+      // visitor_id = token e sem clientId: nenhuma chave da reserva o acha.
+      expect((await postar(corpo, IP)).destinos).toEqual({ "meta:dest-met": "enviado" });
+    };
+    const r = await postar({ ...CLIQUE, visitorId: VID, clientId: null }, IP);
+    expect(r.destinos).toEqual({ "meta:dest-met": "cancelado: checkout ja iniciado" });
+    expect(linha(rs(VID))).toMatchObject({
+      status: "enviado",
+      sent_at: null,
+      response: { enviado: false, substituido_por: "pixel" },
+    });
+    await drenar(AGORA + 10 * MIN);
+    expect(noMeta()).toEqual(["begin_checkout_ck_T7"]);
+  });
+
+  it("sem consentimento, o IP so vale para o pixel do mesmo IP e de agora", async () => {
+    const VID = "mg1abc0.k2j3h4x9";
+    // Um checkout do mesmo IP de 1 min antes (outra pessoa da casa) nao conta.
+    vi.setSystemTime(AGORA - 1 * MIN);
+    await postar({ ...DO_PIXEL, visitorId: "T8", clientId: null, checkoutToken: "T8" }, "203.0.113.9");
+    vi.setSystemTime(AGORA);
+    const corpo = await beaconDoPixel({ clientId: ZERADO, token: "T7", cookies: {} });
+    mundo.antesDeEnfileirar = async (eventId) => {
+      if (!eventId.startsWith("begin_checkout_rs_")) return;
+      mundo.antesDeEnfileirar = null;
+      // O pixel de outro IP, no meio do caminho.
+      await postar(corpo, "198.51.100.4");
+    };
+    expect((await postar({ ...CLIQUE, visitorId: VID, clientId: null }, "203.0.113.9")).destinos).toEqual({
+      "meta:dest-met": "aguardando o pixel",
+    });
+    expect(linha(rs(VID)).status).toBe("pendente");
   });
 
   // ---- sem pixel: como antes ------------------------------------------------

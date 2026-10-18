@@ -115,6 +115,14 @@ const TETO_IDENTIDADES_POR_IP_HORA = 500;
 /** Pixel e tema no mesmo checkout: o do tema chegou antes, nesta janela. */
 const JANELA_CHECKOUT_DO_TEMA_MS = 10 * 60 * 1000;
 
+/**
+ * Reserva do clique comum sem clientId: o pixel do mesmo IP gravado ate este
+ * tanto antes de o POST da reserva chegar ainda conta como "chegou junto". So
+ * relogio do servidor contra relogio do banco; o pixel vem ao menos 2 s depois
+ * do clique (medido: minimo 1,96 s, p10 2,08 s).
+ */
+const FOLGA_DO_PIXEL_PELO_IP_MS = 10 * 1000;
+
 /** Itens do carrinho num evento. Carrinho de verdade nao chega perto disto. */
 const MAX_ITENS = 20;
 
@@ -899,12 +907,10 @@ export async function POST(request: NextRequest) {
   // A reserva que ja saiu (passou do atraso) fica: nao ha como desmandar.
   //
   // ESCREVE PRIMEIRO, CONFERE DEPOIS, nos dois lados. Este cancela DEPOIS de
-  // gravar a propria linha (e so se ela for nova: checkout reaproveitado
-  // termina `duplicado`, nao sai nada, e nao pode derrubar a reserva). A
-  // reserva grava e so depois reconfere se ha begin_checkout comum do mesmo
-  // comprador. Com os dois gravando antes de olhar, em qualquer ordem pelo menos
-  // um enxerga o outro -- conferir antes deixava os dois POSTs sobrepostos
-  // passarem um pelo outro, e saiam 2 IC.
+  // gravar a propria linha. A reserva grava e so depois reconfere se ha
+  // begin_checkout comum do mesmo comprador. Com os dois gravando antes de
+  // olhar, em qualquer ordem pelo menos um enxerga o outro -- conferir antes
+  // deixava os dois POSTs sobrepostos passarem um pelo outro, e saiam 2 IC.
   //
   // Entre as duas reservas vale o mesmo, com o expresso no papel do pixel: ele
   // cancela, depois de gravar, a reserva do clique comum do mesmo comprador, e
@@ -919,6 +925,24 @@ export async function POST(request: NextRequest) {
           // Fora da reserva e o clientId do corpo; no expresso, o resolvido.
           clienteDaReserva,
           expresso ? [PREFIXO_RESERVA_DO_CHECKOUT] : PREFIXOS_DE_RESERVA
+        ))
+      : Promise.resolve();
+
+  // CHECKOUT REAPROVEITADO: o begin_checkout do pixel termina `duplicado` (o
+  // mesmo `_ck_<token>`) quando o comprador volta ao MESMO checkout depois da
+  // janela de 30 min. Nada sai -- o IC deste checkout ja saiu --, mas o pixel
+  // ter rodado prova que o clique comum chegou ao checkout normal, e nao ao
+  // Shop Pay: a reserva do clique comum cai, ou sairia um 2o IC do mesmo
+  // checkout. So ela: contra o expresso o duplicado e a aba velha recarregando
+  // enquanto o Shop Pay abre, e o expresso fica de pe.
+  let cancelamentoDoDuplicado: Promise<void> | null = null;
+  /** Uma vez por POST, no primeiro destino que voltar `duplicado`. */
+  const cancelarDepoisDeDuplicado = () =>
+    doPixel && evento === "begin_checkout"
+      ? (cancelamentoDoDuplicado ??= cancelarReservaPendente(
+          [visitanteDoTema, vidDoTema],
+          clienteDaReserva,
+          [PREFIXO_RESERVA_DO_CHECKOUT]
         ))
       : Promise.resolve();
 
@@ -1158,7 +1182,7 @@ export async function POST(request: NextRequest) {
             ipHash,
           });
           saida[chave] = duplicado ? "duplicado" : "teste: nao enviado";
-          if (!duplicado) await cancelarDepoisDeGravar();
+          await (duplicado ? cancelarDepoisDeDuplicado() : cancelarDepoisDeGravar());
           return;
         }
 
@@ -1193,6 +1217,7 @@ export async function POST(request: NextRequest) {
 
         if (duplicado) {
           saida[chave] = "duplicado";
+          await cancelarDepoisDeDuplicado();
           return;
         }
         // Gravou: agora sim cancela a reserva do mesmo comprador.
@@ -1238,8 +1263,28 @@ export async function POST(request: NextRequest) {
     //
     // Pelo event_id, que e um por comprador e balde: fecha as linhas de todos
     // os destinos de uma vez. So 'pendente': nada que ja tenha saido.
+    //
+    // SEM CONSENTIMENTO a reserva do clique comum nao tem clientId, e a linha
+    // do pixel tem visitor_id = token: as chaves nao se cruzam, e o pixel que
+    // gravou e cancelou (pelo `_xc_vid`) antes deste INSERT passava. Entao, so
+    // nesse caso, o IP: um begin_checkout do pixel (com checkout_token) do
+    // mesmo IP gravado depois que este POST chegou. Filtro fixo, com o hash
+    // feito aqui. Errar para o lado de fechar custa um IC, nao um a mais.
     if (reservaGravada.length) {
-      const outro = await checkoutDoComprador(expresso ? PREFIXOS_DE_RESERVA : [PREFIXO_RESERVA_DO_CHECKOUT]);
+      let outro = await checkoutDoComprador(expresso ? PREFIXOS_DE_RESERVA : [PREFIXO_RESERVA_DO_CHECKOUT]);
+      if (!outro && reservaComum && !clienteDaReserva && ipHash) {
+        const { data, error } = await admin
+          .from("tracking_events")
+          .select("checkout_token")
+          .eq("store_id", registro.id)
+          .eq("event_name", "begin_checkout")
+          .eq("ip_hash", ipHash)
+          .not("checkout_token", "is", null)
+          .gte("created_at", new Date(agoraMs - FOLGA_DO_PIXEL_PELO_IP_MS).toISOString())
+          .limit(1);
+        if (error) console.error("[tracking/collect] falha ao conferir o pixel pelo IP", error.message);
+        outro = ((data || [])[0] as { checkout_token: string | null } | undefined) ?? null;
+      }
       if (outro) {
         const quem = outro.checkout_token ? "pixel" : "tema";
         const { error } = await admin
