@@ -4,7 +4,9 @@ import {
   eventoValido,
   definicaoDoEvento,
   idDoCheckoutExpresso,
+  idDoEventoDoCheckout,
   origemDoCheckout,
+  tokenDoCheckout,
   ATRASO_CHECKOUT_EXPRESSO_MS,
   JANELA_CHECKOUT_EXPRESSO_MS,
   PREFIXO_CHECKOUT_EXPRESSO,
@@ -376,7 +378,7 @@ export async function POST(request: NextRequest) {
       ? corpo.vidDoTema
       : null;
 
-  const checkoutToken = (corpo.checkoutToken || "").trim().slice(0, 120) || null;
+  const checkoutToken = tokenDoCheckout(corpo.checkoutToken);
 
   // Um begin_checkout e um payment_info POR CHECKOUT.
   //
@@ -386,8 +388,11 @@ export async function POST(request: NextRequest) {
   // nao segurava, o Meta nao deduplicava e o Google contava outra conversao.
   // Recusa de cartao e alta em dropshipping. Feito aqui, e nao so no pixel,
   // para valer tambem para a versao do pixel que esteja em cache.
+  //
+  // E o MESMO id do IC de garantia que o webhook manda quando o pixel nao rodou
+  // (Shop Pay em shop.app): chegando os dois, a fila junta.
   if (doPixel && checkoutToken) {
-    eventId = `${evento}_ck_${checkoutToken}`.slice(0, 200);
+    eventId = idDoEventoDoCheckout(evento as ChaveEvento, checkoutToken);
   }
 
   // Clique num botao de checkout EXPRESSO (Shop Pay, Apple Pay, Google Pay...),

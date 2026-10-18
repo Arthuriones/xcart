@@ -328,6 +328,27 @@ export function idDoEventoDeNavegador(
 }
 
 /**
+ * O token do checkout como o coletor e o webhook o leem: aparado e cortado em
+ * 120. Os dois lados TEM que concordar -- e pelo id montado com ele que o IC
+ * do Web Pixel e o IC de garantia do webhook viram o mesmo evento.
+ */
+export function tokenDoCheckout(bruto: unknown): string | null {
+  return (typeof bruto === "string" ? bruto : "").trim().slice(0, 120) || null;
+}
+
+/**
+ * Um begin_checkout (e um payment_info) POR CHECKOUT: `<evento>_ck_<token>`.
+ *
+ * O coletor reescreve com isto o id que o Web Pixel manda, e o webhook monta
+ * com isto o IC de garantia do pedido. Mesmo id, e o indice unico da fila
+ * (store_id, destination_id, event_id) junta os dois em qualquer ordem de
+ * chegada: o segundo volta `duplicado` e nao sai.
+ */
+export function idDoEventoDoCheckout(evento: ChaveEvento, token: string): string {
+  return `${evento}_ck_${token}`.slice(0, 200);
+}
+
+/**
  * O begin_checkout do clique num botao de checkout EXPRESSO (Shop Pay, Apple
  * Pay, Google Pay...). O Meta e o TikTok recebem (pelo servidor); o Google nao.
  *

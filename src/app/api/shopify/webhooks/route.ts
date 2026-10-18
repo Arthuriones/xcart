@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { EventoCapi } from "@/lib/tracking/meta-capi";
+import type { EventoTiktok } from "@/lib/tracking/tiktok-evento";
 import { normalizeShopDomain } from "@/lib/shopify/domain";
 import {
   assinaturaConfere,
@@ -249,9 +251,13 @@ async function tratarPedidoCriado(
   const { rastreamentoLigado, enfileirar, entregar } = await import(
     "@/lib/tracking/fila"
   );
-  const { montarPurchase, montarPurchaseTiktok, sinaisDoPedido } = await import(
-    "@/lib/tracking/purchase"
-  );
+  const {
+    montarPurchase,
+    montarPurchaseTiktok,
+    montarCheckoutDeGarantia,
+    montarCheckoutDeGarantiaTiktok,
+    sinaisDoPedido,
+  } = await import("@/lib/tracking/purchase");
   const { vaiPeloServidor } = await import("@/lib/tracking/eventos");
   const { contarSinais } = await import("@/lib/tracking/normalizar");
 
@@ -317,22 +323,38 @@ async function tratarPedidoCriado(
   // chegou sem atributo (app de COD, "Comprar agora").
   gravarOrigem(identidade);
 
-  const { evento, userData } = montarPurchase(pedido, {
-    identidade,
-    dominioLoja: loja.shop_domain,
-  });
-
   // Uma linha de fila por DESTINO ativo que aceita a compra: Meta e TikTok.
   //
   // Destino e linha, nao coluna, desde a 043: a loja pode ter dois pixels
   // Meta, e uma linha falhar nao pode impedir a outra de sair.
   //
   // O GOOGLE NAO SAI DAQUI: a compra do Google e disparada pelo Web Pixel do
-  // checkout (checkout_completed), pela tag do Google no navegador.
+  // checkout (checkout_completed), pela tag do Google no navegador. O IC de
+  // garantia tambem nao: o begin_checkout do Google e da tag no navegador.
+  //
+  // Junto, em paralelo: o comprador ja teve InitiateCheckout? E por onde ele
+  // andou na loja, para o event_source_url quando a chegada foi endpoint.
+  // Nunca lanca -- ver checkout-de-garantia.ts.
   const { destinosDaLoja, destinoAceita } = await import("@/lib/tracking/destinos");
-  const querem = (await destinosDaLoja(admin, loja.id, { comToken: true })).filter(
+  const { checkoutsDoComprador } = await import("@/lib/tracking/checkout-de-garantia");
+  const visitante = sinais.visitorId || identidade?.visitorId || null;
+  const [todosOsDestinos, doComprador] = await Promise.all([
+    destinosDaLoja(admin, loja.id, { comToken: true }),
+    checkoutsDoComprador(admin, loja.id, pedido, {
+      visitantes: [sinais.visitorId, identidade?.visitorId],
+      clientId: identidade?.clientId,
+    }),
+  ]);
+  const querem = todosOsDestinos.filter(
     (d) => vaiPeloServidor(d.plataforma) && destinoAceita(d)
   );
+
+  const contexto = {
+    identidade,
+    dominioLoja: loja.shop_domain,
+    paginas: doComprador.paginas,
+  };
+  const { evento, userData } = montarPurchase(pedido, contexto);
 
   if (querem.length === 0) {
     return ok({ ignorado: "nenhum destino configurado", topic: "orders/create" });
@@ -360,28 +382,119 @@ async function tratarPedidoCriado(
     // apontar para catalogos montados de formas diferentes. Sem template
     // configurado o Meta reusa o evento ja montado -- e o caso comum, e
     // remontar so repetiria os hashes do user_data.
-    const base =
-      d.plataforma === "tiktok"
-        ? montarPurchaseTiktok(pedido, {
-            identidade,
-            dominioLoja: loja.shop_domain,
-            idTemplate: d.idTemplate,
-          })
-        : d.idTemplate
-          ? montarPurchase(pedido, {
-              identidade,
-              dominioLoja: loja.shop_domain,
-              idTemplate: d.idTemplate,
-            }).evento
-          : evento;
+    //
+    // O IC de garantia sai da compra deste destino (mesmo user_data, valor e
+    // itens), e so onde o comprador ainda nao teve IC. Sem saber
+    // (jaIniciados null), nenhum.
+    const comGarantia =
+      doComprador.jaIniciados !== null && !doComprador.jaIniciados.has(d.id);
+    let base: EventoCapi | EventoTiktok;
+    let garantia: EventoCapi | EventoTiktok | null = null;
+    if (d.plataforma === "tiktok") {
+      const compra = montarPurchaseTiktok(pedido, { ...contexto, idTemplate: d.idTemplate });
+      base = compra;
+      if (comGarantia) garantia = montarCheckoutDeGarantiaTiktok(compra, pedido);
+    } else {
+      const compra = d.idTemplate
+        ? montarPurchase(pedido, { ...contexto, idTemplate: d.idTemplate }).evento
+        : evento;
+      base = compra;
+      if (comGarantia) garantia = montarCheckoutDeGarantia(compra, pedido);
+    }
     return {
       destination: d.plataforma === "tiktok" ? ("tiktok" as const) : ("meta" as const),
       destinationId: d.id,
       destino: d,
       envia,
       payload: payloadComMarcas(d.plataforma, base, marcas, envia),
+      garantia: garantia
+        ? {
+            eventId: garantia.event_id,
+            payload: payloadComMarcas(d.plataforma, garantia, marcas, envia),
+          }
+        : null,
     };
   });
+
+  // A linha do IC de garantia na fila. `order_id` e o NUMERO do pedido (o tema
+  // e o pixel gravam o eventId ali): e o que marca a garantia. `visitor_id` e o
+  // do comprador, para a janela de 30 min do expresso no coletor enxerga-la.
+  // `checkout_token` vazio de proposito: com ele a linha passaria por "pixel" no
+  // painel, e a reserva da identidade (identidade-do-pedido.ts, passo 2) leria
+  // o visitante como clientId.
+  const linhaDaGarantia = {
+    eventName: "begin_checkout",
+    orderId: String(pedido.id ?? ""),
+    visitorId: (visitante || identidade?.clientId || "").slice(0, 64) || null,
+  };
+  /** O que houve com o IC de garantia em cada destino. So para o log. */
+  const saidaDaGarantia: Record<string, string> = {};
+
+  /**
+   * Grava o IC de garantia do destino e devolve o id da linha a entregar.
+   *
+   * Pela mesma porta da compra: em teste, `registrarSemEnviar`; fora dele, a
+   * fila. `duplicado` e o caso do pixel que ja mandou o IC deste checkout (o
+   * mesmo id) e da reentrega do webhook: nada sai. NUNCA lanca -- falhar aqui
+   * custa um IC, nao a compra.
+   */
+  async function gravarGarantia(alvo: (typeof destinos)[number], chave: string): Promise<string | null> {
+    if (!alvo.garantia) {
+      saidaDaGarantia[chave] = doComprador.jaIniciados ? "já iniciado" : "não conferido";
+      return null;
+    }
+    const comum = {
+      storeId: loja.id,
+      destination: alvo.destination,
+      destinationId: alvo.destinationId,
+      orderId: linhaDaGarantia.orderId,
+      visitorId: linhaDaGarantia.visitorId,
+      payload: alvo.garantia.payload,
+    };
+    try {
+      if (!alvo.envia) {
+        const { duplicado } = await registrarSemEnviar(admin, {
+          ...comum,
+          eventName: linhaDaGarantia.eventName,
+          eventId: alvo.garantia.eventId,
+        });
+        saidaDaGarantia[chave] = duplicado ? "duplicado" : "teste: não enviado";
+        return null;
+      }
+      const { id, duplicado } = await enfileirar(admin, {
+        ...comum,
+        evento: { event_name: linhaDaGarantia.eventName, event_id: alvo.garantia.eventId },
+      });
+      saidaDaGarantia[chave] = duplicado ? "duplicado" : "na fila";
+      return duplicado ? null : id;
+    } catch (e) {
+      console.error("[shopify/webhook] falha ao gravar o IC de garantia", e instanceof Error ? e.message : e);
+      saidaDaGarantia[chave] = "falhou ao gravar";
+      return null;
+    }
+  }
+
+  /** Melhor esforco, como a compra: falhou, a linha segue pendente para o cron. */
+  async function entregarGarantia(alvo: (typeof destinos)[number], id: string, chave: string) {
+    try {
+      const r = await entregar(
+        admin,
+        {
+          id,
+          store_id: loja.id,
+          destination: alvo.destination,
+          destination_id: alvo.destinationId,
+          event_name: linhaDaGarantia.eventName,
+          payload: alvo.garantia?.payload,
+          attempts: 0,
+        },
+        { destino: alvo.destino, lojaLigada: true }
+      );
+      saidaDaGarantia[chave] = r.ok ? "enviado" : "na fila";
+    } catch (e) {
+      console.error("[shopify/webhook] falha ao entregar o IC de garantia", e instanceof Error ? e.message : e);
+    }
+  }
 
   try {
     const saida: Record<string, string> = {};
@@ -401,6 +514,10 @@ async function tratarPedidoCriado(
         // chave "meta" sozinha faria o segundo sobrescrever o primeiro e o log
         // mentiria sobre o que saiu.
         const chave = `${alvo.destination}:${alvo.destinationId.slice(0, 8)}`;
+
+        // O IC de garantia entra na fila ANTES da compra, e o event_time dele
+        // e de antes do pagamento.
+        const idDaGarantia = await gravarGarantia(alvo, chave);
 
         if (!alvo.envia) {
           const { duplicado } = await registrarSemEnviar(admin, {
@@ -427,40 +544,51 @@ async function tratarPedidoCriado(
           payload: alvo.payload,
         });
 
+        // O IC sai JUNTO da compra, nao antes dela: a ordem que vale para o
+        // Meta e o TikTok e o event_time, e esperar o IC atrasaria a compra
+        // numa ida e volta -- e poria o webhook perto dos 5 s da Shopify.
+        const garantiaSai = idDaGarantia ? entregarGarantia(alvo, idDaGarantia, chave) : null;
+
         if (duplicado) {
           saida[chave] = "duplicado";
+          await garantiaSai;
           return;
         }
         if (!id) {
           saida[chave] = "na fila";
+          await garantiaSai;
           return;
         }
 
         // Melhor esforco: falhou, a linha segue pendente para o cron.
-        const r = await entregar(
-          admin,
-          {
-            id,
-            store_id: loja.id,
-            destination: alvo.destination,
-            destination_id: alvo.destinationId,
-            event_name: evento.event_name,
-            payload: alvo.payload,
-            attempts: 0,
-          },
-          // `destinosDaLoja` ja trouxe destino e token, e o interruptor foi
-          // checado no inicio. Reler seria tres consultas por destino, por venda.
-          { destino: alvo.destino, lojaLigada: true }
-        );
+        const [r] = await Promise.all([
+          entregar(
+            admin,
+            {
+              id,
+              store_id: loja.id,
+              destination: alvo.destination,
+              destination_id: alvo.destinationId,
+              event_name: evento.event_name,
+              payload: alvo.payload,
+              attempts: 0,
+            },
+            // `destinosDaLoja` ja trouxe destino e token, e o interruptor foi
+            // checado no inicio. Reler seria tres consultas por destino, por venda.
+            { destino: alvo.destino, lojaLigada: true }
+          ),
+          garantiaSai,
+        ]);
         saida[chave] = r.ok ? "enviado" : "na fila";
       })
     );
-
 
     return ok({
       topic: "orders/create",
       eventId: evento.event_id,
       destinos: saida,
+      // O InitiateCheckout que o pedido trouxe, por destino (ver purchase.ts).
+      checkoutDeGarantia: saidaDaGarantia,
       // De onde veio a identidade. "nenhuma" com o carrinho tambem vazio e a
       // compra que sai sem clique -- o numero que importa acompanhar.
       identidade: origem,

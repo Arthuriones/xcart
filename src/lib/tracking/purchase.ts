@@ -9,7 +9,11 @@ import {
   montarIdDeProduto,
   montarIdsDeProdutos,
 } from "@/lib/tracking/id-produto";
-import { definicaoDoEvento } from "@/lib/tracking/eventos";
+import {
+  definicaoDoEvento,
+  idDoEventoDoCheckout,
+  tokenDoCheckout,
+} from "@/lib/tracking/eventos";
 import {
   MOEDAS_TIKTOK,
   tipoDeConteudoTiktok,
@@ -34,6 +38,8 @@ export interface PedidoShopify {
   currency?: string | null;
   total_price?: string | number | null;
   created_at?: string | null;
+  /** Quando o pagamento foi processado. No checkout comum, segundos antes de `created_at`. */
+  processed_at?: string | null;
   browser_ip?: string | null;
   landing_site?: string | null;
   /**
@@ -216,6 +222,12 @@ export interface ContextoPurchase {
    * catalogos distintos, montados por caminhos distintos na mesma loja.
    */
   idTemplate?: string | null;
+  /**
+   * Paginas da loja por onde o comprador passou, da mais recente para a mais
+   * antiga: as URLs dos eventos de funil dele na fila. So servem quando o
+   * `landing_site` e um endpoint -- ver urlDaCompra.
+   */
+  paginas?: readonly (string | null | undefined)[] | null;
 }
 
 export interface PurchaseMontado {
@@ -266,19 +278,69 @@ function telefoneDoPedido(
 }
 
 /**
+ * Caminhos que sao CHAMADA, nao pagina.
+ *
+ * A Shopify grava como `landing_site` o primeiro pedido da sessao, e quando ele
+ * e o AJAX do carrinho sai "/cart/add.js" -- medido em 3 de 14 compras da
+ * Softnook e 1 da AmpleStep ("/cart/add"). O checkout tambem entra: o caminho
+ * dele carrega o token. O prefixo de idioma dos Markets ("/en-ca") vale igual.
+ *
+ * O permalink `/cart/ID:QTD` NAO e endpoint: e a URL do anuncio.
+ */
+const ENDPOINTS: readonly RegExp[] = [
+  /\.(js|json)$/,
+  /^(\/[a-z]{2}(-[a-z0-9]{2,4})?)?\/cart\/(add|change|update|clear|c)(\/|$)/,
+  /(^|\/)checkouts?(\/|$)/,
+  /^\/(wpm@|web-pixels@|api\/|services\/|\.well-known\/)/,
+];
+
+export function caminhoEhEndpoint(caminho: string | null | undefined): boolean {
+  const so = (caminho || "").split(/[?#]/)[0].toLowerCase();
+  return ENDPOINTS.some((re) => re.test(so));
+}
+
+/**
+ * A pagina, na origem da compra: origem e caminho, sem query nem fragmento.
+ * A URL vem do coletor, que e publico -- de outra origem, ou endpoint, nao
+ * serve. Sem a query de proposito: o que vai e a pagina, nao o que ela levava.
+ */
+function paginaDaLoja(url: string | null | undefined, origem: string): string | null {
+  try {
+    const u = new URL(url || "");
+    if (u.origin !== origem || caminhoEhEndpoint(u.pathname)) return null;
+    return `${u.origin}${u.pathname}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * A URL que acompanha a compra: a origem PUBLICA da loja mais o caminho de
  * chegada da sessao. null = nem a URL de status nem o dominio cadastrado.
  *
  * No dominio publico, nao no .myshopify.com: o funil inteiro sai no dominio
  * publico, e a compra em outro dominio quebra regra de dominio verificado e
  * conversao personalizada por URL.
+ *
+ * Chegada que e endpoint (ver ENDPOINTS) vira a ultima pagina do comprador na
+ * loja, e sem ela a raiz: "https://loja/cart/add.js" como event_source_url e
+ * o que o Meta via. Chegada que e pagina sai como sempre saiu.
  */
-function urlDaCompra(pedido: PedidoShopify, dominioLoja: string | null | undefined): string | null {
+function urlDaCompra(
+  pedido: PedidoShopify,
+  contexto: Pick<ContextoPurchase, "dominioLoja" | "paginas">
+): string | null {
   const origem =
-    origemPublica(pedido.order_status_url) || (dominioLoja ? `https://${dominioLoja}` : null);
+    origemPublica(pedido.order_status_url) ||
+    (contexto.dominioLoja ? `https://${contexto.dominioLoja}` : null);
   if (!origem) return null;
   const caminho = (pedido.landing_site || "/").startsWith("/") ? pedido.landing_site || "/" : "/";
-  return `${origem}${caminho}`;
+  if (!caminhoEhEndpoint(caminho)) return `${origem}${caminho}`;
+  for (const p of contexto.paginas || []) {
+    const pagina = paginaDaLoja(p, origem);
+    if (pagina) return pagina;
+  }
+  return `${origem}/`;
 }
 
 /**
@@ -457,7 +519,7 @@ export function montarPurchase(
   }
 
   // O caminho de chegada ajuda o Meta a casar com a sessao do navegador.
-  const url = urlDaCompra(pedido, contexto.dominioLoja);
+  const url = urlDaCompra(pedido, contexto);
   if (url) evento.event_source_url = url;
 
   return { evento, userData };
@@ -525,7 +587,7 @@ export function montarPurchaseTiktok(
     event_time: Math.floor(quandoMs / 1000),
     event_id: idDoEvento(pedido.id),
     user,
-    page: { url: urlSemTtclid(urlDaCompra(pedido, contexto.dominioLoja) || `https://${contexto.dominioLoja}/`) },
+    page: { url: urlSemTtclid(urlDaCompra(pedido, contexto) || `https://${contexto.dominioLoja}/`) },
     properties: {
       ...(comValor ? { currency: moeda, value: valor } : {}),
       content_type: tipoDeConteudoTiktok(idTemplate),
@@ -537,5 +599,106 @@ export function montarPurchaseTiktok(
       num_items: itens.reduce((s, i) => s + (Number(i.quantity) || 0), 0),
       order_id: String(pedido.id ?? ""),
     },
+  };
+}
+
+// ============================================================================
+// IC DE GARANTIA: o InitiateCheckout que o pedido traz consigo.
+//
+// O Shop Pay fecha em shop.app e a carteira na janela do sistema, e o Web
+// Pixel nao roda em nenhum dos dois. Quando o clique tambem nao vira IC (o
+// begin_checkout comum do tema e suprimido com o pixel cobrindo, e o "Secure
+// checkout" que vira Shop Pay nao e expresso), a venda chega ao Meta sem
+// Finalizacao de compra -- medido em 30 dias: 15 de 24 pedidos das lojas do
+// Arthur, e todos os 7 por Shop Pay da Softnook (#1016 entre eles).
+//
+// Entao o webhook manda, junto da compra, um IC do mesmo comprador -- so
+// quando ele ainda nao teve begin_checkout enviado ou pendente
+// (checkout-de-garantia.ts). O id e o do Web Pixel quando ha checkout_token:
+// o pixel chegando antes ou depois, o indice unico da fila junta os dois.
+//
+// Montado A PARTIR da compra ja pronta, nao do pedido de novo: o user_data,
+// o valor, a moeda e os itens sao os da compra por construcao. Sai so o que e
+// da compra: order_id e customer_segmentation.
+// ============================================================================
+
+/**
+ * Quanto o pagamento (`processed_at`) ainda pode vir antes da criacao do
+ * pedido. Alem disto e pedido importado ou editado, nao o comprador pagando, e
+ * o IC iria para o Meta com uma hora que ninguem viveu.
+ */
+const RECUO_MAXIMO_DO_PAGAMENTO_MS = 60 * 60 * 1000;
+
+/**
+ * `begin_checkout_ck_<checkout_token>` -- o MESMO do Web Pixel -- ou, sem
+ * checkout (pedido de app de COD), `begin_checkout_pedido_<id do pedido>`.
+ */
+export function idDoCheckoutDeGarantia(pedido: Pick<PedidoShopify, "id" | "checkout_token">): string {
+  const token = tokenDoCheckout(pedido.checkout_token);
+  if (token) return idDoEventoDoCheckout("begin_checkout", token);
+  return `begin_checkout_pedido_${String(pedido.id ?? "").trim() || "desconhecido"}`;
+}
+
+/**
+ * Em segundos: um antes do pagamento (o mais cedo entre `processed_at` e a
+ * compra), sempre antes da compra e nunca no futuro. O webhook nao traz a
+ * hora em que o checkout comecou; o pagamento e o ultimo instante em que ele
+ * certamente ja tinha comecado.
+ */
+export function horaDoCheckoutDeGarantia(
+  pedido: Pick<PedidoShopify, "created_at" | "processed_at">,
+  horaDaCompra: number,
+  agoraMs = Date.now()
+): number {
+  let segundos = horaDaCompra - 1;
+  const pago = Date.parse(pedido.processed_at || "");
+  const criado = Date.parse(pedido.created_at || "");
+  if (
+    Number.isFinite(pago) &&
+    Number.isFinite(criado) &&
+    pago <= criado &&
+    criado - pago <= RECUO_MAXIMO_DO_PAGAMENTO_MS
+  ) {
+    segundos = Math.min(segundos, Math.floor(pago / 1000) - 1);
+  }
+  return Math.min(segundos, Math.floor(agoraMs / 1000));
+}
+
+/** O IC de garantia do Meta, a partir do Purchase montado para o mesmo destino. */
+export function montarCheckoutDeGarantia(
+  compra: EventoCapi,
+  pedido: PedidoShopify,
+  agoraMs = Date.now()
+): EventoCapi {
+  const custom = { ...compra.custom_data };
+  delete custom.order_id;
+  delete custom.customer_segmentation;
+  return {
+    ...compra,
+    event_name: definicaoDoEvento("begin_checkout").nomeNoMeta,
+    event_time: horaDoCheckoutDeGarantia(pedido, compra.event_time, agoraMs),
+    event_id: idDoCheckoutDeGarantia(pedido),
+    custom_data: custom,
+  };
+}
+
+/**
+ * O IC de garantia do TikTok, a partir do Purchase dele: o mesmo event_id do
+ * Meta, o mesmo `page.url`, e valor e moeda so quando a compra levou (a lista
+ * de moedas do TikTok ja foi aplicada nela).
+ */
+export function montarCheckoutDeGarantiaTiktok(
+  compra: EventoTiktok,
+  pedido: PedidoShopify,
+  agoraMs = Date.now()
+): EventoTiktok {
+  const properties = { ...compra.properties };
+  delete properties.order_id;
+  return {
+    ...compra,
+    event: definicaoDoEvento("begin_checkout").nomeNoTiktok,
+    event_time: horaDoCheckoutDeGarantia(pedido, compra.event_time, agoraMs),
+    event_id: idDoCheckoutDeGarantia(pedido),
+    properties,
   };
 }

@@ -1,9 +1,11 @@
 // Supabase falso em memoria para os testes do sensor do roteamento: tabelas
-// como listas de linhas, filtros simples (eq/in/gte/lt/is/neq), insert com a
-// PK de shopify_webhook_events, update/delete pelos filtros e contagem com
-// { head: true }. Ordem nao e aplicada: o teste guarda as linhas ja na ordem
-// que a consulta pediria. upsert pela coluna do onConflict; .select() depois
-// de uma escrita devolve as linhas escritas (o insert ganha um id se nao tem).
+// como listas de linhas, filtros simples (eq/in/gte/lte/lt/is/neq/like),
+// insert com a PK de shopify_webhook_events e o indice unico da fila de
+// rastreamento, update/delete pelos filtros e contagem com { head: true }.
+// Ordem nao e aplicada: o teste guarda as linhas ja na ordem que a consulta
+// pediria. upsert pela coluna do onConflict; .select() depois de uma escrita
+// devolve as linhas escritas (o insert ganha um id se nao tem). Coluna JSON no
+// select (`apelido:payload->a->>b`) vem junto da linha, pelo apelido.
 
 type Linha = Record<string, unknown>;
 type Erro = { code?: string; message: string };
@@ -19,8 +21,37 @@ export interface FakeSupabase {
   deletes: { tabela: string; linhas: number }[];
 }
 
-const PK: Record<string, string> = { shopify_webhook_events: "webhook_id" };
+/** Chaves unicas por tabela: a PK do webhook e o (store, destino, evento) da fila (043). */
+const UNICOS: Record<string, string[]> = {
+  shopify_webhook_events: ["webhook_id"],
+  tracking_events: ["store_id", "destination_id", "event_id"],
+};
+/** Os defaults das colunas que o codigo nao manda no insert. */
+const PADRAO: Record<string, () => Linha> = {
+  tracking_events: () => {
+    const agora = new Date().toISOString();
+    return { status: "pendente", attempts: 0, sent_at: null, created_at: agora, next_attempt_at: agora };
+  },
+};
 const MAX_LINHAS = 1000;
+
+/** LIKE do Postgres: % e qualquer sequencia, _ e um caractere. */
+function casaLike(texto: unknown, padrao: string): boolean {
+  const re = padrao
+    .split("")
+    .map((c) => (c === "%" ? ".*" : c === "_" ? "." : c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
+    .join("");
+  return new RegExp(`^${re}$`).test(String(texto ?? ""));
+}
+
+/** `apelido:coluna->a->>b` do select -> le o caminho dentro da coluna JSON. */
+function colunasJson(cols: string | undefined): { apelido: string; coluna: string; caminho: string[] }[] {
+  return (cols || "")
+    .split(",")
+    .map((c) => c.trim().match(/^(\w+):(\w+)((?:->>?\w+)+)$/))
+    .filter((m): m is RegExpMatchArray => Boolean(m))
+    .map((m) => ({ apelido: m[1], coluna: m[2], caminho: m[3].split(/->>?/).filter(Boolean) }));
+}
 
 export function fakeSupabase(
   tabelas: Record<string, Linha[]>,
@@ -47,6 +78,19 @@ export function fakeSupabase(
     let unico = false;
     let devolver = false;
     let conflito = "id";
+    let json: ReturnType<typeof colunasJson> = [];
+
+    /** A linha com as colunas JSON pedidas no select, pelo apelido. */
+    const comJson = (l: Linha): Linha => {
+      if (!json.length) return l;
+      const extra: Linha = {};
+      for (const { apelido, coluna, caminho } of json) {
+        let v: unknown = l[coluna];
+        for (const passo of caminho) v = v && typeof v === "object" ? (v as Linha)[passo] : undefined;
+        extra[apelido] = v === undefined || v === null ? null : typeof v === "object" ? v : String(v);
+      }
+      return { ...l, ...extra };
+    };
 
     // So quando a escrita pede .select(): sem ele o Supabase devolve data null.
     const resposta = (linhas: Linha[]) => {
@@ -60,15 +104,17 @@ export function fakeSupabase(
       const linhas = (tabelas[tabela] ||= []);
       if (op === "insert") {
         const novas = (Array.isArray(payload) ? payload : [payload]) as Linha[];
-        const pk = PK[tabela];
+        const unico = UNICOS[tabela];
         for (const n of novas) {
-          if (pk && linhas.some((l) => l[pk] === n[pk])) {
+          if (unico && linhas.some((l) => unico.every((c) => l[c] != null && l[c] === n[c]))) {
             return { data: null, error: { code: "23505", message: "duplicate key" }, count: null };
           }
         }
         const gravadas: Linha[] = [];
         for (const n of novas) {
-          const linha = devolver && n.id === undefined ? { id: `${tabela}-${++novoId}`, ...n } : { ...n };
+          const comPadrao = { ...(PADRAO[tabela]?.() ?? {}), ...n };
+          const linha =
+            devolver && n.id === undefined ? { id: `${tabela}-${++novoId}`, ...comPadrao } : comPadrao;
           linhas.push(linha);
           gravadas.push({ ...linha });
           saida.inserts.push({ tabela, linha: { ...n } });
@@ -102,15 +148,16 @@ export function fakeSupabase(
       if (head) return { data: null, error: null, count: alvo.length };
       // Como o PostgREST do Supabase: no maximo 1000 linhas por resposta,
       // com ou sem limit maior. A contagem (head) nao tem esse corte.
-      const data = alvo.slice(0, Math.min(limite ?? MAX_LINHAS, MAX_LINHAS));
+      const data = alvo.slice(0, Math.min(limite ?? MAX_LINHAS, MAX_LINHAS)).map(comJson);
       if (unico) return { data: data[0] ?? null, error: null, count: null };
       return { data, error: null, count: alvo.length };
     };
 
     const q: Record<string, unknown> = {
-      select: (_cols?: string, o?: { head?: boolean }) => {
+      select: (cols?: string, o?: { head?: boolean }) => {
         if (o?.head) head = true;
         if (op !== "select") devolver = true;
+        json = colunasJson(cols);
         return q;
       },
       upsert: (l: unknown, o?: { onConflict?: string }) => {
@@ -153,12 +200,21 @@ export function fakeSupabase(
         filtros.push((l) => String(l[c] ?? "") < String(v));
         return q;
       },
+      lte: (c: string, v: unknown) => {
+        filtros.push((l) => String(l[c] ?? "") <= String(v));
+        return q;
+      },
       is: (c: string, v: unknown) => {
         filtros.push((l) => (l[c] ?? null) === v);
         return q;
       },
+      like: (c: string, v: string) => {
+        filtros.push((l) => casaLike(l[c], v));
+        return q;
+      },
       not: (c: string, operador: string, v: unknown) => {
         if (operador === "is") filtros.push((l) => (l[c] ?? null) !== v);
+        else if (operador === "like") filtros.push((l) => !casaLike(l[c], String(v)));
         else filtros.push((l) => l[c] !== v);
         return q;
       },
