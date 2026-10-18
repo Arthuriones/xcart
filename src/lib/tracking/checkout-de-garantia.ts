@@ -69,6 +69,15 @@ const MAX_VISITANTE = 64;
  */
 const MAX_EXPRESSOS = 200;
 
+/**
+ * Pedido SEM chave nenhuma (app de COD, pedido por API) e barrado pela reserva
+ * do clique comum PENDENTE criada ate este tanto antes dele: o formulario do
+ * COD (Releasit) costuma abrir pelo proprio botao de checkout do carrinho, o
+ * clique vira reserva que nenhum pixel cancela (nao ha checkout da Shopify) e
+ * o pedido chega sem _xc_vid. Sem isto saiam a reserva E a garantia.
+ */
+const RESERVA_BARRA_SEM_CHAVE_MS = 10 * 60 * 1000;
+
 interface LinhaDoExpresso {
   id?: string | null;
   event_id?: string | null;
@@ -280,7 +289,17 @@ export async function checkoutsDoComprador(
         // Sem chave do comprador, so o expresso pendente de qualquer um barra.
         const semChaveBarra = prefixo === PREFIXO_CHECKOUT_EXPRESSO;
         for (const l of linhasDaReserva) {
-          if (l.destination_id && expressoDoComprador(l, doPedido, semChaveBarra)) jaIniciados.add(l.destination_id);
+          if (!l.destination_id) continue;
+          // Sem chave, a reserva do clique comum so barra se for recente (ver
+          // RESERVA_BARRA_SEM_CHAVE_MS): o COD aberto pelo botao do carrinho.
+          const reservaRecenteSemChave =
+            prefixo === PREFIXO_RESERVA_DO_CHECKOUT &&
+            !comprador.length &&
+            l.status === "pendente" &&
+            Date.parse(String(l.created_at ?? "")) >= referencia - RESERVA_BARRA_SEM_CHAVE_MS;
+          if (reservaRecenteSemChave || expressoDoComprador(l, doPedido, semChaveBarra)) {
+            jaIniciados.add(l.destination_id);
+          }
         }
       }
       // A reserva do clique comum, PENDENTE, do comprador: a compra a enriquece.
@@ -289,7 +308,10 @@ export async function checkoutsDoComprador(
       for (const l of linhasDaReserva) {
         if (l.status !== "pendente" || !l.destination_id || !l.id || !l.event_id) continue;
         const forca = forcaDoCasamento(l, doPedido);
-        if (forca < 1) continue;
+        // So pelo IP quando o pedido nao traz chave: com chave que nao casa, a
+        // reserva do mesmo IP e de OUTRA pessoa da casa (wifi, CGNAT) -- ela
+        // segue pobre, mas nao vira o IC deste comprador.
+        if (forca < 1 || (forca < 2 && comprador.length > 0)) continue;
         const criada = String(l.created_at ?? "");
         const atual = paraEnriquecer.get(l.destination_id);
         if (atual && (atual.forca > forca || (atual.forca === forca && atual.criada >= criada))) continue;

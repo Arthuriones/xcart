@@ -298,7 +298,7 @@ export async function entregar(
   if (ehReservaDeCheckout(eventId)) {
     const { data: atual, error } = await admin
       .from("tracking_events")
-      .select("status")
+      .select("status, payload")
       .eq("id", linha.id)
       .maybeSingle();
     // Sem conseguir reler, nao manda: a linha segue pendente e volta na
@@ -307,6 +307,9 @@ export async function entregar(
     if (atual?.status !== "pendente") {
       return { ok: false, motivo: "expresso cancelado antes do envio" };
     }
+    // A compra pode ter enriquecido a reserva depois da leitura do lote: manda
+    // o que esta gravado, para o enviado ser o que a linha mostra.
+    if (atual.payload) linha = { ...linha, payload: atual.payload };
   }
 
   // ---- TikTok -------------------------------------------------------------

@@ -586,13 +586,24 @@ describe("IC de garantia no webhook orders/create", () => {
     });
   });
 
-  it("pelo IP do pedido: a reserva do comprador com outro _xc_vid e enriquecida", async () => {
+  it("pelo IP com o pedido trazendo OUTRA chave: a reserva e de outra pessoa da casa e nao vira o IC deste comprador", async () => {
     vi.setSystemTime(AGORA - 50e3);
     // O coletor viu o mesmo IPv4 do pedido; o cookie era outro.
     await coletor({ ...CLIQUE_COMUM, visitorId: "vid.antigo", clientId: null });
     const reserva = idDaReservaDoCheckout("vid.antigo", AGORA - 50e3);
     vi.setSystemTime(AGORA);
-    expect((await webhook()).corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "na reserva do clique" } });
+    // Conta como "ja iniciado" (faltar um IC custa menos que sair dois), mas
+    // os dados do pedido nao vao para a reserva do outro.
+    expect((await webhook()).corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "já iniciado" } });
+    expect(JSON.stringify(linha(reserva)!.payload)).not.toMatch(/96.18/);
+  });
+
+  it("pelo IP com o pedido SEM chave: a reserva do comprador e enriquecida", async () => {
+    vi.setSystemTime(AGORA - 50e3);
+    await coletor({ ...CLIQUE_COMUM, visitorId: "vid.antigo", clientId: null });
+    const reserva = idDaReservaDoCheckout("vid.antigo", AGORA - 50e3);
+    vi.setSystemTime(AGORA);
+    expect((await webhook(SEM_CARRINHO)).corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "na reserva do clique" } });
     expect(linha(reserva)!.payload).toMatchObject({
       event_id: reserva,
       custom_data: expect.objectContaining({ value: 96.18 }),
@@ -889,10 +900,19 @@ describe("IC de garantia no webhook orders/create", () => {
     expect(ics()).toHaveLength(1);
   });
 
-  it("sem chave: a reserva do clique comum de outro comprador NAO barra a garantia; o expresso continua barrando", async () => {
+  it("sem chave: a reserva do clique comum RECENTE barra a garantia (COD aberto pelo botao do carrinho); a antiga nao", async () => {
     const ipv6 = { browser_ip: "2001:db8:85a3::8a2e:370:7334", user_agent: "Mozilla/5.0 (iPhone)" };
     const semChave = { ...SEM_CARRINHO, browser_ip: ipv6.browser_ip, client_details: ipv6 };
+    // Pendente ha 2 min: o clique que abriu o formulario do COD -- ela e o IC.
     cenario({ identidades: [], eventos: [EXPRESSO({ event_id: "begin_checkout_rs_outro.visitante_9" })] });
+    expect((await webhook(semChave)).corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "já iniciado" } });
+
+    // Pendente ha 15 min (cron atrasado): de outra pessoa, nao barra.
+    mundo.saiu.length = 0;
+    cenario({
+      identidades: [],
+      eventos: [EXPRESSO({ event_id: "begin_checkout_rs_outro.visitante_9", created_at: new Date(AGORA - 15 * MIN).toISOString() })],
+    });
     expect((await webhook(semChave)).corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "enviado" } });
     expect(linha(idDoEventoDoCheckout("begin_checkout", "outro-token"))).toBeDefined();
 
