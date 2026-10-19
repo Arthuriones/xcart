@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { shopifyGraphQL } from "@/lib/shopify/client";
 import { getPublicAppUrl } from "@/lib/public-url";
+import {
+  rastreiaCompra,
+  scriptDaPonteDoCheckout,
+  semMigration069,
+  tabelaAusente,
+  type IdPlataformaCheckout,
+} from "@/lib/checkouts-externos/tipos";
 
 export const runtime = "nodejs";
 
@@ -17,6 +24,11 @@ export const runtime = "nodejs";
 //
 // Lista leve de proposito: id, titulo e variantes. Nao e o getProducts (que
 // traz descricao, imagens e metafields) -- aqui so se escolhe o que vender.
+//
+// `?checkouts=1`: o botao da pagina pode levar a um checkout externo (Cakto)
+// em vez da loja. Devolve os checkouts que rastreiam, com a tag da ponte de
+// cada um (data-xcart-checkout) e se o rastreamento dele esta ligado. So o
+// banco, pela sessao (RLS): nada da Shopify.
 // ============================================================================
 
 const QUERY = `
@@ -45,6 +57,50 @@ interface Resposta {
   };
 }
 
+interface CheckoutDaPagina {
+  id: string;
+  nome: string;
+  plataforma: IdPlataformaCheckout;
+  ativo: boolean;
+  /** Algum pixel (Meta ou TikTok) ligado: sem ele o coletor recusa o que a pagina mandar. */
+  rastreando: boolean;
+  tag: string;
+}
+
+/** Os checkouts do usuario que rastreiam (modelo venda), pela sessao. Sem a 069/073: o que der. */
+async function checkoutsDaPagina(supabase: Awaited<ReturnType<typeof createClient>>): Promise<CheckoutDaPagina[]> {
+  const { data, error } = await supabase
+    .from("checkouts_externos")
+    .select("id, nome, plataforma, ativo")
+    .order("created_at", { ascending: true });
+  if (error) {
+    if (semMigration069(error)) return [];
+    throw new Error(error.message);
+  }
+  const base = getPublicAppUrl();
+  const linhas = ((data ?? []) as { id: string; nome: string; plataforma: string; ativo: boolean }[]).filter((c) =>
+    rastreiaCompra(c.plataforma)
+  );
+  if (linhas.length === 0) return [];
+  const ligados = new Set<string>();
+  const { data: ds, error: erroDestinos } = await supabase
+    .from("checkout_externo_destinos")
+    .select("checkout_id")
+    .eq("ativo", true)
+    .in(
+      "checkout_id",
+      linhas.map((c) => c.id)
+    );
+  if (erroDestinos && !tabelaAusente(erroDestinos)) throw new Error(erroDestinos.message);
+  for (const d of (ds ?? []) as { checkout_id: string }[]) ligados.add(String(d.checkout_id));
+  return linhas.flatMap((c) => {
+    const tag = scriptDaPonteDoCheckout(base, String(c.id), c.plataforma);
+    return tag
+      ? [{ id: String(c.id), nome: c.nome, plataforma: c.plataforma as IdPlataformaCheckout, ativo: Boolean(c.ativo), rastreando: ligados.has(String(c.id)), tag }]
+      : [];
+  });
+}
+
 /** "gid://shopify/ProductVariant/123" -> "123". O permalink quer o numero. */
 function numero(gid: string | undefined): string | null {
   const m = (gid || "").match(/\/(\d+)$/);
@@ -58,6 +114,15 @@ export async function GET(request: NextRequest) {
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (request.nextUrl.searchParams.get("checkouts") === "1") {
+    try {
+      return NextResponse.json({ ok: true, checkouts: await checkoutsDaPagina(supabase) });
+    } catch (e) {
+      console.error("[tracking/pagina-externa] checkouts", e instanceof Error ? e.message : e);
+      return NextResponse.json({ error: "Não deu para ler os checkouts." }, { status: 500 });
+    }
   }
 
   const storeId = request.nextUrl.searchParams.get("storeId");

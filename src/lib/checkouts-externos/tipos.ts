@@ -270,6 +270,31 @@ export interface RastreamentoDoCheckout {
   uso: { emUso: number; limite: number | null; esteConta: boolean } | null;
   /** A 073 ainda nao foi aplicada. */
   semMigration: boolean;
+  /** A tag da ponte para a pagina de vendas (VSL). null = a plataforma nao rastreia. */
+  scriptDaPagina?: string | null;
+  /**
+   * O que a pagina de vendas mandou pela ponte nas ultimas 24 h (linhas da
+   * fila, uma por pixel). null = nao deu para contar.
+   */
+  daPagina?: { visitas: number; inicios: number } | null;
+}
+
+/**
+ * O host do checkout de cada plataforma que rastreia: o `data-xcart-destinos`
+ * da ponte na pagina de vendas (VSL). Sem curinga, como a ponte exige.
+ */
+export const HOST_DO_CHECKOUT: Partial<Record<IdPlataformaCheckout, string>> = { cakto: "pay.cakto.com.br" };
+
+/**
+ * A tag da ponte (xcart-bridge.js) para a pagina de vendas que leva a este
+ * checkout: reescreve o link do botao (callback=xc.<vid>, UTMs, click ids) e
+ * avisa o coletor da visita e do clique. null = a plataforma nao rastreia.
+ * `base` = o host publico do app (getPublicAppUrl).
+ */
+export function scriptDaPonteDoCheckout(base: string, checkoutId: string, plataforma: string | null | undefined): string | null {
+  const host = HOST_DO_CHECKOUT[plataforma as IdPlataformaCheckout];
+  if (!host || !rastreiaCompra(plataforma)) return null;
+  return `<script src="${base.replace(/\/+$/, "")}/xcart-bridge.js" data-xcart-destinos="${host}" data-xcart-checkout="${checkoutId}" defer></script>`;
 }
 
 export const ROTULO_STATUS_ENVIO: Record<StatusDoEnvio, string> = {

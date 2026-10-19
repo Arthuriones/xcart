@@ -57,6 +57,24 @@
  * ao checkout como atributo _xc_vid: o PageView daqui, o InitiateCheckout do
  * pixel e a compra do webhook falam da mesma pessoa.
  *
+ * PAGINA DE VENDAS DE UM CHECKOUT EXTERNO (Cakto)
+ *
+ *   <script src="https://user.xcart.app/xcart-bridge.js"
+ *           data-xcart-destinos="pay.cakto.com.br"
+ *           data-xcart-checkout="<id do checkout no xcart>"
+ *           defer></script>
+ *
+ * O botao aponta para o link da oferta na Cakto, sem nada a mais. A ponte poe
+ * nele `callback=xc.<vid>` (so se o link ainda nao tiver um callback: a Cakto
+ * devolve esse campo no webhook e o xcart acha o visitante por ele), as UTMs e
+ * os click ids (o gclid e da tag do Google que fica na Cakto). E avisa o
+ * coletor -- para o CHECKOUT, nao para loja -- do PageView ao abrir e do
+ * InitiateCheckout no clique do botao para a Cakto (uma vez em 30 min, sem
+ * valor). A compra vem do webhook da Cakto, com o mesmo visitante: IP, user
+ * agent, _fbp e o clique do anuncio saem daqui. `data-xcart-param-vid="sck"`
+ * leva o visitante no `sck` em vez do `callback`. Com `data-xcart-checkout`
+ * a pagina rastreia para o checkout mesmo que tenha `data-xcart-store`.
+ *
  * `data-xcart-destinos` e OBRIGATORIO e nao aceita curinga. Sem lista, este
  * arquivo nao faz nada. O motivo: reescrever "todo link externo" mandaria o
  * gclid junto para o Instagram, para o WhatsApp e para qualquer outro link da
@@ -127,8 +145,16 @@
       }
     }
   }
+  // A pagina de vendas de um checkout externo (Cakto): o id dele no xcart. Com
+  // ele a ponte rastreia para o checkout e poe o visitante no link do botao.
+  var CHECKOUT_ID = ((tag && tag.getAttribute("data-xcart-checkout")) || "").trim().toLowerCase();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(CHECKOUT_ID)) CHECKOUT_ID = "";
+  // O parametro do link que leva o visitante: o `callback`, que a Cakto
+  // devolve no webhook; `sck` so a pedido (a Utmify reescreve o sck).
+  var PARAM_VID =
+    ((tag && tag.getAttribute("data-xcart-param-vid")) || "").trim().toLowerCase() === "sck" ? "sck" : "callback";
   var COLETOR = null;
-  if (SHOP && tag && tag.src) {
+  if ((SHOP || CHECKOUT_ID) && tag && tag.src) {
     try {
       COLETOR = new URL(tag.src).origin + "/api/tracking/collect";
     } catch (e) {
@@ -366,6 +392,9 @@
         levouClique = true;
       }
     }
+    // O visitante, para o webhook do checkout achar quem clicou. So se o link
+    // nao trouxer um: quem montou a pagina pode usar o campo para outra coisa.
+    if (CHECKOUT_ID && vid && !u.searchParams.has(PARAM_VID)) u.searchParams.set(PARAM_VID, "xc." + vid);
     if (ehPermalink(u)) {
       for (var a = 0; a < CLICK_IDS.length; a++) {
         var id = CLICK_IDS[a];
@@ -392,7 +421,7 @@
         }
         u.searchParams.set("attributes[_xc_utm_em]", utmEm);
       }
-    } else if (levouClique && cliqueEm) {
+    } else if (levouClique && cliqueEm && !CHECKOUT_ID) {
       // A hora do clique que a ponte viu: o snippet da loja nao toma um click
       // id de semanas atras por um clique de agora.
       u.searchParams.set("xcart_clique_em", cliqueEm);
@@ -454,6 +483,26 @@
 
   function corpoDoEvento(evento, produto) {
     var instante = Date.now();
+    if (CHECKOUT_ID) {
+      // Pagina de um checkout externo: o checkout no lugar da loja, e sem
+      // produto (a oferta e da Cakto). O resto e o mesmo acordo.
+      return JSON.stringify({
+        checkoutId: CHECKOUT_ID,
+        evento: evento,
+        eventId: evento + "_" + vid + "_" + instante,
+        visitorId: vid,
+        gclid: guardados.gclid || null,
+        fbp: lerCookie("_fbp") || null,
+        fbc: lerCookie("_fbc") || null,
+        fbclid: guardados.fbclid || null,
+        ttclid: guardados.ttclid || null,
+        ttp: lerCookie("_ttp") || null,
+        referrer: document.referrer || null,
+        pageUrl: location.href.slice(0, 500),
+        utm: utmDoEvento(),
+        fonte: "ponte",
+      });
+    }
     return JSON.stringify({
       shop: SHOP,
       storeId: STORE_ID || undefined,
@@ -505,6 +554,8 @@
   function rastrear() {
     if (!COLETOR) return;
     if (!repetido("page_view")) entregar(corpoDoEvento("page_view", null));
+    // Pagina de checkout externo: nao ha produto da Shopify para o ViewContent.
+    if (CHECKOUT_ID) return;
     var variante = varianteDaPagina();
     if (variante && !repetido("view_item")) {
       entregar(corpoDoEvento("view_item", { variante: variante }));
@@ -532,6 +583,14 @@
     });
   }
 
+  // O clique no botao que leva ao checkout externo: o InitiateCheckout. Uma vez
+  // em 30 min por aba (o coletor tambem segura). Sem valor, como todo evento
+  // daqui. sendBeacon sobrevive a navegacao que vem logo depois.
+  function inicioDoCheckout() {
+    if (!CHECKOUT_ID || !COLETOR) return;
+    if (!repetido("begin_checkout")) entregar(corpoDoEvento("begin_checkout", null));
+  }
+
   // Ultima rede de seguranca, na fase de captura: pega link cujo href foi
   // definido por JS no proprio clique, antes de a navegacao acontecer.
   document.addEventListener(
@@ -543,6 +602,7 @@
       if (!href || !ehDestino(href)) return;
       var novo = comParametros(href);
       if (novo !== href) a.setAttribute("href", novo);
+      inicioDoCheckout();
     },
     true
   );

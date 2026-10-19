@@ -15,13 +15,16 @@
 --   2. checkout_externo_destinos          um pixel Meta e um TikTok por checkout
 --   3. checkout_externo_destino_segredos  o token de cada um (ZERO policy)
 --   4. checkout_externo_envios            a fila: unique (destino_id, event_id)
---   5. checkout_externo_identidades       o visitante da ponte (Fase D)
+--   5. checkout_externo_identidades       o visitante da ponte (o coletor grava, o webhook le)
 --   6. purge_checkout_externo_rastreio()  SECURITY DEFINER, so service_role
 --
 -- DADO PESSOAL: o payload da fila leva e-mail, telefone, nome, cidade, estado,
 -- CEP e pais SO EM SHA-256 (src/lib/checkouts-externos/compra.ts), e sai no
 -- purge: entregue em 8 dias; o que nao saiu perde o payload em 8 e a linha em
 -- 30. O CHECK sem "@" no payload e a trava de que e-mail em claro nunca entra.
+-- IP e user agent do VISITANTE vao em claro no payload e na identidade (o Meta
+-- e o TikTok so casam assim, como nas lojas): identidade sem policy, expira em
+-- 30 dias; o teto por IP conta pelo ip_hash (HMAC), nunca pelo IP.
 -- O lojista le o estado da fila (status, tentativas, erro) e NUNCA o payload
 -- nem a resposta: o grant e por coluna. pedidos_externos continua sem dado
 -- pessoal (072).
@@ -32,6 +35,13 @@
 -- privilegio fechados (o grant a PUBLIC e o do default privileges do
 -- Supabase, 027) -- e o fim da migration CONFERE com has_*_privilege e
 -- aborta se sobrou algum.
+--
+-- FASE D (secao 5b): a ponte (xcart-bridge.js com data-xcart-checkout) avisa
+-- o coletor publico (/api/tracking/collect) da visita (PageView) e do clique
+-- no botao da Cakto (InitiateCheckout). O coletor grava a identidade do
+-- visitante e enfileira os dois aqui, com visitor_id e ip_hash para os tetos
+-- (os mesmos numeros do coletor das lojas). Sem valor monetario: o coletor e
+-- publico.
 --
 -- ORDEM: aplicar ANTES do deploy (recomendado). O codigo novo le com e sem
 -- esta migration (sem ela: nenhum destino, o webhook segue como antes, a tela
@@ -181,7 +191,7 @@ create table if not exists public.checkout_externo_identidades (
   utm                jsonb check (utm is null or utm::text !~ '@'),
   utm_em             timestamptz,
   -- O teto por IP do coletor (065), sem guardar o IP para isso.
-  ip_hash            text check (ip_hash is null or ip_hash ~ '^[0-9a-f]{64}$'),
+  ip_hash            text check (ip_hash is null or ip_hash ~ '^[0-9a-f]{32,64}$'),
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now(),
   -- 30 dias: o boleto vence em dias, e a compra so vai ao Meta ate 7 depois.
@@ -194,6 +204,54 @@ create table if not exists public.checkout_externo_identidades (
 
 create index if not exists checkout_externo_identidades_expira_idx
   on public.checkout_externo_identidades (expires_at);
+
+
+-- ---------------------------------------------------------------------------
+-- 5b. Fase D: o que a ponte manda pelo coletor publico
+-- ---------------------------------------------------------------------------
+-- O coletor (src/lib/checkouts-externos/coletor.ts) poe na fila o PageView e o
+-- InitiateCheckout da pagina de vendas, sem valor. visitor_id e ip_hash sao as
+-- chaves dos tetos (por visitante no dia, por IP e por checkout na hora) e da
+-- janela de 30 min do InitiateCheckout; a compra do webhook nao tem nenhum
+-- dos dois. O lojista nao le essas colunas (o grant da secao 7 e por coluna).
+--
+-- Por ALTER e com nome: roda de novo num banco que ja tenha a 073 sem esta
+-- secao. O ip_hash e o HMAC curto de ip-balde.ts (32 hex).
+alter table public.checkout_externo_envios
+  add column if not exists visitor_id text,
+  add column if not exists ip_hash text;
+
+alter table public.checkout_externo_envios drop constraint if exists checkout_externo_envios_visitor_check;
+alter table public.checkout_externo_envios
+  add constraint checkout_externo_envios_visitor_check
+  check (visitor_id is null or visitor_id ~ '^[A-Za-z0-9]{1,32}\.[A-Za-z0-9]{1,32}$');
+
+alter table public.checkout_externo_envios drop constraint if exists checkout_externo_envios_ip_hash_check;
+alter table public.checkout_externo_envios
+  add constraint checkout_externo_envios_ip_hash_check
+  check (ip_hash is null or ip_hash ~ '^[0-9a-f]{32,64}$');
+
+alter table public.checkout_externo_identidades drop constraint if exists checkout_externo_identidades_ip_hash_check;
+alter table public.checkout_externo_identidades
+  add constraint checkout_externo_identidades_ip_hash_check
+  check (ip_hash is null or ip_hash ~ '^[0-9a-f]{32,64}$');
+
+-- Os tetos e a janela do InitiateCheckout.
+create index if not exists checkout_externo_envios_visitante_idx
+  on public.checkout_externo_envios (checkout_id, visitor_id, created_at)
+  where visitor_id is not null;
+
+create index if not exists checkout_externo_envios_ip_idx
+  on public.checkout_externo_envios (checkout_id, ip_hash, created_at)
+  where ip_hash is not null;
+
+-- Identidades NOVAS na ultima hora, do checkout e do IP.
+create index if not exists checkout_externo_identidades_criada_idx
+  on public.checkout_externo_identidades (checkout_id, created_at);
+
+create index if not exists checkout_externo_identidades_ip_idx
+  on public.checkout_externo_identidades (checkout_id, ip_hash, created_at)
+  where ip_hash is not null;
 
 
 -- ---------------------------------------------------------------------------
@@ -299,6 +357,10 @@ begin
        or has_column_privilege(papel, 'public.checkout_externo_envios', 'response', 'select') then
       raise exception '073: % le o payload da fila do checkout', papel;
     end if;
+    if has_column_privilege(papel, 'public.checkout_externo_envios', 'ip_hash', 'select')
+       or has_column_privilege(papel, 'public.checkout_externo_envios', 'visitor_id', 'select') then
+      raise exception '073: % le o visitante da fila do checkout', papel;
+    end if;
     if has_table_privilege(papel, 'public.checkout_externo_envios', 'insert')
        or has_table_privilege(papel, 'public.checkout_externo_envios', 'update')
        or has_table_privilege(papel, 'public.checkout_externo_destinos', 'insert')
@@ -333,3 +395,5 @@ $$;
 --   select has_function_privilege('authenticated', 'public.purge_checkout_externo_rastreio()', 'execute'); -- false
 --   select column_default from information_schema.columns
 --    where table_name = 'checkouts_externos' and column_name = 'compra_quando';               -- 'gerada'::text
+--   select count(*) from information_schema.columns
+--    where table_name = 'checkout_externo_envios' and column_name in ('visitor_id', 'ip_hash');  -- 2

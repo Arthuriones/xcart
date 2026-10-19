@@ -5,6 +5,7 @@ import { definicaoDoEvento } from "@/lib/tracking/eventos";
 import type { IdentidadeGuardada } from "@/lib/tracking/purchase";
 import type { EventoNormalizado, RastreioNormalizado } from "./plataformas/tipos";
 import type { CompraQuando, PlataformaRastreio } from "./tipos";
+import { PREFIXO_VID, RE_VID, vidDoParametro } from "./plataformas/comum";
 
 // ============================================================================
 // A compra do checkout externo (Cakto) pelo SERVIDOR: Meta (Conversions API)
@@ -29,8 +30,15 @@ import type { CompraQuando, PlataformaRastreio } from "./tipos";
 //
 // DADO PESSOAL: so em SHA-256 no payload (montarUserData/montarUserTiktok:
 // e-mail, telefone, nome, cidade, estado, CEP, pais, external_id). CPF nem e
-// lido. fbc/fbp e (Fase D) IP e user agent vao em claro, como na Shopify: e o
-// formato que o Meta e o TikTok pedem.
+// lido. fbc/fbp e IP e user agent (da identidade que a ponte gravou, Fase D)
+// vao em claro, como na Shopify: e o formato que o Meta e o TikTok pedem.
+// Nada com "@" entra (o CHECK da 073 recusaria a linha, e a compra cairia no
+// caminho de falha): valor da identidade ou URL com "@" sai.
+//
+// O VISITANTE (Fase D): a ponte poe `callback=xc.<vid>` no link da Cakto. O
+// vid vem do campo `callback`, depois do `sck`, depois da query do
+// `checkoutUrl` (cakto.ts) -- e acha a identidade (IP, user agent, _fbp,
+// fbclid, ttclid, _ttp).
 //
 // Puro: sem banco, sem rede. Testado em tests/checkout-externo-rastreio.test.ts.
 // ============================================================================
@@ -44,13 +52,12 @@ const COBRANCA_GERADA = /^[a-z_]+_gerado$/;
 /** O checkout de onde a compra veio, quando o webhook nao traz a URL. */
 const URL_DO_CHECKOUT: Record<string, string> = { cakto: "https://pay.cakto.com.br/" };
 
-/** O vid que a ponte (Fase D) poe no `callback` do link do checkout: "xc.<vid>". */
-const PREFIXO_VID = "xc.";
-/** O formato do _xcb_vid/_xc_vid: base36 + "." + base36. */
-const RE_VID = /^[A-Za-z0-9]{1,32}\.[A-Za-z0-9]{1,32}$/;
+// O vid da ponte ("xc.<vid>" no `callback`): o formato mora em comum.ts, que
+// o adaptador da Cakto tambem usa para ler a query do checkoutUrl.
+export { PREFIXO_VID, RE_VID, vidDoParametro };
 
-const RE_FBC = /^fb\.[0-9]\.[0-9]{9,14}\.[A-Za-z0-9_.-]+$/;
-const RE_FBP = /^fb\.[0-9]\.[0-9]{9,14}\.[0-9]+$/;
+export const RE_FBC = /^fb\.[0-9]\.[0-9]{9,14}\.[A-Za-z0-9_.-]+$/;
+export const RE_FBP = /^fb\.[0-9]\.[0-9]{9,14}\.[0-9]+$/;
 
 /** O id do evento: o MESMO para Meta e TikTok, um por cobranca. */
 export function idDaCompra(plataforma: string, grupo: string): string {
@@ -102,13 +109,18 @@ export function quandoDaCompra(compra: CompraDaCobranca, agoraMs: number): numbe
   return Math.min(datas.length ? Math.min(...datas) : agoraMs, agoraMs);
 }
 
-/** O vid da ponte, se veio: no `callback` ("xc.<vid>") e, sem ele, no `sck`. */
+/**
+ * O vid da ponte, se veio: no `callback` ("xc.<vid>"), depois no `sck`,
+ * depois na query do `checkoutUrl` (o `callback`/`sck` com que o comprador
+ * abriu o checkout, que cakto.ts ja leu e validou).
+ */
 export function vidDoRastreio(r: RastreioNormalizado | null | undefined): string | null {
   for (const bruto of [r?.callback, r?.sck]) {
-    const v = (bruto || "").trim();
-    if (v.startsWith(PREFIXO_VID) && RE_VID.test(v.slice(PREFIXO_VID.length))) return v.slice(PREFIXO_VID.length);
+    const v = vidDoParametro(bruto);
+    if (v) return v;
   }
-  return null;
+  const daUrl = (r?.vidNaUrl || "").trim();
+  return RE_VID.test(daUrl) ? daUrl : null;
 }
 
 /** O vid da cobranca (do principal, ou do primeiro item que trouxe). */
@@ -157,14 +169,30 @@ export interface ContextoDaCompra {
   /** A moeda do checkout: vale quando a venda nao trouxe a dela. */
   moedaPadrao: string;
   /**
-   * Fase D: o que a ponte guardou do visitante (IP, user agent, fbclid,
-   * ttclid, _fbp, _ttp). null = so o que a Cakto mandou.
+   * O que a ponte guardou do visitante (Fase D: IP, user agent, fbclid,
+   * ttclid, _fbp, _ttp e a hora do clique). null = so o que a Cakto mandou.
    */
   identidade?: IdentidadeGuardada | null;
 }
 
 function redondo(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/** Texto sem "@" (o CHECK da fila); o resto sai null. */
+function semArroba(v: string | null | undefined): string | null {
+  const s = typeof v === "string" ? v.trim() : "";
+  return s && !s.includes("@") ? s : null;
+}
+
+/**
+ * A hora do clique para o fbc montado do fbclid da identidade: a do conjunto
+ * do clique que a ponte guardou (utm_em), nunca depois da compra. Sem ela, a
+ * criacao do pedido (o clique foi antes, nao depois).
+ */
+function horaDoClique(id: IdentidadeGuardada | null, criadoMs: number): number {
+  const em = Date.parse(String(id?.utmEm ?? ""));
+  return Number.isFinite(em) && em < criadoMs ? em : criadoMs;
 }
 
 /** O que os dois formatos dividem, ja resolvido. */
@@ -188,8 +216,13 @@ function baseDaCompra(compra: CompraDaCobranca, ctx: ContextoDaCompra) {
   const contents = [...porProduto].map(([pid, x]) => ({ id: pid, quantidade: x.quantidade, preco: redondo(x.pago / x.quantidade) }));
 
   const criadoMs = Date.parse(principal.pedido.criadoEm);
+  const quandoCriado = Number.isFinite(criadoMs) ? criadoMs : ctx.agoraMs;
   const fbcDoWebhook = r?.fbc && RE_FBC.test(r.fbc) ? r.fbc : null;
   const fbpDoWebhook = r?.fbp && RE_FBP.test(r.fbp) ? r.fbp : null;
+  // Da identidade (o coletor ja validou; aqui so a trava do "@").
+  const fbcDaIdentidade = semArroba(id?.fbc);
+  const fbclidDaIdentidade = semArroba(id?.fbclid);
+  const url = semArroba(r?.checkoutUrl) || URL_DO_CHECKOUT[ctx.plataforma] || "https://pay.cakto.com.br/";
 
   return {
     eventId: idDaCompra(ctx.plataforma, compra.grupo),
@@ -199,7 +232,7 @@ function baseDaCompra(compra: CompraDaCobranca, ctx: ContextoDaCompra) {
     contents,
     numItens: compra.itens.length,
     orderId: compra.grupo,
-    url: r?.checkoutUrl || URL_DO_CHECKOUT[ctx.plataforma] || "https://pay.cakto.com.br/",
+    url,
     dados: {
       email: c?.email ?? null,
       // Com o '+': os dois normalizadores tomam como internacional e nao colam DDI de novo.
@@ -214,13 +247,15 @@ function baseDaCompra(compra: CompraDaCobranca, ctx: ContextoDaCompra) {
     },
     fbc:
       fbcDoWebhook ||
-      id?.fbc ||
-      montarFbc(id?.fbclid || r?.fbclid, Number.isFinite(criadoMs) ? criadoMs : ctx.agoraMs),
-    fbp: fbpDoWebhook || id?.fbp || null,
-    ttclid: id?.ttclid || r?.ttclid || null,
-    ttp: id?.ttp || null,
-    ip: id?.clientIp || null,
-    ua: id?.userAgent || null,
+      fbcDaIdentidade ||
+      (fbclidDaIdentidade
+        ? montarFbc(fbclidDaIdentidade, horaDoClique(id, quandoCriado))
+        : montarFbc(semArroba(r?.fbclid), quandoCriado)),
+    fbp: fbpDoWebhook || semArroba(id?.fbp),
+    ttclid: semArroba(id?.ttclid) || semArroba(r?.ttclid),
+    ttp: semArroba(id?.ttp),
+    ip: semArroba(id?.clientIp),
+    ua: semArroba(id?.userAgent),
   };
 }
 
@@ -300,6 +335,9 @@ export interface EnvioNovo {
   event_id: string;
   grupo: string | null;
   payload: EventoCapi | EventoTiktok;
+  /** So o que vem da ponte (Fase D): as chaves dos tetos do coletor. A compra nao leva. */
+  visitor_id?: string | null;
+  ip_hash?: string | null;
 }
 
 export interface EnvioGravado extends EnvioNovo {
@@ -316,7 +354,7 @@ export interface EnvioParaEntregar {
 export interface RastreioCheckout {
   /** Os destinos ATIVOS do checkout, com o token. Sem a 073: []. Erro de banco LANCA. */
   destinos(checkoutId: string): Promise<DestinoDoCheckout[]>;
-  /** Fase D: a identidade do visitante pelo vid. Falha = null (so enriquece). */
+  /** A identidade do visitante pelo vid (Fase D). Falha = null (so enriquece). */
   identidade?(checkoutId: string, visitorId: string): Promise<IdentidadeGuardada | null>;
   /** Grava as linhas; devolve as que entraram (a duplicada fica de fora). Erro LANCA. */
   enfileirar(linhas: EnvioNovo[]): Promise<EnvioGravado[]>;

@@ -42,11 +42,20 @@ export interface RastreioNormalizado {
   callback: string | null;
   fbc: string | null;
   fbp: string | null;
-  /** Os click ids da query com que o comprador abriu o checkout (so eles, nunca o resto da query). */
+  /**
+   * Os click ids da query com que o comprador abriu o checkout (so eles, nunca
+   * o resto da query) e, sem eles, o que a Utmify grudou no utm_content.
+   */
   fbclid: string | null;
   ttclid: string | null;
   /** Origem e caminho, SEM a query (o pre-preenchimento do checkout leva nome e e-mail na URL). */
   checkoutUrl: string | null;
+  /**
+   * O vid da ponte (Fase D) que veio na QUERY do checkoutUrl
+   * (`callback=xc.<vid>` ou `sck=xc.<vid>`), ja sem o "xc.". So ele: o resto
+   * da query nao sai daqui. compra.ts o usa quando o campo `callback` falta.
+   */
+  vidNaUrl: string | null;
 }
 
 /**

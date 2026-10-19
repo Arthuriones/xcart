@@ -43,6 +43,7 @@ import { enviarAoDestino } from "@/lib/tracking/envio";
 import { chaveDoCheckout, conferirLigarRastreamento, lerUso } from "@/lib/billing/limites";
 import type { EventoCapi } from "@/lib/tracking/meta-capi";
 import type { EventoTiktok } from "@/lib/tracking/tiktok-evento";
+import type { IdentidadeGuardada } from "@/lib/tracking/purchase";
 
 // A compra das vendas da Cakto pelo SERVIDOR (Fase C, 073): o xcart manda ao
 // Meta e ao TikTok. Uma compra por cobranca (event_id estavel), no primeiro
@@ -201,17 +202,23 @@ const META: DestinoDoCheckout = { id: "d-meta", plataforma: "meta", conta: "1234
 const TIKTOK: DestinoDoCheckout = { id: "d-tt", plataforma: "tiktok", conta: "CUSG5HBC77UD11VVRQEG", token: "tt-token-1234567", testEventCode: null, ativo: true };
 
 /** A fila com o indice unico (destino_id, event_id) da 073. */
-function fila(destinos: DestinoDoCheckout[] = [META, TIKTOK], opcoes: { falharEnfileirar?: number } = {}) {
+function fila(
+  destinos: DestinoDoCheckout[] = [META, TIKTOK],
+  opcoes: { falharEnfileirar?: number; identidades?: Record<string, IdentidadeGuardada> } = {}
+) {
   let falhas = opcoes.falharEnfileirar ?? 0;
   const linhas: EnvioGravado[] = [];
+  /** Os vids que a compra procurou (checkout|vid). */
+  const procurados: string[] = [];
   let lidas = 0;
   const rastreio: RastreioCheckout = {
     async destinos() {
       lidas += 1;
       return destinos;
     },
-    async identidade() {
-      return null;
+    async identidade(checkoutId, vid) {
+      procurados.push(`${checkoutId}|${vid}`);
+      return opcoes.identidades?.[vid] ?? null;
     },
     async enfileirar(novas: EnvioNovo[]) {
       if (falhas > 0) {
@@ -228,7 +235,7 @@ function fila(destinos: DestinoDoCheckout[] = [META, TIKTOK], opcoes: { falharEn
       return entraram;
     },
   };
-  return { rastreio, linhas, lidas: () => lidas };
+  return { rastreio, linhas, procurados, lidas: () => lidas };
 }
 
 const CHECKOUT: CheckoutParaReceber = {
@@ -556,6 +563,117 @@ describe("o comprador so em hash", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Fase D: a compra acha o visitante que a ponte gravou
+// ---------------------------------------------------------------------------
+
+describe("a compra acha o visitante da ponte (Fase D)", () => {
+  const VID = "mgx1k2a3.4b5c6d7e";
+  const DA_PONTE: IdentidadeGuardada = {
+    visitorId: VID,
+    fbp: "fb.1.1760700000000.987654321",
+    fbc: null,
+    fbclid: "IwAR_ponte",
+    ttclid: "E.C.P.ttponte",
+    ttp: "UqBuLHl7abc",
+    clientIp: "203.0.113.7",
+    userAgent: "Mozilla/5.0 (iPhone)",
+    // A hora do clique (o conjunto da ponte): o fbc montado leva ela, nao a do pedido.
+    utmEm: "2026-10-18T14:30:00.000Z",
+  };
+  const semSinalDaCakto = { fbc: null, fbp: null, callback: null, sck: null, checkoutUrl: "https://pay.cakto.com.br/a8BcHrY_1101387" };
+
+  async function compraCom(dados: Dados) {
+    const m = memoria();
+    const f = fila([META, TIKTOK], { identidades: { [VID]: DA_PONTE } });
+    await receber(m, f, corpo("purchase_approved", venda({ ...semSinalDaCakto, ...dados })));
+    return { f, meta: metaDe(f)[0], tiktok: tiktokDe(f)[0] };
+  }
+
+  it("pelo callback (xc.<vid>): IP, user agent, _fbp, fbc do fbclid, ttclid e _ttp da identidade; external_id = vid", async () => {
+    const { f, meta, tiktok } = await compraCom({ callback: `xc.${VID}` });
+    expect(f.procurados).toEqual([`${CHECKOUT.id}|${VID}`]);
+    expect(meta.user_data).toMatchObject({
+      external_id: [sha(VID)],
+      fbp: "fb.1.1760700000000.987654321",
+      fbc: `fb.1.${Date.parse("2026-10-18T14:30:00.000Z")}.IwAR_ponte`,
+      client_ip_address: "203.0.113.7",
+      client_user_agent: "Mozilla/5.0 (iPhone)",
+    });
+    expect(tiktok.user).toMatchObject({
+      external_id: [sha(VID)],
+      ttclid: "E.C.P.ttponte",
+      ttp: "UqBuLHl7abc",
+      ip: "203.0.113.7",
+      user_agent: "Mozilla/5.0 (iPhone)",
+    });
+  });
+
+  it("o fbc e o fbp que a Cakto mandou vencem os da identidade", async () => {
+    const { meta } = await compraCom({ callback: `xc.${VID}`, fbc: "fb.1.1760799000000.IwAR0abc", fbp: "fb.1.1760799000000.1234567890" });
+    expect(meta.user_data).toMatchObject({ fbc: "fb.1.1760799000000.IwAR0abc", fbp: "fb.1.1760799000000.1234567890", client_ip_address: "203.0.113.7" });
+  });
+
+  it("pelo sck, quando o callback e de outro sistema", async () => {
+    const { f, meta } = await compraCom({ callback: "token-do-lojista", sck: `xc.${VID}` });
+    expect(f.procurados).toEqual([`${CHECKOUT.id}|${VID}`]);
+    expect(meta.user_data.client_ip_address).toBe("203.0.113.7");
+  });
+
+  it("pela query do checkoutUrl, quando os campos nao vieram; a URL do evento sai sem a query", async () => {
+    const { f, meta } = await compraCom({
+      checkoutUrl: `https://pay.cakto.com.br/a8BcHrY_1101387?callback=xc.${VID}&utm_source=FB&email=ana.souza%40provedor.com.br`,
+    });
+    expect(f.procurados).toEqual([`${CHECKOUT.id}|${VID}`]);
+    expect(meta.event_source_url).toBe("https://pay.cakto.com.br/a8BcHrY_1101387");
+    expect(meta.user_data.external_id).toEqual([sha(VID)]);
+    expect(meta.user_data.client_user_agent).toBe("Mozilla/5.0 (iPhone)");
+  });
+
+  it("sem vid: nem procura a identidade, e a compra sai so com o que a Cakto mandou", async () => {
+    const { f, meta } = await compraCom({ callback: "outro", sck: "utmify-123" });
+    expect(f.procurados).toEqual([]);
+    expect(meta.user_data.external_id).toBeUndefined();
+    expect(meta.user_data.client_ip_address).toBeUndefined();
+  });
+
+  it("identidade vencida ou que falhou (null): a compra sai mesmo assim", async () => {
+    const m = memoria();
+    const f = fila();
+    await receber(m, f, corpo("purchase_approved", venda({ ...semSinalDaCakto, callback: "xc.zz9.zz9" })));
+    expect(f.procurados).toEqual([`${CHECKOUT.id}|zz9.zz9`]);
+    expect(metaDe(f)).toHaveLength(1);
+    expect(metaDe(f)[0].user_data.external_id).toEqual([sha("zz9.zz9")]);
+  });
+
+  it("valor da identidade com '@' nao entra (o CHECK da fila recusaria a compra inteira)", async () => {
+    const m = memoria();
+    const f = fila([META, TIKTOK], { identidades: { [VID]: { ...DA_PONTE, userAgent: "Bot (contato@empresa.com)", fbp: "x@y" } } });
+    const r = await receber(m, f, corpo("purchase_approved", venda({ ...semSinalDaCakto, callback: `xc.${VID}` })));
+    expect(r.status).toBe(200);
+    for (const l of f.linhas) expect(JSON.stringify(l.payload)).not.toContain("@");
+    expect(metaDe(f)[0].user_data.client_user_agent).toBeUndefined();
+    expect(metaDe(f)[0].user_data.client_ip_address).toBe("203.0.113.7");
+  });
+
+  it("a Utmify na mesma pagina: as UTMs saem sem o que ela gruda, e o click id dela vira o fbc", async () => {
+    const m = cakto.lerTodos!(
+      corpo(
+        "purchase_approved",
+        venda({ ...semSinalDaCakto, utm_source: "FBjLj6728abc", utm_content: "Anuncio X|120200000000000003::IwAR_utmify::" })
+      ),
+      AGORA
+    );
+    if (!m.ok) throw new Error(m.erro);
+    const r = m.eventos[0].rastreio!;
+    expect(r.utm).toMatchObject({ source: "FB", content: "Anuncio X|120200000000000003" });
+    expect(r.fbclid).toBe("IwAR_utmify");
+    const [compra] = comprasDaEntrega(m.eventos.map((ev) => ({ ev, venceu: true })), "gerada", "purchase_approved");
+    const meta = montarCompraMeta(compra, { plataforma: "cakto", agoraMs: AGORA.getTime(), moedaPadrao: "BRL" });
+    expect(meta.user_data.fbc).toBe(`fb.1.${Date.parse("2026-10-18T14:58:00.123Z")}.IwAR_utmify`);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // A entrega (TikTok so vale com code 0) e o envio comum com as lojas
 // ---------------------------------------------------------------------------
 
@@ -803,6 +921,21 @@ describe("migration 073", () => {
     expect(SQL).toMatch(/grant execute on function public\.purge_checkout_externo_rastreio\(\) to service_role;/);
     expect(SQL).toMatch(/has_function_privilege\(papel, 'public\.purge_checkout_externo_rastreio\(\)', 'execute'\)/);
     expect(SQL).toMatch(/raise exception/);
+  });
+
+  it("Fase D: o visitante e o ip_hash da fila (os tetos do coletor) nao saem pela sessao; o ip_hash e o HMAC curto", async () => {
+    const grant = SQL.match(/grant select \(([^)]*)\)\s+on table public\.checkout_externo_envios to authenticated;/)?.[1] ?? "";
+    expect(grant).not.toMatch(/visitor_id|ip_hash/);
+    expect(SQL).toMatch(/has_column_privilege\(papel, 'public\.checkout_externo_envios', 'ip_hash', 'select'\)/);
+    expect(SQL).toMatch(/add column if not exists visitor_id text,\s+add column if not exists ip_hash text;/);
+    // O CHECK aceita o que hashDoIp grava (32 hex) -- com {64} a identidade nova nunca entraria.
+    const { hashDoIp } = await import("@/lib/tracking/ip-balde");
+    const h = hashDoIp("203.0.113.7", "segredo") as string;
+    for (const tabela of ["checkout_externo_envios", "checkout_externo_identidades"]) {
+      const re = SQL.match(new RegExp(`${tabela}_ip_hash_check\\s+check \\(ip_hash is null or ip_hash ~ '([^']+)'\\)`))?.[1];
+      expect(re, tabela).toBeTruthy();
+      expect(new RegExp(re as string).test(h), tabela).toBe(true);
+    }
   });
 
   it("compra_quando com padrao 'gerada'; nada encosta nas tracking_* das lojas", () => {

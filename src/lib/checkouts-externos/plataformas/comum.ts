@@ -97,3 +97,18 @@ export function lerPais(v: unknown): string | null {
   const p = v.trim().toUpperCase();
   return /^[A-Z]{2}$/.test(p) ? p : null;
 }
+
+// ---------------------------------------------------------------------------
+// O visitante da ponte (Fase D)
+// ---------------------------------------------------------------------------
+
+/** O prefixo que a ponte (xcart-bridge.js) poe antes do vid: `callback=xc.<vid>`. */
+export const PREFIXO_VID = "xc.";
+/** O formato do _xcb_vid/_xc_vid: base36 + "." + base36 (o CHECK da 073). */
+export const RE_VID = /^[A-Za-z0-9]{1,32}\.[A-Za-z0-9]{1,32}$/;
+
+/** "xc.<vid>" -> o vid; qualquer outra coisa (o callback de outro sistema, lixo) -> null. */
+export function vidDoParametro(bruto: unknown): string | null {
+  const v = typeof bruto === "string" ? bruto.trim() : "";
+  return v.startsWith(PREFIXO_VID) && RE_VID.test(v.slice(PREFIXO_VID.length)) ? v.slice(PREFIXO_VID.length) : null;
+}

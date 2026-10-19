@@ -23,6 +23,7 @@ import {
   type RastreamentoDoCheckout,
   type StatusDoEnvio,
 } from "@/lib/checkouts-externos/tipos";
+import { Codigo } from "../../tracking/pagina-externa";
 import { chamar } from "../api";
 import { haQuantoTempo, quando } from "../regras";
 
@@ -30,8 +31,10 @@ import { haQuantoTempo, quando } from "../regras";
 // Rastreamento do checkout (Cakto, 073): o xcart manda a compra ao Meta e ao
 // TikTok pelo servidor. Um pixel por rede, "Mandar a compra" (gerada ou so
 // aprovada), o aviso de tirar o pixel nativo da Cakto, o uso do limite do
-// plano e os ultimos envios. Tudo por /api/checkouts/[id]/rastreamento: o
-// token vai so para o servidor, a tela so sabe SE ha um salvo.
+// plano, a tag da ponte para a pagina de vendas (Fase D: PageView e
+// InitiateCheckout, e o visitante no link) e as ultimas compras enviadas.
+// Tudo por /api/checkouts/[id]/rastreamento: o token vai so para o servidor,
+// a tela so sabe SE ha um salvo.
 // ============================================================================
 
 type Resposta = RastreamentoDoCheckout & { ok: true };
@@ -229,6 +232,21 @@ function TextoDoUso({ uso }: { uso: RastreamentoDoCheckout["uso"] }) {
   return <p className="text-label text-t2">{texto}</p>;
 }
 
+/** O que a pagina de vendas mandou pela ponte nas ultimas 24 h (Fase D). */
+function TextoDaPagina({ daPagina, temPixel }: { daPagina: RastreamentoDoCheckout["daPagina"] | null; temPixel: boolean }) {
+  if (!temPixel) {
+    return <p className="text-label text-t2">Ligue um pixel acima: sem ele, a página não manda nada.</p>;
+  }
+  if (!daPagina) return null;
+  const { visitas, inicios } = daPagina;
+  if (visitas === 0 && inicios === 0) {
+    return <p className="text-label text-t2">Nenhuma visita da página nas últimas 24 h. Confira se o script está colado.</p>;
+  }
+  const v = visitas === 1 ? "1 visita" : `${visitas} visitas`;
+  const i = inicios === 1 ? "1 clique no botão" : `${inicios} cliques no botão`;
+  return <p className="text-label text-t2">Últimas 24 h: {v} e {i} chegaram ao xcart.</p>;
+}
+
 export function RastreamentoCheckout({ checkout, aoFechar }: { checkout: CheckoutResumo; aoFechar: () => void }) {
   const id = useId();
   const [dados, setDados] = useState<RastreamentoDoCheckout | null>(null);
@@ -330,9 +348,25 @@ export function RastreamentoCheckout({ checkout, aoFechar }: { checkout: Checkou
 
             <TextoDoUso uso={dados.uso} />
 
+            {dados.scriptDaPagina ? (
+              <section aria-labelledby={`${id}-pagina`} className="flex flex-col gap-2">
+                <h3 id={`${id}-pagina`} className="text-dense font-semibold text-ink">
+                  Página de vendas (VSL)
+                </h3>
+                <p className="text-label text-t1">
+                  Cole na página, antes de <span className="font-mono">&lt;/body&gt;</span>. O botão aponta para o link da
+                  oferta na {plataforma}, sem nada a mais: o script leva o visitante, as UTMs e o clique do anúncio, e
+                  manda a visita e o clique no botão (PageView e InitiateCheckout). Não instale o pixel do Meta nem do
+                  TikTok na página.
+                </p>
+                <Codigo rotulo="Script da página" texto={dados.scriptDaPagina} />
+                <TextoDaPagina daPagina={dados.daPagina ?? null} temPixel={dados.destinos.some((d) => d.ativo)} />
+              </section>
+            ) : null}
+
             <section aria-labelledby={`${id}-envios`} className="flex flex-col gap-2">
               <h3 id={`${id}-envios`} className="text-dense font-semibold text-ink">
-                Últimos envios
+                Últimas compras enviadas
               </h3>
               {dados.envios.length === 0 ? (
                 <p className="text-dense text-t2">Nenhuma compra enviada ainda. O teste do webhook não manda compra.</p>

@@ -157,6 +157,7 @@ describe("link direto para o checkout leva os click ids como atributo do carrinh
     const atributos: Record<string, string> = { "data-xcart-destinos": "loja.shop", ...(opts.tag || {}) };
     const envios: { url: string; corpo: Record<string, unknown> }[] = [];
     const storage = new Map<string, string>();
+    const ouvintes: { tipo: string; fn: (e: unknown) => void }[] = [];
     const document: Record<string, unknown> = {
       currentScript: {
         src: "https://user.xcart.app/xcart-bridge.js",
@@ -166,7 +167,7 @@ describe("link direto para o checkout leva os click ids como atributo do carrinh
       readyState: "complete",
       documentElement: {},
       getElementsByTagName: () => links,
-      addEventListener: () => {},
+      addEventListener: (tipo: string, fn: (e: unknown) => void) => void ouvintes.push({ tipo, fn }),
     };
     Object.defineProperty(document, "cookie", {
       get: () =>
@@ -198,7 +199,13 @@ describe("link direto para o checkout leva os click ids como atributo do carrinh
     };
     sandbox.window = sandbox;
     vm.runInNewContext(ponte, sandbox);
-    return { links: links.map((l) => l.getAttribute("href") as string), envios, jar };
+    /** O clique no link `i` (o ouvinte de captura da ponte). Devolve o href na hora da navegacao. */
+    const clicar = (i: number) => {
+      const evento = { target: { closest: (sel: string) => (sel === "a[href]" ? links[i] : null) } };
+      for (const o of ouvintes) if (o.tipo === "click") o.fn(evento);
+      return links[i].getAttribute("href") as string;
+    };
+    return { links: links.map((l) => l.getAttribute("href") as string), envios, jar, clicar };
   }
 
   const LOJA = { "data-xcart-store": "11111111-2222-3333-4444-555555555555", "data-xcart-shop": "loja-x.myshopify.com" };
@@ -442,6 +449,146 @@ describe("a ponte leva as UTMs ao pedido, com a hora do clique", () => {
     });
     expect(envios[0].corpo.utm).toMatchObject({ utm_source: "fb", utm_campaign: "111111", clique: "meta" });
     expect(typeof (envios[0].corpo.utm as Record<string, unknown>).em).toBe("number");
+  });
+});
+
+/**
+ * Pagina de vendas que leva a um CHECKOUT EXTERNO (Cakto, Fase D): o botao
+ * aponta para o link da oferta, sem nada a mais. A ponte poe nele o visitante
+ * (`callback=xc.<vid>`, que a Cakto devolve no webhook), as UTMs e os click
+ * ids (o gclid e da tag do Google que fica na Cakto), e avisa o coletor -- para
+ * o checkout, nao para loja -- do PageView ao abrir e do InitiateCheckout no
+ * clique do botao. Sem valor.
+ */
+describe("a ponte numa pagina de vendas de checkout externo (Cakto)", () => {
+  const CK = "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b";
+  const CAKTO = { "data-xcart-destinos": "pay.cakto.com.br", "data-xcart-checkout": CK };
+  const anuncio = "https://vsl.com/oferta?fbclid=IwAR_abc&gclid=Cj0KCQ&utm_source=FB&utm_campaign=111111&utm_content=333333";
+
+  it("o link da oferta ganha callback=xc.<vid>, as UTMs e os click ids -- e nada de atributo de carrinho", async () => {
+    const { links, envios } = rodar({ url: anuncio, hrefs: ["https://pay.cakto.com.br/a8BcHrY_1101387"], tag: CAKTO });
+    const p = new URL(links[0]).searchParams;
+    const vid = envios[0].corpo.visitorId as string;
+    expect(p.get("callback")).toBe(`xc.${vid}`);
+    expect(p.get("utm_source")).toBe("FB");
+    expect(p.get("utm_campaign")).toBe("111111");
+    expect(p.get("utm_content")).toBe("333333");
+    expect(p.get("fbclid")).toBe("IwAR_abc");
+    expect(p.get("gclid")).toBe("Cj0KCQ");
+    expect(links[0]).not.toContain("attributes");
+    expect(links[0]).not.toContain("xcart_clique_em");
+    expect(p.has("sck")).toBe(false);
+    // O webhook le o mesmo vid de volta (o formato que o CHECK da 073 aceita).
+    const { vidDoParametro, RE_VID } = await import("../src/lib/checkouts-externos/plataformas/comum");
+    expect(vidDoParametro(p.get("callback"))).toBe(vid);
+    expect(RE_VID.test(vid)).toBe(true);
+  });
+
+  it("PageView ao abrir, para o CHECKOUT: sem loja, sem produto, sem valor, com o clique e o fbp gerado", () => {
+    const { envios, jar } = rodar({ url: anuncio, hrefs: ["https://pay.cakto.com.br/a8BcHrY_1101387"], tag: CAKTO });
+    expect(envios.map((e) => [e.url, e.corpo.evento])).toEqual([["https://user.xcart.app/api/tracking/collect", "page_view"]]);
+    const pv = envios[0].corpo;
+    expect(pv.checkoutId).toBe(CK);
+    expect(pv).not.toHaveProperty("shop");
+    expect(pv).not.toHaveProperty("storeId");
+    expect(pv).not.toHaveProperty("produto");
+    expect(pv.fonte).toBe("ponte");
+    expect(pv.fbclid).toBe("IwAR_abc");
+    expect(pv.gclid).toBe("Cj0KCQ");
+    expect(pv.fbp).toMatch(/^fb\.1\.\d+\.\d+$/);
+    expect(jar._fbp).toBe(pv.fbp);
+    expect(pv.fbc).toBeNull();
+    expect(pv.utm).toMatchObject({ utm_source: "FB", utm_campaign: "111111" });
+    expect(JSON.stringify(pv)).not.toMatch(/"value"|"currency"/);
+  });
+
+  it("InitiateCheckout no clique do botao da Cakto, uma vez na aba; o link de terceiro nao dispara nem muda", () => {
+    const { envios, clicar } = rodar({
+      url: anuncio,
+      hrefs: ["https://pay.cakto.com.br/a8BcHrY_1101387", "https://instagram.com/loja", "https://loja.shop/cart/1:1"],
+      tag: CAKTO,
+    });
+    expect(clicar(1)).toBe("https://instagram.com/loja");
+    // Fora da lista de destinos: nem o permalink de uma loja muda.
+    expect(clicar(2)).toBe("https://loja.shop/cart/1:1");
+    expect(envios.map((e) => e.corpo.evento)).toEqual(["page_view"]);
+
+    const href = clicar(0);
+    expect(new URL(href).searchParams.get("callback")).toBe(`xc.${envios[0].corpo.visitorId}`);
+    clicar(0);
+    expect(envios.map((e) => e.corpo.evento)).toEqual(["page_view", "begin_checkout"]);
+    const ic = envios[1].corpo;
+    expect(ic).toMatchObject({ checkoutId: CK, visitorId: envios[0].corpo.visitorId, fbclid: "IwAR_abc", fonte: "ponte" });
+    expect(JSON.stringify(ic)).not.toMatch(/"value"|"currency"/);
+  });
+
+  it("o coletor aceita o corpo que a ponte manda e grava o clique na identidade do checkout", async () => {
+    const { envios } = rodar({ url: anuncio, hrefs: ["https://pay.cakto.com.br/oferta"], tag: CAKTO });
+    const pv = envios[0].corpo;
+    const { coletarDoCheckout } = await import("../src/lib/checkouts-externos/coletor");
+    const identidades: Record<string, unknown>[] = [];
+    const eventos: string[] = [];
+    const repo: Parameters<typeof coletarDoCheckout>[0] = {
+      checkout: async (id) => ({ id, user_id: "u-1", plataforma: "cakto", ativo: true }),
+      destinos: async () => [{ id: "d-meta", plataforma: "meta", conta: "123456789012345", token: "EAAtoken123456", testEventCode: null, ativo: true }],
+      atualizarIdentidade: async () => false,
+      identidadesNovas: async () => ({ doCheckout: 0, doIp: 0 }),
+      inserirIdentidade: async (l) => void identidades.push({ ...l }),
+      contarEnvios: async () => 0,
+      inicioDesde: async () => false,
+      enfileirar: async (ls) => {
+        eventos.push(...ls.map((l) => l.event_name));
+        return ls.map((l, i) => ({ ...l, id: `e${i}`, attempts: 0 }));
+      },
+      entregar: async (lista) => lista.map((x) => ({ id: x.envio.id, ok: true })),
+    };
+    const r = await coletarDoCheckout(repo, pv, { agoraMs: Date.now(), ip: "203.0.113.7", ipHash: null, userAgent: "Mozilla/5.0", pais: "BR" });
+    expect(r.ok).toBe(true);
+    expect(eventos).toEqual(["PageView"]);
+    expect(identidades[0]).toMatchObject({
+      checkout_id: CK,
+      visitor_id: pv.visitorId,
+      fbclid: "IwAR_abc",
+      gclid: "Cj0KCQ",
+      fbp: pv.fbp,
+      utm: { source: "FB", campaign: "111111", content: "333333" },
+    });
+  });
+
+  it("callback que o link ja traz fica (quem montou a pagina pode usa-lo); data-xcart-param-vid=sck leva no sck", () => {
+    const {
+      links: [proprio],
+    } = rodar({ url: anuncio, hrefs: ["https://pay.cakto.com.br/oferta?callback=meu-token"], tag: CAKTO });
+    expect(new URL(proprio).searchParams.getAll("callback")).toEqual(["meu-token"]);
+
+    const {
+      links: [comSck],
+      envios,
+    } = rodar({ url: anuncio, hrefs: ["https://pay.cakto.com.br/oferta"], tag: { ...CAKTO, "data-xcart-param-vid": "sck" } });
+    const p = new URL(comSck).searchParams;
+    expect(p.get("sck")).toBe(`xc.${envios[0].corpo.visitorId}`);
+    expect(p.has("callback")).toBe(false);
+  });
+
+  it("id de checkout torto: nao rastreia nem poe visitante (so leva o clique, como a ponte simples)", () => {
+    const { links, envios, clicar } = rodar({
+      url: anuncio,
+      hrefs: ["https://pay.cakto.com.br/oferta"],
+      tag: { "data-xcart-destinos": "pay.cakto.com.br", "data-xcart-checkout": "nao-e-uuid" },
+    });
+    clicar(0);
+    expect(envios).toEqual([]);
+    expect(links[0]).not.toContain("callback");
+    expect(new URL(links[0]).searchParams.get("fbclid")).toBe("IwAR_abc");
+  });
+
+  it("pagina de LOJA segue igual: o clique no botao nao manda InitiateCheckout nem callback", () => {
+    const { envios, clicar } = rodar({ url: anuncio, hrefs: ["https://loja.shop/cart/4567:1"], tag: LOJA });
+    const href = clicar(0);
+    expect(href).not.toContain("callback");
+    expect(envios.map((e) => e.corpo.evento)).toEqual(["page_view", "view_item"]);
+    expect(envios[0].corpo.shop).toBe("loja-x.myshopify.com");
+    expect(envios[0].corpo).not.toHaveProperty("checkoutId");
   });
 });
 });

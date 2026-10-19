@@ -6,7 +6,8 @@ import { validarEscritaNoPixel } from "@/lib/tracking/meta-capi";
 import { validarEscritaNoTiktok } from "@/lib/tracking/tiktok-api";
 import type { IdentidadeGuardada } from "@/lib/tracking/purchase";
 import { JANELA_COMPRA_MS, type DestinoDoCheckout, type EnvioGravado, type EnvioNovo, type EnvioParaEntregar, type RastreioCheckout } from "./compra";
-import { tabelaAusente, type PlataformaRastreio } from "./tipos";
+import type { RepositorioDoColetor } from "./coletor";
+import { semMigration069, tabelaAusente, type PlataformaRastreio } from "./tipos";
 
 // ============================================================================
 // A compra do checkout externo pelo servidor: o banco e a rede (073).
@@ -18,7 +19,8 @@ import { tabelaAusente, type PlataformaRastreio } from "./tipos";
 //
 // Irmas das tracking_* das lojas: nada aqui le ou escreve nelas. O envio em
 // si e o mesmo (src/lib/tracking/envio.ts), e o cron do drain das lojas
-// tambem drena esta fila (drenarFilaDoCheckout).
+// tambem drena esta fila (drenarFilaDoCheckout). O ramo de checkout do
+// coletor publico (coletor.ts) grava pela repositorioDoColetor.
 //
 // Sem a 073 aplicada: nenhum destino (o webhook segue como antes) e o drain
 // nao faz nada. Erro de banco de verdade LANCA.
@@ -67,7 +69,7 @@ async function tokensDe(admin: Admin, ids: string[]): Promise<Map<string, string
 async function identidadeDe(admin: Admin, checkoutId: string, visitorId: string): Promise<IdentidadeGuardada | null> {
   const { data, error } = await admin
     .from("checkout_externo_identidades")
-    .select("visitor_id, fbp, fbc, fbclid, ttclid, ttp, gclid, client_ip_address, client_user_agent, expires_at")
+    .select("visitor_id, fbp, fbc, fbclid, ttclid, ttp, gclid, client_ip_address, client_user_agent, utm_em, expires_at")
     .eq("checkout_id", checkoutId)
     .eq("visitor_id", visitorId)
     .gt("expires_at", new Date().toISOString())
@@ -84,6 +86,8 @@ async function identidadeDe(admin: Admin, checkoutId: string, visitorId: string)
     gclid: l.gclid,
     clientIp: l.client_ip_address,
     userAgent: l.client_user_agent,
+    // A hora do clique: o fbc montado do fbclid leva ela (compra.ts).
+    utmEm: l.utm_em,
   };
 }
 
@@ -209,21 +213,38 @@ export async function entregarEnvios(admin: Admin, lista: readonly EnvioParaEntr
   }
 }
 
-/** Uma passada da fila do checkout. Chamado pelo cron do drain das lojas. */
+const COMPRA = "Purchase";
+
+/**
+ * Uma passada da fila do checkout. Chamado pelo cron do drain das lojas.
+ *
+ * A COMPRA PRIMEIRO: a fila tambem tem o PageView e o InitiateCheckout da
+ * pagina de vendas (Fase D), muito mais numerosos. Com o Meta fora do ar, o
+ * limite da passada iria todo para eles e a compra esperaria atras.
+ */
 export async function drenarFilaDoCheckout(limite = 50): Promise<{ pegos: number; enviados: number; falharam: number }> {
   const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("checkout_externo_envios")
-    .select("id, destino_id, plataforma, event_id, payload, attempts")
-    .eq("status", "pendente")
-    .lte("next_attempt_at", new Date().toISOString())
-    .order("next_attempt_at", { ascending: true })
-    .limit(limite);
-  if (error) {
-    if (tabelaAusente(error)) return { pegos: 0, enviados: 0, falharam: 0 };
-    throw new Error(`falha ao ler a fila do checkout: ${error.message}`);
+  const agora = new Date().toISOString();
+  const pendentes = () =>
+    admin
+      .from("checkout_externo_envios")
+      .select("id, destino_id, plataforma, event_id, payload, attempts")
+      .eq("status", "pendente")
+      .lte("next_attempt_at", agora);
+  const compras = await pendentes().eq("event_name", COMPRA).order("next_attempt_at", { ascending: true }).limit(limite);
+  if (compras.error) {
+    if (tabelaAusente(compras.error)) return { pegos: 0, enviados: 0, falharam: 0 };
+    throw new Error(`falha ao ler a fila do checkout: ${compras.error.message}`);
   }
-  const linhas = (data ?? []) as LinhaDaFila[];
+  const linhas = (compras.data ?? []) as LinhaDaFila[];
+  if (linhas.length < limite) {
+    const resto = await pendentes()
+      .neq("event_name", COMPRA)
+      .order("next_attempt_at", { ascending: true })
+      .limit(limite - linhas.length);
+    if (resto.error) throw new Error(`falha ao ler a fila do checkout: ${resto.error.message}`);
+    linhas.push(...((resto.data ?? []) as LinhaDaFila[]));
+  }
   let enviados = 0;
   let falharam = 0;
   for (const linha of linhas) {
@@ -237,6 +258,97 @@ export async function drenarFilaDoCheckout(limite = 50): Promise<{ pegos: number
     }
   }
   return { pegos: linhas.length, enviados, falharam };
+}
+
+// ---------------------------------------------------------------------------
+// O ramo de checkout do coletor publico (Fase D): o banco do coletor.ts
+// ---------------------------------------------------------------------------
+
+const INICIO = "InitiateCheckout";
+
+/** O RepositorioDoColetor de verdade (service role). */
+export function repositorioDoColetor(admin: Admin): RepositorioDoColetor {
+  const rastreio = rastreioSupabase(admin);
+  const identidades = () => admin.from("checkout_externo_identidades");
+  return {
+    async checkout(id) {
+      const { data, error } = await admin
+        .from("checkouts_externos")
+        .select("id, user_id, plataforma, ativo")
+        .eq("id", id)
+        .maybeSingle();
+      if (error) {
+        if (semMigration069(error)) return null;
+        throw new Error(`falha ao ler o checkout: ${error.message}`);
+      }
+      if (!data) return null;
+      const l = data as Record<string, unknown>;
+      return { id: String(l.id), user_id: String(l.user_id), plataforma: String(l.plataforma), ativo: Boolean(l.ativo) };
+    },
+    destinos: (checkoutId) => rastreio.destinos(checkoutId),
+    async atualizarIdentidade(checkoutId, visitorId, campos) {
+      const { data, error } = await identidades()
+        .update(campos)
+        .eq("checkout_id", checkoutId)
+        .eq("visitor_id", visitorId)
+        .select("visitor_id");
+      if (error) throw new Error(`falha ao atualizar a identidade: ${error.message}`);
+      return (data ?? []).length > 0;
+    },
+    async identidadesNovas(checkoutId, desde, ipHash) {
+      const contar = () =>
+        identidades().select("visitor_id", { count: "exact", head: true }).eq("checkout_id", checkoutId).gte("created_at", desde);
+      const [doCheckout, doIp] = await Promise.all([contar(), ipHash ? contar().eq("ip_hash", ipHash) : null]);
+      return {
+        doCheckout: doCheckout.error ? null : (doCheckout.count ?? 0),
+        doIp: !doIp || doIp.error ? null : (doIp.count ?? 0),
+      };
+    },
+    async inserirIdentidade(linha) {
+      const { error } = await identidades().upsert(linha, { onConflict: "checkout_id,visitor_id" });
+      if (error) throw new Error(`falha ao gravar a identidade: ${error.message}`);
+    },
+    async contarEnvios(f) {
+      let q = admin
+        .from("checkout_externo_envios")
+        .select("id", { count: "exact", head: true })
+        .eq("checkout_id", f.checkoutId)
+        .gte("created_at", f.desde);
+      if (f.visitorId) q = q.eq("visitor_id", f.visitorId);
+      else if (f.ipHash) q = q.eq("ip_hash", f.ipHash);
+      // O balde do checkout conta so o que veio da ponte: a compra nao gasta.
+      else q = q.not("visitor_id", "is", null);
+      const { count, error } = await q;
+      return error ? null : (count ?? 0);
+    },
+    async inicioDesde(checkoutId, visitorId, desde) {
+      const { data, error } = await admin
+        .from("checkout_externo_envios")
+        .select("id")
+        .eq("checkout_id", checkoutId)
+        .eq("visitor_id", visitorId)
+        .eq("event_name", INICIO)
+        .gte("created_at", desde)
+        .limit(1);
+      // Melhor esforco: sem a conferencia sai um InitiateCheckout a mais, nao some nenhum.
+      if (error) console.error("[tracking/collect] falha ao conferir o InitiateCheckout do checkout", error.message);
+      return !error && (data ?? []).length > 0;
+    },
+    enfileirar: (linhas) => rastreio.enfileirar(linhas),
+    async entregar(lista) {
+      return Promise.all(
+        lista.map(async ({ envio, destino }) => {
+          try {
+            const r = await entregarEnvio(admin, envio, destino);
+            return { id: envio.id, ok: r.ok };
+          } catch (e) {
+            console.error("[tracking/collect] falha ao entregar o evento do checkout", envio.id, e instanceof Error ? e.message : e);
+            return { id: envio.id, ok: false };
+          }
+        })
+      );
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------

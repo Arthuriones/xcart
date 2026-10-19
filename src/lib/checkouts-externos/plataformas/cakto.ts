@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { limparValor, parametrosDaUrl, utmDeParametros, type Utm } from "@/lib/tracking/utm";
+import { limparValor, parametrosDaUrl, plataformaDaFonte, utmDeParametros, type Utm } from "@/lib/tracking/utm";
 import { GATILHOS_CAKTO, type SituacaoExterna } from "../tipos";
-import { ehObjeto, lerData, lerMoeda, lerPais, lerPedidoId, lerValor, texto, type Obj } from "./comum";
+import { ehObjeto, lerData, lerMoeda, lerPais, lerPedidoId, lerValor, texto, vidDoParametro, type Obj } from "./comum";
 import type {
   Autenticacao,
   CompradorNormalizado,
@@ -200,6 +200,45 @@ function cliqueValido(v: string | null | undefined, max: number): string | null 
   return s && s.length <= max && /^[A-Za-z0-9_.-]+$/.test(s) ? s : null;
 }
 
+/** O que o script da Utmify gruda nos campos (utms/latest.js). */
+const SEPARADOR_LEAD_UTMIFY = "jLj";
+const SEPARADOR_CLIQUE_UTMIFY = "::";
+
+/**
+ * As UTMs sem o que a Utmify grudou nelas, e o click id que ela pos no
+ * utm_content.
+ *
+ * O script dela (que o lojista pode ter na VSL junto com a ponte) cola o id do
+ * lead dela no utm_source ("FBjLj<lead>"), o click id no utm_content
+ * ("Anuncio|123::<fbclid>::") e a palavra-chave do Google no utm_term
+ * ("termo::<keyword>"). Sem cortar, o anuncio "Anuncio|123::IwAR..." nao tem
+ * id (o que vem depois da ultima barra nao e numero) e a fonte "FBjLj..." nao
+ * e o Meta. O click id dela nao diz de que rede e: a fonte diz (FB = fbclid,
+ * tiktok = ttclid; o gclid nao serve aqui -- o Google fica na tag da Cakto).
+ */
+export function separarUtmify(utm: Utm): { utm: Utm; clique: { fbclid: string | null; ttclid: string | null } } {
+  const saida: Utm = { ...utm };
+  const corte = (v: string | null | undefined, sep: string) => {
+    if (!v || !v.includes(sep)) return v;
+    return limparValor(v.slice(0, v.indexOf(sep))) ?? undefined;
+  };
+  saida.source = corte(saida.source, SEPARADOR_LEAD_UTMIFY);
+  saida.term = corte(saida.term, SEPARADOR_CLIQUE_UTMIFY);
+  const partes = (utm.content || "").split(SEPARADOR_CLIQUE_UTMIFY);
+  if (partes.length > 1) saida.content = limparValor(partes[0]) ?? undefined;
+  for (const k of Object.keys(saida) as (keyof Utm)[]) if (!saida[k]) delete saida[k];
+
+  const id = partes.length > 1 ? (partes[1] || "").trim() : "";
+  const rede = plataformaDaFonte(saida.source);
+  return {
+    utm: saida,
+    clique: {
+      fbclid: rede === "meta" ? cliqueValido(id, 600) : null,
+      ttclid: rede === "tiktok" ? cliqueValido(id, 1000) : null,
+    },
+  };
+}
+
 function lerRastreio(d: Obj): RastreioNormalizado {
   const utm: Utm = {};
   for (const k of ["source", "medium", "campaign", "content", "term"] as const) {
@@ -209,16 +248,18 @@ function lerRastreio(d: Obj): RastreioNormalizado {
   // Sem nenhuma UTM nos campos: a query com que o comprador abriu o checkout.
   // So as chaves utm_* e os click ids (o resto da query pode ter dado do comprador).
   const query = parametrosDaUrl(typeof d.checkoutUrl === "string" ? d.checkoutUrl : null);
-  const finalUtm = Object.keys(utm).length > 0 ? utm : utmDeParametros(query);
+  const { utm: finalUtm, clique: daUtmify } = separarUtmify(Object.keys(utm).length > 0 ? utm : utmDeParametros(query));
   return {
     utm: finalUtm,
     sck: texto(d.sck, 255),
     callback: texto(d.callback, 255),
     fbc: texto(d.fbc, 300),
     fbp: texto(d.fbp, 300),
-    fbclid: cliqueValido(query.get("fbclid"), 600),
-    ttclid: cliqueValido(query.get("ttclid"), 1000),
+    fbclid: cliqueValido(query.get("fbclid"), 600) ?? daUtmify.fbclid,
+    ttclid: cliqueValido(query.get("ttclid"), 1000) ?? daUtmify.ttclid,
     checkoutUrl: semQuery(d.checkoutUrl),
+    // O vid da ponte que ficou na URL (o campo `callback` pode nao vir): so ele.
+    vidNaUrl: vidDoParametro(query.get("callback")) ?? vidDoParametro(query.get("sck")),
   };
 }
 

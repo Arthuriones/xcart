@@ -55,6 +55,11 @@ export const runtime = "nodejs";
 //
 // O mesmo vale para qualquer pixel de navegador -- inclusive o do Google. A
 // diferenca e que aqui esta escrito.
+//
+// PAGINA QUE LEVA A UM CHECKOUT (Cakto): o corpo traz `checkoutId` no lugar
+// de `shop`, e vai inteiro para outro ramo, com outras tabelas
+// (src/lib/checkouts-externos/coletor.ts) -- o mesmo acordo e os mesmos
+// tetos. Nada daqui para baixo roda para ele.
 // ============================================================================
 
 /**
@@ -183,6 +188,8 @@ export async function POST(request: NextRequest) {
 
   let corpo: {
     shop?: string;
+    /** Pagina que leva a um checkout externo (ponte com data-xcart-checkout). Ver coletor.ts. */
+    checkoutId?: unknown;
     /** Linha de loja do xcart, cravada na tag pelo instalador. */
     storeId?: string;
     evento?: string;
@@ -266,6 +273,26 @@ export async function POST(request: NextRequest) {
   // o hash dele e a chave do teto por IP (TETO_POR_IP_HORA).
   const ip = ipDaRequisicao(request.headers);
   const ipHash = hashDoIp(ip);
+
+  // A pagina de vendas de um checkout externo (Cakto): outro ramo, outras
+  // tabelas (checkout_externo_*). Nada da loja Shopify roda para ela.
+  if (typeof corpo.checkoutId === "string" && corpo.checkoutId) {
+    try {
+      const { coletarDoCheckout } = await import("@/lib/checkouts-externos/coletor");
+      const { repositorioDoColetor } = await import("@/lib/checkouts-externos/rastreio");
+      const r = await coletarDoCheckout(repositorioDoColetor(createAdminClient()), corpo, {
+        agoraMs: Date.now(),
+        ip,
+        ipHash,
+        userAgent: request.headers.get("user-agent"),
+        pais: request.headers.get("x-vercel-ip-country") || request.headers.get("cf-ipcountry") || null,
+      });
+      return r.ok ? ok(r.detalhe) : recusado(r.motivo);
+    } catch (e) {
+      console.error("[tracking/collect] falha no evento do checkout", e instanceof Error ? e.message : e);
+      return recusado("falha interna");
+    }
+  }
 
   if (!loja || !eventId || !visitorId) {
     return recusado("shop, eventId e visitorId sao obrigatorios");

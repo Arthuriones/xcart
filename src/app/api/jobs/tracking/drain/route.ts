@@ -75,8 +75,9 @@ async function executar(request: NextRequest) {
     const r = await drenarFila(limite);
 
     // A fila do checkout externo: erro dela nao derruba a resposta das lojas.
-    // Menor que a das lojas: as duas cabem nos 120 s, e o volume dela e de
-    // compra (nao de pageview).
+    // Menor que a das lojas: as duas cabem nos 120 s. O PageView e o
+    // InitiateCheckout da pagina de vendas (Fase D) saem na hora pelo coletor;
+    // aqui so a sobra, e a compra passa na frente (drenarFilaDoCheckout).
     let checkouts: Record<string, unknown>;
     try {
       checkouts = await drenarFilaDoCheckout(Math.min(limite, POR_EXECUCAO_CHECKOUT));

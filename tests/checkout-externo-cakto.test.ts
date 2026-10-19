@@ -195,6 +195,8 @@ describe("lerTodosCakto: V1 (data objeto)", () => {
       ttclid: null,
       // Sem a query: o pre-preenchimento levava e-mail e nome.
       checkoutUrl: "https://pay.cakto.com.br/a8BcHrY_1101387",
+      // O vid da ponte na query (callback/sck = xc.<vid>): nenhum aqui.
+      vidNaUrl: null,
     });
     expect(ev.venda?.produtoId).toBe("cd287b31-d4b7-4e94-858a-96e05ce2f4a2");
   });

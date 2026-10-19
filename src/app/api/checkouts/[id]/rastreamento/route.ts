@@ -8,6 +8,7 @@ import {
   limitesDoPerfil,
 } from "@/lib/billing/limites";
 import { conferirCredencial } from "@/lib/checkouts-externos/rastreio";
+import { getPublicAppUrl } from "@/lib/public-url";
 import { NAO_ENCONTRADO, checkoutDaSessao, json, usuarioDaSessao } from "@/lib/checkouts-externos/servidor";
 import {
   NOME_REDE,
@@ -17,6 +18,7 @@ import {
   contaDoPixel,
   nomeDaPlataforma,
   rastreiaCompra,
+  scriptDaPonteDoCheckout,
   tabelaAusente,
   tokenDoPixel,
   type CheckoutExternoRow,
@@ -35,8 +37,9 @@ export const dynamic = "force-dynamic";
 // ao Meta e ao TikTok (073). A SESSAO confere o dono (checkoutDaSessao, RLS);
 // quem grava e o service role.
 //
-//   GET     destinos (sem o token), "Mandar a compra", os ultimos envios e o
-//           uso do limite do plano
+//   GET     destinos (sem o token), "Mandar a compra", as ultimas compras
+//           enviadas, o uso do limite do plano e a tag da ponte para a pagina
+//           de vendas, com o que ela mandou nas ultimas 24 h (Fase D)
 //   POST    salva o pixel de uma rede { plataforma, conta, token?, testEventCode?, ativo? }:
 //           confere o token com um evento CUSTOM (nunca uma compra) antes de gravar
 //   PATCH   { compra_quando } e/ou { plataforma, ativo }
@@ -54,6 +57,11 @@ type Admin = ReturnType<typeof createAdminClient>;
 
 const ENVIOS_NA_TELA = 20;
 
+/** O nome da compra na fila (o do Meta, nas duas redes): a lista da tela e so dela. */
+const COMPRA = "Purchase";
+/** O que a ponte manda da pagina de vendas (Fase D). */
+const DA_PAGINA = { visitas: "PageView", inicios: "InitiateCheckout" } as const;
+
 const AINDA_NAO = () =>
   json(503, { ok: false, erro: "O rastreamento do checkout ainda não foi liberado. Tente mais tarde." });
 
@@ -68,9 +76,12 @@ async function lerEstado(admin: Admin, checkout: CheckoutExternoRow, userId: str
     envios: [],
     uso: null,
     semMigration: false,
+    scriptDaPagina: scriptDaPonteDoCheckout(getPublicAppUrl(), checkout.id, checkout.plataforma),
+    daPagina: null,
   };
   // Pela sessao (RLS): so o checkout do dono. A fila, so as colunas que o
-  // grant da 073 da ao lojista (nunca o payload).
+  // grant da 073 da ao lojista (nunca o payload), e so as compras: o PageView
+  // e o InitiateCheckout da pagina (Fase D) encheriam a lista.
   const supabase = await createClient();
   const [ds, es] = await Promise.all([
     supabase
@@ -82,6 +93,7 @@ async function lerEstado(admin: Admin, checkout: CheckoutExternoRow, userId: str
       .from("checkout_externo_envios")
       .select("id, plataforma, event_name, grupo, status, attempts, last_error, sent_at, created_at")
       .eq("checkout_id", checkout.id)
+      .eq("event_name", COMPRA)
       .order("created_at", { ascending: false })
       .limit(ENVIOS_NA_TELA),
   ]);
@@ -125,6 +137,24 @@ async function lerEstado(admin: Admin, checkout: CheckoutExternoRow, userId: str
     criadoEm: String(e.created_at),
   }));
 
+  // A pagina de vendas nas ultimas 24 h: as linhas de UMA rede (cada acao
+  // rende uma por pixel), so contagem. Falhou, a tela so nao mostra o numero.
+  let daPagina: RastreamentoDoCheckout["daPagina"] = null;
+  const rede = destinos.find((d) => d.ativo)?.plataforma;
+  if (rede) {
+    const desde = new Date(Date.now() - 864e5).toISOString();
+    const contar = (evento: string) =>
+      supabase
+        .from("checkout_externo_envios")
+        .select("id", { count: "exact", head: true })
+        .eq("checkout_id", checkout.id)
+        .eq("plataforma", rede)
+        .eq("event_name", evento)
+        .gte("created_at", desde);
+    const [v, i] = await Promise.all([contar(DA_PAGINA.visitas), contar(DA_PAGINA.inicios)]);
+    if (!v.error && !i.error) daPagina = { visitas: v.count ?? 0, inicios: i.count ?? 0 };
+  }
+
   // O uso do limite: so informativo aqui (a trava e no POST/PATCH).
   let uso: RastreamentoDoCheckout["uso"] = null;
   try {
@@ -135,7 +165,7 @@ async function lerEstado(admin: Admin, checkout: CheckoutExternoRow, userId: str
     console.error("[checkouts/rastreamento] uso", e instanceof Error ? e.message : e);
   }
 
-  return { ...vazio, destinos, envios, uso };
+  return { ...vazio, destinos, envios, uso, daPagina };
 }
 
 /** O usuario e o checkout dele (de venda), ou a resposta de erro. */
