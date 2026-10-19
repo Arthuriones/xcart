@@ -3,6 +3,8 @@ import { shopifyGraphQL } from "@/lib/shopify/client";
 import { NaoAutorizado, credenciaisDe, exigirLojaDoUsuario } from "@/lib/stores/authorize";
 import { ehUuid } from "@/lib/financeiro/tipos";
 import { buscaPorSku, produtosDosSkus, skusDoPedido, type NoVariante } from "@/lib/leitura/sku-shopify";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { catalogoDaDemonstracao } from "@/lib/demonstracao";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,6 +60,21 @@ export async function GET(request: NextRequest) {
   }
 
   if (skus.length === 0) return NextResponse.json({ produtos: {} });
+
+  // Loja de demonstracao (074): o catalogo mora no banco, nao numa Shopify.
+  // A loja ja foi conferida contra a sessao acima; o admin so le o catalogo dela.
+  try {
+    const doCatalogo = await catalogoDaDemonstracao(createAdminClient(), loja.id, skus);
+    if (doCatalogo) {
+      return NextResponse.json(
+        { produtos: doCatalogo },
+        { headers: { "Cache-Control": "private, max-age=300" } }
+      );
+    }
+  } catch (e) {
+    console.error("[leitura/custos/produtos] catalogo", e);
+    return NextResponse.json({ erro: "Não deu para ler a loja agora." }, { status: 500 });
+  }
 
   try {
     // A busca da Shopify acha por pedaco do SKU: pede folga e filtra exato aqui.

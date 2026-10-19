@@ -9,6 +9,7 @@ import {
   type LojaParaSync,
 } from "@/lib/financeiro/shopify-pedidos";
 import { ehUuid, type FinSyncStateRow, type SyncResposta } from "@/lib/financeiro/tipos";
+import { comMarcaDeDemonstracao, ehDemonstracao } from "@/lib/demonstracao";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -67,8 +68,8 @@ async function executar(request: NextRequest) {
   const doCron = cronAutorizado(request);
   const admin = createAdminClient();
 
-  let consulta = admin.from("stores").select(COLUNAS_LOJA).is("uninstalled_at", null);
-
+  let doUsuario: string | null = null;
+  let lojaPedida: string | null = null;
   if (!doCron) {
     const supabase = await createClient();
     const {
@@ -78,24 +79,48 @@ async function executar(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     // userId sempre da sessao; a loja do parametro so restringe dentro dela.
-    consulta = consulta.eq("user_id", user.id);
+    doUsuario = user.id;
     const loja = request.nextUrl.searchParams.get("loja");
-    if (ehUuid(loja)) consulta = consulta.eq("id", loja.toLowerCase());
+    if (ehUuid(loja)) lojaPedida = loja.toLowerCase();
   }
 
-  const { data: lojas, error: erroLojas } = await consulta;
+  const { data: lidas, error: erroLojas } = await comMarcaDeDemonstracao(COLUNAS_LOJA, (colunas) => {
+    let consulta = admin.from("stores").select(colunas).is("uninstalled_at", null);
+    if (doUsuario) consulta = consulta.eq("user_id", doUsuario);
+    if (lojaPedida) consulta = consulta.eq("id", lojaPedida);
+    return consulta;
+  });
   if (erroLojas) {
     return NextResponse.json(
       { ok: false, processadas: 0, puladas: 0, erros: [`lojas: ${erroLojas.message}`] } satisfies SyncResposta,
       { status: 500 }
     );
   }
+  // Loja de demonstracao (074) nao tem Shopify por tras: os pedidos dela vem
+  // do script, e a credencial inventada so gravaria erro na tela. O cron a
+  // pula; o botao da sessao so marca a hora, como uma leitura que deu certo.
+  const todas = (lidas ?? []) as unknown as (LojaParaSync & { demonstracao?: boolean })[];
+  const lojas = todas.filter((l) => !ehDemonstracao(l));
+  const demonstracao = doCron ? [] : todas.filter((l) => ehDemonstracao(l));
 
   const resposta: SyncResposta = { ok: true, processadas: 0, puladas: 0, erros: [] };
   const inicio = Date.now();
   const limiteEm = inicio + ORCAMENTO_MS;
 
-  for (const loja of (lojas ?? []) as LojaParaSync[]) {
+  if (demonstracao.length > 0) {
+    const fim = new Date().toISOString();
+    const { error } = await admin
+      .from("fin_sync_state")
+      .update({ ultimo_sync_em: fim, ultimo_sync_ok_em: fim, updated_at: fim })
+      .in(
+        "store_id",
+        demonstracao.map((l) => l.id)
+      );
+    if (error) resposta.erros.push(`${demonstracao[0].shop_domain}: ${mensagemDe(error.message)}`);
+    else resposta.processadas += demonstracao.length;
+  }
+
+  for (const loja of lojas) {
     if (Date.now() > limiteEm) {
       resposta.puladas += 1;
       continue;

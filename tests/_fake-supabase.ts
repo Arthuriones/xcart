@@ -1,5 +1,5 @@
 // Supabase falso em memoria para os testes do sensor do roteamento: tabelas
-// como listas de linhas, filtros simples (eq/in/gte/lte/lt/is/neq/like, e o
+// como listas de linhas, filtros simples (eq/in/gte/lte/lt/gt/is/neq/like, e o
 // `or` do PostgREST com grupos `and(...)`),
 // insert com a PK de shopify_webhook_events e o indice unico da fila de
 // rastreamento, update/delete pelos filtros e contagem com { head: true }.
@@ -248,6 +248,12 @@ export function fakeSupabase(
       },
       lt: (c: string, v: unknown) => {
         filtros.push((l) => String(l[c] ?? "") < String(v));
+        return q;
+      },
+      gt: (c: string, v: unknown) => {
+        filtros.push((l) =>
+          typeof v === "number" ? Number(l[c] ?? Number.NaN) > v : String(l[c] ?? "") > String(v)
+        );
         return q;
       },
       lte: (c: string, v: unknown) => {

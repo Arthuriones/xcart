@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ErroGraph } from "@/lib/ads/meta-graph";
 import { classificarErroMeta } from "@/lib/ads/meta-mapear";
 import { sincronizarContaMeta } from "@/lib/ads/meta-sync";
+import { lojasDeDemonstracao } from "@/lib/demonstracao";
 import type { AdAccountRow, SyncResposta } from "@/lib/financeiro/tipos";
 
 export const runtime = "nodejs";
@@ -98,8 +99,38 @@ async function executar(request: NextRequest) {
   // Conta sem loja nem checkout externo (069) ainda nao entra no lucro: nao
   // gasta chamada com ela. Filtro aqui, nao no banco: checkout_id so existe
   // depois da 069, e select("*") le com ou sem ela.
-  const contas = ((data ?? []) as AdAccountRow[]).filter((c) => c.store_id || c.checkout_id);
+  const ligadas = ((data ?? []) as AdAccountRow[]).filter((c) => c.store_id || c.checkout_id);
+
+  // Conta de loja de demonstracao (074): o gasto vem do script e o token e
+  // inventado -- o Meta responderia 190 e a tela mostraria "Token recusado".
+  // O cron a pula; o botao da sessao so marca a hora da leitura.
+  let demonstracao: Set<string>;
+  try {
+    demonstracao = await lojasDeDemonstracao(
+      admin,
+      ligadas.map((c) => c.store_id ?? "")
+    );
+  } catch (e) {
+    return NextResponse.json<SyncResposta>(
+      { ok: false, processadas: 0, puladas: 0, erros: [textoDoErro(e)] },
+      { status: 500 }
+    );
+  }
+  const contas = ligadas.filter((c) => !(c.store_id && demonstracao.has(c.store_id)));
   const resposta: SyncResposta = { ok: true, processadas: 0, puladas: 0, erros: [] };
+
+  const daDemonstracao = somenteRecentes
+    ? ligadas.filter((c) => c.store_id && demonstracao.has(c.store_id)).map((c) => c.id)
+    : [];
+  if (daDemonstracao.length > 0) {
+    const fim = new Date().toISOString();
+    const { error: erroDemo } = await admin
+      .from("ad_accounts")
+      .update({ ultimo_sync_em: fim, ultimo_sync_ok_em: fim, updated_at: fim })
+      .in("id", daDemonstracao);
+    if (erroDemo) resposta.erros.push(`contas: ${erroDemo.message.slice(0, 300)}`);
+    else resposta.processadas += daDemonstracao.length;
+  }
 
   for (let i = 0; i < contas.length; i += 1) {
     const conta = contas[i];

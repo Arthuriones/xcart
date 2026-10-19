@@ -23,6 +23,7 @@ import { montarEventoDeFunilTiktok } from "@/lib/tracking/tiktok-evento";
 import { JANELA_PIXEL_CHECKOUT_MS } from "@/lib/tracking/google-tag";
 import { hashDoIp, ipDaRequisicao } from "@/lib/tracking/ip-balde";
 import { CORTE_PAGINA, utmDaPagina, utmDoCorpo } from "@/lib/tracking/utm";
+import { comMarcaDeDemonstracao, ehDemonstracao } from "@/lib/demonstracao";
 
 export const runtime = "nodejs";
 
@@ -353,19 +354,21 @@ export async function POST(request: NextRequest) {
   // tem uma linha cada, e os 4 dominios duplicados tem rastreamento desligado.
   // ------------------------------------------------------------------------
   const idDaTag = (corpo.storeId || "").trim();
-  const consulta = admin
-    .from("stores")
-    .select("id")
-    .is("uninstalled_at", null);
 
   // Com o id da tag nao ha o que desempatar: e exatamente a linha que instalou o
   // snippet. O dominio segue exigido junto -- o id sozinho deixaria alguem
   // apontar evento para a loja de outro sabendo so o uuid.
-  const { data: candidatas } = idDaTag
-    ? await consulta.eq("id", idDaTag).eq("shop_domain", loja)
-    : await consulta.eq("shop_domain", loja);
+  const { data: lidas } = await comMarcaDeDemonstracao("id", (colunas) => {
+    const consulta = admin.from("stores").select(colunas).is("uninstalled_at", null);
+    return idDaTag ? consulta.eq("id", idDaTag).eq("shop_domain", loja) : consulta.eq("shop_domain", loja);
+  });
+  // Loja de demonstracao (074) nao tem tema nem pixel: evento para ela e de
+  // fora, e o cron mandaria ao Meta com o token inventado dela.
+  const candidatas = ((lidas ?? []) as unknown as { id: string; demonstracao?: boolean }[]).filter(
+    (c) => !ehDemonstracao(c)
+  );
 
-  if (!candidatas?.length) return recusado("loja desconhecida");
+  if (!candidatas.length) return recusado("loja desconhecida");
 
   const ids = candidatas.map((c) => c.id);
   // So o interruptor da loja e o estado do Web Pixel: as credenciais agora

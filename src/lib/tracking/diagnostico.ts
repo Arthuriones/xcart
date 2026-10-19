@@ -3,6 +3,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { runWithConcurrency } from "@/lib/concurrency";
 import { shopifyGraphQL } from "@/lib/shopify/client";
 import { motivoParaIgnorarPedido } from "@/lib/tracking/filtro-pedido";
+import {
+  comMarcaDeDemonstracao,
+  ehDemonstracao,
+  pedidosEsperadosDoBanco,
+  type PedidoParaDiagnostico,
+} from "@/lib/demonstracao";
 
 // ============================================================================
 // O que a tela nao consegue saber olhando so o nosso banco.
@@ -228,6 +234,68 @@ export async function checarSnippet(
   }
 }
 
+interface LojaDoDiagnostico {
+  id: string;
+  shop_domain: string;
+  client_id: string | null;
+  client_secret: string | null;
+  access_token: string | null;
+  uninstalled_at: string | null;
+  demonstracao?: boolean;
+}
+
+/**
+ * O diagnostico da loja de demonstracao, sem Shopify: os pedidos esperados
+ * vem de fin_orders (a mesma regra e o mesmo teto da consulta a Shopify), e o
+ * remarketing acompanha o destino Google. Erro de banco vira "nao deu para
+ * perguntar", como a falha da Shopify.
+ */
+async function diagnosticoPeloBanco(
+  admin: ReturnType<typeof createAdminClient>,
+  storeId: string,
+  desde: Date
+): Promise<DiagnosticoLoja> {
+  const agora = Date.now();
+  const [pedidos, google] = await Promise.all([
+    admin
+      .from("fin_orders")
+      .select("shopify_order_id, criado_em, tipo, origem, total_bruto")
+      .eq("store_id", storeId)
+      .eq("tipo", "venda")
+      .gt("total_bruto", 0)
+      .gte("criado_em", desde.toISOString())
+      .lte("criado_em", new Date(agora - CARENCIA_MS).toISOString())
+      .order("criado_em", { ascending: true })
+      .limit(MAX_PAGINAS * 250),
+    admin
+      .from("tracking_destinations")
+      .select("id")
+      .eq("store_id", storeId)
+      .eq("plataforma", "google")
+      .eq("ativo", true)
+      .limit(1),
+  ]);
+  const remarketing = google.error ? null : (google.data ?? []).length > 0;
+  if (pedidos.error) {
+    return { ...VAZIO, temWebhook: true, temSnippet: true, snippetComId: true, temRemarketing: remarketing, problema: "failed" };
+  }
+  const { ids, criadoEm } = pedidosEsperadosDoBanco(
+    (pedidos.data ?? []) as PedidoParaDiagnostico[],
+    agora,
+    CARENCIA_MS
+  );
+  return {
+    pedidos7d: ids.length,
+    pedidoIds: ids,
+    pedidoCriadoEm: criadoEm,
+    temWebhook: true,
+    temSnippet: true,
+    snippetComId: true,
+    temRemarketing: remarketing,
+    problema: null,
+  };
+}
+
 /**
  * Diagnostico das lojas com rastreamento ligado.
  *
@@ -242,18 +310,26 @@ export async function diagnosticar(
   if (storeIds.length === 0) return saida;
 
   const admin = createAdminClient();
-  const { data: lojas } = await admin
-    .from("stores")
-    .select("id, shop_domain, client_id, client_secret, access_token, uninstalled_at")
-    .in("id", storeIds);
+  const { data: lidas } = await comMarcaDeDemonstracao(
+    "id, shop_domain, client_id, client_secret, access_token, uninstalled_at",
+    (colunas) => admin.from("stores").select(colunas).in("id", storeIds)
+  );
+  const lojas = (lidas || []) as unknown as LojaDoDiagnostico[];
 
   const desde = new Date(Date.now() - 7 * 864e5);
 
-  await runWithConcurrency(lojas || [], 4, async (l) => {
+  await runWithConcurrency(lojas, 4, async (l) => {
     // App desinstalado: a credencial nao vale mais, e cada checagem so gastaria
     // tempo para voltar "nao deu para verificar". A tela ja acusa a loja pelo
     // `desinstalada` do painel.
     if (l.uninstalled_at) return;
+
+    // Loja de demonstracao (074): nao ha Shopify para perguntar. Os pedidos
+    // saem do banco; webhook e snippet estao "instalados".
+    if (ehDemonstracao(l)) {
+      saida.set(l.id, await diagnosticoPeloBanco(admin, l.id, desde));
+      return;
+    }
 
     if (!l.client_id || !l.client_secret) {
       saida.set(l.id, { ...VAZIO, problema: "loja sem credencial do app" });

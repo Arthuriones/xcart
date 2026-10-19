@@ -35,6 +35,7 @@ import { ROTULO_FORA_DO_AR } from "@/lib/checkout-routes/loja-fora-do-ar";
 import { MOTIVO_ESCAPE } from "@/lib/checkout-routes/sensor";
 import { lerUltimoConserto, type UltimoConserto } from "@/lib/checkout-routes/ultimo-conserto";
 import { modeloDaPlataforma } from "@/lib/checkouts-externos/tipos";
+import { comMarcaDeDemonstracao, ehDemonstracao } from "@/lib/demonstracao";
 
 // ============================================================================
 // O cron de alertas: le o banco, decide e manda UMA mensagem por usuario.
@@ -98,12 +99,17 @@ export async function coletarCondicoesDetalhado(
 
   // Sem lojas nao ha dono para nenhum alerta: aqui a falha derruba a execucao
   // (melhor do que fechar todo alerta aberto por "nada encontrado").
-  const { data: lojasCruas, error: erroLojas } = await admin
-    .from("stores")
-    .select("id, user_id, name, shop_domain, uninstalled_at");
+  const { data: lojasCruas, error: erroLojas } = await comMarcaDeDemonstracao(
+    "id, user_id, name, shop_domain, uninstalled_at",
+    (colunas) => admin.from("stores").select(colunas)
+  );
   if (erroLojas) throw new Error(`Falha ao ler as lojas: ${erroLojas.message}`);
   const lojas = new Map<string, LojaAlerta>();
-  for (const l of (lojasCruas || []) as LojaAlerta[]) lojas.set(String(l.id), l);
+  // Loja de demonstracao (074) fica fora do mapa: sem dono, nenhuma regra
+  // abre alerta para ela (os dados sao do script, nao ha o que acompanhar).
+  for (const l of (lojasCruas || []) as unknown as LojaAlerta[]) {
+    if (!ehDemonstracao(l)) lojas.set(String(l.id), l);
+  }
   const donoDa = (storeId: string | null | undefined) =>
     storeId ? lojas.get(String(storeId))?.user_id ?? null : null;
 

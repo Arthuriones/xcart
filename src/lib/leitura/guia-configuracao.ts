@@ -8,6 +8,7 @@ import { getCurrentUser } from "@/lib/supabase/current-user";
 import { estadoConexao } from "@/lib/leitura/lojas-estado";
 import { checarSnippet } from "@/lib/tracking/diagnostico";
 import { semMigration069 } from "@/lib/checkouts-externos/tipos";
+import { comMarcaDeDemonstracao, ehDemonstracao } from "@/lib/demonstracao";
 import {
   COOKIE_GUIA_CAMINHO,
   COOKIE_GUIA_DISPENSADO,
@@ -344,15 +345,23 @@ const TETO_TEMA_MS = 8_000;
  *
  * A credencial e lida pelo admin so com ids que a sessao acabou de ler (do
  * proprio usuario), e so o booleano sai daqui. null = nao deu para conferir.
+ * Exportada para o teste da loja de demonstracao (nenhuma ida a Shopify).
  */
-function scriptNoTemaDaLoja(storeId: string): Promise<boolean | null> {
+export function scriptNoTemaDaLoja(storeId: string): Promise<boolean | null> {
   return unstable_cache(
     async (): Promise<boolean | null> => {
-      const { data: l } = await createAdminClient()
-        .from("stores")
-        .select("shop_domain, client_id, client_secret, access_token")
-        .eq("id", storeId)
-        .maybeSingle();
+      const admin = createAdminClient();
+      const { data } = await comMarcaDeDemonstracao("shop_domain, client_id, client_secret, access_token", (colunas) =>
+        admin.from("stores").select(colunas).eq("id", storeId).maybeSingle()
+      );
+      const l = data as {
+        shop_domain: string;
+        client_id: string | null;
+        client_secret: string | null;
+        access_token: string | null;
+      } | null;
+      // Loja de demonstracao (074): sem tema na Shopify para ler; o script conta como instalado.
+      if (ehDemonstracao(l)) return true;
       if (!l?.client_id || !l.client_secret) return null;
       const r = await checarSnippet({
         shopDomain: l.shop_domain,
