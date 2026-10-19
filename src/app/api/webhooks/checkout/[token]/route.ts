@@ -4,6 +4,7 @@ import { plataformaDe } from "@/lib/checkouts-externos/plataformas";
 import { receberEvento, type ResultadoRecebimento } from "@/lib/checkouts-externos/receber";
 import { checkoutDoToken, repositorioSupabase, segredoDaPlataforma } from "@/lib/checkouts-externos/repo-supabase";
 import { notificarPedidoExterno } from "@/lib/checkouts-externos/notificar";
+import { entregarEnvios, rastreioSupabase } from "@/lib/checkouts-externos/rastreio";
 
 export const runtime = "nodejs";
 // Sem cache: cada entrega e um evento.
@@ -47,7 +48,8 @@ export const maxDuration = 30;
 //      checkout pausado (pedido que ja existe segue atualizando mesmo pausado)
 //
 // A Sphere espera 10 s e a Cakto 8 s: a notificacao no celular sai DEPOIS da
-// resposta.
+// resposta. A compra ao Meta e ao TikTok (073, so no modelo venda) entra na
+// fila ANTES da resposta e sai em after(); o que falhar o cron do drain manda.
 // ============================================================================
 
 const MAX_CORPO = 64 * 1024;
@@ -143,7 +145,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
   let r: ResultadoRecebimento;
   try {
-    r = await receberEvento(repo, ck, plataforma, json, agora, { raw: bytes, headers: request.headers, segredo: await segredo() });
+    r = await receberEvento(
+      repo,
+      ck,
+      plataforma,
+      json,
+      agora,
+      { raw: bytes, headers: request.headers, segredo: await segredo() },
+      rastreioSupabase(admin)
+    );
   } catch (e) {
     // Falha de banco fora da gravacao do pedido. Trava que ficou sem pedido,
     // a retentativa refaz (receber.ts).
@@ -157,6 +167,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     return tenteDeNovo(segurar);
   }
 
+  if (r.entregar && r.entregar.length > 0) {
+    const lista = r.entregar;
+    after(() => entregarEnvios(admin, lista));
+  }
   if (r.notificar) {
     const n = r.notificar;
     const userId = ck.user_id;

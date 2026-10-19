@@ -190,9 +190,13 @@ describe("lerTodosCakto: V1 (data objeto)", () => {
       callback: null,
       fbc: "fb.1.1760799000000.IwAR0abc",
       fbp: "fb.1.1760799000000.1234567890",
+      // Da query, so os click ids (nenhum aqui).
+      fbclid: null,
+      ttclid: null,
       // Sem a query: o pre-preenchimento levava e-mail e nome.
       checkoutUrl: "https://pay.cakto.com.br/a8BcHrY_1101387",
     });
+    expect(ev.venda?.produtoId).toBe("cd287b31-d4b7-4e94-858a-96e05ce2f4a2");
   });
 
   it("o grupo NAO e o data.checkout (id da pagina, igual em toda venda): e o refId, ou o parent_order", () => {

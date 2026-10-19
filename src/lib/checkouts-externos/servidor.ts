@@ -9,7 +9,8 @@ import { ehUuid } from "@/lib/financeiro/tipos";
 import {
   COLUNAS_CHECKOUT,
   COLUNAS_CHECKOUT_072,
-  comColunas072,
+  COLUNAS_CHECKOUT_073,
+  comColunasEmOrdem,
   resumoDoCheckout,
   urlDoWebhook,
   type CheckoutExternoRow,
@@ -40,11 +41,11 @@ export async function usuarioDaSessao(): Promise<User | null> {
   return user;
 }
 
-/** O checkout, lido pela SESSAO (RLS): so o do dono volta. Sem a 072, sem os avisos da venda. */
+/** O checkout, lido pela SESSAO (RLS): so o do dono volta. Sem a 072/073, sem as colunas delas. */
 export async function checkoutDaSessao(id: string): Promise<CheckoutExternoRow | null> {
   if (!ehUuid(id)) return null;
   const supabase = await createClient();
-  const { data, error } = await comColunas072(COLUNAS_CHECKOUT_072, COLUNAS_CHECKOUT, (colunas) =>
+  const { data, error } = await comColunasEmOrdem([COLUNAS_CHECKOUT_073, COLUNAS_CHECKOUT_072, COLUNAS_CHECKOUT], (colunas) =>
     supabase.from("checkouts_externos").select(colunas).eq("id", id).maybeSingle()
   );
   if (error) throw new Error(error.message);

@@ -4,7 +4,8 @@ import { getCurrentUser } from "@/lib/supabase/current-user";
 import {
   COLUNAS_CHECKOUT,
   COLUNAS_CHECKOUT_072,
-  comColunas072,
+  COLUNAS_CHECKOUT_073,
+  comColunasEmOrdem,
   resumoDoCheckout,
   semMigration069,
   type CheckoutExternoRow,
@@ -44,8 +45,8 @@ export async function lerCheckoutsDaTela({ comEventos = true }: { comEventos?: b
   if (!user) return { checkouts: [], contas: {}, eventos: [], semMigration: false };
   const supabase = await createClient();
   const [cks, cts, evs] = await Promise.all([
-    // Com os avisos da venda (072); sem a migration, as colunas da 069.
-    comColunas072(COLUNAS_CHECKOUT_072, COLUNAS_CHECKOUT, (colunas) =>
+    // Com o "Mandar a compra" (073) e os avisos da venda (072); sem elas, as colunas da 069.
+    comColunasEmOrdem([COLUNAS_CHECKOUT_073, COLUNAS_CHECKOUT_072, COLUNAS_CHECKOUT], (colunas) =>
       supabase.from("checkouts_externos").select(colunas).eq("user_id", user.id).order("created_at", { ascending: true })
     ),
     supabase

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { profileHasAccess } from "@/lib/billing/access";
+import { tabelaAusente } from "@/lib/checkouts-externos/tipos";
 import {
   PLANO_BASE,
   ehPlanoId,
@@ -24,12 +25,12 @@ import {
 // rastreamento da loja (a tela de Rastreamento mostra a desinstalada que ainda
 // esta ligada) ou tirar a loja da rota.
 //
-// Checkout externo (Sphere e afins, migration 069) NAO conta em nenhum dos
-// dois: nao tem tracking_configs nem entra em rota, entao lerUso nem o ve, e
-// POST /api/checkouts nao chama conferirLigarRastreamento/conferirRoteamento.
-// O teto dele e so contra abuso (MAX_CHECKOUTS em
-// src/lib/checkouts-externos/tipos.ts). Se um dia virar limite de plano, o
-// lugar e LimitesPlano em plans.ts -- nao misture com as lojas daqui.
+// Checkout externo (Cakto, Sphere... migration 069) e uma "operacao" como a
+// loja (decisao de 19/10/2026): com o rastreamento LIGADO -- um destino Meta
+// ou TikTok ativo em checkout_externo_destinos (073) -- ele ocupa uma vaga do
+// MESMO limite de rastreamento das lojas, com a chave `checkout:<id>` no
+// conjunto (chaveDoCheckout). Cadastrar checkout nao conta, e ele nunca entra
+// no roteamento. Sem a 073, nenhum checkout conta (a tabela nao existe).
 //
 // Conectar loja NAO tem limite. O limite so barra uma ativacao NOVA: nada que
 // ja esta ligado acima do limite e desligado (quem passou do limite continua
@@ -111,6 +112,14 @@ export function lojasNoRoteamento(
     if (d.target_store_id && daConta.has(d.route_id)) ids.add(d.target_store_id);
   }
   return new Set([...ids].filter((id) => donas.has(id)));
+}
+
+/**
+ * A chave do checkout no conjunto do rastreamento. Prefixada: o id do
+ * checkout nunca colide com o de uma loja, e os dois contam no mesmo limite.
+ */
+export function chaveDoCheckout(checkoutId: string): string {
+  return `checkout:${checkoutId}`;
 }
 
 /** Lojas do usuario (instaladas ou nao) com o rastreamento ligado. */
@@ -261,6 +270,7 @@ export async function atualizarPerfil(
 export interface LeituraDeUso {
   /** Todas as lojas do usuario, instaladas ou nao. */
   donas: Set<string>;
+  /** Lojas (o id) e checkouts (chaveDoCheckout) com o rastreamento ligado. */
   rastreamento: Set<string>;
   rotas: LinhaRota[];
   destinos: LinhaDestino[];
@@ -283,7 +293,7 @@ export async function lerUso(db: SupabaseClient, userId: string): Promise<Leitur
   const linhasRota = (rotas.data || []) as LinhaRota[];
   const idsRota = linhasRota.map((r) => r.id);
 
-  const [configs, destinos] = await Promise.all([
+  const [configs, destinos, rastreioCheckout] = await Promise.all([
     donas.size
       ? db
           .from("tracking_configs")
@@ -297,17 +307,29 @@ export async function lerUso(db: SupabaseClient, userId: string): Promise<Leitur
           .select("route_id, target_store_id")
           .in("route_id", idsRota)
       : Promise.resolve({ data: [], error: null }),
+    // Checkout com destino ativo (073). O user_id da linha e o do checkout
+    // (FK composta), entao o filtro basta, com o admin ou com a sessao.
+    db.from("checkout_externo_destinos").select("checkout_id").eq("user_id", userId).eq("ativo", true),
   ]);
   if (configs.error) throw new Error(configs.error.message);
   if (destinos.error) throw new Error(destinos.error.message);
+  // Sem a 073 a tabela nao existe: nenhum checkout rastreia (nao e erro).
+  if (rastreioCheckout.error && !tabelaAusente(rastreioCheckout.error)) {
+    throw new Error(rastreioCheckout.error.message);
+  }
+
+  const rastreamento = lojasComRastreamento(
+    (configs.data || []) as { store_id: string; enabled: boolean | null }[],
+    donas
+  );
+  for (const d of (rastreioCheckout.error ? [] : rastreioCheckout.data || []) as { checkout_id: string }[]) {
+    rastreamento.add(chaveDoCheckout(String(d.checkout_id)));
+  }
 
   const linhasDestino = (destinos.data || []) as LinhaDestino[];
   return {
     donas,
-    rastreamento: lojasComRastreamento(
-      (configs.data || []) as { store_id: string; enabled: boolean | null }[],
-      donas
-    ),
+    rastreamento,
     rotas: linhasRota,
     destinos: linhasDestino,
     roteamento: lojasNoRoteamento(linhasRota, linhasDestino, donas),
@@ -353,19 +375,21 @@ export function corpoDoBloqueio(c: Exclude<Checagem, { ok: true }>) {
 }
 
 /**
- * Pode LIGAR o rastreamento desta loja? Ja ligada passa sempre. Quem chama ja
- * conferiu que a loja e do usuario; desinstalada ou nao, ela entra na conta.
+ * Pode LIGAR o rastreamento desta loja -- ou deste checkout externo
+ * (`{ checkoutId }`)? Ja ligado passa sempre. Quem chama ja conferiu que a
+ * loja (ou o checkout) e do usuario; loja desinstalada entra na conta.
  */
 export async function conferirLigarRastreamento(
   db: SupabaseClient,
   userId: string,
-  storeId: string
+  alvo: string | { checkoutId: string }
 ): Promise<Checagem> {
   try {
     const limites = limitesDoPerfil(await lerPerfilParaLimites(db, userId));
     if (limites.rastreamento === null) return { ok: true };
     const uso = await lerUso(db, userId);
-    const depois = new Set(uso.rastreamento).add(storeId);
+    const chave = typeof alvo === "string" ? alvo : chaveDoCheckout(alvo.checkoutId);
+    const depois = new Set(uso.rastreamento).add(chave);
     return passaDoLimite(uso.rastreamento, depois, limites.rastreamento)
       ? bloqueio("rastreamento", limites)
       : { ok: true };

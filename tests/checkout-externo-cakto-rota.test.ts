@@ -42,6 +42,12 @@ vi.mock("@/lib/checkouts-externos/repo-supabase", () => ({
     marcarCheckout: async (_id: string, campos: Record<string, unknown>) => void estado.marcas.push(campos),
   }),
 }));
+// A compra pelo servidor (073): aqui sem destino. O caminho dela tem o
+// proprio teste (checkout-externo-rastreio.test.ts).
+vi.mock("@/lib/checkouts-externos/rastreio", () => ({
+  rastreioSupabase: () => ({ destinos: async () => [], enfileirar: async () => [] }),
+  entregarEnvios: async () => undefined,
+}));
 vi.mock("next/server", async (original) => ({
   ...(await original<typeof import("next/server")>()),
   after: (fn: () => unknown) => void fn(),

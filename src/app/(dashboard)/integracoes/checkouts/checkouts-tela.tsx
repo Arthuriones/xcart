@@ -29,6 +29,7 @@ import {
   modeloDaPlataforma,
   moedaPadraoDe,
   nomeDaPlataforma,
+  rastreiaCompra,
   rotuloDoEvento,
   segredoValido,
   textoDaMoeda,
@@ -40,6 +41,7 @@ import type { EventoDaTela } from "@/lib/leitura/checkouts";
 import { CabecalhoPlataforma } from "../cabecalho-plataforma";
 import { chamar } from "../api";
 import { estadoDoCheckout, haQuantoTempo, plural, quando, rotuloAfiliados } from "../regras";
+import { RastreamentoCheckout } from "./rastreamento-checkout";
 
 // ============================================================================
 // Checkouts externos: cadastrar (plataforma -> nome -> URL), copiar a URL do
@@ -608,7 +610,18 @@ function Adicionar({
 // Editar: nome, moeda, taxa padrao (comissao), fuso, avisos, secret (Cakto)
 // ---------------------------------------------------------------------------
 
-function Editar({ checkout, aoFechar, aoSalvar }: { checkout: CheckoutResumo; aoFechar: () => void; aoSalvar: () => void }) {
+function Editar({
+  checkout,
+  aoFechar,
+  aoSalvar,
+  aoRastrear,
+}: {
+  checkout: CheckoutResumo;
+  aoFechar: () => void;
+  aoSalvar: () => void;
+  /** Venda (Cakto): abre o Rastreamento (Meta e TikTok) do checkout. */
+  aoRastrear: () => void;
+}) {
   const id = useId();
   const venda = modeloDaPlataforma(checkout.plataforma) === "venda";
   const assina = usaSegredo(checkout.plataforma);
@@ -730,6 +743,17 @@ function Editar({ checkout, aoFechar, aoSalvar }: { checkout: CheckoutResumo; ao
               />
             </div>
           ) : null}
+          {rastreiaCompra(checkout.plataforma) ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface-2 px-3.5 py-3">
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-dense font-medium text-ink">Rastreamento</span>
+                <span className="text-label text-t2">A compra ao Meta e ao TikTok pelo servidor, e quando ela sai.</span>
+              </span>
+              <Button variant="secondary" size="sm" onClick={aoRastrear}>
+                Abrir
+              </Button>
+            </div>
+          ) : null}
           {venda ? (
             <>
               <Switch
@@ -791,6 +815,7 @@ export function CheckoutsTela({
   const [adicionando, setAdicionando] = useState(false);
   const [urlDe, setUrlDe] = useState<CheckoutResumo | null>(null);
   const [editando, setEditando] = useState<CheckoutResumo | null>(null);
+  const [rastreando, setRastreando] = useState<CheckoutResumo | null>(null);
   const [removendo, setRemovendo] = useState<CheckoutResumo | null>(null);
   const [trocando, setTrocando] = useState<CheckoutResumo | null>(null);
   const [testando, setTestando] = useState<string | null>(null);
@@ -924,6 +949,9 @@ export function CheckoutsTela({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-52">
                       <DropdownMenuItem onClick={() => setEditando(c)}>Editar</DropdownMenuItem>
+                      {rastreiaCompra(c.plataforma) ? (
+                        <DropdownMenuItem onClick={() => setRastreando(c)}>Rastreamento (Meta e TikTok)</DropdownMenuItem>
+                      ) : null}
                       <DropdownMenuItem onClick={() => void alternar(c)}>{c.ativo ? "Pausar" : "Ativar"}</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setTrocando(c)}>Trocar URL</DropdownMenuItem>
                       <DropdownMenuItem variant="destructive" onClick={() => setRemovendo(c)}>
@@ -1001,7 +1029,19 @@ export function CheckoutsTela({
         </DialogContent>
       </Dialog>
 
-      {editando ? <Editar checkout={editando} aoFechar={() => setEditando(null)} aoSalvar={atualizar} /> : null}
+      {editando ? (
+        <Editar
+          checkout={editando}
+          aoFechar={() => setEditando(null)}
+          aoSalvar={atualizar}
+          aoRastrear={() => {
+            setRastreando(editando);
+            setEditando(null);
+          }}
+        />
+      ) : null}
+
+      {rastreando ? <RastreamentoCheckout checkout={rastreando} aoFechar={() => setRastreando(null)} /> : null}
 
       <ConfirmDialog
         open={trocando !== null}

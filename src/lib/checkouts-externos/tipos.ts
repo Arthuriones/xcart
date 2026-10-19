@@ -86,7 +86,11 @@ export function textoDaMoeda(plataforma: string | null | undefined, moeda: strin
   return modeloDaPlataforma(plataforma) === "venda" ? `vendas em ${moeda}` : `comissão em ${moeda}`;
 }
 
-/** Teto contra abuso. Checkout NAO conta no limite do plano (limites.ts). */
+/**
+ * Teto contra abuso. Cadastrar checkout NAO conta no limite do plano; ligar o
+ * rastreamento nele (destino Meta/TikTok ativo, 073) conta como uma loja com
+ * rastreamento (src/lib/billing/limites.ts).
+ */
 export const MAX_CHECKOUTS = 20;
 
 /** O caminho publico do webhook. O token acha o checkout (e e a senha da Sphere, que nao assina). */
@@ -162,6 +166,119 @@ export function rotuloDoEvento(evento: string | null | undefined): string {
 }
 
 // ---------------------------------------------------------------------------
+// Rastreamento pelo servidor (073): o xcart manda a compra ao Meta e ao TikTok
+// ---------------------------------------------------------------------------
+
+/**
+ * Quando a compra sai. "gerada" (padrao): no PRIMEIRO evento de venda da
+ * cobranca -- Pix, boleto ou PicPay gerado, ou o cartao aprovado. "aprovada":
+ * so quando o pagamento aprova. Nos dois, uma compra por cobranca: o Pix pago
+ * depois do gerado nao manda de novo (src/lib/checkouts-externos/compra.ts).
+ */
+export type CompraQuando = "gerada" | "aprovada";
+
+export const COMPRA_QUANDO_PADRAO: CompraQuando = "gerada";
+
+export const OPCOES_COMPRA_QUANDO: { id: CompraQuando; rotulo: string; descricao: string }[] = [
+  {
+    id: "gerada",
+    rotulo: "Quando gerar o Pix/boleto ou aprovar (padrão)",
+    descricao: "A compra sai quando o Pix ou o boleto é gerado, ou quando o cartão aprova. Não sai de novo quando o Pix é pago.",
+  },
+  {
+    id: "aprovada",
+    rotulo: "Só quando aprovar",
+    descricao: "A compra sai quando o pagamento é aprovado. Pix e boleto que não forem pagos não contam.",
+  },
+];
+
+/** Ausente (sem a 073) ou desconhecido: o padrao. */
+export function compraQuandoDe(v: unknown): CompraQuando {
+  return v === "aprovada" ? "aprovada" : COMPRA_QUANDO_PADRAO;
+}
+
+/**
+ * O xcart manda a compra deste checkout ao Meta e ao TikTok? So no modelo
+ * venda (Cakto): a Sphere nao manda dado do comprador nem click id.
+ */
+export function rastreiaCompra(plataforma: string | null | undefined): boolean {
+  return modeloDaPlataforma(plataforma) === "venda";
+}
+
+/** As redes do rastreamento do checkout. O Google fica com a tag nativa da plataforma. */
+export type PlataformaRastreio = "meta" | "tiktok";
+
+export const NOME_REDE: Record<PlataformaRastreio, string> = { meta: "Meta", tiktok: "TikTok" };
+
+/** O id do pixel: so digitos no Meta; letras e digitos no TikTok (CHECK da 073). */
+export function contaDoPixel(plataforma: PlataformaRastreio, bruto: unknown): string | null {
+  const s = String(bruto ?? "");
+  if (plataforma === "tiktok") {
+    const c = s.replace(/\s+/g, "");
+    return /^[A-Za-z0-9]{10,30}$/.test(c) ? c : null;
+  }
+  const c = s.replace(/\D/g, "");
+  return /^[0-9]{5,25}$/.test(c) ? c : null;
+}
+
+/** Codigo de teste do Meta/TikTok: vazio = sem (CHECK da 073). undefined = invalido. */
+export function codigoDeTeste(bruto: unknown): string | null | undefined {
+  if (bruto === undefined || bruto === null) return null;
+  const s = String(bruto).trim();
+  if (!s) return null;
+  return /^[A-Za-z0-9_-]{1,64}$/.test(s) ? s : undefined;
+}
+
+/** O token colado (CHECK da 073): 10 a 1000 caracteres, sem espaco. */
+export function tokenDoPixel(bruto: unknown): string | null {
+  const s = String(bruto ?? "").trim();
+  return s.length >= 10 && s.length <= 1000 && !/\s/.test(s) ? s : null;
+}
+
+/** Um destino como a tela ve: NUNCA o token, so se ha um salvo. */
+export interface DestinoNaTela {
+  plataforma: PlataformaRastreio;
+  conta: string;
+  testEventCode: string | null;
+  ativo: boolean;
+  temToken: boolean;
+}
+
+export type StatusDoEnvio = "pendente" | "enviado" | "falhou";
+
+/** Uma linha da fila como a tela ve: o estado, nunca o payload. */
+export interface EnvioNaTela {
+  id: string;
+  plataforma: PlataformaRastreio;
+  evento: string;
+  /** A cobranca (o refId do principal). */
+  grupo: string | null;
+  status: StatusDoEnvio;
+  tentativas: number;
+  /** O motivo da falha, ou o aviso do envio (ex.: "sem fbc"). */
+  detalhe: string | null;
+  enviadoEm: string | null;
+  criadoEm: string;
+}
+
+/** GET /api/checkouts/[id]/rastreamento (e a resposta das mudancas). */
+export interface RastreamentoDoCheckout {
+  compraQuando: CompraQuando;
+  destinos: DestinoNaTela[];
+  envios: EnvioNaTela[];
+  /** O limite de rastreamento do plano (lojas + checkouts). null = nao deu para ler. */
+  uso: { emUso: number; limite: number | null; esteConta: boolean } | null;
+  /** A 073 ainda nao foi aplicada. */
+  semMigration: boolean;
+}
+
+export const ROTULO_STATUS_ENVIO: Record<StatusDoEnvio, string> = {
+  pendente: "Na fila",
+  enviado: "Enviada",
+  falhou: "Falhou",
+};
+
+// ---------------------------------------------------------------------------
 // Situacao do pedido
 // ---------------------------------------------------------------------------
 
@@ -205,6 +322,8 @@ export interface CheckoutExternoRow {
   notificar_pendente?: boolean | null;
   /** Venda (072): avisar reembolso e chargeback. Ausente sem a 072. */
   notificar_estorno?: boolean | null;
+  /** Rastreamento (073): quando a compra sai ao Meta e ao TikTok. Ausente sem a 073. */
+  compra_quando?: string | null;
   ultimo_evento_em: string | null;
   ultimo_evento: string | null;
   ultimo_evento_teste: boolean;
@@ -226,6 +345,7 @@ export interface CheckoutResumo {
   notificar_aprovada: boolean;
   notificar_pendente: boolean;
   notificar_estorno: boolean;
+  compra_quando: CompraQuando;
   ultimo_evento_em: string | null;
   ultimo_evento: string | null;
   ultimo_evento_teste: boolean;
@@ -247,6 +367,7 @@ export function resumoDoCheckout(c: CheckoutExternoRow): CheckoutResumo {
     notificar_aprovada: Boolean(c.notificar_aprovada),
     notificar_pendente: Boolean(c.notificar_pendente),
     notificar_estorno: Boolean(c.notificar_estorno),
+    compra_quando: compraQuandoDe(c.compra_quando),
     ultimo_evento_em: c.ultimo_evento_em,
     ultimo_evento: c.ultimo_evento,
     ultimo_evento_teste: Boolean(c.ultimo_evento_teste),
@@ -328,6 +449,9 @@ export const COLUNAS_CHECKOUT =
 /** COLUNAS_CHECKOUT com os avisos opcionais da venda (072). */
 export const COLUNAS_CHECKOUT_072 = `${COLUNAS_CHECKOUT}, notificar_pendente, notificar_estorno`;
 
+/** E com o "Mandar a compra" do rastreamento (073). */
+export const COLUNAS_CHECKOUT_073 = `${COLUNAS_CHECKOUT_072}, compra_quando`;
+
 /**
  * Tabela (PGRST205/42P01) ou coluna (42703/PGRST204) que o banco nao tem: a
  * 069 ainda nao foi aplicada. Quem le trata como "nenhum checkout".
@@ -366,6 +490,30 @@ export async function comColunas072<T>(
   const r = await consulta(novas);
   if (!r.error || !colunaAusente(r.error)) return r;
   return consulta(velhas);
+}
+
+/**
+ * comColunas072 com mais de um degrau: as colunas da migration mais nova
+ * primeiro e, enquanto o banco nao as tem (colunaAusente), as da anterior.
+ * Ex.: [073, 072, 069] le com e sem a 073 e com e sem a 072.
+ */
+export async function comColunasEmOrdem<T>(
+  listas: readonly string[],
+  consulta: (colunas: string) => PromiseLike<RespostaDoBanco<T>>
+): Promise<RespostaDoBanco<T>> {
+  let r: RespostaDoBanco<T> = { data: null, error: { message: "sem colunas" } };
+  for (const colunas of listas) {
+    r = await consulta(colunas);
+    if (!r.error || !colunaAusente(r.error)) return r;
+  }
+  return r;
+}
+
+/** Tabela que o banco nao tem (PGRST205 no PostgREST, 42P01 no Postgres): a migration ainda nao foi aplicada. */
+export function tabelaAusente(error: { code?: string | null; message?: string | null } | null | undefined): boolean {
+  if (!error) return false;
+  const code = String(error.code || "");
+  return code === "PGRST205" || code === "42P01";
 }
 
 /** Nome valido para checkout: 1 a 80 caracteres sem espaco nas pontas. */

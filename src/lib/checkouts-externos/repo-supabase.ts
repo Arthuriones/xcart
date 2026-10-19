@@ -5,7 +5,7 @@ import { hashSegredo } from "@/lib/ads/google-ingest";
 import { paraNumero } from "@/lib/financeiro/tipos";
 import { CAMPOS_VENDA, type EstadoPedido } from "./estado";
 import type { CheckoutParaReceber, PedidoGravado, RepositorioCheckout } from "./receber";
-import { COLUNAS_VENDA, RE_TOKEN, colunaAusente, comColunas072, type SituacaoExterna } from "./tipos";
+import { COLUNAS_VENDA, RE_TOKEN, colunaAusente, comColunas072, comColunasEmOrdem, type SituacaoExterna } from "./tipos";
 
 // ============================================================================
 // O RepositorioCheckout de verdade: service role, tabelas da 069 (e as
@@ -23,6 +23,8 @@ type Admin = ReturnType<typeof createAdminClient>;
 const COLUNAS_RECEBER =
   "id, user_id, plataforma, nome, ativo, fuso, moeda_receita, notificar_aprovada, ultimo_evento_em, ultimo_evento_teste";
 const COLUNAS_RECEBER_072 = `${COLUNAS_RECEBER}, notificar_pendente, notificar_estorno`;
+/** E o "Mandar a compra" do rastreamento (073). */
+const COLUNAS_RECEBER_073 = `${COLUNAS_RECEBER_072}, compra_quando`;
 
 const COLUNAS_ESTADO =
   "situacao, status_comissao, status_pedido, metodo_pagamento, produto, pais, programa, moeda, valor, receita, moeda_receita, criado_em, dia_local, aprovado_em, pago_em, perdido_em, atualizado_em, versao";
@@ -103,7 +105,8 @@ export async function checkoutDoToken(admin: Admin, token: string): Promise<Chec
   if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
 
   const checkoutId = (seg as { checkout_id: string }).checkout_id;
-  const { data: ck, error: erroCk } = await comColunas072(COLUNAS_RECEBER_072, COLUNAS_RECEBER, (colunas) =>
+  // Com e sem a 073 (compra_quando) e com e sem a 072 (os avisos da venda).
+  const { data: ck, error: erroCk } = await comColunasEmOrdem([COLUNAS_RECEBER_073, COLUNAS_RECEBER_072, COLUNAS_RECEBER], (colunas) =>
     admin.from("checkouts_externos").select(colunas).eq("id", checkoutId).maybeSingle()
   );
   if (erroCk) throw new Error(`falha ao ler o checkout: ${erroCk.message}`);

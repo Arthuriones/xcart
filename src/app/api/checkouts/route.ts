@@ -25,10 +25,11 @@ export const runtime = "nodejs";
 // Cakto BRL). A Cakto aceita o secret do webhook ja aqui (opcional: ele
 // costuma aparecer so depois de criar o webhook la, e a tela pede de novo).
 //
-// Checkout externo NAO passa por conferirLigarRastreamento/conferirRoteamento
-// (src/lib/billing/limites.ts): nao entra no rastreamento nem no roteamento,
-// entao nao conta no limite do plano. O teto aqui (MAX_CHECKOUTS) e so contra
-// abuso.
+// Cadastrar checkout NAO passa por conferirLigarRastreamento (nasce sem
+// rastreamento) nem por conferirRoteamento (nunca entra em rota). Ligar o
+// rastreamento dele (destino Meta/TikTok, /api/checkouts/[id]/rastreamento)
+// conta como uma loja no limite do plano (src/lib/billing/limites.ts). O teto
+// aqui (MAX_CHECKOUTS) e so contra abuso.
 // ============================================================================
 
 interface Corpo {

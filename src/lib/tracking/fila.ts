@@ -1,8 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { enviarParaMeta, type EventoCapi } from "@/lib/tracking/meta-capi";
-import { enviarParaTiktok } from "@/lib/tracking/tiktok-api";
-import type { EventoTiktok } from "@/lib/tracking/tiktok-evento";
+import { enviarAoDestino } from "@/lib/tracking/envio";
 import type { Destino } from "@/lib/tracking/destinos";
 import {
   ehReservaDeCheckout,
@@ -312,52 +310,21 @@ export async function entregar(
     if (atual.payload) linha = { ...linha, payload: atual.payload };
   }
 
-  // ---- TikTok -------------------------------------------------------------
-  if (linha.destination === "tiktok") {
-    const r = await enviarParaTiktok(
-      destino.conta,
-      destino.token!,
-      [linha.payload as EventoTiktok],
-      { testEventCode: destino.testEventCode }
-    );
-    // Mesmo aviso do Meta, com o clique do TikTok. A tela conta o "de
-    // anuncio" pelo payload (migration 059), nao por esta frase.
-    const semTtclid = !(linha.payload as EventoTiktok)?.user?.ttclid;
-    return r.ok
-      ? gravarSucesso(
-          (r.corpo ?? null) as Record<string, unknown> | null,
-          semTtclid ? "sem ttclid: nao veio de clique em anuncio do TikTok" : null
-        )
-      : gravarFalha(
-          r.erro ?? "falha desconhecida",
-          r.podeTentarDeNovo,
-          (r.corpo ?? null) as Record<string, unknown> | null
-        );
-  }
-
-  // ---- Meta ---------------------------------------------------------------
-  const r = await enviarParaMeta(
-    destino.conta,
-    destino.token!,
-    [linha.payload as EventoCapi],
-    { testEventCode: destino.testEventCode }
+  // O envio em si e comum com a fila do checkout externo (envio.ts): o
+  // despacho e pela plataforma da linha (vaiPeloServidor la em cima), que
+  // acabou de ser conferida contra a do destino.
+  const r = await enviarAoDestino(
+    {
+      plataforma: linha.destination as PlataformaServidor,
+      conta: destino.conta,
+      token: destino.token!,
+      testEventCode: destino.testEventCode,
+    },
+    linha.payload
   );
-  // Aviso para quem le a linha. A TELA nao depende dele: a RPC conta o sem
-  // clique pelo payload (migration 051), entao reescrever esta frase nao
-  // muda contagem nenhuma.
-  const semClique = !(linha.payload as EventoCapi)?.user_data?.fbc;
   return r.ok
-    ? gravarSucesso(
-        (r.corpo ?? null) as Record<string, unknown> | null,
-        // Sem fbc o Meta ainda casa por _fbp, IP, user agent e e-mail: o
-        // que falta e so o clique no anuncio dele.
-        semClique ? "sem fbc: nao veio de clique em anuncio do Meta" : null
-      )
-    : gravarFalha(
-        r.erro ?? "falha desconhecida",
-        r.podeTentarDeNovo,
-        (r.corpo ?? null) as Record<string, unknown> | null
-      );
+    ? gravarSucesso(r.corpo, r.aviso)
+    : gravarFalha(r.erro ?? "falha desconhecida", r.podeTentarDeNovo, r.corpo);
 }
 
 /**

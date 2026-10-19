@@ -194,6 +194,12 @@ function semQuery(v: unknown): string | null {
   }
 }
 
+/** Click id inteiro e so com o charset deles (a query pode ter de tudo). Grande demais sai, nunca cortado. */
+function cliqueValido(v: string | null | undefined, max: number): string | null {
+  const s = (v || "").trim();
+  return s && s.length <= max && /^[A-Za-z0-9_.-]+$/.test(s) ? s : null;
+}
+
 function lerRastreio(d: Obj): RastreioNormalizado {
   const utm: Utm = {};
   for (const k of ["source", "medium", "campaign", "content", "term"] as const) {
@@ -201,16 +207,26 @@ function lerRastreio(d: Obj): RastreioNormalizado {
     if (v) utm[k] = v;
   }
   // Sem nenhuma UTM nos campos: a query com que o comprador abriu o checkout.
-  // So as chaves utm_* (o resto da query pode ter dado do comprador).
-  const finalUtm = Object.keys(utm).length > 0 ? utm : utmDeParametros(parametrosDaUrl(typeof d.checkoutUrl === "string" ? d.checkoutUrl : null));
+  // So as chaves utm_* e os click ids (o resto da query pode ter dado do comprador).
+  const query = parametrosDaUrl(typeof d.checkoutUrl === "string" ? d.checkoutUrl : null);
+  const finalUtm = Object.keys(utm).length > 0 ? utm : utmDeParametros(query);
   return {
     utm: finalUtm,
     sck: texto(d.sck, 255),
     callback: texto(d.callback, 255),
     fbc: texto(d.fbc, 300),
     fbp: texto(d.fbp, 300),
+    fbclid: cliqueValido(query.get("fbclid"), 600),
+    ttclid: cliqueValido(query.get("ttclid"), 1000),
     checkoutUrl: semQuery(d.checkoutUrl),
   };
+}
+
+/** O id do produto (o uuid; senao o curto do painel; senao o da oferta). */
+function lerProdutoId(d: Obj): string | null {
+  const p = ehObjeto(d.product) ? d.product : {};
+  const o = ehObjeto(d.offer) ? d.offer : {};
+  return lerRef(p.id) ?? lerRef(p.short_id) ?? lerRef(o.id);
 }
 
 /** SO EM MEMORIA (ver o cabecalho). */
@@ -320,6 +336,7 @@ function lerItem(evento: string, d: unknown, agora: Date): Item {
     referencia,
     // parent_order e o refId do principal ("" quando nao ha).
     grupo: lerRef(d.parent_order) ?? referencia ?? pedidoId,
+    produtoId: lerProdutoId(d),
     ofertaTipo: TIPOS_OFERTA.has(tipoOferta) ? (tipoOferta as VendaNormalizada["ofertaTipo"]) : null,
     venceEm: vencimentoDe(d, agora),
     reembolsadoEm: reembolsado ?? (situacao === "revertido" && !ehChargeback ? dataEvento : null),

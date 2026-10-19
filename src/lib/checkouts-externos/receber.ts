@@ -1,6 +1,7 @@
+import { comprasDaEntrega, enfileirarCompras, type EnvioParaEntregar, type RastreioCheckout } from "./compra";
 import { aplicarEvento, eventoJaRefletido, type EstadoPedido } from "./estado";
 import type { EventoNormalizado, LeituraVarios, PlataformaCheckout } from "./plataformas/tipos";
-import { nomeDaPlataforma } from "./tipos";
+import { compraQuandoDe, nomeDaPlataforma } from "./tipos";
 
 // ============================================================================
 // Um evento do webhook de checkout, do corpo ja lido ate a resposta.
@@ -35,6 +36,14 @@ import { nomeDaPlataforma } from "./tipos";
 // Uma entrega pode trazer VARIOS pedidos (V2 da Cakto: principal, order bump
 // e upsell da mesma cobranca). Cada um tem a sua trava: na retentativa, o que
 // ja entrou cai em "duplicado" e so o que falhou e gravado.
+//
+// A COMPRA PELO SERVIDOR (073, so no modelo venda): depois de gravar, o
+// evento de venda que venceu entra na fila do Meta e do TikTok (compra.ts),
+// ANTES da resposta -- e so um insert; o envio sai em after() na rota. Nao
+// passa: teste, checkout pausado, destino desligado. Falhou ao enfileirar ->
+// as travas dos itens da compra saem e a resposta e a da falha nossa: a
+// retentativa refaz (o pedido ja esta igual) e o indice unico da fila impede
+// a dobra. A Venda no celular desses itens fica para a retentativa.
 // ============================================================================
 
 export interface CheckoutParaReceber {
@@ -50,6 +59,8 @@ export interface CheckoutParaReceber {
   notificar_pendente?: boolean | null;
   /** Venda (072): avisar reembolso e chargeback. Ausente = nao. */
   notificar_estorno?: boolean | null;
+  /** Rastreamento (073): quando a compra sai ao Meta e ao TikTok. Ausente = o padrao ("gerada"). */
+  compra_quando?: string | null;
   /** Para o teste nao esconder um webhook parado (ver o ramo do teste). */
   ultimo_evento_em: string | null;
   ultimo_evento_teste: boolean;
@@ -123,6 +134,8 @@ export interface ResultadoRecebimento {
   notificar: Notificacao | null;
   /** Falha nossa numa plataforma que so reenvia por timeout: a rota segura a resposta. */
   segurar?: true;
+  /** As compras que entraram na fila (073): a rota manda em after(). */
+  entregar?: EnvioParaEntregar[];
 }
 
 /** A credencial da entrega: o corpo cru, os headers e o secret salvo da plataforma. */
@@ -252,7 +265,9 @@ export async function receberEvento(
   plataforma: PlataformaCheckout,
   corpo: unknown,
   agora: Date,
-  entrega?: EntregaRecebida
+  entrega?: EntregaRecebida,
+  /** A fila da compra pelo servidor (073). Ausente = nada vai ao Meta nem ao TikTok. */
+  rastreio?: RastreioCheckout
 ): Promise<ResultadoRecebimento> {
   const agoraIso = agora.toISOString();
   const nome = nomeDaPlataforma(checkout.plataforma);
@@ -366,8 +381,33 @@ export async function receberEvento(
     }
   }
 
+  // A compra pelo servidor (073): so o modelo venda, checkout ativo, e o
+  // evento de venda que venceu. Grava antes de responder; a rota entrega.
+  let entregar: EnvioParaEntregar[] = [];
+  let avisados = aplicados;
+  if (venda && checkout.ativo && rastreio && aplicados.length > 0) {
+    const compras = comprasDaEntrega(aplicados, compraQuandoDe(checkout.compra_quando), plataforma.eventoDeVenda);
+    try {
+      entregar = await enfileirarCompras(rastreio, checkout, compras, agora.getTime());
+    } catch (e) {
+      console.error("[checkout/webhook] falha ao enfileirar a compra", e instanceof Error ? e.message : e);
+      // Sem a trava, a retentativa refaz o item (o pedido ja esta igual) e
+      // enfileira; o indice unico da fila segura a dobra do que ja entrou.
+      const fora = new Set(compras.flatMap((c) => c.itens));
+      for (const ev of fora) {
+        await repo.soltarEvento({ checkout_id: checkout.id, pedido_id: ev.pedidoId, evento: ev.evento }).catch((erro: unknown) => {
+          console.error("[checkout/webhook] a trava nao saiu", erro instanceof Error ? erro.message : erro);
+        });
+      }
+      // A Venda no celular deles sai na retentativa, que nao vai cair em "duplicado".
+      avisados = aplicados.filter((a) => !fora.has(a.ev));
+      falhou = true;
+    }
+  }
+  const comEnvios = entregar.length > 0 ? { entregar } : {};
+
   // O que entrou avisa (a retentativa dele vai cair em "duplicado").
-  const notificar = !checkout.ativo || aplicados.length === 0 ? null : venda ? notificacaoDaVenda(checkout, plataforma, aplicados) : null;
+  const notificar = !checkout.ativo || avisados.length === 0 ? null : venda ? notificacaoDaVenda(checkout, plataforma, avisados) : null;
 
   if (falhou) {
     if (plataforma.reenvio === "timeout") {
@@ -375,9 +415,9 @@ export async function receberEvento(
         ultimo_erro: `Falha nossa ao gravar um evento. A ${nome} manda de novo em alguns minutos; se o erro ficar, use Reenviar no painel dela.`,
         ultimo_erro_em: agoraIso,
       });
-      return { status: 503, corpo: { ok: false, erro: "tente de novo" }, notificar, segurar: true };
+      return { status: 503, corpo: { ok: false, erro: "tente de novo" }, notificar, segurar: true, ...comEnvios };
     }
-    return { status: 503, corpo: { ok: false, erro: "tente de novo" }, notificar };
+    return { status: 503, corpo: { ok: false, erro: "tente de novo" }, notificar, ...comEnvios };
   }
 
   if (aplicados.length === 0) {
@@ -394,7 +434,7 @@ export async function receberEvento(
     ultimo_erro_em: null,
   });
 
-  if (venda) return { status: 200, corpo: { ok: true }, notificar };
+  if (venda) return { status: 200, corpo: { ok: true }, notificar, ...comEnvios };
 
   // Comissao (Sphere): um pedido por entrega.
   const { ev, venceu } = aplicados[0];
