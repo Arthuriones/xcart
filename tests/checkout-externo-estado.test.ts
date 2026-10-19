@@ -243,6 +243,25 @@ const C_APROVADA = corpo("comissao.aprovada", "approved", "2026-07-15T09:00:00.0
 const C_PAGA = corpo("comissao.paga", "paid", "2026-07-16T14:32:05.000Z");
 
 describe("receberEvento: idempotencia", () => {
+  it("entrega repetida com a primeira ainda gravando (trava nova): duplicado, sem gravar nem avisar de novo", async () => {
+    const m = memoria();
+    m.eventos.add("ck-1|12345|pedido.criado");
+    m.repo.travaRecebidaEm = async () => new Date(AGORA.getTime() - 2_000).toISOString();
+    const r = await receberEvento(m.repo, CHECKOUT, sphere, C_CRIADO, AGORA);
+    expect(r).toMatchObject({ status: 200, notificar: null });
+    expect(m.pedidos.size).toBe(0);
+  });
+
+  it("trava velha sem o evento no pedido (gravar e soltar falharam): a retentativa refaz e avisa", async () => {
+    const m = memoria();
+    m.eventos.add("ck-1|12345|pedido.criado");
+    m.repo.travaRecebidaEm = async () => new Date(AGORA.getTime() - 5 * 60_000).toISOString();
+    const r = await receberEvento(m.repo, CHECKOUT, sphere, C_CRIADO, AGORA);
+    expect(r.status).toBe(200);
+    expect(r.notificar).toMatchObject({ tipo: "criado" });
+    expect(m.pedidos.size).toBe(1);
+  });
+
   it("o mesmo evento do mesmo pedido entra uma vez; a notificacao sai uma vez", async () => {
     const m = memoria();
     const a = await receberEvento(m.repo, CHECKOUT, sphere, C_CRIADO, AGORA);

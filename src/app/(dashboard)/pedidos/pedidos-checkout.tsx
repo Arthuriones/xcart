@@ -145,7 +145,7 @@ export function PedidosCheckout({
             textoCsv(p.checkout),
             textoCsv(p.produto),
             p.oferta,
-            p.metodo,
+            textoCsv(p.metodo),
             // Como na tela: a linha da Sphere (misto) fica no valor e na moeda do pedido.
             redondo(p.valorRelatorio ?? p.valor),
             p.valorRelatorio === null ? p.moedaPedido : moeda,

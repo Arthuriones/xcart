@@ -70,6 +70,11 @@ export interface RepositorioCheckout {
   travarEvento(x: { checkout_id: string; user_id: string; pedido_id: string; evento: string; data_evento: string }): Promise<"ok" | "duplicado">;
   /** Tira a trava (o processamento falhou e a retentativa precisa passar). Erro LANCA. */
   soltarEvento(x: { checkout_id: string; pedido_id: string; evento: string }): Promise<void>;
+  /**
+   * Quando a trava foi gravada (ISO); null = nao achou. Sem o metodo, toda
+   * trava conta como antiga (o comportamento de antes).
+   */
+  travaRecebidaEm?(x: { checkout_id: string; pedido_id: string; evento: string }): Promise<string | null>;
   lerPedido(checkoutId: string, pedidoId: string): Promise<PedidoGravado | null>;
   /**
    * "existe" = outro evento criou o pedido no meio do caminho. `venda` = o
@@ -128,6 +133,14 @@ export interface EntregaRecebida {
 }
 
 const TENTATIVAS = 4;
+
+/**
+ * Trava mais nova que isto e de uma entrega que ainda esta gravando (a
+ * plataforma mandou duas vezes, ou a retentativa chegou antes de a primeira
+ * terminar): ela grava e avisa, esta responde duplicado. Passa do maxDuration
+ * da rota (30 s) com folga: trava mais velha sem o evento no pedido ficou presa.
+ */
+const TRAVA_EM_ANDAMENTO_MS = 60_000;
 
 function resp(status: ResultadoRecebimento["status"], corpo: Record<string, unknown>): ResultadoRecebimento {
   return { status, corpo, notificar: null };
@@ -325,9 +338,16 @@ export async function receberEvento(
     // nao tem o evento, e a retentativa e o Reenviar cairiam aqui para sempre.
     // Ai refaz; aplicarEvento e idempotente e a corrida cai na versao/23505.
     const refazendo = travou === "duplicado";
-    if (refazendo && eventoJaRefletido(await repo.lerPedido(checkout.id, ev.pedidoId), ev, checkout.fuso)) {
-      duplicados += 1;
-      continue;
+    if (refazendo) {
+      const em = repo.travaRecebidaEm ? await repo.travaRecebidaEm(trava).catch(() => null) : null;
+      const idade = em ? agora.getTime() - Date.parse(em) : NaN;
+      if (
+        (Number.isFinite(idade) && idade < TRAVA_EM_ANDAMENTO_MS) ||
+        eventoJaRefletido(await repo.lerPedido(checkout.id, ev.pedidoId), ev, checkout.fuso)
+      ) {
+        duplicados += 1;
+        continue;
+      }
     }
 
     try {

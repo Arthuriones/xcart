@@ -300,6 +300,8 @@ export function eventoJaRefletido(atual: EstadoPedido | null, ev: EventoNormaliz
   if (!atual) return false;
   const r = aplicarEvento(atual, ev, fuso);
   if (!r.mudou) return true;
-  if (r.pedido.situacao !== atual.situacao) return false;
+  // So a etapa que falta prova que o evento nao entrou. "Situacao diferente"
+  // nao: a retentativa velha de um evento sem data (vira a hora da chegada)
+  // regrediria o pedido e avisaria de novo.
   return !MARCOS.some((k) => !atual[k] && Boolean(r.pedido[k]));
 }
