@@ -20,8 +20,11 @@
 --
 -- DADO PESSOAL: o payload da fila leva e-mail, telefone, nome, cidade, estado,
 -- CEP e pais SO EM SHA-256 (src/lib/checkouts-externos/compra.ts), e sai no
--- purge: entregue em 8 dias; o que nao saiu perde o payload em 8 e a linha em
--- 30. O CHECK sem "@" no payload e a trava de que e-mail em claro nunca entra.
+-- purge: toda linha perde o payload (e a resposta) em 8 dias e some em 30; o
+-- funil da pagina entregue some em 8. A compra entregue fica os 30 porque a
+-- linha dela e a trava contra a compra em dobro (boleto que compensa depois
+-- do dia 8). O CHECK sem "@" no payload e a trava de que e-mail em claro nunca
+-- entra.
 -- IP e user agent do VISITANTE vao em claro no payload e na identidade (o Meta
 -- e o TikTok so casam assim, como nas lojas): identidade sem policy, expira em
 -- 30 dias; o teto por IP conta pelo ip_hash (HMAC), nunca pelo IP.
@@ -93,6 +96,10 @@ create table if not exists public.checkout_externo_destinos (
 );
 
 -- Um pixel por rede em cada checkout (a tela edita um Meta e um TikTok).
+-- "Remover" na tela NAO apaga a linha: desliga e apaga so o token. A fila
+-- cai em cascata com o destino, e a compra entregue dela e a trava contra a
+-- compra em dobro; o pixel posto de novo reaproveita a linha (este unique) e
+-- o mesmo destino_id.
 create unique index if not exists checkout_externo_destinos_rede_key
   on public.checkout_externo_destinos (checkout_id, plataforma);
 
@@ -123,7 +130,8 @@ create table if not exists public.checkout_externo_destino_segredos (
 -- e responde; o envio sai depois). O indice unico (destino_id, event_id) e a
 -- trava contra a compra em dobro: event_id e um por cobranca
 -- (purchase_cakto_<grupo>), entao o Pix pago, a retentativa e o order bump
--- que chega em outra entrega caem em "duplicado".
+-- que chega em outra entrega caem em "duplicado". A trava dura o que a linha
+-- dura: a compra fica 30 dias (secao 6) e o destino nunca e apagado pela tela.
 create table if not exists public.checkout_externo_envios (
   id               uuid primary key default gen_random_uuid(),
   checkout_id      uuid not null,
@@ -267,31 +275,43 @@ begin
   delete from public.checkout_externo_identidades
    where expires_at < now();
 
-  -- Entregue: 8 dias. O Meta e o TikTok so aceitam compra de ate 7; depois
-  -- a linha so serve para a tela.
+  -- A COMPRA entregue NAO sai aos 8 dias: a linha dela e a trava
+  -- (destino_id, event_id) contra a segunda compra da mesma cobranca. No modo
+  -- 'gerada' a compra sai no boleto_gerado (dia 0); o boleto pode compensar
+  -- depois do dia 8 (vencimento em dias uteis, compensacao, feriado), e o
+  -- purchase_approved dele passa na janela de 7 dias (que olha o pagamento,
+  -- recente). Sem a linha, a mesma purchase_cakto_<grupo> voltaria a fila, e
+  -- o Meta e o TikTok so descartam event_id repetido em 48 h.
+  --
+  -- O funil da pagina (PageView, InitiateCheckout, Fase D) entregue sai aos 8
+  -- dias: o event_id dele vira a cada 30 min, a trava nao precisa durar, e e
+  -- ele que faz volume (uma linha por visita e pixel).
   delete from public.checkout_externo_envios
    where status = 'enviado'
+     and event_name <> 'Purchase'
      and created_at < now() - interval '8 days';
 
-  -- O que nao saiu em 8 dias nunca mais sai: o payload (o hash do comprador)
-  -- vai embora e o pendente fecha com o motivo; a linha fica para a tela.
+  -- 8 dias: o payload (o hash do comprador) e a resposta da rede saem de TODA
+  -- linha que sobrou, a compra entregue inclusive; o que nao saiu nunca mais
+  -- sai, e o pendente fecha com o motivo. A linha fica (a trava e a tela).
   update public.checkout_externo_envios
      set payload = '{}'::jsonb,
+         response = null,
          status = case when status = 'pendente' then 'falhou' else status end,
          last_error = case when status = 'pendente'
                            then 'passou dos 7 dias que o Meta e o TikTok aceitam'
                            else last_error end
-   where status <> 'enviado'
-     and created_at < now() - interval '8 days'
-     and payload <> '{}'::jsonb;
+   where created_at < now() - interval '8 days'
+     and (payload <> '{}'::jsonb or response is not null);
 
+  -- 30 dias: tudo. Boleto nao leva 30 dias para compensar (vencido = perdido).
   delete from public.checkout_externo_envios
    where created_at < now() - interval '30 days';
 end;
 $$;
 
 comment on function public.purge_checkout_externo_rastreio() is
-  'Apaga identidade de checkout vencida, envio entregue com mais de 8 dias, tira o payload do que nao saiu em 8 e apaga tudo com mais de 30. Chamado pelo drain, uma vez por hora.';
+  'Apaga identidade de checkout vencida e o funil da pagina entregue com mais de 8 dias; aos 8 tira payload e resposta de toda linha (a compra entregue fica: e a trava contra a compra em dobro) e fecha o pendente; apaga tudo com mais de 30. Chamado pelo drain, uma vez por hora.';
 
 revoke all on function public.purge_checkout_externo_rastreio() from public, anon, authenticated;
 grant execute on function public.purge_checkout_externo_rastreio() to service_role;

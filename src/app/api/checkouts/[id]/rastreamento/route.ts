@@ -43,7 +43,8 @@ export const dynamic = "force-dynamic";
 //   POST    salva o pixel de uma rede { plataforma, conta, token?, testEventCode?, ativo? }:
 //           confere o token com um evento CUSTOM (nunca uma compra) antes de gravar
 //   PATCH   { compra_quando } e/ou { plataforma, ativo }
-//   DELETE  ?plataforma=meta|tiktok tira o pixel (a fila dele vai junto)
+//   DELETE  ?plataforma=meta|tiktok tira o pixel: desliga e apaga o token, e
+//           a linha fica (a fila dela e a trava contra a compra em dobro)
 //
 // LIMITE DO PLANO: checkout com destino ativo conta como uma loja com
 // rastreamento (conferirLigarRastreamento com { checkoutId }). So barra
@@ -117,13 +118,17 @@ async function lerEstado(admin: Admin, checkout: CheckoutExternoRow, userId: str
     if (error) throw new Error(`falha ao ler os tokens: ${error.message}`);
     comToken = new Set(((data ?? []) as { destino_id: string }[]).map((s) => String(s.destino_id)));
   }
-  const destinos: DestinoNaTela[] = linhas.map((l) => ({
-    plataforma: l.plataforma === "tiktok" ? "tiktok" : "meta",
-    conta: String(l.conta),
-    testEventCode: l.test_event_code ?? null,
-    ativo: Boolean(l.ativo),
-    temToken: comToken.has(String(l.id)),
-  }));
+  // Desligado e sem token = removido (o DELETE guarda a linha pela trava da
+  // fila): para a tela, "Não configurado".
+  const destinos: DestinoNaTela[] = linhas
+    .map((l) => ({
+      plataforma: (l.plataforma === "tiktok" ? "tiktok" : "meta") as PlataformaRastreio,
+      conta: String(l.conta),
+      testEventCode: l.test_event_code ?? null,
+      ativo: Boolean(l.ativo),
+      temToken: comToken.has(String(l.id)),
+    }))
+    .filter((d) => d.ativo || d.temToken);
 
   const envios: EnvioNaTela[] = ((es.error ? [] : es.data ?? []) as Record<string, unknown>[]).map((e) => ({
     id: String(e.id),
@@ -188,6 +193,34 @@ async function responder(admin: Admin, checkout: CheckoutExternoRow, userId: str
   } catch (e) {
     return json(500, { ok: false, erro: e instanceof Error ? e.message : "Falha ao ler o rastreamento." });
   }
+}
+
+/** O pixel da rede existe E tem token salvo? A resposta de erro, se o banco falhou. */
+async function temTokenSalvo(
+  admin: Admin,
+  checkoutId: string,
+  userId: string,
+  plataforma: PlataformaRastreio
+): Promise<boolean | Response> {
+  const { data, error } = await admin
+    .from("checkout_externo_destinos")
+    .select("id")
+    .eq("checkout_id", checkoutId)
+    .eq("user_id", userId)
+    .eq("plataforma", plataforma)
+    .maybeSingle();
+  if (error) {
+    if (tabelaAusente(error)) return AINDA_NAO();
+    return json(500, { ok: false, erro: `Falha ao ler o pixel: ${error.message}` });
+  }
+  if (!data) return false;
+  const { data: s, error: e } = await admin
+    .from("checkout_externo_destino_segredos")
+    .select("destino_id")
+    .eq("destino_id", String((data as { id: string }).id))
+    .maybeSingle();
+  if (e) return json(500, { ok: false, erro: `Falha ao ler o token: ${e.message}` });
+  return Boolean(s);
 }
 
 /** Ligar conta no limite do plano. null = pode. */
@@ -287,8 +320,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const agora = new Date().toISOString();
+  const gravarToken = (destinoId: string) =>
+    admin
+      .from("checkout_externo_destino_segredos")
+      .upsert({ destino_id: destinoId, access_token: colado, updated_at: agora }, { onConflict: "destino_id" });
   let destinoId: string;
   if (existente) {
+    // O token ANTES da linha: o pixel removido (desligado, sem token) nao
+    // pode voltar ligado sem token se gravar o token falhar.
+    if (colado) {
+      const { error: e } = await gravarToken(existente.id);
+      if (e) return json(500, { ok: false, erro: `Falha ao salvar o token: ${e.message}` });
+    }
     const { error: e } = await admin
       .from("checkout_externo_destinos")
       .update({ conta, test_event_code: teste, ativo, updated_at: agora })
@@ -305,16 +348,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (e?.code === "23505") return json(409, { ok: false, erro: `O ${rede} deste checkout acabou de ser salvo. Recarregue a tela.` });
     if (e || !data) return json(500, { ok: false, erro: `Falha ao salvar o pixel: ${e?.message ?? "sem resposta"}` });
     destinoId = String((data as { id: string }).id);
-  }
-
-  if (colado) {
-    const { error: e } = await admin
-      .from("checkout_externo_destino_segredos")
-      .upsert({ destino_id: destinoId, access_token: colado, updated_at: agora }, { onConflict: "destino_id" });
-    if (e) {
-      // Pixel novo sem token nao manda nada: melhor nao deixar pela metade.
-      if (!existente) await admin.from("checkout_externo_destinos").delete().eq("id", destinoId).eq("user_id", userId);
-      return json(500, { ok: false, erro: `Falha ao salvar o token: ${e.message}` });
+    if (colado) {
+      const { error: e2 } = await gravarToken(destinoId);
+      if (e2) {
+        // Pixel novo sem token nao manda nada: melhor nao deixar pela metade
+        // (a linha acabou de nascer, nao tem fila).
+        await admin.from("checkout_externo_destinos").delete().eq("id", destinoId).eq("user_id", userId);
+        return json(500, { ok: false, erro: `Falha ao salvar o token: ${e2.message}` });
+      }
     }
   }
 
@@ -368,6 +409,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const plataforma = plataformaDe(corpo.plataforma);
     if (!plataforma || typeof corpo.ativo !== "boolean") return json(400, { ok: false, erro: "Rede ou estado inválido." });
     if (corpo.ativo) {
+      // Ligar so o pixel com token: o removido (sem token) e "não configurado".
+      const configurado = await temTokenSalvo(admin, checkout.id, userId, plataforma);
+      if (configurado instanceof Response) return configurado;
+      if (!configurado) return json(404, { ok: false, erro: `O ${NOME_REDE[plataforma]} ainda não foi configurado.` });
       const barrado = await conferirLimite(admin, userId, checkout.id);
       if (barrado) return barrado;
     }
@@ -389,6 +434,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   return responder(admin, atualizado, userId);
 }
 
+/**
+ * Tirar o pixel NAO apaga a linha do destino: desliga e apaga so o token. A
+ * fila cai em cascata com o destino, e a compra ja entregue dela e a trava
+ * (destino_id, event_id) contra a segunda compra da mesma cobranca -- o Pix
+ * gerado antes e aprovado depois de o lojista tirar e por o pixel de novo
+ * sairia outra vez (o Meta e o TikTok so descartam event_id repetido em 48 h).
+ * O POST reaproveita a linha pelo unique (checkout_id, plataforma). Na tela,
+ * desligado e sem token = "Não configurado" (lerEstado).
+ */
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const aberto = await abrir(id);
@@ -397,15 +451,23 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const plataforma = plataformaDe(new URL(request.url).searchParams.get("plataforma"));
   if (!plataforma) return json(400, { ok: false, erro: "Rede inválida." });
   const admin = createAdminClient();
-  const { error } = await admin
+  // Desliga primeiro: dali em diante nada sai para este pixel (o drain rele o
+  // destino), mesmo que apagar o token falhe.
+  const { data, error } = await admin
     .from("checkout_externo_destinos")
-    .delete()
+    .update({ ativo: false, updated_at: new Date().toISOString() })
     .eq("checkout_id", checkout.id)
     .eq("user_id", userId)
-    .eq("plataforma", plataforma);
+    .eq("plataforma", plataforma)
+    .select("id");
   if (error) {
     if (tabelaAusente(error)) return AINDA_NAO();
     return json(500, { ok: false, erro: `Falha ao remover: ${error.message}` });
+  }
+  const ids = ((data ?? []) as { id: string }[]).map((d) => String(d.id));
+  if (ids.length > 0) {
+    const { error: e } = await admin.from("checkout_externo_destino_segredos").delete().in("destino_id", ids);
+    if (e) return json(500, { ok: false, erro: `O pixel foi desligado, mas o token não saiu: ${e.message}. Tente de novo.` });
   }
   return responder(admin, checkout, userId);
 }

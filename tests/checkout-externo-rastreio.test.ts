@@ -41,6 +41,7 @@ import {
 import { entregarEnvio } from "@/lib/checkouts-externos/rastreio";
 import { enviarAoDestino } from "@/lib/tracking/envio";
 import { chaveDoCheckout, conferirLigarRastreamento, lerUso } from "@/lib/billing/limites";
+import { definicaoDoEvento } from "@/lib/tracking/eventos";
 import type { EventoCapi } from "@/lib/tracking/meta-capi";
 import type { EventoTiktok } from "@/lib/tracking/tiktok-evento";
 import type { IdentidadeGuardada } from "@/lib/tracking/purchase";
@@ -328,6 +329,47 @@ describe("a compra pelo servidor: quando sai", () => {
     const de_novo = await receber(m, f, corpo("purchase_approved", venda()));
     expect(de_novo.corpo).toEqual({ ok: true, duplicado: true });
     expect(f.linhas).toHaveLength(2);
+  });
+
+  it("boleto gerado no dia 0 e pago no dia 10: a aprovacao tem o MESMO event_id e passa na janela de 7 dias -- so a linha guardada barra a 2a compra", async () => {
+    const DIA_0 = new Date("2026-10-08T15:05:00.000Z");
+    const em = (m: ReturnType<typeof memoria>, f: ReturnType<typeof fila>, c: Dados, agora: Date) => {
+      const raw = JSON.stringify(c);
+      const ts = String(Math.floor(agora.getTime() / 1000));
+      const sig = createHmac("sha256", SECRET).update(`${ts}.${raw}`).digest("hex");
+      const headers = new Headers({ "X-Cakto-Timestamp": ts, "X-Cakto-Signature": `v1=${sig}` });
+      return receberEvento(m.repo, CHECKOUT, cakto, JSON.parse(raw), agora, { raw, headers, segredo: SECRET }, f.rastreio);
+    };
+    const boleto = (extra: Dados = {}) =>
+      pix({
+        id: "d3333333-3333-4333-8333-333333333333",
+        refId: "BOL0010",
+        paymentMethod: "boleto",
+        createdAt: "2026-10-08T12:00:00-03:00",
+        ...extra,
+      });
+    const pago = boleto({ status: "paid", paidAt: "2026-10-18T11:59:50-03:00" });
+
+    // A linha da compra entregue guardada (o purge guarda 30 dias): a
+    // aprovacao do dia 10 cai no unique e nao sai.
+    const m = memoria();
+    const f = fila([META]);
+    await em(m, f, corpo("boleto_gerado", boleto()), DIA_0);
+    expect(f.linhas.map((l) => l.event_id)).toEqual(["purchase_cakto_BOL0010"]);
+    const comTrava = await em(m, f, corpo("purchase_approved", pago), AGORA);
+    expect(comTrava.status).toBe(200);
+    expect(comTrava.entregar ?? []).toHaveLength(0);
+    expect(f.linhas).toHaveLength(1);
+
+    // A linha apagada aos 8 dias (o purge antigo): a mesma aprovacao entra de
+    // novo com o mesmo event_id -- e o Meta so descarta repetido em 48 h.
+    const m2 = memoria();
+    const f2 = fila([META]);
+    await em(m2, f2, corpo("boleto_gerado", boleto()), DIA_0);
+    f2.linhas.splice(0);
+    const semTrava = await em(m2, f2, corpo("purchase_approved", pago), AGORA);
+    expect(semTrava.entregar).toHaveLength(1);
+    expect(f2.linhas.map((l) => l.event_id)).toEqual(["purchase_cakto_BOL0010"]);
   });
 
   it("Pix gerado que chega depois da aprovacao nao e venda nova", async () => {
@@ -921,6 +963,27 @@ describe("migration 073", () => {
     expect(SQL).toMatch(/grant execute on function public\.purge_checkout_externo_rastreio\(\) to service_role;/);
     expect(SQL).toMatch(/has_function_privilege\(papel, 'public\.purge_checkout_externo_rastreio\(\)', 'execute'\)/);
     expect(SQL).toMatch(/raise exception/);
+  });
+
+  it("o purge guarda a COMPRA entregue 30 dias (a trava do boleto que compensa depois do dia 8); aos 8 so tira payload e resposta", () => {
+    const corpoDoPurge = SQL.match(/function public\.purge_checkout_externo_rastreio\(\)[\s\S]*?\$\$([\s\S]*?)\$\$;/)?.[1] ?? "";
+    expect(corpoDoPurge).toMatch(/begin/);
+    const deletes = corpoDoPurge.match(/delete from public\.checkout_externo_envios[^;]*;/g) ?? [];
+    expect(deletes.length).toBeGreaterThan(0);
+    for (const d of deletes) {
+      const dias = Number(d.match(/interval '(\d+) days'/)?.[1]);
+      expect(Number.isFinite(dias), d).toBe(true);
+      // Antes dos 30 dias so sai o funil da pagina, nunca a compra.
+      if (dias < 30) expect(d).toMatch(/event_name <> 'Purchase'/);
+    }
+    expect(deletes.some((d) => /interval '30 days'/.test(d) && !/status|event_name/.test(d))).toBe(true);
+    const poda = corpoDoPurge.match(/update public\.checkout_externo_envios[^;]*;/)?.[0] ?? "";
+    expect(poda).toMatch(/payload = '\{\}'::jsonb/);
+    expect(poda).toMatch(/response = null/);
+    expect(poda).toMatch(/interval '8 days'/);
+    expect(poda).not.toMatch(/status <> 'enviado'/);
+    // O literal do SQL e o nome que a fila grava na compra (compra.ts).
+    expect(definicaoDoEvento("purchase").nomeNoMeta).toBe("Purchase");
   });
 
   it("Fase D: o visitante e o ip_hash da fila (os tetos do coletor) nao saem pela sessao; o ip_hash e o HMAC curto", async () => {

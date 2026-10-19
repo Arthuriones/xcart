@@ -24,12 +24,14 @@ export const maxDuration = 120;
 // pela tag do Google (ver /api/tracking/google-config).
 //
 // A fila do checkout externo (Cakto, 073: checkout_externo_envios) tambem
-// drena aqui, DEPOIS da das lojas e sem encostar nela: falha de uma nao para
-// a outra.
+// drena aqui, DEPOIS da das lojas e do expurgo, sem encostar nelas: falha de
+// uma nao para a outra.
 // ============================================================================
 
 const POR_EXECUCAO = 50;
 const POR_EXECUCAO_CHECKOUT = 20;
+/** A fila do checkout para de pegar linha nova aqui: o maxDuration e 120 s, e cada envio leva ate ~5 s. */
+const PRAZO_DO_CHECKOUT_MS = 100_000;
 
 function segredoDoCron() {
   return process.env.CRON_SECRET || process.env.BULK_IMPORT_CRON_SECRET || "";
@@ -45,6 +47,7 @@ function cronAutorizado(request: NextRequest) {
 }
 
 async function executar(request: NextRequest) {
+  const inicio = Date.now();
   // Fora do cron, so admin: a fila tem evento de todas as lojas, e drenar
   // dispara envio para pixel de terceiro.
   if (!cronAutorizado(request)) {
@@ -74,17 +77,6 @@ async function executar(request: NextRequest) {
   try {
     const r = await drenarFila(limite);
 
-    // A fila do checkout externo: erro dela nao derruba a resposta das lojas.
-    // Menor que a das lojas: as duas cabem nos 120 s. O PageView e o
-    // InitiateCheckout da pagina de vendas (Fase D) saem na hora pelo coletor;
-    // aqui so a sobra, e a compra passa na frente (drenarFilaDoCheckout).
-    let checkouts: Record<string, unknown>;
-    try {
-      checkouts = await drenarFilaDoCheckout(Math.min(limite, POR_EXECUCAO_CHECKOUT));
-    } catch (e) {
-      checkouts = { erro: e instanceof Error ? e.message : "falha ao drenar a fila do checkout" };
-    }
-
     // ---- expurgo ----------------------------------------------------------
     //
     // `purge_tracking()` existe desde a migration 035, com comentario dizendo
@@ -105,6 +97,20 @@ async function executar(request: NextRequest) {
       // O do checkout externo (073): o payload da fila tem o hash do comprador.
       const rc = await createAdminClient().rpc("purge_checkout_externo_rastreio");
       expurgoCheckouts = rc.error ? `falhou: ${rc.error.message}` : "ok";
+    }
+
+    // A fila do checkout externo, DEPOIS do expurgo: com o Meta ou o TikTok
+    // lentos ela pode levar dezenas de segundos, e o expurgo das lojas so roda
+    // nos 10 primeiros minutos da hora -- estourar os 120 s antes dele perdia
+    // a hora inteira. Erro dela nao derruba a resposta das lojas, e ela para
+    // de pegar linha nova perto do fim (a sobra fica pendente para a proxima).
+    // O PageView e o InitiateCheckout da pagina de vendas (Fase D) saem na
+    // hora pelo coletor; aqui so a sobra, e a compra passa na frente.
+    let checkouts: Record<string, unknown>;
+    try {
+      checkouts = await drenarFilaDoCheckout(Math.min(limite, POR_EXECUCAO_CHECKOUT), inicio + PRAZO_DO_CHECKOUT_MS);
+    } catch (e) {
+      checkouts = { erro: e instanceof Error ? e.message : "falha ao drenar a fila do checkout" };
     }
 
     return NextResponse.json({ ok: true, ...r, expurgo, checkouts, expurgoCheckouts });

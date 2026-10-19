@@ -221,8 +221,14 @@ const COMPRA = "Purchase";
  * A COMPRA PRIMEIRO: a fila tambem tem o PageView e o InitiateCheckout da
  * pagina de vendas (Fase D), muito mais numerosos. Com o Meta fora do ar, o
  * limite da passada iria todo para eles e a compra esperaria atras.
+ *
+ * `ateMs`: depois dele nao entrega linha nova (a sobra fica pendente para a
+ * proxima passada) -- o cron tem 120 s e divide com a fila das lojas.
  */
-export async function drenarFilaDoCheckout(limite = 50): Promise<{ pegos: number; enviados: number; falharam: number }> {
+export async function drenarFilaDoCheckout(
+  limite = 50,
+  ateMs = Number.POSITIVE_INFINITY
+): Promise<{ pegos: number; enviados: number; falharam: number }> {
   const admin = createAdminClient();
   const agora = new Date().toISOString();
   const pendentes = () =>
@@ -247,7 +253,10 @@ export async function drenarFilaDoCheckout(limite = 50): Promise<{ pegos: number
   }
   let enviados = 0;
   let falharam = 0;
+  let pegos = 0;
   for (const linha of linhas) {
+    if (Date.now() > ateMs) break;
+    pegos += 1;
     try {
       const r = await entregarEnvio(admin, linha);
       if (r.ok) enviados += 1;
@@ -257,7 +266,7 @@ export async function drenarFilaDoCheckout(limite = 50): Promise<{ pegos: number
       falharam += 1;
     }
   }
-  return { pegos: linhas.length, enviados, falharam };
+  return { pegos, enviados, falharam };
 }
 
 // ---------------------------------------------------------------------------
