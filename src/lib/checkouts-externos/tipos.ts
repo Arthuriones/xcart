@@ -296,6 +296,11 @@ export interface PedidoExternoRow {
   campanha_id?: string | null;
   conjunto_id?: string | null;
   anuncio_id?: string | null;
+  /**
+   * Custo de produto da venda, na moeda dela. null = 0 (infoproduto). O
+   * webhook NAO grava (nao esta em CAMPOS_VENDA): fica para o custo opcional.
+   */
+  custo?: number | string | null;
 }
 
 export interface EventoExternoRow {

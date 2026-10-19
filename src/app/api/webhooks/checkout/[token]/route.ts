@@ -22,14 +22,20 @@ export const maxDuration = 30;
 // o adaptador confere antes de ler.
 //
 // O corpo traz VALOR MONETARIO que vai para o lucro. Por isso: teto de
-// 64 KB, validacao dura no adaptador (numero, moeda ISO, data na janela),
-// afiliado de outro checkout do usuario recusado, e o evento de teste nunca
-// vira pedido.
+// tamanho (64 KB; 256 KB na plataforma de varios pedidos por entrega, a V2
+// da Cakto), validacao dura no adaptador (numero, moeda ISO, data na
+// janela), afiliado de outro checkout do usuario recusado, e o evento de
+// teste nunca vira pedido.
+//
+// Na plataforma que assina (Cakto), o erro so vai para a tela com a origem
+// conferida: quem tem so a URL nao escreve no checkout -- menos o proprio
+// 401, que e o aviso de secret errado.
 //
 // -------------------------------- codigos ---------------------------------
 //
 // 404  token desconhecido (generico: nao diz se o formato estava certo)
-// 413  corpo grande demais
+// 413  corpo grande demais -> na Cakto (que nao reenvia), o erro fica no
+//      checkout
 // 400  corpo invalido -> o erro fica no checkout, a tela mostra
 // 401  Cakto sem secret salvo ou com assinatura errada -> idem
 // 409  afiliado que ja e de outro checkout do usuario (contaria em dobro)
@@ -45,6 +51,8 @@ export const maxDuration = 30;
 // ============================================================================
 
 const MAX_CORPO = 64 * 1024;
+/** V2 da Cakto: principal, order bump e upsell (com os blocos do Pix) numa entrega. */
+const MAX_CORPO_VARIOS = 256 * 1024;
 
 /** Passa do timeout de 8 s da Cakto: para ela, a entrega "nao respondeu" e volta. */
 const SEGURAR_MS = 9_000;
@@ -71,7 +79,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   const { token } = await params;
 
   const declarado = Number(request.headers.get("content-length") || 0);
-  if (declarado > MAX_CORPO) return resposta(413, { ok: false, erro: "corpo grande demais" });
+  if (declarado > MAX_CORPO_VARIOS) return resposta(413, { ok: false, erro: "corpo grande demais" });
 
   const admin = createAdminClient();
   let checkout: Awaited<ReturnType<typeof checkoutDoToken>>;
@@ -82,38 +90,66 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     return tenteDeNovo(pareceCakto(request));
   }
   if (!checkout) return NAO_ENCONTRADO();
+  const ck = checkout;
 
-  const plataforma = plataformaDe(checkout.plataforma);
+  const plataforma = plataformaDe(ck.plataforma);
   if (!plataforma) return NAO_ENCONTRADO();
   const segurar = plataforma.reenvio === "timeout";
+  const limite = plataforma.lerTodos ? MAX_CORPO_VARIOS : MAX_CORPO;
 
   const repo = repositorioSupabase(admin);
   const agora = new Date();
 
+  // O secret da plataforma, lido uma vez (so a que assina tem).
+  let segredoLido: Promise<string | null> | null = null;
+  const segredo = () =>
+    (segredoLido ??= plataforma.autenticar ? segredoDaPlataforma(admin, ck.id) : Promise.resolve(null));
+  /** Recusa que vai para a tela: na plataforma que assina, so com a origem conferida. */
+  const recusar = async (status: 400 | 413, erro: string, ultimoErro: string, corpo: Uint8Array) => {
+    if (plataforma.autenticar) {
+      let origem = false;
+      try {
+        origem = plataforma.autenticar(corpo, request.headers, await segredo(), agora).ok;
+      } catch {
+        // Sem o secret nao da para conferir: nao escreve na tela.
+      }
+      if (!origem) return resposta(401, { ok: false, erro: "nao autorizado" });
+    }
+    await repo.marcarCheckout(ck.id, { ultimo_erro: ultimoErro, ultimo_erro_em: agora.toISOString() });
+    return resposta(status, { ok: false, erro });
+  };
+
+  if (declarado > limite) return resposta(413, { ok: false, erro: "corpo grande demais" });
   // Os bytes como chegaram: o HMAC da Cakto e do corpo CRU.
   const bytes = Buffer.from(await request.arrayBuffer());
-  if (bytes.length > MAX_CORPO) return resposta(413, { ok: false, erro: "corpo grande demais" });
+  if (bytes.length > limite) {
+    // A Sphere segue como sempre (sem marca). A Cakto nao reenvia o 413: sem
+    // o erro na tela, a venda sumiria sem sinal.
+    if (!segurar) return resposta(413, { ok: false, erro: "corpo grande demais" });
+    return recusar(
+      413,
+      "corpo grande demais",
+      `Evento recusado: a entrega passou de ${limite / 1024} KB. Fale com o suporte do xcart antes de usar Reenviar no painel da ${plataforma.nome}.`,
+      bytes
+    );
+  }
   const raw = bytes.toString("utf8");
   let json: unknown;
   try {
     json = JSON.parse(raw);
   } catch {
-    await repo.marcarCheckout(checkout.id, {
-      ultimo_erro: "Evento recusado: o corpo não é JSON.",
-      ultimo_erro_em: agora.toISOString(),
-    });
-    return resposta(400, { ok: false, erro: "corpo nao e JSON" });
+    return recusar(400, "corpo nao e JSON", "Evento recusado: o corpo não é JSON.", bytes);
   }
 
   let r: ResultadoRecebimento;
   try {
-    const segredo = plataforma.autenticar ? await segredoDaPlataforma(admin, checkout.id) : null;
-    r = await receberEvento(repo, checkout, plataforma, json, agora, { raw: bytes, headers: request.headers, segredo });
+    r = await receberEvento(repo, ck, plataforma, json, agora, { raw: bytes, headers: request.headers, segredo: await segredo() });
   } catch (e) {
-    // A trava ja foi solta onde dava; aqui so a falha de banco antes dela.
+    // Falha de banco fora da gravacao do pedido. Trava que ficou sem pedido,
+    // a retentativa refaz (receber.ts).
     console.error("[checkout/webhook] falha ao receber", e instanceof Error ? e.message : e);
     if (segurar) {
-      await repo.marcarCheckout(checkout.id, {
+      await repo.marcarCheckout(ck.id, {
         ultimo_erro: `Falha nossa ao receber um evento. A ${plataforma.nome} manda de novo em alguns minutos; se o erro ficar, use Reenviar no painel dela.`,
         ultimo_erro_em: agora.toISOString(),
       });
@@ -123,7 +159,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
   if (r.notificar) {
     const n = r.notificar;
-    const userId = checkout.user_id;
+    const userId = ck.user_id;
     after(() => notificarPedidoExterno(admin, userId, n));
   }
   if (r.segurar) return tenteDeNovo(true);

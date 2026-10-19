@@ -36,8 +36,10 @@ import type {
 // - checkout_abandonment (nao tem id: repete a cada visita) e subscription_*
 //   respondem 200 sem gravar.
 // - Teste: o "Testar webhook" da Cakto manda um exemplo fixo com card, pix,
-//   boleto e picpay JUNTOS (a entrega real traz so o meio usado) e e-mail
-//   @example.com; o nosso leva callback=xcart-teste. Nunca vira pedido.
+//   boleto e picpay JUNTOS (a entrega real traz so o meio usado) e John Doe
+//   com e-mail @example.com; o nosso leva o id fixo e callback=xcart-teste.
+//   Nunca vira pedido, e e reconhecido ANTES de validar datas e valores: o
+//   exemplo fixo da Cakto e de 2025 e sairia da janela das datas.
 //
 // A Cakto NAO reenvia resposta nao-2xx (so timeout e erro de rede): a rota
 // segura a resposta da falha nossa ate o timeout dela (reenvio: "timeout").
@@ -48,6 +50,12 @@ import type {
 
 /** O `callback` do nosso "Enviar evento de teste". */
 export const CALLBACK_TESTE = "xcart-teste";
+
+/**
+ * O data.id do nosso exemplo. O callback sozinho nao basta: ele vem da URL do
+ * checkout (?callback=), e qualquer comprador o poe numa venda de verdade.
+ */
+export const ID_TESTE = "7e57c0de-0000-4000-8000-00000000c470";
 
 /**
  * A janela do X-Cakto-Timestamp. A doc sugere 5 min, mas nao diz se o
@@ -105,10 +113,6 @@ const BLOCOS_COM_VENCIMENTO = ["pix", "boleto", "picpay", "openFinanceNubank"];
 
 const TIPOS_OFERTA = new Set(["main", "orderbump", "upsell", "downsell"]);
 
-function tem(o: Obj, chave: string): boolean {
-  return Object.prototype.hasOwnProperty.call(o, chave);
-}
-
 function redondo(n: number): number {
   return Math.round(n * 100) / 100;
 }
@@ -145,12 +149,37 @@ function vencimentoDe(d: Obj, agora: Date): string | null {
   return lerVencimento(d.due_date, agora);
 }
 
-/** O "Testar webhook" da Cakto, o nosso exemplo, ou um e-mail de exemplo (RFC 2606). */
+/**
+ * O nosso exemplo (id fixo E callback), ou o "Testar webhook" da Cakto: os
+ * quatro blocos de meio PREENCHIDOS (a venda real traz so o usado; o resto
+ * falta ou vem null), ou John Doe com e-mail de exemplo (RFC 2606). So o
+ * e-mail nao basta: um comprador pode digitar um.
+ */
 function ehTeste(d: Obj): boolean {
-  if (d.callback === CALLBACK_TESTE) return true;
-  if (["card", "pix", "boleto", "picpay"].every((k) => tem(d, k))) return true;
+  if (d.id === ID_TESTE && d.callback === CALLBACK_TESTE) return true;
+  if (["card", "pix", "boleto", "picpay"].every((k) => ehObjeto(d[k]))) return true;
   const c = ehObjeto(d.customer) ? d.customer : {};
-  return typeof c.email === "string" && /@example\.(com|org|net)$/i.test(c.email.trim());
+  return (
+    typeof c.email === "string" &&
+    /@example\.(com|org|net)$/i.test(c.email.trim()) &&
+    typeof c.name === "string" &&
+    /^john doe$/i.test(c.name.trim())
+  );
+}
+
+/** A entrega de teste: so marca "teste recebido", entao nada nela precisa valer. */
+function eventoDeTeste(evento: string, d: Obj, agora: Date): EventoNormalizado {
+  const agoraIso = agora.toISOString();
+  return {
+    evento,
+    dataEvento: agoraIso,
+    pedidoId: lerPedidoId(d.id) ?? "teste",
+    pedido: { status: null, metodo: null, produto: null, pais: null, moeda: "", valor: 0, criadoEm: agoraIso },
+    receita: { valor: 0, moeda: null, situacao: POR_EVENTO[evento] ?? "pendente", statusOriginal: null },
+    conta: null,
+    programa: null,
+    teste: true,
+  };
 }
 
 /** URL sem query nem fragmento: o pre-preenchimento leva nome e e-mail na query. */
@@ -238,14 +267,18 @@ function lerItem(evento: string, d: unknown, agora: Date): Item {
   const ehChargeback = evento === "chargeback" || statusOriginal === "chargedback" || statusOriginal === "chargeback";
   // A data do evento e a da etapa que ele prova. O reembolso PEDIDO usa a do
   // pagamento: ele nunca e mais novo que um reembolso ou chargeback de
-  // verdade, entao nunca desfaz um deles (estado.ts compara por data).
+  // verdade, entao nunca desfaz um deles (estado.ts compara por data). A
+  // recusa quase nunca traz canceledAt: vale a criacao, nunca a chegada --
+  // a recusa reenviada depois de um pagamento do mesmo pedido seria mais nova
+  // que ele e o desfaria. Assim ela so vence o pendente (mesmo instante, e na
+  // ordem expirado fica acima).
   const dataEvento =
     situacao === "pendente"
       ? criado ?? agoraIso
       : situacao === "pago"
         ? pago ?? (evento === "refund_requested" ? criado : null) ?? agoraIso
         : situacao === "expirado"
-          ? cancelado ?? agoraIso
+          ? cancelado ?? criado ?? agoraIso
           : (ehChargeback ? chargeback : reembolsado) ?? reembolsado ?? chargeback ?? agoraIso;
 
   // Dinheiro.
@@ -311,7 +344,8 @@ function lerItem(evento: string, d: unknown, agora: Date): Item {
     // O afiliado da Cakto e um e-mail: dado pessoal, nao entra.
     conta: null,
     programa: null,
-    teste: ehTeste(d),
+    // O teste sai antes (lerTodosCakto), sem passar pelas validacoes.
+    teste: false,
     venda,
     rastreio: lerRastreio(d),
     comprador: lerComprador(d),
@@ -330,6 +364,11 @@ export function lerTodosCakto(corpo: unknown, agora: Date): LeituraVarios {
   if (lista.length === 0) return { ok: false, erro: "data vazio" };
   if (lista.length > MAX_ITENS) return { ok: false, erro: `data com mais de ${MAX_ITENS} pedidos` };
 
+  // Uma entrega de teste e teste inteira, e sai antes das validacoes: o
+  // exemplo fixo da Cakto tem data de 2025, que sai da janela de 400 dias.
+  const teste = lista.find((d): d is Obj => ehObjeto(d) && ehTeste(d));
+  if (teste) return { ok: true, eventos: [eventoDeTeste(evento, teste, agora)] };
+
   const eventos: EventoNormalizado[] = [];
   const vistos = new Set<string>();
   for (const item of lista) {
@@ -346,8 +385,6 @@ export function lerTodosCakto(corpo: unknown, agora: Date): LeituraVarios {
     const grupo = principal.venda!.grupo;
     for (const e of eventos) e.venda!.grupo = grupo;
   }
-  // Uma entrega de teste e teste inteira.
-  if (eventos.some((e) => e.teste)) for (const e of eventos) e.teste = true;
   return { ok: true, eventos };
 }
 
@@ -428,7 +465,7 @@ export function exemploCakto(agora: Date, segredo?: string | null): unknown {
     secret: segredo ?? "",
     event: "purchase_approved",
     data: {
-      id: "7e57c0de-0000-4000-8000-00000000c470",
+      id: ID_TESTE,
       refId: "XCTESTE",
       status: "paid",
       offer_type: "main",

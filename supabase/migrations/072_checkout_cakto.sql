@@ -101,7 +101,10 @@ alter table public.pedidos_externos
   add column if not exists utm_term            text check (utm_term is null or length(utm_term) <= 200),
   add column if not exists campanha_id         text check (campanha_id is null or campanha_id ~ '^[0-9]{5,25}$'),
   add column if not exists conjunto_id         text check (conjunto_id is null or conjunto_id ~ '^[0-9]{5,25}$'),
-  add column if not exists anuncio_id          text check (anuncio_id is null or anuncio_id ~ '^[0-9]{5,25}$');
+  add column if not exists anuncio_id          text check (anuncio_id is null or anuncio_id ~ '^[0-9]{5,25}$'),
+  -- Custo de produto da venda, na moeda dela: o Dashboard le null como 0
+  -- (infoproduto). O webhook nao grava; fica para o custo opcional.
+  add column if not exists custo               numeric(14,2) check (custo is null or (custo >= 0 and custo <= 100000));
 
 -- Nenhum e-mail nas UTMs (a de campanha de e-mail leva o do cliente).
 alter table public.pedidos_externos drop constraint if exists pedidos_externos_utm_sem_email;
@@ -150,7 +153,7 @@ grant select, insert, update, delete on table
 --      and column_name in ('referencia', 'taxa', 'comissoes', 'grupo', 'oferta_tipo', 'vence_em',
 --                          'reembolsado_em', 'chargeback_em', 'reembolso_pedido_em', 'utm_source',
 --                          'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'campanha_id',
---                          'conjunto_id', 'anuncio_id');                                       -- 17
+--                          'conjunto_id', 'anuncio_id', 'custo');                              -- 18
 --   select count(*) from information_schema.columns
 --    where table_schema = 'public' and table_name = 'checkouts_externos'
 --      and column_name in ('notificar_pendente', 'notificar_estorno');                         -- 2

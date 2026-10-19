@@ -23,7 +23,8 @@ import { POR_PAGINA, textoCsv } from "./filtros";
 //   venda (Cakto): metodo, valor, taxa, liquido, situacao e campanha/anuncio,
 //     tudo na moeda do relatorio.
 //   misto (os dois no filtro): as colunas da venda; na linha da Sphere o
-//     liquido e a comissao.
+//     liquido e a comissao, e o valor fica na moeda do pedido (o CSV leva a
+//     coluna "Moeda do valor").
 // ============================================================================
 
 export type ModeloDaTela = "comissao" | "venda" | "misto";
@@ -80,6 +81,8 @@ const CABECALHO_VENDA = [
   "Oferta",
   "Método",
   "Valor",
+  // A da coluna Valor: a do relatorio, ou a do pedido (a linha da Sphere no misto, venda sem cotacao).
+  "Moeda do valor",
   "Taxa",
   "Comissões",
   "Líquido",
@@ -143,7 +146,9 @@ export function PedidosCheckout({
             textoCsv(p.produto),
             p.oferta,
             p.metodo,
-            redondo(p.valorRelatorio),
+            // Como na tela: a linha da Sphere (misto) fica no valor e na moeda do pedido.
+            redondo(p.valorRelatorio ?? p.valor),
+            p.valorRelatorio === null ? p.moedaPedido : moeda,
             redondo(p.taxa),
             redondo(p.comissoes),
             redondo(p.comissao),

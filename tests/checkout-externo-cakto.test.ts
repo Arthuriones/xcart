@@ -7,6 +7,7 @@ vi.mock("server-only", () => ({}));
 
 import {
   CALLBACK_TESTE,
+  ID_TESTE,
   assinarCakto,
   autenticarCakto,
   cakto,
@@ -27,6 +28,11 @@ import {
 import { vendaDoPedidoExterno } from "@/lib/checkouts-externos/notificar";
 import { mensagemDaVenda } from "@/lib/alertas/venda-webhook";
 import { estadoDaVenda, pendenteVencida } from "@/lib/checkouts-externos/venda";
+import { CAMPOS_VENDA } from "@/lib/checkouts-externos/estado";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { IndicadoresKpiCod, IndicadoresTopoCod, type BaseIndicadores } from "@/app/(dashboard)/financeiro/indicadores";
+import { composicaoCod } from "@/app/(dashboard)/financeiro/lucro-dados";
 import { calcularFinanceiro, type EntradaFinanceiro, type LojaFinanceira, type PedidoExternoFin } from "@/lib/financeiro/calculo";
 import { montarPedidosExternos } from "@/lib/checkouts-externos/pedidos";
 import type { PedidoExternoRow } from "@/lib/checkouts-externos/tipos";
@@ -253,6 +259,10 @@ describe("lerTodosCakto: V1 (data objeto)", () => {
 
     const [recusa] = ler(corpo("purchase_refused", venda({ status: "refused", paidAt: null })));
     expect(recusa.receita.situacao).toBe("expirado");
+    // Sem canceledAt, a data e a da criacao, nunca a da chegada.
+    expect(recusa.dataEvento).toBe("2026-10-18T14:58:00.123Z");
+    const [comData] = ler(corpo("purchase_refused", venda({ status: "refused", paidAt: null, canceledAt: "2026-10-18T12:00:00-03:00" })));
+    expect(comData.dataEvento).toBe("2026-10-18T15:00:00.000Z");
 
     const [pedido] = ler(
       corpo("refund_requested", venda({ status: "refund_requested", refundRequest: { requestedAt: "2026-10-18T12:00:00-03:00" } }))
@@ -336,10 +346,48 @@ describe("teste: o da Cakto e o nosso nunca viram pedido", () => {
   });
 
   it("o nosso exemplo leva o callback de teste e o secret salvo", () => {
-    const c = exemploCakto(AGORA, SECRET) as { secret: string; data: { callback: string } };
+    const c = exemploCakto(AGORA, SECRET) as { secret: string; data: { id: string; callback: string } };
     expect(c.secret).toBe(SECRET);
     expect(c.data.callback).toBe(CALLBACK_TESTE);
+    expect(c.data.id).toBe(ID_TESTE);
     expect(ler(c)[0].teste).toBe(true);
+  });
+
+  it("o callback de teste sozinho e venda de verdade: ele vem da URL do checkout, qualquer um poe", () => {
+    const [ev] = ler(corpo("purchase_approved", venda({ callback: CALLBACK_TESTE })));
+    expect(ev.teste).toBe(false);
+    expect(ev.receita.valor).toBe(90.22);
+    // Na V2, a cobranca inteira continua de verdade.
+    const evs = ler(corpo("purchase_approved", [venda({ callback: CALLBACK_TESTE }), venda({ id: "c1111111-1111-4111-8111-111111111111", offer_type: "orderbump" })]));
+    expect(evs.map((e) => e.teste)).toEqual([false, false]);
+  });
+
+  it("os quatro blocos como null (a chave vem, o meio nao): venda de verdade", () => {
+    const [ev] = ler(corpo("purchase_approved", venda({ pix: null, boleto: null, picpay: null })));
+    expect(ev.teste).toBe(false);
+  });
+
+  it("so o e-mail de exemplo nao e teste (um comprador pode digitar); com John Doe e", () => {
+    expect(ler(corpo("purchase_approved", venda({ customer: { name: "Ana Souza", email: "ana@example.com" } })))[0].teste).toBe(false);
+    expect(ler(corpo("purchase_approved", venda({ customer: { name: "John Doe", email: "john.doe@example.com" } })))[0].teste).toBe(true);
+  });
+
+  it("o 'Testar webhook' com a data fixa de 2025 (fora da janela) e com valor torto: teste, nunca 400", () => {
+    const fixo = venda({
+      customer: { name: "John Doe", email: "john.doe@example.com" },
+      createdAt: "2025-11-06T16:01:53.935243-03:00",
+      paidAt: "2025-11-06T16:01:55.741948-03:00",
+      fees: 6.62,
+      baseAmount: 5,
+      pix: { qrCode: "x" },
+      boleto: { barcode: "x" },
+      picpay: { qrCode: "x" },
+    });
+    const daqui = new Date("2026-12-20T12:00:00Z");
+    expect(lerTodosCakto(corpo("purchase_approved", fixo), daqui)).toMatchObject({ ok: true, eventos: [{ teste: true }] });
+    expect(lerTodosCakto(corpo("pix_gerado", { ...fixo, baseAmount: "abc" }), daqui)).toMatchObject({ ok: true, eventos: [{ teste: true }] });
+    // Sem os sinais do teste, a mesma data recusa.
+    expect(lerTodosCakto(corpo("purchase_approved", venda({ createdAt: fixo.createdAt, paidAt: fixo.paidAt })), daqui)).toMatchObject({ ok: false });
   });
 });
 
@@ -411,8 +459,10 @@ interface Memoria {
   comVenda: number;
 }
 
-function memoria(opcoes: { falharInsert?: number } = {}): Memoria {
+function memoria(opcoes: { falharInsert?: number; falharUpdate?: number; falharSoltar?: number } = {}): Memoria {
   let falhas = opcoes.falharInsert ?? 0;
+  let falhasUpdate = opcoes.falharUpdate ?? 0;
+  let falhasSoltar = opcoes.falharSoltar ?? 0;
   const m: Memoria = { eventos: new Set(), pedidos: new Map(), marcas: [], soltos: [], comVenda: 0, repo: undefined as never };
   m.repo = {
     async travarEvento(x) {
@@ -422,6 +472,10 @@ function memoria(opcoes: { falharInsert?: number } = {}): Memoria {
       return "ok";
     },
     async soltarEvento(x) {
+      if (falhasSoltar > 0) {
+        falhasSoltar -= 1;
+        throw new Error("banco fora");
+      }
       m.eventos.delete(`${x.pedido_id}|${x.evento}`);
       m.soltos.push(`${x.pedido_id}|${x.evento}`);
     },
@@ -440,6 +494,10 @@ function memoria(opcoes: { falharInsert?: number } = {}): Memoria {
       return "ok";
     },
     async atualizarPedido(x) {
+      if (falhasUpdate > 0) {
+        falhasUpdate -= 1;
+        throw new Error("banco fora");
+      }
       const atual = m.pedidos.get(x.pedido_id);
       if (!atual || atual.versao !== x.versao) return false;
       if (x.venda) m.comVenda += 1;
@@ -550,6 +608,24 @@ describe("receberEvento (Cakto): origem, idempotencia e ordem", () => {
     expect(m2.pedidos.get(ID)?.situacao).toBe("revertido");
   });
 
+  it("recusa reenviada sem canceledAt depois do pagamento: o pedido segue pago", async () => {
+    // Boleto pago (paidAt antes da chegada) e uma recusa do mesmo pedido que
+    // chega atrasada (retentativa por timeout ou Reenviar).
+    const m = memoria();
+    await receber(m, corpo("boleto_gerado", pix({ paymentMethod: "boleto", pix: undefined, due_date: "2026-10-21" })));
+    await receber(m, corpo("purchase_approved", { ...pix({ paymentMethod: "boleto", pix: undefined }), status: "paid", paidAt: "2026-10-18T11:59:00-03:00" }));
+    const r = await receber(m, corpo("purchase_refused", pix({ paymentMethod: "boleto", pix: undefined, status: "refused" })));
+    expect(r.status).toBe(200);
+    expect(m.pedidos.get(ID)).toMatchObject({ situacao: "pago", pago_em: "2026-10-18T14:59:00.000Z", perdido_em: null });
+    expect(estadoDaVenda(m.pedidos.get(ID)!, AGORA.getTime())).toBe("paga");
+
+    // Ainda vence o pendente: Pix gerado e recusado, nada pago.
+    const m2 = memoria();
+    await receber(m2, corpo("pix_gerado", pix()));
+    await receber(m2, corpo("purchase_refused", pix({ status: "refused" })));
+    expect(m2.pedidos.get(ID)?.situacao).toBe("expirado");
+  });
+
   it("chargeback depois da venda: revertido com a data do chargeback", async () => {
     const m = memoria();
     await receber(m, corpo("purchase_approved", venda()));
@@ -591,6 +667,50 @@ describe("receberEvento (Cakto): origem, idempotencia e ordem", () => {
     const b = await receber(m, corpo("purchase_approved", venda()));
     expect(b.status).toBe(200);
     expect(m.pedidos.get(ID)?.situacao).toBe("pago");
+  });
+
+  it("a trava presa (gravar e soltar falharam): a retentativa e o Reenviar refazem, e avisam uma vez", async () => {
+    const logs: unknown[] = [];
+    vi.spyOn(console, "error").mockImplementation((...a: unknown[]) => void logs.push(a));
+    try {
+      // Pedido novo: a trava ficou, o pedido nao existe.
+      const m = memoria({ falharInsert: 1, falharSoltar: 1 });
+      const a = await receber(m, corpo("purchase_approved", venda()));
+      expect(a).toMatchObject({ status: 503, segurar: true });
+      expect(m.eventos.has(`${ID}|purchase_approved`)).toBe(true);
+      expect(JSON.stringify(logs)).toMatch(/a trava nao saiu/);
+      const b = await receber(m, corpo("purchase_approved", venda()));
+      expect(b.status).toBe(200);
+      expect(b.notificar).toMatchObject({ tipo: "venda", pedido: "#4852F91" });
+      expect(m.pedidos.get(ID)?.situacao).toBe("pago");
+      // Agora sim duplicado: o pedido ja tem o evento.
+      expect(await receber(m, corpo("purchase_approved", venda()))).toEqual({ status: 200, corpo: { ok: true, duplicado: true }, notificar: null });
+
+      // Pedido que ja existia (o Pix gerado): a aprovacao falhou e a trava ficou.
+      const m2 = memoria({ falharUpdate: 1, falharSoltar: 1 });
+      await receber(m2, corpo("pix_gerado", pix()));
+      const aprovado = corpo("purchase_approved", { ...pix(), status: "paid", paidAt: "2026-10-18T12:05:00-03:00" });
+      expect((await receber(m2, aprovado)).status).toBe(503);
+      expect(m2.pedidos.get(ID)?.situacao).toBe("pendente");
+      const c = await receber(m2, aprovado);
+      expect(c.status).toBe(200);
+      expect(c.notificar?.tipo).toBe("venda");
+      expect(m2.pedidos.get(ID)).toMatchObject({ situacao: "pago", pago_em: "2026-10-18T15:05:00.000Z" });
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it("retentativa de evento sem data (cai na hora da chegada): duplicado, sem regravar nem avisar de novo", async () => {
+    const m = memoria();
+    const semData = corpo("purchase_approved", venda({ paidAt: null }));
+    expect((await receber(m, semData)).notificar?.tipo).toBe("venda");
+    const versao = m.pedidos.get(ID)?.versao;
+    const depois = new Date(AGORA.getTime() + 60_000);
+    const raw = JSON.stringify(semData);
+    const r = await receberEvento(m.repo, CHECKOUT, cakto, JSON.parse(raw), depois, { raw, headers: assinado(raw), segredo: SECRET });
+    expect(r).toEqual({ status: 200, corpo: { ok: true, duplicado: true }, notificar: null });
+    expect(m.pedidos.get(ID)?.versao).toBe(versao);
   });
 
   it("V2 com um item falhando: o que entrou fica (e avisa); a retentativa so grava o que faltou", async () => {
@@ -728,6 +848,9 @@ describe("dado pessoal do comprador nunca e gravado nem logado", () => {
     expect(sql).toMatch(/checkout_externo_contas_plataforma_check check \(plataforma in \('sphere', 'cakto'\)\)/);
     const colunas = [...sql.matchAll(/add column if not exists (\w+)/g)].map((x) => x[1]);
     expect(colunas).toContain("segredo_plataforma");
+    // O custo opcional ja tem coluna; o webhook nao a grava (nao apaga o que o lojista puser).
+    expect(colunas).toContain("custo");
+    expect(CAMPOS_VENDA as readonly string[]).not.toContain("custo");
     expect(colunas.filter((c) => /mail|nome|name|fone|phone|cpf|doc|endereco|address|cliente|comprador|customer|ip\b/i.test(c))).toEqual([]);
     expect(sql).toMatch(/pedidos_externos_utm_sem_email/);
   });
@@ -921,6 +1044,16 @@ describe("checkout de venda no Dashboard", () => {
     expect(pendenteVencida({ situacao: "pendente", metodo_pagamento: "boleto", criado_em: "2026-09-27T10:00:00Z" }, AGORA_MS)).toBe(false);
   });
 
+  it("custo de produto (072): null e 0; com valor, entra no custo e sai do lucro", () => {
+    expect(calcularFinanceiro(entrada()).atual.cmv).toBe(0);
+    const comCusto = VENDAS.map((v) => (v.pedido_id === "A1" ? { ...v, custo: "12.50" } : v.pedido_id === "A3" ? { ...v, custo: 99 } : v));
+    const r = calcularFinanceiro(entrada({ externos: comCusto }));
+    // So a venda paga conta (A3 e Pix aguardando).
+    expect(r.atual.cmv).toBeCloseTo(12.5);
+    expect(r.atual.lucro).toBeCloseTo(211.33 - 12.5);
+    expect(r.atual.receita).toBeCloseTo(264);
+  });
+
   it("lucro e ROAS: liquido menos o anuncio ligado ao checkout", () => {
     const r = calcularFinanceiro(entrada({ contas: [conta("c1", CK_VENDA)], gastos: [gasto("c1", "2026-09-28", 50)] }));
     expect(r.atual.gasto).toBeCloseTo(50);
@@ -942,6 +1075,47 @@ describe("checkout de venda no Dashboard", () => {
     expect(junto.atual.externo).toEqual(so.atual.externo);
     expect(junto.lojasContraEntrega).toEqual([CK_SPHERE]);
     expect(junto.atual.receita).toBeCloseTo(so.atual.receita + 264);
+  });
+});
+
+describe("cartoes de contra entrega com Sphere e Cakto, sem loja Shopify", () => {
+  const sphereSo: PedidoExternoFin[] = [
+    { checkout_id: CK_SPHERE, situacao: "aprovado", moeda: "EUR", valor: 89.9, receita: 75, moeda_receita: null, dia_local: "2026-09-28" },
+    { checkout_id: CK_SPHERE, situacao: "expirado", moeda: "EUR", valor: 89.9, receita: 40, moeda_receita: null, dia_local: "2026-09-28" },
+  ];
+
+  function cartoes(lojaIds: string[], semLoja: boolean): string {
+    const r = calcularFinanceiro(entrada({ lojas: [SPHERE_LOJA, CAKTO_LOJA], externos: [...sphereSo, ...VENDAS] }));
+    // Como a tela monta (financeiro-screen.tsx): a venda junto das lojas, a comissao a parte.
+    const base: BaseIndicadores = {
+      moeda: "BRL",
+      atual: r.atual,
+      anterior: r.anterior,
+      compara: false,
+      dicas: {},
+      composicao: composicaoCod([...lojaIds, CK_VENDA], [CK_SPHERE], r.lojasContraEntrega),
+      venda: "junto",
+      semLoja,
+    };
+    return renderToStaticMarkup(createElement(IndicadoresKpiCod, base)) + renderToStaticMarkup(createElement(IndicadoresTopoCod, base));
+  }
+
+  // A definicao de cada cartao abre num popover (fora do HTML estatico): aqui
+  // so o que aparece -- os rotulos e o detalhe.
+  it("os cartoes do checkout de comissao (Perdido, Valor dos pedidos), nao os de produto e devolucao", () => {
+    const html = cartoes([], true);
+    expect(html).toContain(">Perdido<");
+    expect(html).toContain(">Valor dos pedidos<");
+    expect(html).not.toContain(">Devoluções<");
+    expect(html).not.toContain(">Custo de produto<");
+    expect(html).toContain("Não entra no lucro");
+  });
+
+  it("com loja Shopify no filtro, nada muda: produto e devolucoes", () => {
+    const html = cartoes(["44444444-4444-4444-8444-444444444444"], false);
+    expect(html).toContain(">Devoluções<");
+    expect(html).toContain(">Custo de produto<");
+    expect(html).not.toContain(">Valor dos pedidos<");
   });
 });
 

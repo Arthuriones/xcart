@@ -163,12 +163,14 @@ export function repositorioSupabase(admin: Admin): RepositorioCheckout {
       return "ok";
     },
     async soltarEvento(x) {
-      await admin
+      const { error } = await admin
         .from("checkout_externo_eventos")
         .delete()
         .eq("checkout_id", x.checkout_id)
         .eq("pedido_id", x.pedido_id)
         .eq("evento", x.evento);
+      // Quem chama registra; a retentativa refaz pela trava sem pedido (receber.ts).
+      if (error) throw new Error(`falha ao soltar a trava do evento: ${error.message}`);
     },
     async lerPedido(checkoutId, pedidoId) {
       const { data, error } = await comColunas072(COLUNAS_ESTADO_072, COLUNAS_ESTADO, (colunas) =>

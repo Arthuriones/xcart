@@ -88,7 +88,9 @@ export function FinanceiroScreen({
   // textos seguem o que o filtro soma: so checkout ("Taxa de aprovação", sem
   // custo de produto), so loja, ou os dois -- com "Todas", loja online +
   // checkout ja abre estes cartoes, e a taxa ai e so a de aprovacao. O de
-  // VENDA (Cakto) conta como loja online: nunca abre estes cartoes.
+  // VENDA (Cakto) conta como loja online: nunca abre estes cartoes, mas junto
+  // da comissao sem loja Shopify (semLoja) os cartoes de produto e devolucao
+  // saem para os do checkout de comissao.
   const noFiltro = new Set(dados.checkoutIds);
   const vendaIds = dados.checkouts.filter((c) => c.modelo === "venda" && noFiltro.has(c.id)).map((c) => c.id);
   const comissaoIds = dados.checkoutIds.filter((id) => !vendaIds.includes(id));
@@ -110,6 +112,7 @@ export function FinanceiroScreen({
     entrega: r.entrega,
     composicao,
     venda,
+    semLoja: dados.lojaIds.length === 0,
   };
 
   return (

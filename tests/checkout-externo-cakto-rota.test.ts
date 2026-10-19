@@ -174,6 +174,37 @@ describe("POST /api/webhooks/checkout/[token] com a Cakto", () => {
     expect((await resposta).status).toBe(503);
   });
 
+  it("corpo que nao e JSON: sem a assinatura, 401 e nada na tela; assinado, 400 com o erro na tela", async () => {
+    const lixo = "isto nao e json";
+    const sem = await post(lixo);
+    expect(sem.status).toBe(401);
+    expect(estado.marcas).toHaveLength(0);
+    const outro = await post(lixo, assinatura(lixo, "outro-secret-qualquer"));
+    expect(outro.status).toBe(401);
+    expect(estado.marcas).toHaveLength(0);
+    const assinado = await post(lixo, assinatura(lixo));
+    expect(assinado.status).toBe(400);
+    expect(String(estado.marcas.at(-1)?.ultimo_erro)).toMatch(/não é JSON/);
+  });
+
+  it("V2 grande: ate 256 KB passa; acima, 413 com o erro na tela (a Cakto nao reenvia)", async () => {
+    const comLixo = (kb: number) => {
+      const c = JSON.parse(corpoCakto()) as { data: Record<string, unknown> };
+      c.data.observacao = "x".repeat(kb * 1024);
+      return JSON.stringify(c);
+    };
+    const medio = comLixo(100);
+    expect((await post(medio, assinatura(medio))).status).toBe(200);
+    const grande = comLixo(260);
+    const r = await post(grande, assinatura(grande));
+    expect(r.status).toBe(413);
+    expect(String(estado.marcas.at(-1)?.ultimo_erro)).toMatch(/passou de 256 KB/);
+    // Sem a origem (sem o header e com outro secret no corpo), o 413 nao escreve na tela.
+    estado.marcas = [];
+    expect((await post(grande.replace(SECRET, "secret-de-outra-conta"))).status).toBe(401);
+    expect(estado.marcas).toHaveLength(0);
+  });
+
   it("a Sphere segue com o 503 na hora (ela reenvia o 503)", async () => {
     estado.checkout = { ...CAKTO, plataforma: "sphere", moeda_receita: "EUR" };
     estado.falharInsert = true;

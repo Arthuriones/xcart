@@ -277,3 +277,29 @@ export function aplicarEvento(
   const mudou = (Object.keys(pedido) as (keyof EstadoPedido)[]).some((k) => pedido[k] !== atual[k]);
   return { pedido, venceu, mudou };
 }
+
+/** As datas de etapa: a primeira vez que cada uma vem fica (ver vendaMesclada). */
+const MARCOS = [
+  "aprovado_em",
+  "pago_em",
+  "perdido_em",
+  "vence_em",
+  "reembolsado_em",
+  "chargeback_em",
+  "reembolso_pedido_em",
+] as const satisfies readonly (keyof EstadoPedido)[];
+
+/**
+ * O pedido gravado ja tem o que este evento traz? Para a trava que ficou sem
+ * o pedido (a gravacao falhou e a trava nao saiu): a retentativa refaz so se
+ * o evento muda a situacao ou traz uma etapa que falta. Nao compara o resto:
+ * evento sem data cai na hora da chegada, e a retentativa dele mudaria o
+ * atualizado_em sem ser novidade.
+ */
+export function eventoJaRefletido(atual: EstadoPedido | null, ev: EventoNormalizado, fuso: string | null | undefined): boolean {
+  if (!atual) return false;
+  const r = aplicarEvento(atual, ev, fuso);
+  if (!r.mudou) return true;
+  if (r.pedido.situacao !== atual.situacao) return false;
+  return !MARCOS.some((k) => !atual[k] && Boolean(r.pedido[k]));
+}

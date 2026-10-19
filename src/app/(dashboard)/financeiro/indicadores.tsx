@@ -70,6 +70,13 @@ export interface BaseIndicadores {
    * comissao. Os textos de Faturamento, Taxas e Pedidos dizem o que entra.
    */
   venda?: "so" | "junto";
+  /**
+   * Nenhuma loja Shopify no filtro (so checkouts). Nos cartoes de contra
+   * entrega, a venda (Cakto) junto da comissao conta como "ambos" na
+   * composicao, mas produto, frete e devolucao sao de loja: entram os
+   * cartoes do checkout de comissao.
+   */
+  semLoja?: boolean;
 }
 
 const SO_LOJAS: ComposicaoCod = { origem: "lojas", taxa: "entrega" };
@@ -375,6 +382,8 @@ export function IndicadoresTopoCod(b: BaseIndicadores) {
   const taxa = taxaUsada(b);
   const { origem, taxa: taxaDe } = b.composicao ?? SO_LOJAS;
   const soCheckout = origem === "checkouts";
+  // Venda e comissao, sem loja: nada de produto, frete ou devolucao.
+  const soCheckouts = !soCheckout && b.semLoja === true;
   // Cobertura do previsto: conta o custo dos que ainda vao ser enviados. No
   // Lucro previsto so o aviso; o "Todos com custo" fica no cartao Pedidos.
   const cobertura = seloCobertura(t.cod.coberturaCusto);
@@ -387,8 +396,10 @@ export function IndicadoresTopoCod(b: BaseIndicadores) {
     "dinheiro",
     soCheckout
       ? "Previsto menos o gasto em anúncios ligado ao checkout."
-      : "Previsto menos produto, frete, taxas, devoluções esperadas e anúncios.",
-    { notas: b.dicas.lucro, selo: cobertura?.tom === "warn" ? cobertura : undefined }
+      : soCheckouts
+        ? "Previsto menos as taxas da venda e o gasto em anúncios ligado aos checkouts."
+        : "Previsto menos produto, frete, taxas, devoluções esperadas e anúncios.",
+    { notas: b.dicas.lucro, selo: cobertura?.tom === "warn" && !soCheckouts ? cobertura : undefined }
   );
   const cartoes: Cartao[] = [
     cartaoCod(
@@ -455,7 +466,9 @@ export function IndicadoresTopoCod(b: BaseIndicadores) {
       "dinheiro",
       soCheckout
         ? "Recebido menos o gasto em anúncios ligado ao checkout."
-        : "Recebido menos produto e frete do que já foi enviado, taxas, devoluções e anúncios."
+        : soCheckouts
+          ? "Recebido menos as taxas da venda e o gasto em anúncios ligado aos checkouts."
+          : "Recebido menos produto e frete do que já foi enviado, taxas, devoluções e anúncios."
     ),
   ];
   return (
@@ -500,6 +513,9 @@ export function IndicadoresKpiCod(b: BaseIndicadores) {
   const taxa = taxaUsada(b);
   const { origem, taxa: taxaDe } = b.composicao ?? SO_LOJAS;
   const ck = origem === "checkouts";
+  // Venda e comissao, sem loja: os cartoes do checkout de comissao no lugar
+  // de custo e devolucoes (que sao de loja e ficariam zerados).
+  const soCheckouts = !ck && b.semLoja === true;
   const cartoes: Cartao[] = [
     cartaoTaxa(b, taxa, taxaDe),
     daMetrica(b, "gasto", Megaphone, (x) => x.gasto, {
@@ -528,14 +544,20 @@ export function IndicadoresKpiCod(b: BaseIndicadores) {
       "numero",
       ck
         ? "Pedidos criados no checkout no período, em qualquer situação."
-        : origem === "ambos"
-          ? "Pedidos gerados: online pagos, contra entrega que não foi cancelado antes do envio e os do checkout."
-          : "Pedidos gerados: online pagos e contra entrega que não foi cancelado antes do envio.",
+        : soCheckouts
+          ? "Vendas pagas e pedidos do checkout de comissão, em qualquer situação."
+          : origem === "ambos"
+            ? "Pedidos gerados: online pagos, contra entrega que não foi cancelado antes do envio e os do checkout."
+            : "Pedidos gerados: online pagos e contra entrega que não foi cancelado antes do envio.",
       ck
         ? {
             detalhe: `${inteiro(t.externo.aprovados + t.externo.pagos)} aprovados · ${inteiro(t.externo.pendentes)} pendentes · ${inteiro(t.externo.perdidos)} perdidos`,
           }
-        : origem === "ambos"
+        : soCheckouts
+          ? {
+              detalhe: `${inteiro(t.pedidos)} pagos ou aprovados · ${inteiro(t.cod.abertos)} em aberto · ${inteiro(t.cod.recusados)} recusados ou perdidos`,
+            }
+          : origem === "ambos"
           ? {
               detalhe: `${inteiro(t.pedidos)} pagos ou aprovados · ${inteiro(t.cod.abertos)} em aberto · ${inteiro(t.cod.recusados)} recusados ou perdidos`,
               selo: seloCobertura(t.cod.coberturaCusto),
@@ -548,7 +570,7 @@ export function IndicadoresKpiCod(b: BaseIndicadores) {
     cartaoCod(b, "cpaCod", "CPA", UserPlus, (x) => x.cod.cpa, "dinheiro", "Gasto em anúncios dividido pelos pedidos gerados. Quanto menor, melhor.", {
       bom: "descer",
     }),
-    ...(ck
+    ...(ck || soCheckouts
       ? [
           cartaoCod(
             b,
@@ -557,7 +579,9 @@ export function IndicadoresKpiCod(b: BaseIndicadores) {
             Undo2,
             (x) => x.externo.perdido,
             "dinheiro",
-            "Comissão de pedidos expirados (COD não pago ou não entregue) ou revertidos.",
+            ck
+              ? "Comissão de pedidos expirados (COD não pago ou não entregue) ou revertidos."
+              : "Comissão de pedidos expirados ou revertidos no checkout de comissão.",
             {
               bom: "descer",
               detalhe: `${inteiro(t.externo.perdidos)} ${t.externo.perdidos === 1 ? "pedido" : "pedidos"}`,
@@ -570,7 +594,9 @@ export function IndicadoresKpiCod(b: BaseIndicadores) {
             Package,
             (x) => x.externo.valorPedidos,
             "dinheiro",
-            "Soma do total dos pedidos na plataforma. Só referência: a sua receita é a comissão.",
+            ck
+              ? "Soma do total dos pedidos na plataforma. Só referência: a sua receita é a comissão."
+              : "Soma do total dos pedidos do checkout de comissão. Só referência: dele, a receita é a comissão.",
             { bom: "neutro", detalhe: "Não entra no lucro" }
           ),
         ]

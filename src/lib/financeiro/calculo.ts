@@ -59,7 +59,8 @@ import { chaveDaCobranca, estadoDaVenda, vendaRecebida } from "@/lib/checkouts-e
 // Checkout de VENDA (Cakto, 072, src/lib/checkouts-externos/venda.ts): conta
 // como uma loja online, fora dos cartoes de contra entrega. Pago = receita
 // (o faturamento) e taxas (a taxa da plataforma + as comissoes de afiliado e
-// coprodutor: o que nao fica com o lojista), entao lucro = liquido - anuncio.
+// coprodutor: o que nao fica com o lojista), entao lucro = liquido - custo -
+// anuncio (custo null = 0: o webhook nao manda; o infoproduto nao tem).
 // Pix/boleto aguardando so contam em Totais.venda (A receber); vencido,
 // recusado, reembolso e chargeback nao entram na receita, com contador
 // proprio. O pedido e a COBRANCA: order bump e upsell nao dobram Pedidos.
@@ -262,6 +263,7 @@ export type PedidoExternoFin = Pick<
       | "reembolsado_em"
       | "chargeback_em"
       | "reembolso_pedido_em"
+      | "custo"
     >
   >;
 
@@ -811,12 +813,15 @@ export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
         const receita = Math.max(faturamento, liquido);
         const custos = receita - liquido;
         const taxa = x.taxa === null || x.taxa === undefined ? custos : Math.min(paraNumero(x.taxa), custos);
+        // Custo de produto (072): null = 0, o infoproduto.
+        const custo = x.custo === null || x.custo === undefined ? 0 : paraNumero(x.custo);
         const nova = primeiraVez("vendas", chave);
         lancar(ck.id, dia, {
           pedidos: nova,
           gerados: nova,
           receita: receita * k,
           taxas: custos * k,
+          cmv: custo * k,
           vndVendas: nova,
           vndItens: 1,
           vndFaturamento: receita * k,

@@ -1,4 +1,4 @@
-import { aplicarEvento, type EstadoPedido } from "./estado";
+import { aplicarEvento, eventoJaRefletido, type EstadoPedido } from "./estado";
 import type { EventoNormalizado, LeituraVarios, PlataformaCheckout } from "./plataformas/tipos";
 import { nomeDaPlataforma } from "./tipos";
 
@@ -23,12 +23,14 @@ import { nomeDaPlataforma } from "./tipos";
 //   afiliado de OUTRO checkout do usuario -> 409 (contaria em dobro). O
 //     primeiro evento de cada codigo o liga a este checkout; um checkout pode
 //     ter varios (a Sphere nao garante um codigo por conta).
-//   trava (checkout, pedido, evento) ja existe -> 200 duplicado
+//   trava (checkout, pedido, evento) ja existe -> 200 duplicado. Se o pedido
+//     gravado NAO tem o evento (a gravacao falhou e a trava nao saiu), refaz:
+//     senao a retentativa e o Reenviar cairiam em duplicado para sempre.
 //   pedido gravado (trava otimista pela versao) -> 200
 //   falhou ao gravar -> a trava sai e responde 503. A Sphere tenta de novo
 //     com o 503; a Cakto NAO (so timeout e erro de rede): `segurar` pede a
 //     rota para segurar a resposta ate o timeout dela, e o erro fica no
-//     checkout com a instrucao de reenvio.
+//     checkout com a instrucao de reenvio (que vale mesmo com a trava presa).
 //
 // Uma entrega pode trazer VARIOS pedidos (V2 da Cakto: principal, order bump
 // e upsell da mesma cobranca). Cada um tem a sua trava: na retentativa, o que
@@ -66,7 +68,7 @@ export interface MarcaCheckout {
 export interface RepositorioCheckout {
   /** Grava a trava do evento. "duplicado" = ja existia. Outro erro LANCA. */
   travarEvento(x: { checkout_id: string; user_id: string; pedido_id: string; evento: string; data_evento: string }): Promise<"ok" | "duplicado">;
-  /** Tira a trava (o processamento falhou e a retentativa precisa passar). */
+  /** Tira a trava (o processamento falhou e a retentativa precisa passar). Erro LANCA. */
   soltarEvento(x: { checkout_id: string; pedido_id: string; evento: string }): Promise<void>;
   lerPedido(checkoutId: string, pedidoId: string): Promise<PedidoGravado | null>;
   /**
@@ -139,20 +141,21 @@ function lerEntrega(plataforma: PlataformaCheckout, corpo: unknown, agora: Date)
 }
 
 /**
- * Grava o pedido com trava otimista. Devolve se o evento venceu, ou lanca.
- * Checkout pausado nao cria pedido: so atualiza o que ja existe.
+ * Grava o pedido com trava otimista. Devolve se o evento venceu e se ESTA
+ * chamada escreveu, ou lanca. Checkout pausado nao cria pedido: so atualiza o
+ * que ja existe.
  */
 async function gravarPedido(
   repo: RepositorioCheckout,
   checkout: CheckoutParaReceber,
   ev: EventoNormalizado,
   venda: boolean
-): Promise<{ venceu: boolean }> {
+): Promise<{ venceu: boolean; escreveu: boolean }> {
   for (let i = 0; i < TENTATIVAS; i += 1) {
     const atual = await repo.lerPedido(checkout.id, ev.pedidoId);
     const r = aplicarEvento(atual, ev, checkout.fuso);
     if (!atual) {
-      if (!checkout.ativo) return { venceu: false };
+      if (!checkout.ativo) return { venceu: false, escreveu: false };
       const ins = await repo.inserirPedido({
         checkout_id: checkout.id,
         user_id: checkout.user_id,
@@ -160,10 +163,10 @@ async function gravarPedido(
         pedido: r.pedido,
         ...(venda ? { venda: true } : {}),
       });
-      if (ins === "ok") return { venceu: true };
+      if (ins === "ok") return { venceu: true, escreveu: true };
       continue;
     }
-    if (!r.mudou) return { venceu: r.venceu };
+    if (!r.mudou) return { venceu: r.venceu, escreveu: false };
     const ok = await repo.atualizarPedido({
       checkout_id: checkout.id,
       pedido_id: ev.pedidoId,
@@ -171,7 +174,7 @@ async function gravarPedido(
       pedido: r.pedido,
       ...(venda ? { venda: true } : {}),
     });
-    if (ok) return { venceu: r.venceu };
+    if (ok) return { venceu: r.venceu, escreveu: true };
   }
   throw new Error("o pedido mudou em todas as tentativas");
 }
@@ -317,18 +320,28 @@ export async function receberEvento(
 
     const trava = { checkout_id: checkout.id, pedido_id: ev.pedidoId, evento: ev.evento };
     const travou = await repo.travarEvento({ ...trava, user_id: checkout.user_id, data_evento: ev.dataEvento });
-    if (travou === "duplicado") {
+    // Trava que ja existe e a retentativa do que ja entrou -- menos quando a
+    // gravacao falhou e a trava NAO saiu (o banco caiu nas duas): o pedido
+    // nao tem o evento, e a retentativa e o Reenviar cairiam aqui para sempre.
+    // Ai refaz; aplicarEvento e idempotente e a corrida cai na versao/23505.
+    const refazendo = travou === "duplicado";
+    if (refazendo && eventoJaRefletido(await repo.lerPedido(checkout.id, ev.pedidoId), ev, checkout.fuso)) {
       duplicados += 1;
       continue;
     }
 
     try {
-      const { venceu } = await gravarPedido(repo, checkout, ev, venda);
-      aplicados.push({ ev, venceu });
+      const { venceu, escreveu } = await gravarPedido(repo, checkout, ev, venda);
+      // Refazendo, so avisa quem escreveu: a outra entrega pode ter gravado.
+      if (refazendo && !escreveu) duplicados += 1;
+      else aplicados.push({ ev, venceu });
     } catch (e) {
       console.error("[checkout/webhook] falha ao gravar o pedido", e instanceof Error ? e.message : e);
-      // Sem soltar a trava, a retentativa cairia em "duplicado" e o evento se perderia.
-      await repo.soltarEvento(trava).catch(() => undefined);
+      // Sem soltar a trava, a retentativa cairia em "duplicado". Se nem isso
+      // der, ela refaz pelo ramo acima (o pedido nao tem o evento).
+      await repo.soltarEvento(trava).catch((erro: unknown) => {
+        console.error("[checkout/webhook] a trava nao saiu", erro instanceof Error ? erro.message : erro);
+      });
       falhou = true;
     }
   }
