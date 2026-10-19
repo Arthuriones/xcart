@@ -34,6 +34,7 @@ import {
 import { ROTULO_FORA_DO_AR } from "@/lib/checkout-routes/loja-fora-do-ar";
 import { MOTIVO_ESCAPE } from "@/lib/checkout-routes/sensor";
 import { lerUltimoConserto, type UltimoConserto } from "@/lib/checkout-routes/ultimo-conserto";
+import { modeloDaPlataforma } from "@/lib/checkouts-externos/tipos";
 
 // ============================================================================
 // O cron de alertas: le o banco, decide e manda UMA mensagem por usuario.
@@ -534,12 +535,12 @@ export async function coletarCondicoesDetalhado(
     if (somas.size === 0 && somasCheckout.size === 0) return;
 
     // Checkout externo: o dono, o nome e o fuso do "hoje" vem dele.
-    type CheckoutAlerta = { id: string; user_id: string; nome: string; fuso: string | null; ativo: boolean };
+    type CheckoutAlerta = { id: string; user_id: string; nome: string; fuso: string | null; ativo: boolean; plataforma: string | null };
     const checkoutPorId = new Map<string, CheckoutAlerta>();
     if (somasCheckout.size > 0) {
       const { data: cks, error: erroCk } = await admin
         .from("checkouts_externos")
-        .select("id, user_id, nome, fuso, ativo")
+        .select("id, user_id, nome, fuso, ativo, plataforma")
         .in("id", [...somasCheckout.keys()]);
       if (erroCk) throw new Error(erroCk.message);
       for (const c of (cks || []) as CheckoutAlerta[]) checkoutPorId.set(String(c.id), c);
@@ -633,7 +634,8 @@ export async function coletarCondicoesDetalhado(
 
     // Checkout externo (069): qualquer pedido de hoje (pendente conta: a
     // comissao do COD so e aprovada dias depois) e venda. Nao depende de
-    // fin_sync_state -- o pedido chega pelo webhook, na hora.
+    // fin_sync_state -- o pedido chega pelo webhook, na hora. No checkout de
+    // VENDA (Cakto, 072) so a venda paga conta: Pix gerado nao e venda.
     for (const [checkoutId, porMoeda] of somasCheckout) {
       const ck = checkoutPorId.get(checkoutId);
       if (!ck || !ck.ativo) continue;
@@ -643,12 +645,13 @@ export async function coletarCondicoesDetalhado(
         .sort((a, b) => b.total - a.total)[0];
       if (!acima) continue;
       const hojeDoCheckout = diaNoFuso(agora, ck.fuso || "America/Sao_Paulo");
-      const { data: vendas, error: e5 } = await admin
+      let consultaVendas = admin
         .from("pedidos_externos")
         .select("pedido_id")
         .eq("checkout_id", checkoutId)
-        .eq("dia_local", hojeDoCheckout)
-        .limit(1);
+        .eq("dia_local", hojeDoCheckout);
+      if (modeloDaPlataforma(ck.plataforma) === "venda") consultaVendas = consultaVendas.in("situacao", ["aprovado", "pago"]);
+      const { data: vendas, error: e5 } = await consultaVendas.limit(1);
       if (e5) throw new Error(e5.message);
       if ((vendas || []).length > 0) continue;
 

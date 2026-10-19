@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { nomeDaPlataforma } from "@/lib/checkouts-externos/tipos";
+import { nomeDaPlataforma, textoDaMoeda } from "@/lib/checkouts-externos/tipos";
 import { RESUMO_CHECKOUT_EXTERNO } from "@/lib/conectar-operacao";
 import { FUSO_RELATORIO_PADRAO } from "@/lib/financeiro/tipos";
 import { lerCheckoutsDaTela, type CheckoutsDaTela } from "@/lib/leitura/checkouts";
@@ -85,7 +85,7 @@ export async function CheckoutsDaConta() {
                 <span className="truncate text-dense font-semibold text-ink">{c.nome}</span>
                 <span className="text-label text-t2">
                   {nomeDaPlataforma(c.plataforma)}
-                  {rotuloAfiliados(contas[c.id])} · comissão em {c.moeda_receita}
+                  {rotuloAfiliados(contas[c.id])} · {textoDaMoeda(c.plataforma, c.moeda_receita)}
                 </span>
               </span>
               <span className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">

@@ -2,7 +2,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   MOEDAS_COMISSAO,
   fusoValido,
+  modeloDaPlataforma,
   nomeValido,
+  segredoValido,
+  usaSegredo,
   type CheckoutExternoRow,
 } from "@/lib/checkouts-externos/tipos";
 import {
@@ -15,17 +18,18 @@ import {
   usuarioDaSessao,
 } from "@/lib/checkouts-externos/servidor";
 import { diasDoFusoNovo } from "@/lib/checkouts-externos/dia-local";
-import { COLUNAS_CHECKOUT } from "@/lib/checkouts-externos/tipos";
 
 export const runtime = "nodejs";
 
 // ============================================================================
 // PATCH /api/checkouts/[id]: renomear, pausar, moeda e fuso, taxa padrao,
-// aviso de comissao aprovada e "Trocar URL" (token novo; o antigo morre na
-// hora, e os afiliados ligados ao checkout ficam livres -- o primeiro evento
-// na URL nova liga de novo; sem isso, afiliado ligado por engano travava o
-// outro checkout em 409 para sempre). DELETE remove o checkout: os pedidos e eventos vao junto (cascade da
-// 069) e a conta de anuncio ligada fica sem checkout.
+// aviso de comissao aprovada (Sphere), avisos de Pix/boleto gerado e de
+// estorno (venda, 072), trocar o secret da Cakto e "Trocar URL" (token novo;
+// o antigo morre na hora, e os afiliados ligados ao checkout ficam livres --
+// o primeiro evento na URL nova liga de novo; sem isso, afiliado ligado por
+// engano travava o outro checkout em 409 para sempre; o secret da Cakto fica).
+// DELETE remove o checkout: os pedidos e eventos vao junto (cascade da 069)
+// e a conta de anuncio ligada fica sem checkout.
 // ============================================================================
 
 interface Corpo {
@@ -35,6 +39,10 @@ interface Corpo {
   fuso?: unknown;
   taxa_aprovacao_padrao?: unknown;
   notificar_aprovada?: unknown;
+  notificar_pendente?: unknown;
+  notificar_estorno?: unknown;
+  /** O secret do webhook da Cakto. Nunca volta na resposta. */
+  segredo?: unknown;
   trocarUrl?: unknown;
 }
 
@@ -65,9 +73,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!nome) return json(400, { ok: false, erro: "Dê um nome de 1 a 80 letras." });
     mudanca.nome = nome;
   }
-  for (const campo of ["ativo", "notificar_aprovada"] as const) {
+  for (const campo of ["ativo", "notificar_aprovada", "notificar_pendente", "notificar_estorno"] as const) {
     if (corpo[campo] === undefined) continue;
     if (typeof corpo[campo] !== "boolean") return json(400, { ok: false, erro: `${campo} inválido.` });
+    // Os avisos da venda (072) so existem no checkout de venda; mandar false
+    // para a Sphere nao gravaria nada (e sem a 072 a coluna nem existe).
+    if ((campo === "notificar_pendente" || campo === "notificar_estorno") && modeloDaPlataforma(atual.plataforma) !== "venda") continue;
     mudanca[campo] = corpo[campo];
   }
   if (corpo.moeda_receita !== undefined) {
@@ -87,10 +98,34 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!Number.isFinite(t) || t < 0 || t > 100) return json(400, { ok: false, erro: "Taxa de 0 a 100%." });
     mudanca.taxa_aprovacao_padrao = Math.round(t * 100) / 100;
   }
+  let segredo: string | null = null;
+  if (corpo.segredo !== undefined && corpo.segredo !== null && corpo.segredo !== "") {
+    if (!usaSegredo(atual.plataforma)) return json(400, { ok: false, erro: "Esta plataforma não usa secret." });
+    segredo = segredoValido(corpo.segredo);
+    if (!segredo) return json(400, { ok: false, erro: "Secret inválido: de 8 a 200 caracteres, sem espaço." });
+  }
   const trocarUrl = corpo.trocarUrl === true;
-  if (Object.keys(mudanca).length === 0 && !trocarUrl) return json(400, { ok: false, erro: "Nada para mudar." });
+  if (Object.keys(mudanca).length === 0 && !trocarUrl && !segredo) return json(400, { ok: false, erro: "Nada para mudar." });
 
   const admin = createAdminClient();
+
+  // O secret da plataforma (Cakto) primeiro: so o service role grava (a tabela
+  // nao tem policy). Salvo, o erro de "secret faltando/errado" sai da tela --
+  // o proximo evento confirma.
+  let temSegredo: boolean | undefined;
+  if (segredo) {
+    const { data, error } = await admin
+      .from("checkout_externo_segredos")
+      .update({ segredo_plataforma: segredo, updated_at: new Date().toISOString() })
+      .eq("checkout_id", atual.id)
+      .select("checkout_id");
+    if (error) return json(500, { ok: false, erro: `Falha ao salvar o secret: ${error.message}` });
+    if (!data || data.length === 0) return json(409, { ok: false, erro: "Este checkout está sem URL. Use “Trocar URL”." });
+    temSegredo = true;
+    mudanca.ultimo_erro = null;
+    mudanca.ultimo_erro_em = null;
+  }
+
   let salvo = atual;
   if (Object.keys(mudanca).length > 0) {
     mudanca.updated_at = new Date().toISOString();
@@ -99,10 +134,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .update(mudanca)
       .eq("id", atual.id)
       .eq("user_id", user.id)
-      .select(COLUNAS_CHECKOUT);
+      .select("id");
     if (error) return json(500, { ok: false, erro: `Falha ao salvar: ${error.message}` });
     if (!data || data.length === 0) return NAO_ENCONTRADO();
-    salvo = data[0] as CheckoutExternoRow;
+    // Relido pela sessao (com e sem as colunas da 072).
+    salvo = (await checkoutDaSessao(atual.id).catch(() => null)) ?? { ...atual, ...(mudanca as Partial<CheckoutExternoRow>) };
   }
 
   // Fuso novo: o dia de cada pedido muda junto (o periodo do Dashboard le
@@ -137,7 +173,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
   }
 
-  return json(200, { ok: true, checkout: resumoDoCheckout(salvo), ...(url ? { url } : {}), ...(aviso ? { aviso } : {}) });
+  return json(200, {
+    ok: true,
+    checkout: resumoDoCheckout(salvo),
+    ...(url ? { url } : {}),
+    ...(aviso ? { aviso } : {}),
+    ...(temSegredo ? { temSegredo } : {}),
+  });
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {

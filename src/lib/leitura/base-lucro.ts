@@ -74,8 +74,14 @@ const COLUNAS_ENVIO = "cod, status_envio, entrega, enviado_em, entregue_em, devo
 const COLUNAS_AMOSTRA = `store_id, dia_local, tipo, gateways, cancelado_em, status_financeiro, recebido, reembolsado, linhas, ${COLUNAS_ENVIO}`;
 /** O que o calculo le de um pedido de checkout externo. */
 const COLUNAS_EXTERNO = "checkout_id, situacao, moeda, valor, receita, moeda_receita, dia_local";
+/** Mais o que a venda (Cakto, 072) precisa. Sem a 072, a leitura cai na lista de cima. */
+const COLUNAS_EXTERNO_VENDA = `${COLUNAS_EXTERNO}, pedido_id, criado_em, metodo_pagamento, grupo, taxa, comissoes, vence_em, reembolsado_em, chargeback_em, reembolso_pedido_em`;
 
-/** Le pedidos_externos; sem a 069 aplicada, nenhum. */
+/**
+ * Le pedidos_externos; sem a 069 aplicada, nenhum. Coluna ausente (a 072) NAO
+ * chega aqui: quem le cai antes nas colunas da 069 (ColunaAusente) -- senao o
+ * semMigration069 esconderia os checkouts em silencio.
+ */
 async function lerExternos<T>(rotulo: string, ler: () => Promise<T[]>): Promise<T[]> {
   try {
     return await ler();
@@ -163,6 +169,20 @@ export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseL
         .overrideTypes<FinOrderRow[], { merge: false }>()
     );
 
+  const lerPedidosExternos = (colunas: string) =>
+    lerTudo<PedidoExternoFin>("os pedidos dos checkouts", (de, a) =>
+      supabase
+        .from("pedidos_externos")
+        .select(colunas)
+        .in("checkout_id", checkoutIds)
+        .gte("dia_local", desde)
+        .lte("dia_local", ate)
+        .order("checkout_id", { ascending: true })
+        .order("pedido_id", { ascending: true })
+        .range(de, a)
+        .overrideTypes<PedidoExternoFin[], { merge: false }>()
+    );
+
   const [pedidos, custos, configs, contas, externos] = await Promise.all([
     !temLojas
       ? ([] as FinOrderRow[])
@@ -204,18 +224,10 @@ export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseL
     enxuta || checkoutIds.length === 0
       ? ([] as PedidoExternoFin[])
       : lerExternos("os pedidos dos checkouts", () =>
-          lerTudo<PedidoExternoFin>("os pedidos dos checkouts", (de, a) =>
-            supabase
-              .from("pedidos_externos")
-              .select(COLUNAS_EXTERNO)
-              .in("checkout_id", checkoutIds)
-              .gte("dia_local", desde)
-              .lte("dia_local", ate)
-              .order("checkout_id", { ascending: true })
-              .order("pedido_id", { ascending: true })
-              .range(de, a)
-              .overrideTypes<PedidoExternoFin[], { merge: false }>()
-          )
+          lerPedidosExternos(COLUNAS_EXTERNO_VENDA).catch((e: unknown) => {
+            if (e instanceof ColunaAusente) return lerPedidosExternos(COLUNAS_EXTERNO);
+            throw e;
+          })
         ),
   ]);
 
@@ -310,9 +322,11 @@ export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseL
     }
   }
 
-  // Taxa de aprovacao dos checkouts externos: a mesma janela, amostra propria.
-  // Falha aqui tambem nao derruba a tela (cai na taxa padrao do checkout).
-  if (!enxuta && checkoutIds.length > 0) {
+  // Taxa de aprovacao dos checkouts de comissao: a mesma janela, amostra
+  // propria. A venda (Cakto) nao tem Previsto: fica de fora. Falha aqui
+  // tambem nao derruba a tela (cai na taxa padrao do checkout).
+  const comissaoIds = checkoutsDoFiltro.filter((c) => c.modelo !== "venda").map((c) => c.id);
+  if (!enxuta && comissaoIds.length > 0) {
     const janela = intervaloDaAmostra(hoje);
     try {
       const linhas = await lerExternos("a amostra dos checkouts", () =>
@@ -320,7 +334,7 @@ export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseL
           supabase
             .from("pedidos_externos")
             .select("checkout_id, situacao, dia_local")
-            .in("checkout_id", checkoutIds)
+            .in("checkout_id", comissaoIds)
             .gte("dia_local", janela.desde)
             .lte("dia_local", janela.ate)
             .order("checkout_id", { ascending: true })
@@ -347,6 +361,7 @@ export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseL
       nome: c.nome,
       dominio: checkouts.find((x) => x.id === c.id)?.dominio ?? "Checkout",
       tipo: "checkout" as const,
+      modelo: c.modelo,
       fuso: c.fuso,
       moeda: c.moeda_receita,
       taxaPadraoPct: c.taxa_aprovacao_padrao,
@@ -367,6 +382,7 @@ export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseL
       hoje,
       amostraEntrega,
       externos,
+      agoraMs: Date.now(),
     },
     filtro,
     lojas,

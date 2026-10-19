@@ -53,7 +53,7 @@ export interface OpcaoConectar {
 const DE = `${PARAM_DE}=${DE_CONECTAR}`;
 
 /** O checkout externo numa frase: a mesma aqui e na tela Lojas. */
-export const RESUMO_CHECKOUT_EXTERNO = "Pedido feito fora da Shopify, com comissão por venda.";
+export const RESUMO_CHECKOUT_EXTERNO = "Venda fora da Shopify: a sua (Cakto) ou por comissão (Sphere).";
 
 export const OPCOES_CONECTAR: OpcaoConectar[] = [
   {
@@ -78,7 +78,7 @@ export const OPCOES_CONECTAR: OpcaoConectar[] = [
     id: "checkout",
     titulo: "Checkout externo",
     texto: RESUMO_CHECKOUT_EXTERNO,
-    traz: ["Comissão em Recebido e A receber", "Cada pedido com a situação dele", "Gasto do Meta e do Google no lucro"],
+    traz: ["Faturamento, taxa e líquido, ou a comissão", "Cada pedido com a situação dele", "Gasto do Meta e do Google no lucro"],
     contagem: { um: "conectado", varios: "conectados" },
     destinos: PLATAFORMAS_CHECKOUT.map((p) => ({
       id: p.id,

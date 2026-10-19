@@ -86,9 +86,11 @@ export interface LojaDoSeletor {
   dominio: string;
   /**
    * Ausente = loja Shopify. "checkout" = checkout externo (migration 069):
-   * uma "loja" de comissao, sem Shopify por tras.
+   * uma "loja" de comissao (Sphere) ou de venda (Cakto), sem Shopify por tras.
    */
   tipo?: "loja" | "checkout";
+  /** So no checkout: "comissao" (Sphere) ou "venda" (Cakto, 072). Ausente = comissao. */
+  modelo?: "comissao" | "venda";
 }
 
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

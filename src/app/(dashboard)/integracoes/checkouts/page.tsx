@@ -1,4 +1,4 @@
-import { passoDoNovo } from "@/lib/checkouts-externos/tipos";
+import { passoDoNovo, plataformaDoNovo } from "@/lib/checkouts-externos/tipos";
 import { PARAM_DE, voltarParaEscolha } from "@/lib/conectar-operacao";
 import { lerCheckoutsDaTela } from "@/lib/leitura/checkouts";
 import { CabecalhoPlataforma } from "../cabecalho-plataforma";
@@ -8,12 +8,13 @@ import { CheckoutsTela } from "./checkouts-tela";
 export const dynamic = "force-dynamic";
 
 // ============================================================================
-// Integracoes -> Checkouts: os checkouts externos (Sphere Affiliates primeiro).
-// O lojista cadastra, copia a URL do webhook para a plataforma e ve os
-// eventos chegando. Cada checkout vira uma "loja" de comissao no seletor do
-// topo e no Dashboard. Ver src/lib/checkouts-externos/.
+// Integracoes -> Checkouts: os checkouts externos (Cakto e Sphere Affiliates).
+// O lojista cadastra, copia a URL do webhook para a plataforma (na Cakto,
+// cola o secret dela aqui) e ve os eventos chegando. Cada checkout vira uma
+// "loja" no seletor do topo e no Dashboard: de venda (Cakto) ou de comissao
+// (Sphere). Ver src/lib/checkouts-externos/.
 //
-// ?novo=sphere (ou ?novo=1) abre o "Conectar checkout" ao chegar, ja no passo
+// ?novo=cakto, ?novo=sphere (ou ?novo=1) abre o "Conectar checkout" ao chegar, ja no passo
 // certo; e a porta do "Conectar operação" (/conectar), que manda &de=conectar
 // para o Voltar devolver a escolha.
 // ============================================================================
@@ -47,6 +48,7 @@ export default async function CheckoutsPage({
       {...r.dados}
       agoraMs={r.agoraMs}
       abrirEm={passoDoNovo(sp.novo)}
+      plataformaNovo={plataformaDoNovo(sp.novo)}
       voltar={voltarParaEscolha(sp[PARAM_DE])}
     />
   );

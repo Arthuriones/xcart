@@ -25,18 +25,21 @@ export function Cascata({
   atual,
   moeda,
   contraEntrega = false,
+  venda = false,
 }: {
   atual: Totais;
   moeda: string;
   /** Loja em contra entrega: mostra a linha de devolucoes, mesmo zerada. */
   contraEntrega?: boolean;
+  /** Checkout de venda (Cakto) no filtro: as taxas levam as comissoes de afiliado. */
+  venda?: boolean;
 }) {
   const total = atual.cmv + atual.taxas + atual.gasto + atual.devolucoes;
   const linhas: [string, number, string][] = [
     ["Produto + frete", atual.cmv, COR_PARTE.cmv],
     ["Meta Ads", atual.gastoMeta, COR_PARTE.gasto],
     ["Google Ads", atual.gastoGoogle, "bg-chart-4"],
-    ["Taxas de pagamento", atual.taxas, COR_PARTE.taxas],
+    [venda ? "Taxas e comissões" : "Taxas de pagamento", atual.taxas, COR_PARTE.taxas],
   ];
   if (contraEntrega || atual.devolucoes > 0) linhas.push(["Devoluções", atual.devolucoes, COR_PARTE.cmv]);
 

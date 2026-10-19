@@ -22,7 +22,8 @@ export const dynamic = "force-dynamic";
 // Dashboard. A leitura mora em src/lib/leitura/pedidos-banco.ts.
 //
 // Checkout externo (069): com um checkout na barra, ou so checkouts, a tabela
-// e a da comissao (src/lib/leitura/pedidos-externos.ts). Com "Todas" e os dois
+// e a do checkout (src/lib/leitura/pedidos-externos.ts): comissao na Sphere,
+// metodo, taxa, liquido e campanha na Cakto (072). Com "Todas" e os dois
 // tipos, as abas "Lojas | Checkouts" (?origem=).
 // ============================================================================
 
@@ -59,7 +60,7 @@ function AbasOrigem({ atual }: { atual: Origem }) {
   );
 }
 
-/** Pedidos de checkout externo (Sphere): comissao no lugar do lucro. */
+/** Pedidos de checkout externo: comissao (Sphere) ou venda com taxa e liquido (Cakto). */
 async function ConteudoCheckouts({ abas }: { abas: ReactNode }) {
   let dados: Awaited<ReturnType<typeof lerPedidosExternos>>;
   try {
@@ -76,6 +77,9 @@ async function ConteudoCheckouts({ abas }: { abas: ReactNode }) {
   if (dados.vazio) return <SemNada />;
   const { filtro, intervalo, checkouts } = dados;
   const nome = checkouts.length === 1 ? checkouts[0].nome : "Todos os checkouts";
+  // Sphere (comissao), Cakto (venda) ou os dois: as colunas seguem o filtro.
+  const modelos = new Set(checkouts.map((c) => c.modelo ?? "comissao"));
+  const modelo = modelos.size > 1 ? "misto" : modelos.has("venda") ? "venda" : "comissao";
   return (
     <PedidosCheckout
       linhas={dados.linhas}
@@ -83,7 +87,13 @@ async function ConteudoCheckouts({ abas }: { abas: ReactNode }) {
       moeda={filtro.moeda}
       mostrarCheckout={checkouts.length > 1}
       abas={abas}
-      contextoCsv={["Pedidos", nome, `${dataBr(intervalo.desde)} a ${dataBr(intervalo.ate)}`, `Comissão em ${filtro.moeda}`]}
+      modelo={modelo}
+      contextoCsv={[
+        "Pedidos",
+        nome,
+        `${dataBr(intervalo.desde)} a ${dataBr(intervalo.ate)}`,
+        modelo === "comissao" ? `Comissão em ${filtro.moeda}` : `Valores em ${filtro.moeda}`,
+      ]}
       arquivoCsv={`pedidos-checkout-${intervalo.desde}-a-${intervalo.ate}.csv`}
     />
   );
@@ -94,7 +104,7 @@ function SemNada() {
     <EmptyState
       icone={<Store />}
       titulo="Conecte uma loja ou um checkout para ver os pedidos"
-      descricao="Os pedidos aparecem aqui com o lucro (loja) ou a comissão (checkout) de cada um."
+      descricao="Os pedidos aparecem aqui com o lucro, o líquido ou a comissão de cada um."
       acao={
         <Link href={ROTA_CONECTAR_OPERACAO} className={buttonVariants({})}>
           {ROTULO_CONECTAR_OPERACAO}

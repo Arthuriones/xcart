@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import {
   COLUNAS_CHECKOUT,
+  COLUNAS_CHECKOUT_072,
+  comColunas072,
   resumoDoCheckout,
   semMigration069,
   type CheckoutExternoRow,
@@ -42,11 +44,10 @@ export async function lerCheckoutsDaTela({ comEventos = true }: { comEventos?: b
   if (!user) return { checkouts: [], contas: {}, eventos: [], semMigration: false };
   const supabase = await createClient();
   const [cks, cts, evs] = await Promise.all([
-    supabase
-      .from("checkouts_externos")
-      .select(COLUNAS_CHECKOUT)
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: true }),
+    // Com os avisos da venda (072); sem a migration, as colunas da 069.
+    comColunas072(COLUNAS_CHECKOUT_072, COLUNAS_CHECKOUT, (colunas) =>
+      supabase.from("checkouts_externos").select(colunas).eq("user_id", user.id).order("created_at", { ascending: true })
+    ),
     supabase
       .from("checkout_externo_contas")
       .select("checkout_id, conta")
@@ -72,7 +73,7 @@ export async function lerCheckoutsDaTela({ comEventos = true }: { comEventos?: b
   }
   if (evs?.error && !semMigration069(evs.error)) throw new Error(`Falha ao ler os eventos: ${evs.error.message}`);
   return {
-    checkouts: ((cks.data ?? []) as CheckoutExternoRow[]).map(resumoDoCheckout),
+    checkouts: ((cks.data ?? []) as unknown as CheckoutExternoRow[]).map(resumoDoCheckout),
     contas,
     eventos: ((!evs || evs.error ? [] : (evs.data ?? [])) as {
       checkout_id: string;

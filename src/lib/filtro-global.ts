@@ -18,7 +18,7 @@ import {
   comparacaoDeCookie,
   type Comparacao,
 } from "@/components/layout/contexto";
-import { nomeDaPlataforma, semMigration069 } from "@/lib/checkouts-externos/tipos";
+import { modeloDaPlataforma, nomeDaPlataforma, semMigration069, type ModeloCheckout } from "@/lib/checkouts-externos/tipos";
 
 // ============================================================================
 // O filtro global (loja, periodo, moeda) mora em COOKIE, nao na URL.
@@ -74,6 +74,8 @@ export interface CheckoutDoUsuario {
   fuso: string;
   moeda_receita: string;
   taxa_aprovacao_padrao: number;
+  /** comissao (Sphere) ou venda (Cakto): o Dashboard e o Pedidos leem diferente. */
+  modelo: ModeloCheckout;
 }
 
 /**
@@ -101,6 +103,7 @@ export const lerCheckoutsDoUsuario = cache(async (): Promise<CheckoutDoUsuario[]
     fuso: String(c.fuso || FUSO_RELATORIO_PADRAO),
     moeda_receita: String(c.moeda_receita || "EUR").toUpperCase(),
     taxa_aprovacao_padrao: Number(c.taxa_aprovacao_padrao ?? 70),
+    modelo: modeloDaPlataforma(c.plataforma as string),
   }));
 });
 
@@ -111,6 +114,7 @@ export const listarCheckoutsDoUsuario = cache(async (): Promise<LojaDoSeletor[]>
     nome: c.nome,
     dominio: nomeDaPlataforma(c.plataforma),
     tipo: "checkout" as const,
+    modelo: c.modelo,
   }))
 );
 

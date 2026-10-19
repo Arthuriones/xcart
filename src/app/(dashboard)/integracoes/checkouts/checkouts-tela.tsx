@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useSyncExternalStore, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { CheckIcon, CopyIcon, MoreHorizontalIcon, PlusIcon, SendIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -26,9 +26,15 @@ import { FUSO_RELATORIO_PADRAO } from "@/lib/financeiro/tipos";
 import {
   MOEDAS_COMISSAO,
   PLATAFORMAS_CHECKOUT,
+  modeloDaPlataforma,
+  moedaPadraoDe,
   nomeDaPlataforma,
   rotuloDoEvento,
+  segredoValido,
+  textoDaMoeda,
+  usaSegredo,
   type CheckoutResumo,
+  type IdPlataformaCheckout,
 } from "@/lib/checkouts-externos/tipos";
 import type { EventoDaTela } from "@/lib/leitura/checkouts";
 import { CabecalhoPlataforma } from "../cabecalho-plataforma";
@@ -36,10 +42,14 @@ import { chamar } from "../api";
 import { estadoDoCheckout, haQuantoTempo, plural, quando, rotuloAfiliados } from "../regras";
 
 // ============================================================================
-// Checkouts externos: cadastrar (Sphere -> nome -> URL), copiar a URL do
+// Checkouts externos: cadastrar (plataforma -> nome -> URL), copiar a URL do
 // webhook, ver os eventos chegando e mandar um evento de teste. Tudo pelas
 // rotas /api/checkouts (a sessao confere o dono; quem grava e o servidor).
 // O teste NUNCA entra nos numeros: o endpoint reconhece e nao grava pedido.
+//
+// Cakto (venda): a Cakto gera o secret quando o webhook e criado la, entao o
+// campo dele fica no painel da URL (e no Editar, para trocar). O secret vai
+// so para o servidor: a tela so sabe SE ha um salvo (GET /url).
 // ============================================================================
 
 const API = "/api/checkouts";
@@ -66,17 +76,108 @@ const FUSOS = [
 const ESPERA_MS = 2 * 60 * 1000;
 const INTERVALO_MS = 5_000;
 
+const Forte = ({ children }: { children: ReactNode }) => <span className="font-medium text-ink">{children}</span>;
+
 const PASSOS_SPHERE = [
   <>
-    Na Sphere, abra <span className="font-medium text-ink">Webhooks</span> e clique em{" "}
-    <span className="font-medium text-ink">Novo Webhook</span>.
+    Na Sphere, abra <Forte>Webhooks</Forte> e clique em <Forte>Novo Webhook</Forte>.
   </>,
   <>Cole a URL acima.</>,
   <>Marque os 4 gatilhos (pedido criado, pedido expirado, comissão aprovada e comissão paga) e salve.</>,
 ];
 
+const PASSOS_CAKTO = [
+  <>
+    Na Cakto, abra <Forte>Integrações › Webhooks</Forte> e crie um webhook com a URL acima.
+  </>,
+  <>
+    Marque <Forte>todos os produtos</Forte>. Produto novo precisa ser incluído lá depois.
+  </>,
+  <>
+    Marque os eventos: compra aprovada e recusada, Pix, boleto e PicPay gerados, reembolso, reembolso pedido e
+    chargeback.
+  </>,
+  <>Copie o secret do webhook e cole aqui embaixo.</>,
+  <>
+    Clique em <Forte>Testar</Forte> na Cakto. O teste não entra nos números.
+  </>,
+];
+
+function passosDe(plataforma: string) {
+  return plataforma === "cakto" ? PASSOS_CAKTO : PASSOS_SPHERE;
+}
+
+/** "na Sphere", "na Cakto": o nome curto das frases (a Sphere e so "Sphere" nos textos dela). */
+function nomeCurto(plataforma: string | null | undefined): string {
+  return plataforma === "sphere" ? "Sphere" : nomeDaPlataforma(plataforma);
+}
+
 function cidade(fuso: string): string {
   return fuso === "UTC" ? "UTC" : (fuso.split("/").pop() ?? fuso).replace(/_/g, " ");
+}
+
+// ---------------------------------------------------------------------------
+// O secret da plataforma (Cakto): colar e salvar
+// ---------------------------------------------------------------------------
+
+function CampoSegredo({
+  checkoutId,
+  temSegredo,
+  aoSalvar,
+}: {
+  checkoutId: string;
+  /** null = ainda nao se sabe (o GET /url nao voltou). */
+  temSegredo: boolean | null;
+  aoSalvar: () => void;
+}) {
+  const id = useId();
+  const [valor, setValor] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function salvar() {
+    const s = segredoValido(valor);
+    if (!s) return setErro("Cole o secret inteiro: de 8 a 200 caracteres, sem espaço.");
+    setErro(null);
+    setSalvando(true);
+    const r = await chamar(`${API}/${checkoutId}`, { method: "PATCH", body: JSON.stringify({ segredo: s }) });
+    setSalvando(false);
+    if (!r.ok) return setErro(r.erro);
+    setValor("");
+    toast.success("Secret salvo", { description: "Agora clique em Testar na Cakto." });
+    aoSalvar();
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={`${id}-segredo`}>Secret do webhook</Label>
+      <div className="flex gap-2">
+        <Input
+          id={`${id}-segredo`}
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          value={valor}
+          onChange={(ev) => setValor(ev.target.value)}
+          placeholder={temSegredo ? "Salvo · cole outro para trocar" : "Cole o secret da Cakto"}
+          className="min-w-0 flex-1 font-mono text-dense"
+          aria-invalid={erro ? true : undefined}
+          aria-describedby={`${id}-segredo-ajuda`}
+        />
+        <Button variant="secondary" pending={salvando} onClick={salvar} disabled={!valor.trim()}>
+          Salvar
+        </Button>
+      </div>
+      <p id={`${id}-segredo-ajuda`} className={erro ? "text-label text-err" : "text-label text-t2"}>
+        {erro ??
+          (temSegredo === false
+            ? "Sem o secret, o xcart recusa os eventos da Cakto."
+            : temSegredo
+              ? "Secret salvo. Ele confere cada evento que chega."
+              : "Ele confere cada evento que chega.")}
+      </p>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -86,15 +187,19 @@ function cidade(fuso: string): string {
 function PainelUrl({
   checkout,
   urlInicial,
+  temSegredoInicial,
   aoMudar,
 }: {
   checkout: CheckoutResumo;
   /** Ja veio no cadastro; senao o painel pede (GET /url). */
   urlInicial?: string | null;
+  temSegredoInicial?: boolean | null;
   aoMudar: () => void;
 }) {
   const id = useId();
+  const assina = usaSegredo(checkout.plataforma);
   const [url, setUrl] = useState<string | null>(urlInicial ?? null);
+  const [temSegredo, setTemSegredo] = useState<boolean | null>(temSegredoInicial ?? null);
   const [erroUrl, setErroUrl] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
   const [estado, setEstado] = useState<CheckoutResumo>(checkout);
@@ -107,19 +212,23 @@ function PainelUrl({
     aoMudarRef.current = aoMudar;
   });
 
-  // A URL so sai quando o lojista abre o painel (nunca na lista).
+  // A URL so sai quando o lojista abre o painel (nunca na lista). Na Cakto,
+  // junto vem SE o secret ja foi colado (nunca o secret). Uma vez por painel:
+  // o que veio no cadastro dispensa o pedido.
   useEffect(() => {
-    if (url) return;
+    if (urlInicial && (!assina || typeof temSegredoInicial === "boolean")) return;
     let vivo = true;
-    void chamar<{ url: string }>(`${API}/${checkout.id}/url`).then((r) => {
+    void chamar<{ url: string; temSegredo?: boolean }>(`${API}/${checkout.id}/url`).then((r) => {
       if (!vivo) return;
-      if (r.ok) setUrl(r.url);
-      else setErroUrl(r.erro);
+      if (r.ok) {
+        setUrl(r.url);
+        if (typeof r.temSegredo === "boolean") setTemSegredo(r.temSegredo);
+      } else setErroUrl(r.erro);
     });
     return () => {
       vivo = false;
     };
-  }, [checkout.id, url]);
+  }, [checkout.id, urlInicial, assina, temSegredoInicial]);
 
   // "Ultimo evento recebido": pergunta a cada 5 s por 2 min, so com o painel aberto.
   useEffect(() => {
@@ -167,6 +276,7 @@ function PainelUrl({
   }
 
   const e = estadoDoCheckout(estado, agora, FUSO_RELATORIO_PADRAO);
+  const semSegredo = assina && temSegredo !== true;
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
@@ -191,7 +301,7 @@ function PainelUrl({
       </div>
 
       <ol className="flex flex-col gap-2">
-        {PASSOS_SPHERE.map((p, i) => (
+        {passosDe(checkout.plataforma).map((p, i) => (
           <li key={i} className="flex items-start gap-3 text-dense text-t1">
             <span
               aria-hidden
@@ -204,12 +314,30 @@ function PainelUrl({
         ))}
       </ol>
 
+      {assina ? (
+        <CampoSegredo
+          checkoutId={checkout.id}
+          temSegredo={temSegredo}
+          aoSalvar={() => {
+            setTemSegredo(true);
+            aoMudar();
+          }}
+        />
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface-2 px-3.5 py-3">
         <span className="flex min-w-0 flex-col gap-1" aria-live="polite">
           <StatusBadge tom={e.tom}>{e.texto}</StatusBadge>
           {e.detalhe ? <span className="text-label text-t2">{e.detalhe}</span> : null}
         </span>
-        <Button variant="secondary" size="sm" pending={testando} onClick={testar} disabled={!checkout.ativo}>
+        <Button
+          variant="secondary"
+          size="sm"
+          pending={testando}
+          onClick={testar}
+          disabled={!checkout.ativo || semSegredo}
+          title={semSegredo ? "Salve o secret antes de testar" : undefined}
+        >
           {testando ? null : <SendIcon aria-hidden />}
           Enviar evento de teste
         </Button>
@@ -222,32 +350,49 @@ function PainelUrl({
 // Conectar checkout: plataforma -> nome -> URL
 // ---------------------------------------------------------------------------
 
+const TEXTO_DADOS: Record<IdPlataformaCheckout, string> = {
+  sphere: "Comissão por pedido: entra no Dashboard como Recebido e A receber.",
+  cakto: "Venda própria: entra no Dashboard com faturamento, taxa e líquido.",
+};
+
+const EXEMPLO_NOME: Record<IdPlataformaCheckout, string> = {
+  sphere: "Ex.: Sphere Itália",
+  cakto: "Ex.: Cakto Curso X",
+};
+
 function Adicionar({
   aberto,
   aoMudar,
   aoCriar,
   passoInicial,
+  plataformaInicial,
   voltar,
 }: {
   aberto: boolean;
   aoMudar: (v: boolean) => void;
   aoCriar: () => void;
-  /** "dados" quando a URL ja escolheu a plataforma (?novo=sphere). */
+  /** "dados" quando a URL ja escolheu a plataforma (?novo=cakto). */
   passoInicial: "plataforma" | "dados";
+  plataformaInicial: IdPlataformaCheckout | null;
   /** Veio de "Conectar operação": o Voltar devolve a escolha (so nesta abertura). */
   voltar: string | null;
 }) {
   const id = useId();
   const router = useRouter();
-  const [passo, setPasso] = useState<"plataforma" | "dados" | "url">(passoInicial);
+  const [passo, setPasso] = useState<"plataforma" | "dados" | "url">(plataformaInicial ? passoInicial : "plataforma");
+  const [plataforma, setPlataforma] = useState<IdPlataformaCheckout>(plataformaInicial ?? "cakto");
   const [voltarPara, setVoltarPara] = useState(voltar);
   const [nome, setNome] = useState("");
-  const [moeda, setMoeda] = useState<string>("EUR");
+  const [moeda, setMoeda] = useState<string>(moedaPadraoDe(plataformaInicial ?? "cakto"));
+  const [segredo, setSegredo] = useState("");
   const [fuso, setFuso] = useState(FUSO_RELATORIO_PADRAO);
   const [avancado, setAvancado] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [criado, setCriado] = useState<{ checkout: CheckoutResumo; url: string } | null>(null);
+  const [criado, setCriado] = useState<{ checkout: CheckoutResumo; url: string; temSegredo: boolean | null } | null>(null);
+  const venda = modeloDaPlataforma(plataforma) === "venda";
+  const nomePlataforma = nomeDaPlataforma(plataforma);
+  const curto = nomeCurto(plataforma);
 
   function fechar(v: boolean) {
     aoMudar(v);
@@ -255,7 +400,9 @@ function Adicionar({
       setPasso("plataforma");
       setVoltarPara(null);
       setNome("");
-      setMoeda("EUR");
+      setMoeda(moedaPadraoDe("cakto"));
+      setPlataforma("cakto");
+      setSegredo("");
       setFuso(FUSO_RELATORIO_PADRAO);
       setAvancado(false);
       setErro(null);
@@ -263,23 +410,36 @@ function Adicionar({
     }
   }
 
+  function escolher(p: IdPlataformaCheckout) {
+    setPlataforma(p);
+    setMoeda(moedaPadraoDe(p));
+    setSegredo("");
+    setErro(null);
+    setPasso("dados");
+  }
+
   async function criar() {
     if (!nome.trim()) {
       setErro("Dê um nome ao checkout.");
       return;
     }
+    const s = segredo.trim() ? segredoValido(segredo) : null;
+    if (segredo.trim() && !s) {
+      setErro("Secret inválido: de 8 a 200 caracteres, sem espaço.");
+      return;
+    }
     setErro(null);
     setSalvando(true);
-    const r = await chamar<{ checkout: CheckoutResumo; url: string }>(API, {
+    const r = await chamar<{ checkout: CheckoutResumo; url: string; temSegredo?: boolean }>(API, {
       method: "POST",
-      body: JSON.stringify({ plataforma: "sphere", nome: nome.trim(), moeda_receita: moeda, fuso }),
+      body: JSON.stringify({ plataforma, nome: nome.trim(), moeda_receita: moeda, fuso, ...(s ? { segredo: s } : {}) }),
     });
     setSalvando(false);
     if (!r.ok) {
       setErro(r.erro);
       return;
     }
-    setCriado({ checkout: r.checkout, url: r.url });
+    setCriado({ checkout: r.checkout, url: r.url, temSegredo: typeof r.temSegredo === "boolean" ? r.temSegredo : null });
     setPasso("url");
     aoCriar();
   }
@@ -289,14 +449,14 @@ function Adicionar({
       <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>
-            {passo === "plataforma" ? "Conectar checkout" : passo === "dados" ? "Sphere Affiliates" : "Cole a URL na Sphere"}
+            {passo === "plataforma" ? "Conectar checkout" : passo === "dados" ? nomePlataforma : `Cole a URL na ${curto}`}
           </DialogTitle>
           <DialogDescription>
             {passo === "plataforma"
               ? "Onde o pedido acontece fora da Shopify."
               : passo === "dados"
-                ? "Comissão por pedido: entra no Dashboard como Recebido e A receber."
-                : "Os pedidos aparecem no Dashboard assim que a Sphere mandar."}
+                ? TEXTO_DADOS[plataforma]
+                : `Os pedidos aparecem no Dashboard assim que a ${curto} mandar.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -307,7 +467,7 @@ function Adicionar({
                 key={p.id}
                 type="button"
                 disabled={!p.ativa}
-                onClick={() => setPasso("dados")}
+                onClick={() => p.ativa && escolher(p.id as IdPlataformaCheckout)}
                 className="flex min-h-16 flex-col items-start gap-0.5 rounded-card border border-border bg-surface px-3.5 py-3 text-left hover:border-control-border hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-border disabled:hover:bg-surface"
               >
                 <span className="text-dense font-semibold text-ink">{p.nome}</span>
@@ -326,15 +486,15 @@ function Adicionar({
                 value={nome}
                 maxLength={80}
                 onChange={(ev) => setNome(ev.target.value)}
-                placeholder="Ex.: Sphere Itália"
+                placeholder={EXEMPLO_NOME[plataforma]}
                 aria-invalid={erro ? true : undefined}
                 autoFocus
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Moeda da comissão</Label>
+              <Label>{venda ? "Moeda das vendas" : "Moeda da comissão"}</Label>
               <Select value={moeda} onValueChange={(v) => v && setMoeda(String(v))}>
-                <SelectTrigger aria-label="Moeda da comissão" className="w-40">
+                <SelectTrigger aria-label={venda ? "Moeda das vendas" : "Moeda da comissão"} className="w-40">
                   <SelectValue>{() => moeda}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -345,8 +505,28 @@ function Adicionar({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-label text-t2">A Sphere não diz a moeda da comissão: use a do seu painel lá.</p>
+              <p className="text-label text-t2">
+                {venda
+                  ? "Vale quando a Cakto não manda a moeda da venda."
+                  : "A Sphere não diz a moeda da comissão: use a do seu painel lá."}
+              </p>
             </div>
+            {usaSegredo(plataforma) ? (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor={`${id}-segredo`}>Secret do webhook (opcional)</Label>
+                <Input
+                  id={`${id}-segredo`}
+                  type="password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={segredo}
+                  onChange={(ev) => setSegredo(ev.target.value)}
+                  placeholder="Se já tiver o da Cakto"
+                  className="font-mono text-dense"
+                />
+                <p className="text-label text-t2">A Cakto mostra o secret ao criar o webhook. Dá para colar no próximo passo.</p>
+              </div>
+            ) : null}
             {avancado ? (
               <div className="flex flex-col gap-1.5">
                 <Label>Fuso dos dias</Label>
@@ -377,7 +557,12 @@ function Adicionar({
         ) : null}
 
         {passo === "url" && criado ? (
-          <PainelUrl checkout={criado.checkout} urlInicial={criado.url} aoMudar={aoCriar} />
+          <PainelUrl
+            checkout={criado.checkout}
+            urlInicial={criado.url}
+            temSegredoInicial={criado.temSegredo}
+            aoMudar={aoCriar}
+          />
         ) : null}
 
         <DialogFooter showCloseButton={passo === "plataforma"}>
@@ -405,7 +590,7 @@ function Adicionar({
             <Button
               onClick={() => {
                 toast.success(`${criado.checkout.nome} conectado`, {
-                  description: "Os pedidos entram quando a Sphere mandar o primeiro evento.",
+                  description: `Os pedidos entram quando a ${curto} mandar o primeiro evento.`,
                 });
                 fechar(false);
               }}
@@ -420,16 +605,21 @@ function Adicionar({
 }
 
 // ---------------------------------------------------------------------------
-// Editar: nome, moeda, taxa padrao, fuso, aviso de comissao aprovada
+// Editar: nome, moeda, taxa padrao (comissao), fuso, avisos, secret (Cakto)
 // ---------------------------------------------------------------------------
 
 function Editar({ checkout, aoFechar, aoSalvar }: { checkout: CheckoutResumo; aoFechar: () => void; aoSalvar: () => void }) {
   const id = useId();
+  const venda = modeloDaPlataforma(checkout.plataforma) === "venda";
+  const assina = usaSegredo(checkout.plataforma);
   const [nome, setNome] = useState(checkout.nome);
   const [moeda, setMoeda] = useState(checkout.moeda_receita);
   const [taxa, setTaxa] = useState(String(checkout.taxa_aprovacao_padrao));
   const [fuso, setFuso] = useState(checkout.fuso);
   const [aprovada, setAprovada] = useState(checkout.notificar_aprovada);
+  const [pendente, setPendente] = useState(checkout.notificar_pendente);
+  const [estorno, setEstorno] = useState(checkout.notificar_estorno);
+  const [segredo, setSegredo] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const fusos = FUSOS.includes(checkout.fuso) ? FUSOS : [checkout.fuso, ...FUSOS];
@@ -437,18 +627,18 @@ function Editar({ checkout, aoFechar, aoSalvar }: { checkout: CheckoutResumo; ao
   async function salvar() {
     const t = Number(taxa.replace(",", "."));
     if (!nome.trim()) return setErro("Dê um nome ao checkout.");
-    if (!Number.isFinite(t) || t < 0 || t > 100) return setErro("A taxa vai de 0 a 100%.");
+    if (!venda && (!Number.isFinite(t) || t < 0 || t > 100)) return setErro("A taxa vai de 0 a 100%.");
+    const s = segredo.trim() ? segredoValido(segredo) : null;
+    if (segredo.trim() && !s) return setErro("Secret inválido: de 8 a 200 caracteres, sem espaço.");
     setErro(null);
     setSalvando(true);
     const r = await chamar<{ aviso?: string }>(`${API}/${checkout.id}`, {
       method: "PATCH",
-      body: JSON.stringify({
-        nome: nome.trim(),
-        moeda_receita: moeda,
-        taxa_aprovacao_padrao: t,
-        fuso,
-        notificar_aprovada: aprovada,
-      }),
+      body: JSON.stringify(
+        venda
+          ? { nome: nome.trim(), moeda_receita: moeda, fuso, notificar_pendente: pendente, notificar_estorno: estorno, ...(s ? { segredo: s } : {}) }
+          : { nome: nome.trim(), moeda_receita: moeda, taxa_aprovacao_padrao: t, fuso, notificar_aprovada: aprovada }
+      ),
     });
     setSalvando(false);
     if (!r.ok) return setErro(r.erro);
@@ -457,6 +647,24 @@ function Editar({ checkout, aoFechar, aoSalvar }: { checkout: CheckoutResumo; ao
     aoSalvar();
     aoFechar();
   }
+
+  const seletorMoeda = (
+    <div className="flex flex-col gap-1.5">
+      <Label>{venda ? "Moeda das vendas" : "Moeda da comissão"}</Label>
+      <Select value={moeda} onValueChange={(v) => v && setMoeda(String(v))}>
+        <SelectTrigger aria-label={venda ? "Moeda das vendas" : "Moeda da comissão"} className={venda ? "w-40" : undefined}>
+          <SelectValue>{() => moeda}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {MOEDAS_COMISSAO.map((m) => (
+            <SelectItem key={m} value={m}>
+              {m}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
 
   return (
     <Dialog open onOpenChange={(v) => !v && aoFechar()}>
@@ -470,36 +678,28 @@ function Editar({ checkout, aoFechar, aoSalvar }: { checkout: CheckoutResumo; ao
             <Label htmlFor={`${id}-nome`}>Nome</Label>
             <Input id={`${id}-nome`} value={nome} maxLength={80} onChange={(ev) => setNome(ev.target.value)} />
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-1.5">
-              <Label>Moeda da comissão</Label>
-              <Select value={moeda} onValueChange={(v) => v && setMoeda(String(v))}>
-                <SelectTrigger aria-label="Moeda da comissão">
-                  <SelectValue>{() => moeda}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {MOEDAS_COMISSAO.map((m) => (
-                    <SelectItem key={m} value={m}>
-                      {m}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor={`${id}-taxa`}>Taxa de aprovação padrão (%)</Label>
-              <Input
-                id={`${id}-taxa`}
-                inputMode="decimal"
-                value={taxa}
-                onChange={(ev) => setTaxa(ev.target.value)}
-                aria-describedby={`${id}-taxa-ajuda`}
-              />
-            </div>
-          </div>
-          <p id={`${id}-taxa-ajuda`} className="-mt-2 text-label text-t2">
-            Usada no Previsto até o checkout ter 20 pedidos finalizados.
-          </p>
+          {venda ? (
+            seletorMoeda
+          ) : (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {seletorMoeda}
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor={`${id}-taxa`}>Taxa de aprovação padrão (%)</Label>
+                  <Input
+                    id={`${id}-taxa`}
+                    inputMode="decimal"
+                    value={taxa}
+                    onChange={(ev) => setTaxa(ev.target.value)}
+                    aria-describedby={`${id}-taxa-ajuda`}
+                  />
+                </div>
+              </div>
+              <p id={`${id}-taxa-ajuda`} className="-mt-2 text-label text-t2">
+                Usada no Previsto até o checkout ter 20 pedidos finalizados.
+              </p>
+            </>
+          )}
           <div className="flex flex-col gap-1.5">
             <Label>Fuso dos dias</Label>
             <Select value={fuso} onValueChange={(v) => v && setFuso(String(v))}>
@@ -515,12 +715,39 @@ function Editar({ checkout, aoFechar, aoSalvar }: { checkout: CheckoutResumo; ao
               </SelectContent>
             </Select>
           </div>
-          <Switch
-            rotulo="Avisar no celular quando a comissão for aprovada"
-            descricao="O pedido novo sempre avisa (Notificações → Venda no celular)."
-            checked={aprovada}
-            onCheckedChange={setAprovada}
-          />
+          {assina ? (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={`${id}-segredo`}>Trocar o secret do webhook</Label>
+              <Input
+                id={`${id}-segredo`}
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                value={segredo}
+                onChange={(ev) => setSegredo(ev.target.value)}
+                placeholder="Vazio mantém o atual"
+                className="font-mono text-dense"
+              />
+            </div>
+          ) : null}
+          {venda ? (
+            <>
+              <Switch
+                rotulo="Avisar no celular quando gerar Pix ou boleto"
+                descricao="A venda aprovada sempre avisa (Notificações → Venda no celular)."
+                checked={pendente}
+                onCheckedChange={setPendente}
+              />
+              <Switch rotulo="Avisar reembolso e chargeback" checked={estorno} onCheckedChange={setEstorno} />
+            </>
+          ) : (
+            <Switch
+              rotulo="Avisar no celular quando a comissão for aprovada"
+              descricao="O pedido novo sempre avisa (Notificações → Venda no celular)."
+              checked={aprovada}
+              onCheckedChange={setAprovada}
+            />
+          )}
           {erro ? <p className="text-label text-err">{erro}</p> : null}
         </div>
         <DialogFooter showCloseButton>
@@ -544,6 +771,7 @@ export function CheckoutsTela({
   semMigration,
   agoraMs,
   abrirEm = null,
+  plataformaNovo = null,
   voltar = null,
 }: {
   checkouts: CheckoutResumo[];
@@ -553,6 +781,8 @@ export function CheckoutsTela({
   agoraMs: number;
   /** ?novo= na URL: abre o "Conectar checkout" ao chegar, neste passo. */
   abrirEm?: "plataforma" | "dados" | null;
+  /** ?novo=cakto: a plataforma ja escolhida. */
+  plataformaNovo?: IdPlataformaCheckout | null;
   /** ?de=conectar: o Voltar do primeiro passo devolve /conectar. */
   voltar?: string | null;
 }) {
@@ -621,7 +851,7 @@ export function CheckoutsTela({
       <CabecalhoPlataforma
         titulo="Checkouts"
         estado={geral}
-        dica="Checkout externo é onde o pedido acontece fora da Shopify. Cada um vira uma “loja” no seletor do topo, com Recebido, A receber e lucro."
+        dica="Checkout externo é onde o pedido acontece fora da Shopify. Cada um vira uma “loja” no seletor do topo, com as vendas (ou a comissão) e o lucro."
         acao={
           <Button onClick={() => setAdicionando(true)} disabled={semMigration}>
             <PlusIcon aria-hidden />
@@ -639,7 +869,7 @@ export function CheckoutsTela({
       {checkouts.length === 0 ? (
         <EmptyState
           titulo="Nenhum checkout"
-          descricao="Ligue a Sphere Affiliates para ver a comissão e o lucro no Dashboard."
+          descricao="Ligue a Cakto ou a Sphere Affiliates para ver as vendas e o lucro no Dashboard."
           acao={
             semMigration ? undefined : (
               <Button onClick={() => setAdicionando(true)}>
@@ -663,7 +893,7 @@ export function CheckoutsTela({
                     <span className="truncate text-body font-semibold text-ink">{c.nome}</span>
                     <span className="text-label text-t2">
                       {nomeDaPlataforma(c.plataforma)}
-                      {rotuloAfiliados(contas[c.id])} · comissão em {c.moeda_receita}
+                      {rotuloAfiliados(contas[c.id])} · {textoDaMoeda(c.plataforma, c.moeda_receita)}
                     </span>
                   </span>
                   <span className="flex flex-wrap items-center gap-2">
@@ -756,6 +986,7 @@ export function CheckoutsTela({
         aoMudar={mudarAdicionar}
         aoCriar={atualizar}
         passoInicial={abrirEm === "dados" ? "dados" : "plataforma"}
+        plataformaInicial={pedidoAberto ? plataformaNovo : null}
         voltar={pedidoAberto ? voltar : null}
       />
 
@@ -777,7 +1008,11 @@ export function CheckoutsTela({
         onOpenChange={(v) => !v && setTrocando(null)}
         tom="normal"
         titulo={`Trocar a URL de ${trocando?.nome ?? "checkout"}?`}
-        descricao="A URL antiga para de funcionar na hora e os afiliados ligados a ela ficam livres. Cole a nova na Sphere logo em seguida, senão os eventos se perdem."
+        descricao={
+          trocando && usaSegredo(trocando.plataforma)
+            ? `A URL antiga para de funcionar na hora. Cole a nova no webhook da ${nomeCurto(trocando.plataforma)} logo em seguida, senão os eventos se perdem. O secret continua o mesmo.`
+            : "A URL antiga para de funcionar na hora e os afiliados ligados a ela ficam livres. Cole a nova na Sphere logo em seguida, senão os eventos se perdem."
+        }
         confirmar="Trocar URL"
         onConfirmar={async () => {
           if (!trocando) return;
@@ -790,7 +1025,7 @@ export function CheckoutsTela({
           setTrocando(null);
           setUrlDe(alvo);
           if (r.aviso) toast.warning("URL trocada", { description: r.aviso });
-          else toast.success("URL trocada", { description: "Cole a nova na Sphere." });
+          else toast.success("URL trocada", { description: `Cole a nova na ${nomeCurto(alvo.plataforma)}.` });
           atualizar();
         }}
       />
@@ -799,7 +1034,11 @@ export function CheckoutsTela({
         open={removendo !== null}
         onOpenChange={(v) => !v && setRemovendo(null)}
         titulo={`Remover ${removendo?.nome ?? "checkout"} do xcart?`}
-        descricao="Os pedidos e a comissão dele saem do Dashboard. A conta de anúncio ligada fica sem checkout. Na Sphere, apague o webhook também."
+        descricao={
+          removendo && modeloDaPlataforma(removendo.plataforma) === "venda"
+            ? `Os pedidos e as vendas dele saem do Dashboard. A conta de anúncio ligada fica sem checkout. Na ${nomeCurto(removendo.plataforma)}, apague o webhook também.`
+            : "Os pedidos e a comissão dele saem do Dashboard. A conta de anúncio ligada fica sem checkout. Na Sphere, apague o webhook também."
+        }
         confirmar="Remover checkout"
         onConfirmar={async () => {
           if (!removendo) return;

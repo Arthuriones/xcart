@@ -6,7 +6,14 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 import { gerarSegredo, hashSegredo } from "@/lib/ads/google-ingest";
 import { getPublicAppUrl } from "@/lib/public-url";
 import { ehUuid } from "@/lib/financeiro/tipos";
-import { COLUNAS_CHECKOUT, resumoDoCheckout, urlDoWebhook, type CheckoutExternoRow } from "./tipos";
+import {
+  COLUNAS_CHECKOUT,
+  COLUNAS_CHECKOUT_072,
+  comColunas072,
+  resumoDoCheckout,
+  urlDoWebhook,
+  type CheckoutExternoRow,
+} from "./tipos";
 
 // ============================================================================
 // O que as rotas autenticadas de /api/checkouts dividem. O molde e o de
@@ -33,13 +40,15 @@ export async function usuarioDaSessao(): Promise<User | null> {
   return user;
 }
 
-/** O checkout, lido pela SESSAO (RLS): so o do dono volta. */
+/** O checkout, lido pela SESSAO (RLS): so o do dono volta. Sem a 072, sem os avisos da venda. */
 export async function checkoutDaSessao(id: string): Promise<CheckoutExternoRow | null> {
   if (!ehUuid(id)) return null;
   const supabase = await createClient();
-  const { data, error } = await supabase.from("checkouts_externos").select(COLUNAS_CHECKOUT).eq("id", id).maybeSingle();
+  const { data, error } = await comColunas072(COLUNAS_CHECKOUT_072, COLUNAS_CHECKOUT, (colunas) =>
+    supabase.from("checkouts_externos").select(colunas).eq("id", id).maybeSingle()
+  );
   if (error) throw new Error(error.message);
-  return (data as CheckoutExternoRow | null) ?? null;
+  return (data as unknown as CheckoutExternoRow | null) ?? null;
 }
 
 /** Token novo e o hash dele (a busca do endpoint). */

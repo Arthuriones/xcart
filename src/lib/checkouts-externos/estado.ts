@@ -1,4 +1,5 @@
 import { diaNoFuso } from "@/lib/financeiro/tipos";
+import { niveisDoAnuncio, plataformaDe as plataformaDaOrigem } from "@/lib/tracking/utm";
 import type { EventoNormalizado } from "./plataformas/tipos";
 import type { SituacaoExterna } from "./tipos";
 
@@ -19,7 +20,13 @@ import type { SituacaoExterna } from "./tipos";
 //   5. Qualquer evento cria o pedido com todos os campos: se o pedido.criado
 //      se perdeu, a comissao.aprovada cria o pedido.
 //
-// Puro: testado em tests/checkout-externo-estado.test.ts.
+// Venda (Cakto, 072): as datas da venda (vencimento, reembolso, chargeback,
+// reembolso pedido) seguem a regra das datas de etapa -- a primeira que veio
+// fica, venca o evento ou nao. Grupo, oferta, referencia e UTMs sao da
+// cobranca: o primeiro que trouxe fica. Na Sphere sao todas null.
+//
+// Puro: testado em tests/checkout-externo-estado.test.ts e
+// tests/checkout-externo-cakto.test.ts.
 // ============================================================================
 
 const ORDEM: Record<SituacaoExterna, number> = {
@@ -49,7 +56,57 @@ export interface EstadoPedido {
   pago_em: string | null;
   perdido_em: string | null;
   atualizado_em: string;
+  // --- Venda (072): null na Sphere ---
+  referencia: string | null;
+  taxa: number | null;
+  comissoes: number | null;
+  grupo: string | null;
+  oferta_tipo: string | null;
+  vence_em: string | null;
+  reembolsado_em: string | null;
+  chargeback_em: string | null;
+  reembolso_pedido_em: string | null;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  utm_content: string | null;
+  utm_term: string | null;
+  campanha_id: string | null;
+  conjunto_id: string | null;
+  anuncio_id: string | null;
 }
+
+/** As colunas da venda: a repo so as grava no modelo venda (sem a 072, a Sphere segue gravando). */
+export const CAMPOS_VENDA = [
+  "referencia",
+  "taxa",
+  "comissoes",
+  "grupo",
+  "oferta_tipo",
+  "vence_em",
+  "reembolsado_em",
+  "chargeback_em",
+  "reembolso_pedido_em",
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_content",
+  "utm_term",
+  "campanha_id",
+  "conjunto_id",
+  "anuncio_id",
+] as const satisfies readonly (keyof EstadoPedido)[];
+
+const CAMPOS_UTM = [
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_content",
+  "utm_term",
+  "campanha_id",
+  "conjunto_id",
+  "anuncio_id",
+] as const satisfies readonly (keyof EstadoPedido)[];
 
 /** O dia do pedido no fuso do checkout: o periodo do Dashboard le por ele. */
 export function diaDoPedido(criadoEm: string, fuso: string | null | undefined): string {
@@ -72,8 +129,25 @@ function primeira(a: string | null, b: string | null): string | null {
   return Date.parse(a) <= Date.parse(b) ? a : b;
 }
 
+/** As UTMs e os ids do anuncio, pelas regras de src/lib/tracking/utm.ts. */
+function utmDoEvento(ev: EventoNormalizado) {
+  const utm = ev.rastreio?.utm ?? {};
+  const niveis = niveisDoAnuncio(utm, plataformaDaOrigem(utm, ev.rastreio?.fbc ? { fbc: ev.rastreio.fbc } : null));
+  return {
+    utm_source: utm.source ?? null,
+    utm_medium: utm.medium ?? null,
+    utm_campaign: utm.campaign ?? null,
+    utm_content: utm.content ?? null,
+    utm_term: utm.term ?? null,
+    campanha_id: niveis.campanha,
+    conjunto_id: niveis.conjunto,
+    anuncio_id: niveis.anuncio,
+  };
+}
+
 /** O pedido novo, so com este evento. */
 export function pedidoDoEvento(ev: EventoNormalizado, fuso: string | null | undefined): EstadoPedido {
+  const v = ev.venda;
   return {
     situacao: ev.receita.situacao,
     status_comissao: ev.receita.statusOriginal,
@@ -90,6 +164,27 @@ export function pedidoDoEvento(ev: EventoNormalizado, fuso: string | null | unde
     dia_local: diaDoPedido(ev.pedido.criadoEm, fuso),
     ...marcos(ev.receita.situacao, ev.dataEvento),
     atualizado_em: ev.dataEvento,
+    referencia: v?.referencia ?? null,
+    taxa: v ? v.taxa : null,
+    comissoes: v ? v.comissoes : null,
+    grupo: v?.grupo ?? null,
+    oferta_tipo: v?.ofertaTipo ?? null,
+    vence_em: v?.venceEm ?? null,
+    reembolsado_em: v?.reembolsadoEm ?? null,
+    chargeback_em: v?.chargebackEm ?? null,
+    reembolso_pedido_em: v?.reembolsoPedidoEm ?? null,
+    ...(v
+      ? utmDoEvento(ev)
+      : {
+          utm_source: null,
+          utm_medium: null,
+          utm_campaign: null,
+          utm_content: null,
+          utm_term: null,
+          campanha_id: null,
+          conjunto_id: null,
+          anuncio_id: null,
+        }),
   };
 }
 
@@ -102,6 +197,29 @@ export function eventoVence(atual: Pick<EstadoPedido, "situacao" | "atualizado_e
   if (b < a) return false;
   if (b > a) return true;
   return ORDEM[novo.situacao] >= ORDEM[atual.situacao];
+}
+
+/** Os campos da venda depois do evento: datas pela primeira, o resto pelo primeiro que veio. */
+function vendaMesclada(atual: EstadoPedido, novo: EstadoPedido, venceu: boolean) {
+  const utmAtual = CAMPOS_UTM.some((k) => atual[k] !== null && atual[k] !== undefined);
+  const utm = Object.fromEntries(CAMPOS_UTM.map((k) => [k, utmAtual ? (atual[k] ?? null) : (novo[k] ?? null)])) as Pick<
+    EstadoPedido,
+    (typeof CAMPOS_UTM)[number]
+  >;
+  return {
+    referencia: atual.referencia ?? novo.referencia,
+    // Valor da taxa: o do evento que vence (a aprovacao traz a taxa real);
+    // o velho so completa.
+    taxa: venceu ? (novo.taxa ?? atual.taxa) : (atual.taxa ?? novo.taxa),
+    comissoes: venceu ? (novo.comissoes ?? atual.comissoes) : (atual.comissoes ?? novo.comissoes),
+    grupo: atual.grupo ?? novo.grupo,
+    oferta_tipo: atual.oferta_tipo ?? novo.oferta_tipo,
+    vence_em: atual.vence_em ?? novo.vence_em,
+    reembolsado_em: primeira(atual.reembolsado_em, novo.reembolsado_em),
+    chargeback_em: primeira(atual.chargeback_em, novo.chargeback_em),
+    reembolso_pedido_em: primeira(atual.reembolso_pedido_em, novo.reembolso_pedido_em),
+    ...utm,
+  };
 }
 
 /**
@@ -146,6 +264,7 @@ export function aplicarEvento(
       };
   const pedido: EstadoPedido = {
     ...base,
+    ...vendaMesclada(atual, novo, venceu),
     aprovado_em: primeira(atual.aprovado_em, m.aprovado_em),
     pago_em: primeira(atual.pago_em, m.pago_em),
     // So o perdido do estado atual: comissao revertida e depois paga de novo

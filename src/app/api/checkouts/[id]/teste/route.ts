@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { safeFetch } from "@/lib/net/safe-url";
 import { plataformaDe } from "@/lib/checkouts-externos/plataformas";
+import { segredoDaPlataforma } from "@/lib/checkouts-externos/repo-supabase";
 import {
   NAO_ENCONTRADO,
   checkoutDaSessao,
@@ -20,6 +21,9 @@ export const maxDuration = 30;
 // checkout o corpo de exemplo da plataforma, marcado como teste. Passa pelo
 // caminho inteiro de um evento real (host, middleware, token, adaptador), mas
 // o endpoint reconhece o teste e nunca grava pedido: os numeros nao mudam.
+// Na Cakto o corpo vai assinado com o secret salvo (X-Cakto-Signature) e
+// passa pelo mesmo autenticar. Quem prova que o secret colado e o da Cakto e
+// o "Testar" do painel dela (o teste dela tambem nunca vira pedido).
 //
 // safeFetch, nao fetch: a URL e a nossa (host do app), mas a regra do repo e
 // mecanica (tests/sem-fetch-cru.test.ts).
@@ -34,7 +38,8 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
   const admin = createAdminClient();
   let url: string;
-  let corpoTeste: unknown;
+  let corpoTeste: string;
+  let assinatura: Record<string, string> = {};
   try {
     const checkout = await checkoutDaSessao(id);
     if (!checkout) return NAO_ENCONTRADO();
@@ -43,7 +48,15 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const token = await tokenDoCheckout(admin, checkout.id);
     if (!plataforma || !token) return json(409, { ok: false, erro: "Este checkout está sem URL. Use “Trocar URL”." });
     url = urlPublica(token);
-    corpoTeste = plataforma.exemplo(new Date());
+    const agora = new Date();
+    // Plataforma que assina (Cakto): o teste vai assinado com o secret salvo,
+    // pelo mesmo autenticar de uma entrega real.
+    const segredo = plataforma.autenticar ? await segredoDaPlataforma(admin, checkout.id) : null;
+    if (plataforma.autenticar && !segredo) {
+      return json(409, { ok: false, erro: `Cole o secret do webhook da ${plataforma.nome} antes de testar.` });
+    }
+    corpoTeste = JSON.stringify(plataforma.exemplo(agora, segredo));
+    if (segredo && plataforma.assinar) assinatura = plataforma.assinar(corpoTeste, segredo, agora);
   } catch (e) {
     return json(500, { ok: false, erro: `Falha ao ler o checkout: ${e instanceof Error ? e.message : e}` });
   }
@@ -53,8 +66,8 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   try {
     const r = await safeFetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "User-Agent": "xcart-teste" },
-      body: JSON.stringify(corpoTeste),
+      headers: { "Content-Type": "application/json", "User-Agent": "xcart-teste", ...assinatura },
+      body: corpoTeste,
       timeoutMs: TIMEOUT_MS,
     });
     status = r.status;

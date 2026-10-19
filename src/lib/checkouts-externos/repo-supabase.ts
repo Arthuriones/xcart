@@ -3,23 +3,30 @@ import { timingSafeEqual } from "node:crypto";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { hashSegredo } from "@/lib/ads/google-ingest";
 import { paraNumero } from "@/lib/financeiro/tipos";
-import type { EstadoPedido } from "./estado";
+import { CAMPOS_VENDA, type EstadoPedido } from "./estado";
 import type { CheckoutParaReceber, PedidoGravado, RepositorioCheckout } from "./receber";
-import { RE_TOKEN, type SituacaoExterna } from "./tipos";
+import { COLUNAS_VENDA, RE_TOKEN, colunaAusente, comColunas072, type SituacaoExterna } from "./tipos";
 
 // ============================================================================
-// O RepositorioCheckout de verdade: service role, tabelas da 069. So o
-// endpoint publico e as rotas /api/checkouts usam (a sessao nao escreve nessas
-// tabelas -- os grants da 069 tiram insert/update/delete dela).
+// O RepositorioCheckout de verdade: service role, tabelas da 069 (e as
+// colunas da venda da 072). So o endpoint publico e as rotas /api/checkouts
+// usam (a sessao nao escreve nessas tabelas -- os grants da 069 tiram
+// insert/update/delete dela).
+//
+// Com e sem a 072: a leitura tenta as colunas novas e cai nas da 069 (42703);
+// a escrita so leva as colunas da venda no modelo venda -- a Sphere grava o
+// que gravava antes, com ou sem a migration.
 // ============================================================================
 
 type Admin = ReturnType<typeof createAdminClient>;
 
 const COLUNAS_RECEBER =
   "id, user_id, plataforma, nome, ativo, fuso, moeda_receita, notificar_aprovada, ultimo_evento_em, ultimo_evento_teste";
+const COLUNAS_RECEBER_072 = `${COLUNAS_RECEBER}, notificar_pendente, notificar_estorno`;
 
 const COLUNAS_ESTADO =
   "situacao, status_comissao, status_pedido, metodo_pagamento, produto, pais, programa, moeda, valor, receita, moeda_receita, criado_em, dia_local, aprovado_em, pago_em, perdido_em, atualizado_em, versao";
+const COLUNAS_ESTADO_072 = `${COLUNAS_ESTADO}, ${COLUNAS_VENDA}`;
 
 function iso(v: unknown): string | null {
   if (v === null || v === undefined || v === "") return null;
@@ -27,7 +34,15 @@ function iso(v: unknown): string | null {
   return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
 }
 
-/** A linha do banco no formato do estado (numeric chega como string). */
+function textoOuNull(v: unknown): string | null {
+  return v === null || v === undefined ? null : String(v);
+}
+
+function numeroOuNull(v: unknown): number | null {
+  return v === null || v === undefined || v === "" ? null : paraNumero(v);
+}
+
+/** A linha do banco no formato do estado (numeric chega como string; sem a 072, as colunas da venda faltam). */
 function estadoDaLinha(l: Record<string, unknown>): PedidoGravado {
   return {
     situacao: l.situacao as SituacaoExterna,
@@ -47,6 +62,23 @@ function estadoDaLinha(l: Record<string, unknown>): PedidoGravado {
     pago_em: iso(l.pago_em),
     perdido_em: iso(l.perdido_em),
     atualizado_em: iso(l.atualizado_em) ?? String(l.atualizado_em),
+    referencia: textoOuNull(l.referencia),
+    taxa: numeroOuNull(l.taxa),
+    comissoes: numeroOuNull(l.comissoes),
+    grupo: textoOuNull(l.grupo),
+    oferta_tipo: textoOuNull(l.oferta_tipo),
+    vence_em: iso(l.vence_em),
+    reembolsado_em: iso(l.reembolsado_em),
+    chargeback_em: iso(l.chargeback_em),
+    reembolso_pedido_em: iso(l.reembolso_pedido_em),
+    utm_source: textoOuNull(l.utm_source),
+    utm_medium: textoOuNull(l.utm_medium),
+    utm_campaign: textoOuNull(l.utm_campaign),
+    utm_content: textoOuNull(l.utm_content),
+    utm_term: textoOuNull(l.utm_term),
+    campanha_id: textoOuNull(l.campanha_id),
+    conjunto_id: textoOuNull(l.conjunto_id),
+    anuncio_id: textoOuNull(l.anuncio_id),
     versao: Number(l.versao) || 0,
   };
 }
@@ -70,17 +102,35 @@ export async function checkoutDoToken(admin: Admin, token: string): Promise<Chec
   const b = Buffer.from(token, "utf8");
   if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
 
-  const { data: ck, error: erroCk } = await admin
-    .from("checkouts_externos")
-    .select(COLUNAS_RECEBER)
-    .eq("id", (seg as { checkout_id: string }).checkout_id)
-    .maybeSingle();
+  const checkoutId = (seg as { checkout_id: string }).checkout_id;
+  const { data: ck, error: erroCk } = await comColunas072(COLUNAS_RECEBER_072, COLUNAS_RECEBER, (colunas) =>
+    admin.from("checkouts_externos").select(colunas).eq("id", checkoutId).maybeSingle()
+  );
   if (erroCk) throw new Error(`falha ao ler o checkout: ${erroCk.message}`);
-  return (ck as CheckoutParaReceber | null) ?? null;
+  return (ck as unknown as CheckoutParaReceber | null) ?? null;
 }
 
-function linhaDoPedido(p: EstadoPedido) {
-  return {
+/**
+ * O secret do webhook da plataforma (Cakto), ou null (nao cadastrado, ou o
+ * banco sem a 072). So o service role: a tabela nao tem policy. Erro de
+ * banco LANCA.
+ */
+export async function segredoDaPlataforma(admin: Admin, checkoutId: string): Promise<string | null> {
+  const { data, error } = await admin
+    .from("checkout_externo_segredos")
+    .select("segredo_plataforma")
+    .eq("checkout_id", checkoutId)
+    .maybeSingle();
+  if (error) {
+    if (colunaAusente(error)) return null;
+    throw new Error(`falha ao ler o secret: ${error.message}`);
+  }
+  const s = (data as { segredo_plataforma?: string | null } | null)?.segredo_plataforma;
+  return s ? String(s) : null;
+}
+
+function linhaDoPedido(p: EstadoPedido, venda: boolean) {
+  const linha: Record<string, unknown> = {
     situacao: p.situacao,
     status_comissao: p.status_comissao,
     status_pedido: p.status_pedido,
@@ -99,6 +149,9 @@ function linhaDoPedido(p: EstadoPedido) {
     perdido_em: p.perdido_em,
     atualizado_em: p.atualizado_em,
   };
+  // Venda: as colunas da 072. Comissao: so as da 069 (grava sem a migration).
+  if (venda) for (const k of CAMPOS_VENDA) linha[k] = p[k];
+  return linha;
 }
 
 export function repositorioSupabase(admin: Admin): RepositorioCheckout {
@@ -118,21 +171,18 @@ export function repositorioSupabase(admin: Admin): RepositorioCheckout {
         .eq("evento", x.evento);
     },
     async lerPedido(checkoutId, pedidoId) {
-      const { data, error } = await admin
-        .from("pedidos_externos")
-        .select(COLUNAS_ESTADO)
-        .eq("checkout_id", checkoutId)
-        .eq("pedido_id", pedidoId)
-        .maybeSingle();
+      const { data, error } = await comColunas072(COLUNAS_ESTADO_072, COLUNAS_ESTADO, (colunas) =>
+        admin.from("pedidos_externos").select(colunas).eq("checkout_id", checkoutId).eq("pedido_id", pedidoId).maybeSingle()
+      );
       if (error) throw new Error(`falha ao ler o pedido: ${error.message}`);
-      return data ? estadoDaLinha(data as Record<string, unknown>) : null;
+      return data ? estadoDaLinha(data as unknown as Record<string, unknown>) : null;
     },
     async inserirPedido(x) {
       const { error } = await admin.from("pedidos_externos").insert({
         checkout_id: x.checkout_id,
         user_id: x.user_id,
         pedido_id: x.pedido_id,
-        ...linhaDoPedido(x.pedido),
+        ...linhaDoPedido(x.pedido, x.venda === true),
         versao: 0,
       });
       if (error?.code === "23505") return "existe";
@@ -142,7 +192,7 @@ export function repositorioSupabase(admin: Admin): RepositorioCheckout {
     async atualizarPedido(x) {
       const { data, error } = await admin
         .from("pedidos_externos")
-        .update({ ...linhaDoPedido(x.pedido), versao: x.versao + 1 })
+        .update({ ...linhaDoPedido(x.pedido, x.venda === true), versao: x.versao + 1 })
         .eq("checkout_id", x.checkout_id)
         .eq("pedido_id", x.pedido_id)
         .eq("versao", x.versao)

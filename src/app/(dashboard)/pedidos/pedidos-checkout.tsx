@@ -10,26 +10,54 @@ import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatarDinheiro } from "@/lib/financeiro/tipos";
 import type { PedidoExternoTela, ResumoPedidosExternos } from "@/lib/checkouts-externos/pedidos";
+import { vendaPerdida, vendaRecebida } from "@/lib/checkouts-externos/venda";
 import { montarCsv } from "../financeiro/lucro-dados";
 import { POR_PAGINA, textoCsv } from "./filtros";
 
 // ============================================================================
-// Pedidos de checkout externo (Sphere): data, pedido, produto, pais, valor do
-// pedido, comissao e situacao. Os numeros chegam prontos do servidor
+// Pedidos de checkout externo. Os numeros chegam prontos do servidor
 // (src/lib/checkouts-externos/pedidos.ts); aqui so busca, filtro, pagina e CSV.
+//
+//   comissao (Sphere): data, pedido, produto, pais, valor do pedido,
+//     comissao e situacao -- como sempre foi.
+//   venda (Cakto): metodo, valor, taxa, liquido, situacao e campanha/anuncio,
+//     tudo na moeda do relatorio.
+//   misto (os dois no filtro): as colunas da venda; na linha da Sphere o
+//     liquido e a comissao.
 // ============================================================================
+
+export type ModeloDaTela = "comissao" | "venda" | "misto";
 
 type Filtro = "todos" | "pendente" | "recebido" | "perdido";
 
-const FILTROS: { id: Filtro; rotulo: string }[] = [
-  { id: "todos", rotulo: "Todos" },
-  { id: "recebido", rotulo: "Aprovadas e pagas" },
-  { id: "pendente", rotulo: "Pendentes" },
-  { id: "perdido", rotulo: "Expiradas e revertidas" },
-];
+const FILTROS: Record<ModeloDaTela, { id: Filtro; rotulo: string }[]> = {
+  comissao: [
+    { id: "todos", rotulo: "Todos" },
+    { id: "recebido", rotulo: "Aprovadas e pagas" },
+    { id: "pendente", rotulo: "Pendentes" },
+    { id: "perdido", rotulo: "Expiradas e revertidas" },
+  ],
+  venda: [
+    { id: "todos", rotulo: "Todos" },
+    { id: "recebido", rotulo: "Pagas" },
+    { id: "pendente", rotulo: "Aguardando" },
+    { id: "perdido", rotulo: "Perdidas" },
+  ],
+  misto: [
+    { id: "todos", rotulo: "Todos" },
+    { id: "recebido", rotulo: "Pagas e aprovadas" },
+    { id: "pendente", rotulo: "Pendentes" },
+    { id: "perdido", rotulo: "Perdidas" },
+  ],
+};
 
 function passa(p: PedidoExternoTela, f: Filtro): boolean {
   if (f === "todos") return true;
+  if (p.estado) {
+    if (f === "recebido") return vendaRecebida(p.estado);
+    if (f === "perdido") return vendaPerdida(p.estado);
+    return p.estado === "aguardando";
+  }
   if (f === "pendente") return p.situacao === "pendente";
   if (f === "recebido") return p.situacao === "aprovado" || p.situacao === "pago";
   return p.situacao === "expirado" || p.situacao === "revertido";
@@ -38,10 +66,29 @@ function passa(p: PedidoExternoTela, f: Filtro): boolean {
 function casaBusca(p: PedidoExternoTela, busca: string): boolean {
   const q = busca.trim().toLowerCase().replace(/^#/, "");
   if (!q) return true;
-  return `${p.pedido} ${p.produto ?? ""} ${p.pais ?? ""} ${p.checkout}`.toLowerCase().includes(q);
+  return `${p.pedido} ${p.produto ?? ""} ${p.pais ?? ""} ${p.checkout} ${p.campanha ?? ""} ${p.anuncio ?? ""}`
+    .toLowerCase()
+    .includes(q);
 }
 
 const CABECALHO = ["Pedido", "Data", "Checkout", "Produto", "País", "Valor do pedido", "Moeda do pedido", "Comissão", "Situação"];
+const CABECALHO_VENDA = [
+  "Pedido",
+  "Data",
+  "Checkout",
+  "Produto",
+  "Oferta",
+  "Método",
+  "Valor",
+  "Taxa",
+  "Comissões",
+  "Líquido",
+  "Situação",
+  "Campanha",
+  "Anúncio",
+];
+
+const redondo = (v: number | null) => (v === null ? null : Math.round(v * 100) / 100);
 
 export function PedidosCheckout({
   linhas,
@@ -51,6 +98,7 @@ export function PedidosCheckout({
   contextoCsv,
   arquivoCsv,
   abas,
+  modelo = "comissao",
 }: {
   linhas: PedidoExternoTela[];
   resumo: ResumoPedidosExternos;
@@ -61,15 +109,20 @@ export function PedidosCheckout({
   arquivoCsv: string;
   /** "Lojas | Checkouts" quando o usuario tem os dois (page.tsx). */
   abas?: ReactNode;
+  /** Sphere (comissao), Cakto (venda) ou os dois. */
+  modelo?: ModeloDaTela;
 }) {
   const [filtro, setFiltro] = useState<Filtro>("todos");
   const [busca, setBusca] = useState("");
   const [pagina, setPagina] = useState(0);
   const dinheiro = (v: number | null) => (v === null ? "—" : formatarDinheiro(v, moeda, 2));
+  const venda = modelo !== "comissao";
+  const filtros = FILTROS[modelo];
+  const rotuloReceita = modelo === "venda" ? "Líquido" : modelo === "misto" ? "Líquido ou comissão" : "Comissão";
 
   const contagem = useMemo(() => {
     const c = {} as Record<Filtro, number>;
-    for (const f of FILTROS) c[f.id] = linhas.filter((p) => passa(p, f.id)).length;
+    for (const f of FILTROS.comissao) c[f.id] = linhas.filter((p) => passa(p, f.id)).length;
     return c;
   }, [linhas]);
   const lista = useMemo(() => linhas.filter((p) => passa(p, filtro) && casaBusca(p, busca)), [linhas, filtro, busca]);
@@ -79,21 +132,41 @@ export function PedidosCheckout({
   const filtrado = filtro !== "todos" || busca.trim() !== "";
 
   function exportar() {
-    const csv = montarCsv(
-      contextoCsv.map((c) => textoCsv(c) ?? ""),
-      CABECALHO,
-      lista.map((p) => [
-        textoCsv(p.pedido),
-        p.criadoEm.slice(0, 10),
-        textoCsv(p.checkout),
-        textoCsv(p.produto),
-        p.pais,
-        p.valor,
-        p.moedaPedido,
-        p.comissao === null ? null : Math.round(p.comissao * 100) / 100,
-        p.rotulo,
-      ])
-    );
+    const csv = venda
+      ? montarCsv(
+          contextoCsv.map((c) => textoCsv(c) ?? ""),
+          CABECALHO_VENDA,
+          lista.map((p) => [
+            textoCsv(p.pedido),
+            p.criadoEm.slice(0, 10),
+            textoCsv(p.checkout),
+            textoCsv(p.produto),
+            p.oferta,
+            p.metodo,
+            redondo(p.valorRelatorio),
+            redondo(p.taxa),
+            redondo(p.comissoes),
+            redondo(p.comissao),
+            p.rotulo,
+            textoCsv(p.campanha),
+            textoCsv(p.anuncio),
+          ])
+        )
+      : montarCsv(
+          contextoCsv.map((c) => textoCsv(c) ?? ""),
+          CABECALHO,
+          lista.map((p) => [
+            textoCsv(p.pedido),
+            p.criadoEm.slice(0, 10),
+            textoCsv(p.checkout),
+            textoCsv(p.produto),
+            p.pais,
+            p.valor,
+            p.moedaPedido,
+            p.comissao === null ? null : Math.round(p.comissao * 100) / 100,
+            p.rotulo,
+          ])
+        );
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -113,33 +186,77 @@ export function PedidosCheckout({
     .filter(Boolean)
     .join(" · ");
 
-  const kpis: { rotulo: string; valor: string; icone: ReactNode; detalhe?: string }[] = [
-    { rotulo: "Pedidos", valor: new Intl.NumberFormat("pt-BR").format(resumo.pedidos), icone: <Receipt /> },
-    { rotulo: "Recebido", valor: dinheiro(resumo.recebido), icone: <HandCoins />, detalhe: aviso || "Comissão aprovada e paga" },
-    {
-      rotulo: "A receber",
-      valor: dinheiro(resumo.aReceber),
-      icone: <Hourglass />,
-      detalhe: `${resumo.pendentes} ${resumo.pendentes === 1 ? "pendente" : "pendentes"}`,
-    },
-    {
-      rotulo: "Perdido",
-      valor: dinheiro(resumo.perdido),
-      icone: <Undo2 />,
-      detalhe: `${resumo.perdidos} ${resumo.perdidos === 1 ? "expirado ou revertido" : "expirados ou revertidos"}`,
-    },
-  ];
+  const kpis: { rotulo: string; valor: string; icone: ReactNode; detalhe?: string }[] = venda
+    ? [
+        { rotulo: "Pedidos", valor: new Intl.NumberFormat("pt-BR").format(resumo.pedidos), icone: <Receipt /> },
+        {
+          rotulo: "Recebido",
+          valor: dinheiro(resumo.recebido),
+          icone: <HandCoins />,
+          detalhe:
+            aviso ||
+            (modelo === "venda"
+              ? `Faturamento ${dinheiro(resumo.faturamento)} · taxas ${dinheiro(resumo.taxas)}`
+              : "Líquido das vendas pagas e comissão aprovada"),
+        },
+        {
+          rotulo: "A receber",
+          valor: dinheiro(resumo.aReceber),
+          icone: <Hourglass />,
+          detalhe: `${resumo.pendentes} ${resumo.pendentes === 1 ? "pendente" : "pendentes"}`,
+        },
+        {
+          rotulo: "Perdido",
+          valor: dinheiro(resumo.perdido),
+          icone: <Undo2 />,
+          detalhe: `${resumo.perdidos} ${resumo.perdidos === 1 ? "vencido, recusado ou estornado" : "vencidos, recusados ou estornados"}`,
+        },
+      ]
+    : [
+        { rotulo: "Pedidos", valor: new Intl.NumberFormat("pt-BR").format(resumo.pedidos), icone: <Receipt /> },
+        { rotulo: "Recebido", valor: dinheiro(resumo.recebido), icone: <HandCoins />, detalhe: aviso || "Comissão aprovada e paga" },
+        {
+          rotulo: "A receber",
+          valor: dinheiro(resumo.aReceber),
+          icone: <Hourglass />,
+          detalhe: `${resumo.pendentes} ${resumo.pendentes === 1 ? "pendente" : "pendentes"}`,
+        },
+        {
+          rotulo: "Perdido",
+          valor: dinheiro(resumo.perdido),
+          icone: <Undo2 />,
+          detalhe: `${resumo.perdidos} ${resumo.perdidos === 1 ? "expirado ou revertido" : "expirados ou revertidos"}`,
+        },
+      ];
 
-  const colunas: [string, "left" | "right"][] = [
-    ["Pedido", "left"],
-    ["Data", "left"],
-    ...(mostrarCheckout ? ([["Checkout", "left"]] as [string, "left"][]) : []),
-    ["Produto", "left"],
-    ["País", "left"],
-    ["Valor do pedido", "right"],
-    ["Comissão", "right"],
-    ["Situação", "left"],
-  ];
+  const colunaCheckout = mostrarCheckout ? ([["Checkout", "left"]] as [string, "left"][]) : [];
+  const colunas: [string, "left" | "right"][] = venda
+    ? [
+        ["Pedido", "left"],
+        ["Data", "left"],
+        ...colunaCheckout,
+        ["Produto", "left"],
+        ["Método", "left"],
+        ["Valor", "right"],
+        ["Taxa", "right"],
+        [rotuloReceita, "right"],
+        ["Situação", "left"],
+        ["Campanha", "left"],
+      ]
+    : [
+        ["Pedido", "left"],
+        ["Data", "left"],
+        ...colunaCheckout,
+        ["Produto", "left"],
+        ["País", "left"],
+        ["Valor do pedido", "right"],
+        ["Comissão", "right"],
+        ["Situação", "left"],
+      ];
+
+  /** Valor da venda na moeda do relatorio; a linha da Sphere (misto) fica na moeda dela. */
+  const valorDaLinha = (p: PedidoExternoTela) =>
+    p.modelo === "venda" ? dinheiro(p.valorRelatorio) : formatarDinheiro(p.valor, p.moedaPedido, 2);
 
   return (
     <div data-largura="total" className="flex flex-col gap-3.5">
@@ -190,7 +307,7 @@ export function PedidosCheckout({
                 setPagina(0);
               }}
               aria-label="Buscar pedido ou produto"
-              placeholder="Buscar #pedido ou produto"
+              placeholder={venda ? "Buscar #pedido, produto ou campanha" : "Buscar #pedido ou produto"}
               className="pl-8 text-dense"
             />
           </div>
@@ -199,7 +316,7 @@ export function PedidosCheckout({
             aria-label="Filtrar"
             className="flex max-w-full gap-0.5 overflow-x-auto rounded-card border border-border bg-surface-2 p-0.75 [scrollbar-width:none]"
           >
-            {FILTROS.map((f) => {
+            {filtros.map((f) => {
               const on = filtro === f.id;
               return (
                 <button
@@ -269,22 +386,50 @@ export function PedidosCheckout({
                   </tr>
                 </thead>
                 <tbody>
-                  {visiveis.map((p) => (
-                    <tr key={p.chave} className="[&>td]:border-b [&>td]:border-border-subtle [&>td]:px-3.5">
-                      <td className="h-13 whitespace-nowrap font-semibold text-ink">{p.pedido}</td>
-                      <td className="num whitespace-nowrap text-t1">{p.quando}</td>
-                      {mostrarCheckout && <td className="whitespace-nowrap">{p.checkout}</td>}
-                      <td className="max-w-60 truncate text-t1" title={p.produto ?? undefined}>
-                        {p.produto ?? "—"}
-                      </td>
-                      <td className="whitespace-nowrap text-t1">{p.pais ?? "—"}</td>
-                      <td className="num whitespace-nowrap text-right text-t1">{formatarDinheiro(p.valor, p.moedaPedido, 2)}</td>
-                      <td className="num whitespace-nowrap text-right font-semibold">{dinheiro(p.comissao)}</td>
-                      <td className="whitespace-nowrap">
-                        <StatusBadge tom={p.tom}>{p.rotulo}</StatusBadge>
-                      </td>
-                    </tr>
-                  ))}
+                  {venda
+                    ? visiveis.map((p) => (
+                        <tr key={p.chave} className="[&>td]:border-b [&>td]:border-border-subtle [&>td]:px-3.5">
+                          <td className="h-13 whitespace-nowrap font-semibold text-ink">{p.pedido}</td>
+                          <td className="num whitespace-nowrap text-t1">{p.quando}</td>
+                          {mostrarCheckout && <td className="whitespace-nowrap">{p.checkout}</td>}
+                          <td className="max-w-60 text-t1" title={p.produto ?? undefined}>
+                            <span className="block truncate">{p.produto ?? "—"}</span>
+                            {p.oferta ? <span className="block text-label text-t2">{p.oferta}</span> : null}
+                          </td>
+                          <td className="whitespace-nowrap text-t1">{p.metodo ?? "—"}</td>
+                          <td className="num whitespace-nowrap text-right text-t1">{valorDaLinha(p)}</td>
+                          <td className="num whitespace-nowrap text-right text-t1">
+                            {dinheiro(p.taxa)}
+                            {p.comissoes ? (
+                              <span className="block text-label text-t2">+ {dinheiro(p.comissoes)} comissões</span>
+                            ) : null}
+                          </td>
+                          <td className="num whitespace-nowrap text-right font-semibold">{dinheiro(p.comissao)}</td>
+                          <td className="whitespace-nowrap">
+                            <StatusBadge tom={p.tom}>{p.rotulo}</StatusBadge>
+                          </td>
+                          <td className="max-w-50 text-t1" title={[p.campanha, p.anuncio].filter(Boolean).join(" · ") || undefined}>
+                            <span className="block truncate">{p.campanha ?? "—"}</span>
+                            {p.anuncio ? <span className="block truncate text-label text-t2">{p.anuncio}</span> : null}
+                          </td>
+                        </tr>
+                      ))
+                    : visiveis.map((p) => (
+                        <tr key={p.chave} className="[&>td]:border-b [&>td]:border-border-subtle [&>td]:px-3.5">
+                          <td className="h-13 whitespace-nowrap font-semibold text-ink">{p.pedido}</td>
+                          <td className="num whitespace-nowrap text-t1">{p.quando}</td>
+                          {mostrarCheckout && <td className="whitespace-nowrap">{p.checkout}</td>}
+                          <td className="max-w-60 truncate text-t1" title={p.produto ?? undefined}>
+                            {p.produto ?? "—"}
+                          </td>
+                          <td className="whitespace-nowrap text-t1">{p.pais ?? "—"}</td>
+                          <td className="num whitespace-nowrap text-right text-t1">{formatarDinheiro(p.valor, p.moedaPedido, 2)}</td>
+                          <td className="num whitespace-nowrap text-right font-semibold">{dinheiro(p.comissao)}</td>
+                          <td className="whitespace-nowrap">
+                            <StatusBadge tom={p.tom}>{p.rotulo}</StatusBadge>
+                          </td>
+                        </tr>
+                      ))}
                 </tbody>
               </table>
             </div>
@@ -299,13 +444,15 @@ export function PedidosCheckout({
                         {mostrarCheckout ? ` · ${p.checkout}` : ""}
                       </strong>
                       <span className="truncate text-label text-t2">
-                        {p.quando} · {[p.produto, p.pais].filter(Boolean).join(" · ") || "—"}
+                        {p.quando} ·{" "}
+                        {(p.modelo === "venda" ? [p.produto, p.metodo, p.campanha] : [p.produto, p.pais]).filter(Boolean).join(" · ") ||
+                          "—"}
                       </span>
                     </span>
                     <StatusBadge tom={p.tom}>{p.rotulo}</StatusBadge>
                   </span>
                   <span className="num flex w-full justify-between text-dense">
-                    <span className="text-t1">{formatarDinheiro(p.valor, p.moedaPedido, 2)}</span>
+                    <span className="text-t1">{valorDaLinha(p)}</span>
                     <strong className="text-ink">{dinheiro(p.comissao)}</strong>
                   </span>
                 </li>
@@ -315,7 +462,7 @@ export function PedidosCheckout({
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle px-4 py-3 text-label text-t2">
               <span className="num">
                 {atual * POR_PAGINA + 1}–{atual * POR_PAGINA + visiveis.length} de {lista.length}{" "}
-                {lista.length === 1 ? "pedido" : "pedidos"} · comissão em {moeda}
+                {lista.length === 1 ? "pedido" : "pedidos"} · {venda ? "valores" : "comissão"} em {moeda}
               </span>
               <span className="flex gap-1.5">
                 <Button

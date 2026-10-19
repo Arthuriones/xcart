@@ -255,7 +255,7 @@ function passoLoja(foto: FotoGuia, b: Base): PassoGuia {
     id: "loja" as const,
     titulo: "Conecte sua operação",
     texto:
-      "Uma loja Shopify ou um checkout externo, como a Sphere. O xcart lê os pedidos e calcula o lucro de cada venda.",
+      "Uma loja Shopify ou um checkout externo, como a Cakto ou a Sphere. O xcart lê os pedidos e calcula o lucro de cada venda.",
     href: ROTA_CONECTAR_OPERACAO,
     cta: "Conectar operação",
   };

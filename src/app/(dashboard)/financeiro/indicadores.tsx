@@ -65,6 +65,11 @@ export interface BaseIndicadores {
    * e de aprovacao, de entrega ou a media das duas. Ausente = so loja.
    */
   composicao?: ComposicaoCod;
+  /**
+   * Checkout de venda (Cakto) no filtro: "so" ele, ou "junto" de loja e
+   * comissao. Os textos de Faturamento, Taxas e Pedidos dizem o que entra.
+   */
+  venda?: "so" | "junto";
 }
 
 const SO_LOJAS: ComposicaoCod = { origem: "lojas", taxa: "entrega" };
@@ -186,11 +191,37 @@ function CartaoKpi({ c, destaque }: { c: Cartao; destaque?: "ok" | "err" }) {
 
 const custosDe = (t: Totais) => t.cmv + t.taxas + t.gasto;
 
+/** O Faturamento com a venda da Cakto: o que ainda esta em Pix ou boleto aparece embaixo. */
+function extraFaturamento(b: BaseIndicadores): Partial<Cartao> | undefined {
+  if (!b.venda) return undefined;
+  const v = b.atual.venda;
+  return {
+    definicao:
+      b.venda === "so"
+        ? "Valor das vendas pagas no checkout, sem a taxa que o comprador paga à plataforma. Reembolso e chargeback saem do dia da venda; Pix e boleto só entram quando pagos."
+        : "Pedidos pagos das lojas e as vendas pagas do checkout. Pix e boleto do checkout só entram quando pagos.",
+    detalhe: v.aguardando > 0 ? `${dinheiro(v.aReceber, b.moeda)} a receber · ${inteiro(v.aguardando)} aguardando` : undefined,
+  };
+}
+
+/** As Taxas com a venda da Cakto: a taxa da plataforma e as comissoes de afiliado e coprodutor. */
+function extraTaxas(b: BaseIndicadores): Partial<Cartao> | undefined {
+  if (!b.venda) return undefined;
+  const v = b.atual.venda;
+  return {
+    definicao:
+      b.venda === "so"
+        ? "Taxa da plataforma de checkout mais as comissões de afiliado e coprodutor das vendas pagas: o que não fica com você."
+        : "Taxa de pagamento dos pedidos (Custos e taxas) e, no checkout, a taxa da plataforma mais as comissões de afiliado e coprodutor.",
+    detalhe: `Checkout ${dinheiro(v.taxa, b.moeda)}${v.comissoes > 0.005 ? ` · comissões ${dinheiro(v.comissoes, b.moeda)}` : ""}`,
+  };
+}
+
 export function IndicadoresTopo(b: BaseIndicadores) {
   const lucro = daMetrica(b, "lucro", CircleDollarSign, (t) => t.lucro);
   const custos = custosDe(b.atual);
   const cartoes: Cartao[] = [
-    daMetrica(b, "receita", CircleDollarSign, (t) => t.receita),
+    daMetrica(b, "receita", CircleDollarSign, (t) => t.receita, extraFaturamento(b)),
     {
       id: "custos",
       rotulo: "Custos totais",
@@ -210,6 +241,7 @@ export function IndicadoresTopo(b: BaseIndicadores) {
       variacao: variacaoDe(b, b.atual.taxas, b.anterior.taxas),
       bom: "neutro",
       definicao: "Taxa de pagamento dos pedidos: o percentual mais o valor fixo configurados em Custos e taxas.",
+      ...extraTaxas(b),
     },
     daMetrica(b, "margem", Percent, (t) => t.margem),
   ];
@@ -228,6 +260,17 @@ function seloCobertura(cobertura: number | null): Cartao["selo"] {
   if (cobertura === null) return undefined;
   if (cobertura >= 0.9995) return { texto: "Todos com custo", tom: "ok" };
   return { texto: `${porcento(1 - cobertura)} das vendas sem custo`, tom: "warn" };
+}
+
+/** "2 reembolsos · 1 chargeback · 3 vencidos": o que saiu da venda no periodo. */
+function detalheVendas(t: Totais): string | undefined {
+  const v = t.venda;
+  const partes = [
+    v.reembolsos > 0 ? `${inteiro(v.reembolsos)} ${v.reembolsos === 1 ? "reembolso" : "reembolsos"}` : null,
+    v.chargebacks > 0 ? `${inteiro(v.chargebacks)} ${v.chargebacks === 1 ? "chargeback" : "chargebacks"}` : null,
+    v.vencidas > 0 ? `${inteiro(v.vencidas)} ${v.vencidas === 1 ? "Pix/boleto vencido" : "Pix/boleto vencidos"}` : null,
+  ].filter(Boolean);
+  return partes.length ? partes.join(" · ") : undefined;
 }
 
 export function IndicadoresKpi(b: BaseIndicadores) {
@@ -251,8 +294,16 @@ export function IndicadoresKpi(b: BaseIndicadores) {
     },
     daMetrica(b, "custo", Package, (x) => x.cmv),
     daMetrica(b, "pedidos", Receipt, (x) => x.pedidos, {
-      detalhe: t.reenvios > 0 ? `+ ${inteiro(t.reenvios)} ${t.reenvios === 1 ? "reenvio" : "reenvios"}` : undefined,
+      detalhe:
+        (b.venda ? detalheVendas(t) : undefined) ??
+        (t.reenvios > 0 ? `+ ${inteiro(t.reenvios)} ${t.reenvios === 1 ? "reenvio" : "reenvios"}` : undefined),
       selo: seloCobertura(t.coberturaCusto),
+      ...(b.venda
+        ? {
+            definicao:
+              "Pedidos pagos. No checkout conta a cobrança: order bump e upsell entram no pedido principal. Reembolso e chargeback saem.",
+          }
+        : {}),
     }),
     // Ultimo da grade de 4: fecha a 2a linha em vez de deixar um buraco.
     daMetrica(b, "ticket", Ticket, (x) => x.ticket, { classe: "lg:col-span-2" }),

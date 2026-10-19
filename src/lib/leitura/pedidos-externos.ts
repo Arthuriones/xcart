@@ -17,7 +17,13 @@ import {
   type PedidoExternoTela,
   type ResumoPedidosExternos,
 } from "@/lib/checkouts-externos/pedidos";
-import { COLUNAS_PEDIDO_EXTERNO, semMigration069, type PedidoExternoRow } from "@/lib/checkouts-externos/tipos";
+import {
+  COLUNAS_PEDIDO_EXTERNO,
+  COLUNAS_PEDIDO_EXTERNO_072,
+  colunaAusente,
+  semMigration069,
+  type PedidoExternoRow,
+} from "@/lib/checkouts-externos/tipos";
 
 // ============================================================================
 // Leitura da tela Pedidos para checkout externo (069). So banco, pela sessao
@@ -44,7 +50,7 @@ export async function lerPedidosExternos(): Promise<DadosPedidosExternos> {
   const ids = new Set(checkoutIds);
   const checkouts: CheckoutDaTela[] = (await lerCheckoutsDoUsuario())
     .filter((c) => ids.has(c.id))
-    .map((c) => ({ id: c.id, nome: c.nome, fuso: c.fuso, moeda_receita: c.moeda_receita }));
+    .map((c) => ({ id: c.id, nome: c.nome, fuso: c.fuso, moeda_receita: c.moeda_receita, modelo: c.modelo }));
   if (checkouts.length === 0) return { vazio: true };
 
   // A mesma regra do Dashboard (base-lucro.ts): o fuso do checkout so quando
@@ -53,11 +59,14 @@ export async function lerPedidosExternos(): Promise<DadosPedidosExternos> {
   const intervalo = intervaloDoPeriodo(filtro.periodo, diaNoFuso(new Date(), fuso)).atual;
   const supabase = await createClient();
 
-  const pedidos: PedidoExternoRow[] = [];
+  // Com as colunas da venda (072); sem a migration, as da 069 -- o 42703 NAO
+  // pode cair no semMigration069 (esconderia os pedidos da Sphere).
+  let colunas = COLUNAS_PEDIDO_EXTERNO_072;
+  let pedidos: PedidoExternoRow[] = [];
   for (let de = 0; ; de += PAGINA) {
     const { data, error } = await supabase
       .from("pedidos_externos")
-      .select(COLUNAS_PEDIDO_EXTERNO)
+      .select(colunas)
       .in("checkout_id", checkouts.map((c) => c.id))
       .gte("dia_local", intervalo.desde)
       .lte("dia_local", intervalo.ate)
@@ -66,6 +75,12 @@ export async function lerPedidosExternos(): Promise<DadosPedidosExternos> {
       .range(de, de + PAGINA - 1)
       .overrideTypes<PedidoExternoRow[], { merge: false }>();
     if (error) {
+      if (colunaAusente(error) && colunas !== COLUNAS_PEDIDO_EXTERNO) {
+        colunas = COLUNAS_PEDIDO_EXTERNO;
+        pedidos = [];
+        de = -PAGINA;
+        continue;
+      }
       if (semMigration069(error)) break;
       throw new Error(`Falha ao ler os pedidos dos checkouts: ${error.message}`);
     }

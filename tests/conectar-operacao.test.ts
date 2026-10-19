@@ -67,11 +67,12 @@ describe("opcoes do Conectar operação", () => {
     expect(porId.checkout.texto).toBe(RESUMO_CHECKOUT_EXTERNO);
   });
 
-  it("hoje: Sphere ativa; Yampi, CartPanda e Kiwify em breve", () => {
+  it("hoje: Cakto e Sphere ativas; Yampi, CartPanda e Kiwify em breve", () => {
     const ativos = porId.checkout.destinos.filter((d) => d.href).map((d) => d.id);
     const emBreve = porId.checkout.destinos.filter((d) => !d.href).map((d) => d.id);
-    expect(ativos).toEqual(["sphere"]);
+    expect(ativos).toEqual(["cakto", "sphere"]);
     expect(emBreve).toEqual(["yampi", "cartpanda", "kiwify"]);
+    expect(passoDoNovo("cakto")).toBe("dados");
   });
 });
 

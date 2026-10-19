@@ -31,6 +31,7 @@ import {
   type ProductCostRow,
 } from "@/lib/financeiro/tipos";
 import type { PedidoExternoRow } from "@/lib/checkouts-externos/tipos";
+import { chaveDaCobranca, estadoDaVenda, vendaRecebida } from "@/lib/checkouts-externos/venda";
 
 // ============================================================================
 // Motor do Lucro. Puro: recebe as linhas do banco, devolve os totais.
@@ -54,6 +55,15 @@ import type { PedidoExternoRow } from "@/lib/checkouts-externos/tipos";
 // aprovacao), sem custo de produto nem taxa. Entra na visao contra entrega:
 // os mesmos campos, a mesma conta de Previsto e Lucro previsto. Loja Shopify
 // nao muda -- tests/financeiro-checkout-externo.test.ts trava.
+//
+// Checkout de VENDA (Cakto, 072, src/lib/checkouts-externos/venda.ts): conta
+// como uma loja online, fora dos cartoes de contra entrega. Pago = receita
+// (o faturamento) e taxas (a taxa da plataforma + as comissoes de afiliado e
+// coprodutor: o que nao fica com o lojista), entao lucro = liquido - anuncio.
+// Pix/boleto aguardando so contam em Totais.venda (A receber); vencido,
+// recusado, reembolso e chargeback nao entram na receita, com contador
+// proprio. O pedido e a COBRANCA: order bump e upsell nao dobram Pedidos.
+// tests/checkout-externo-cakto.test.ts trava.
 // ============================================================================
 
 /**
@@ -93,6 +103,37 @@ export interface Totais {
   cod: TotaisCod;
   /** Checkout externo (comissao). Tudo zero sem checkout no filtro. */
   externo: TotaisExterno;
+  /** Checkout de venda (Cakto). Tudo zero sem ele no filtro. */
+  venda: TotaisVenda;
+}
+
+/** As vendas de checkout de venda propria (Cakto) no periodo, ja na moeda do relatorio. */
+export interface TotaisVenda {
+  /** Cobrancas pagas: order bump e upsell entram na do principal. */
+  vendas: number;
+  /** Itens pagos (principal, order bump, upsell). */
+  itens: number;
+  /** Faturamento dos pagos (= o que entra em `receita`). */
+  faturamento: number;
+  /** Taxa da plataforma dos pagos. */
+  taxa: number;
+  /** Comissoes de afiliado e coprodutor dos pagos. taxa + comissoes = o que entra em `taxas`. */
+  comissoes: number;
+  /** O liquido dos pagos: o que fica com o lojista. */
+  liquido: number;
+  /** Cobrancas aguardando pagamento (Pix, boleto) que ainda nao venceram. */
+  aguardando: number;
+  /** O liquido delas. Nao entra no lucro. */
+  aReceber: number;
+  /** Cobrancas que passaram do vencimento sem pagar. */
+  vencidas: number;
+  recusadas: number;
+  reembolsos: number;
+  chargebacks: number;
+  /** Faturamento que saiu por reembolso e chargeback. */
+  estornado: number;
+  /** Pagas com reembolso pedido: ainda contam, mas podem sair. */
+  emRisco: number;
 }
 
 /** Os pedidos de checkout externo no periodo (src/lib/checkouts-externos). */
@@ -199,11 +240,30 @@ export type LojaFinanceira = LojaDoSeletor & {
   taxaPadraoPct?: number | null;
 };
 
-/** O que o calculo le de um pedido de checkout externo (pedidos_externos). */
+/**
+ * O que o calculo le de um pedido de checkout externo (pedidos_externos). Os
+ * campos opcionais sao da venda (072): sem eles (Sphere, ou sem a migration)
+ * a conta e a de comissao.
+ */
 export type PedidoExternoFin = Pick<
   PedidoExternoRow,
   "checkout_id" | "situacao" | "moeda" | "valor" | "receita" | "moeda_receita" | "dia_local"
->;
+> &
+  Partial<
+    Pick<
+      PedidoExternoRow,
+      | "pedido_id"
+      | "criado_em"
+      | "metodo_pagamento"
+      | "grupo"
+      | "taxa"
+      | "comissoes"
+      | "vence_em"
+      | "reembolsado_em"
+      | "chargeback_em"
+      | "reembolso_pedido_em"
+    >
+  >;
 
 export interface EntradaFinanceiro {
   lojas: LojaFinanceira[];
@@ -225,6 +285,11 @@ export interface EntradaFinanceiro {
   amostraEntrega?: Record<string, AmostraEntrega>;
   /** Pedidos de checkout externo do periodo (069). Ausente = nenhum. */
   externos?: PedidoExternoFin[];
+  /**
+   * Agora (ms): o Pix/boleto da venda que passou do vencimento conta como
+   * perdido. Ausente = o fim do dia `hoje`.
+   */
+  agoraMs?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -330,6 +395,21 @@ interface Acumulador {
   extPerdidos: number;
   extPerdido: number;
   extValorPedidos: number;
+  // Checkout de venda
+  vndVendas: number;
+  vndItens: number;
+  vndFaturamento: number;
+  vndTaxa: number;
+  vndComissoes: number;
+  vndLiquido: number;
+  vndAguardando: number;
+  vndAReceber: number;
+  vndVencidas: number;
+  vndRecusadas: number;
+  vndReembolsos: number;
+  vndChargebacks: number;
+  vndEstornado: number;
+  vndEmRisco: number;
 }
 
 function acumuladorVazio(): Acumulador {
@@ -366,6 +446,20 @@ function acumuladorVazio(): Acumulador {
     extPerdidos: 0,
     extPerdido: 0,
     extValorPedidos: 0,
+    vndVendas: 0,
+    vndItens: 0,
+    vndFaturamento: 0,
+    vndTaxa: 0,
+    vndComissoes: 0,
+    vndLiquido: 0,
+    vndAguardando: 0,
+    vndAReceber: 0,
+    vndVencidas: 0,
+    vndRecusadas: 0,
+    vndReembolsos: 0,
+    vndChargebacks: 0,
+    vndEstornado: 0,
+    vndEmRisco: 0,
   };
 }
 
@@ -430,6 +524,22 @@ function totaisDe(a: Acumulador): Totais {
       perdidos: a.extPerdidos,
       perdido: a.extPerdido,
       valorPedidos: a.extValorPedidos,
+    },
+    venda: {
+      vendas: a.vndVendas,
+      itens: a.vndItens,
+      faturamento: a.vndFaturamento,
+      taxa: a.vndTaxa,
+      comissoes: a.vndComissoes,
+      liquido: a.vndLiquido,
+      aguardando: a.vndAguardando,
+      aReceber: a.vndAReceber,
+      vencidas: a.vndVencidas,
+      recusadas: a.vndRecusadas,
+      reembolsos: a.vndReembolsos,
+      chargebacks: a.vndChargebacks,
+      estornado: a.vndEstornado,
+      emRisco: a.vndEmRisco,
     },
   };
 }
@@ -661,12 +771,76 @@ export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
     });
   }
 
-  // --- Checkout externo (comissao) ----------------------------------------
+  // --- Checkout externo (comissao e venda) --------------------------------
+  // Venda: a cobranca (grupo) conta uma vez em cada contador, o item que
+  // chegar primeiro. A chave nao leva o periodo: o order bump nasce no mesmo
+  // instante do principal.
+  const agoraMs = e.agoraMs ?? (Date.parse(`${e.hoje}T23:59:59Z`) || Date.now());
+  const cobrancas = new Map<string, Set<string>>();
+  const primeiraVez = (contador: string, chave: string): number => {
+    let s = cobrancas.get(contador);
+    if (!s) cobrancas.set(contador, (s = new Set()));
+    if (s.has(chave)) return 0;
+    s.add(chave);
+    return 1;
+  };
+
   for (const x of e.externos ?? []) {
     const ck = lojaPorId.get(x.checkout_id);
     if (!ck || ck.tipo !== "checkout") continue;
     const dia = String(x.dia_local).slice(0, 10);
     if (!dentro(dia, iAtual) && !dentro(dia, iAnterior)) continue;
+
+    if (ck.modelo === "venda") {
+      // Faturamento, taxa, comissoes e liquido: todos na moeda da venda.
+      const moedaVenda = String(x.moeda_receita || x.moeda || ck.moeda || "BRL").toUpperCase();
+      const fator = converter(1, moedaVenda, e.moeda, dia);
+      if (!fator) {
+        moedasSemCotacao.add(moedaVenda);
+        continue;
+      }
+      if (fator.aproximado) cambioAproximado = true;
+      const k = fator.valor;
+      const estado = estadoDaVenda(x, agoraMs);
+      const chave = chaveDaCobranca(x);
+      const faturamento = paraNumero(x.valor);
+      const liquido = paraNumero(x.receita);
+      if (vendaRecebida(estado)) {
+        // O que nao fica com o lojista sai como taxa: lucro = liquido - anuncio,
+        // mesmo quando a taxa que veio nao fecha a conta.
+        const receita = Math.max(faturamento, liquido);
+        const custos = receita - liquido;
+        const taxa = x.taxa === null || x.taxa === undefined ? custos : Math.min(paraNumero(x.taxa), custos);
+        const nova = primeiraVez("vendas", chave);
+        lancar(ck.id, dia, {
+          pedidos: nova,
+          gerados: nova,
+          receita: receita * k,
+          taxas: custos * k,
+          vndVendas: nova,
+          vndItens: 1,
+          vndFaturamento: receita * k,
+          vndTaxa: taxa * k,
+          vndComissoes: (custos - taxa) * k,
+          vndLiquido: liquido * k,
+          vndEmRisco: estado === "em_risco" ? primeiraVez("emRisco", chave) : 0,
+        });
+      } else if (estado === "aguardando") {
+        lancar(ck.id, dia, { vndAguardando: primeiraVez("aguardando", chave), vndAReceber: liquido * k });
+      } else if (estado === "vencida") {
+        lancar(ck.id, dia, { vndVencidas: primeiraVez("vencidas", chave) });
+      } else if (estado === "recusada") {
+        lancar(ck.id, dia, { vndRecusadas: primeiraVez("recusadas", chave) });
+      } else {
+        // Reembolso e chargeback: a receita sai do dia da venda.
+        lancar(ck.id, dia, {
+          vndReembolsos: estado === "reembolsada" ? primeiraVez("reembolsos", chave) : 0,
+          vndChargebacks: estado === "chargeback" ? primeiraVez("chargebacks", chave) : 0,
+          vndEstornado: faturamento * k,
+        });
+      }
+      continue;
+    }
 
     // A comissao vem na moeda do checkout (a Sphere nao diz qual e).
     const moedaComissao = String(x.moeda_receita || ck.moeda || "EUR").toUpperCase();
@@ -770,9 +944,10 @@ export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
     parcial: dia === e.hoje,
   }));
 
-  // Checkout externo e sempre "a receber + previsto": entra aqui tambem.
+  // Checkout de comissao e sempre "a receber + previsto": entra aqui tambem.
+  // O de venda (Cakto) nao: Pix e boleto nao sao contra entrega.
   const lojasContraEntrega = e.lojas
-    .filter((l) => l.tipo === "checkout" || configPorLoja.get(l.id)?.contra_entrega === true)
+    .filter((l) => (l.tipo === "checkout" && l.modelo !== "venda") || configPorLoja.get(l.id)?.contra_entrega === true)
     .map((l) => l.id);
 
   return {

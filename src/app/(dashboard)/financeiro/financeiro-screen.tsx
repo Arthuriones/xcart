@@ -84,12 +84,18 @@ export function FinanceiroScreen({
   // Loja marcada "Contra entrega" em Custos e taxas (ou, com todas as lojas,
   // alguma delas): Recebido, A receber e Previsto no lugar do Faturamento.
   const contraEntrega = r.lojasContraEntrega.length > 0;
-  // Checkout externo (comissao) entra nestes cartoes sempre. Os textos seguem
-  // o que o filtro soma: so checkout ("Taxa de aprovação", sem custo de
-  // produto), so loja, ou os dois -- com "Todas", loja online + checkout ja
-  // abre estes cartoes, e a taxa ai e so a de aprovacao.
-  const composicao = composicaoCod(dados.lojaIds, dados.checkoutIds, r.lojasContraEntrega);
+  // Checkout externo de comissao (Sphere) entra nestes cartoes sempre. Os
+  // textos seguem o que o filtro soma: so checkout ("Taxa de aprovação", sem
+  // custo de produto), so loja, ou os dois -- com "Todas", loja online +
+  // checkout ja abre estes cartoes, e a taxa ai e so a de aprovacao. O de
+  // VENDA (Cakto) conta como loja online: nunca abre estes cartoes.
+  const noFiltro = new Set(dados.checkoutIds);
+  const vendaIds = dados.checkouts.filter((c) => c.modelo === "venda" && noFiltro.has(c.id)).map((c) => c.id);
+  const comissaoIds = dados.checkoutIds.filter((id) => !vendaIds.includes(id));
+  const composicao = composicaoCod([...dados.lojaIds, ...vendaIds], comissaoIds, r.lojasContraEntrega);
   const codShopify = r.lojasContraEntrega.some((id) => dados.lojaIds.includes(id));
+  const venda: BaseIndicadores["venda"] =
+    vendaIds.length === 0 ? undefined : dados.lojaIds.length === 0 && comissaoIds.length === 0 ? "so" : "junto";
   const comparando = comparacao === "anterior";
   const semBase = comparando && !temMovimento(r.anterior);
   const base: BaseIndicadores = {
@@ -103,6 +109,7 @@ export function FinanceiroScreen({
       : montarDicas(r.avisos, r.atual.coberturaCusto),
     entrega: r.entrega,
     composicao,
+    venda,
   };
 
   return (
@@ -116,7 +123,7 @@ export function FinanceiroScreen({
             contexto={contexto}
             rotuloReceita={contraEntrega ? "Recebido" : undefined}
           />
-          <Cascata atual={r.atual} moeda={moeda} contraEntrega={codShopify} />
+          <Cascata atual={r.atual} moeda={moeda} contraEntrega={codShopify} venda={Boolean(venda)} />
         </div>
         {contraEntrega ? <IndicadoresKpiCod {...base} /> : <IndicadoresKpi {...base} />}
         {mostrarLoja && <PorLoja lojas={r.porLoja} moeda={moeda} />}
@@ -139,7 +146,7 @@ export function FinanceiroScreen({
         erroExtras={erroExtras}
       />
 
-      <ComoCalculamos contraEntrega={codShopify} checkout={dados.checkoutIds.length > 0} />
+      <ComoCalculamos contraEntrega={codShopify} checkout={comissaoIds.length > 0} venda={vendaIds.length > 0} />
     </div>
   );
 }

@@ -1,5 +1,10 @@
 import { GATILHOS_SPHERE, type SituacaoExterna } from "../tipos";
+import { ehObjeto, lerData, lerMoeda, lerPais, lerPedidoId, lerValor, texto } from "./comum";
 import type { EventoNormalizado, Leitura, PlataformaCheckout } from "./tipos";
+
+// Os leitores sairam para comum.ts (a Cakto usa os mesmos); os testes da
+// Sphere seguem importando daqui.
+export { DIAS_PARA_FRENTE, DIAS_PARA_TRAS, VALOR_MAXIMO, lerData, lerValor } from "./comum";
 
 // ============================================================================
 // Sphere Affiliates: webhook do afiliado (doc da aba "Webhooks" do painel).
@@ -26,14 +31,6 @@ import type { EventoNormalizado, Leitura, PlataformaCheckout } from "./tipos";
 /** afiliado.codigo do "Enviar evento de teste": nunca vira pedido. */
 export const CODIGO_TESTE = "xcart-teste";
 
-/** Teto de valor aceito (pedido e comissao). */
-export const VALOR_MAXIMO = 100_000;
-/** Datas aceitas em volta de agora. */
-export const DIAS_PARA_TRAS = 400;
-export const DIAS_PARA_FRENTE = 1;
-
-const DIA_MS = 86_400_000;
-
 const STATUS: Record<string, SituacaoExterna> = {
   pending: "pendente",
   approved: "aprovado",
@@ -56,72 +53,6 @@ const POR_EVENTO: Record<string, SituacaoExterna> = {
   "comissao.paga": "pago",
   "pedido.expirado": "expirado",
 };
-
-type Obj = Record<string, unknown>;
-
-function ehObjeto(v: unknown): v is Obj {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-
-function texto(v: unknown, max: number): string | null {
-  if (typeof v !== "string" && typeof v !== "number") return null;
-  const t = String(v).replace(/\s+/g, " ").trim();
-  if (!t) return null;
-  return t.length > max ? t.slice(0, max) : t;
-}
-
-/**
- * "89.90", "89,90", 89.9 -> 89.9. Vazio/ausente -> 0. Lixo, negativo ou acima
- * do teto -> null (o chamador recusa).
- */
-export function lerValor(v: unknown): number | null {
-  if (v === null || v === undefined || v === "") return 0;
-  let n: number;
-  if (typeof v === "number") {
-    n = v;
-  } else if (typeof v === "string") {
-    let s = v.trim();
-    // So virgula: decimal europeu ("89,90"). Ponto e virgula juntos: recusa.
-    if (s.includes(",") && !s.includes(".")) s = s.replace(",", ".");
-    if (!/^\d{1,9}(\.\d{1,6})?$/.test(s)) return null;
-    n = Number(s);
-  } else {
-    return null;
-  }
-  if (!Number.isFinite(n) || n < 0 || n > VALOR_MAXIMO) return null;
-  return Math.round(n * 100) / 100;
-}
-
-/** ISO 8601 com data e hora, dentro da janela aceita. Devolve em UTC. */
-export function lerData(v: unknown, agora: Date): string | null {
-  if (typeof v !== "string") return null;
-  const s = v.trim();
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) return null;
-  const ms = Date.parse(s);
-  if (!Number.isFinite(ms)) return null;
-  const agoraMs = agora.getTime();
-  if (ms < agoraMs - DIAS_PARA_TRAS * DIA_MS || ms > agoraMs + DIAS_PARA_FRENTE * DIA_MS) return null;
-  return new Date(ms).toISOString();
-}
-
-function lerPedidoId(v: unknown): string | null {
-  if (typeof v === "number") return Number.isSafeInteger(v) && v >= 0 ? String(v) : null;
-  if (typeof v !== "string") return null;
-  const s = v.trim();
-  return /^[A-Za-z0-9_.:#-]{1,64}$/.test(s) ? s : null;
-}
-
-function lerMoeda(v: unknown): string | null {
-  if (typeof v !== "string") return null;
-  const m = v.trim().toUpperCase();
-  return /^[A-Z]{3}$/.test(m) ? m : null;
-}
-
-function lerPais(v: unknown): string | null {
-  if (typeof v !== "string") return null;
-  const p = v.trim().toUpperCase();
-  return /^[A-Z]{2}$/.test(p) ? p : null;
-}
 
 export function lerSphere(corpo: unknown, agora: Date): Leitura {
   if (!ehObjeto(corpo)) return { ok: false, erro: "corpo nao e um objeto JSON" };
@@ -217,7 +148,10 @@ export const sphere: PlataformaCheckout = {
   nome: "Sphere Affiliates",
   modelo: "comissao",
   autenticacao: "token_na_url",
+  // A Sphere tenta de novo (1 vez) quando o xcart responde 503.
+  reenvio: "status",
   gatilhos: GATILHOS_SPHERE,
+  eventoDeVenda: "pedido.criado",
   ler: lerSphere,
   exemplo: exemploSphere,
 };

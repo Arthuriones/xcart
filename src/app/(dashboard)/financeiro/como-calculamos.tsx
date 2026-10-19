@@ -56,15 +56,25 @@ const CHECKOUT_EXTERNO = {
     "No checkout externo (Sphere) a receita é a sua comissão, não o valor do pedido. Recebido é a comissão aprovada ou paga. A receber é a comissão pendente. Perdido é a de pedido expirado ou revertido. Previsto soma o recebido e a comissão pendente vezes a taxa de aprovação do checkout (a padrão, até ele ter 20 pedidos finalizados; pendente há mais de 21 dias conta como perdido). Lucro é a comissão menos os anúncios ligados ao checkout: não há custo de produto nem taxa.",
 };
 
+const CHECKOUT_VENDA = {
+  titulo: "Checkout de venda (Cakto)",
+  texto:
+    "Na Cakto a venda é sua. Faturamento é o valor da venda paga, sem a taxa que o comprador paga à Cakto. Taxas são a taxa da Cakto mais as comissões de afiliado e coprodutor; o que sobra é o seu líquido, e o lucro é o líquido menos os anúncios ligados ao checkout. Pix e boleto gerados ficam em A receber até vencer; vencido não conta. Reembolso e chargeback saem do dia da venda. Order bump e upsell entram no pedido principal.",
+};
+
 export function ComoCalculamos({
   contraEntrega = false,
   checkout = false,
+  venda = false,
 }: {
   contraEntrega?: boolean;
-  /** Algum checkout externo no filtro. */
+  /** Algum checkout de comissao (Sphere) no filtro. */
   checkout?: boolean;
+  /** Algum checkout de venda (Cakto) no filtro. */
+  venda?: boolean;
 }) {
   const extras = [
+    ...(venda ? [CHECKOUT_VENDA] : []),
     ...(checkout ? [CHECKOUT_EXTERNO] : []),
     ...(contraEntrega ? [CONTRA_ENTREGA] : []),
   ];
