@@ -14,6 +14,9 @@
 //   - os nomes de produto de Custos, que saem de demonstracao_catalogo;
 //   - o coletor publico (api/tracking/collect): evento para ela e recusado.
 //
+// E com "Todas" no topo (filtro-global.ts) ela fica fora de `lojaIds`: os
+// numeros de Todas sao os da operacao de verdade. So conta escolhida.
+//
 // NADA DAQUI VAI PARA A TELA. A marca e so do banco.
 //
 // A coluna so existe depois da 074: toda leitura dela pede a coluna e, se o

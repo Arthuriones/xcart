@@ -44,6 +44,7 @@ import {
   diaDaSemana,
   instanteLocal,
   segundoDoDia,
+  semanaBfcm,
   sha256,
   somarDia,
   uuid,
@@ -479,7 +480,8 @@ function eventosDaSessao(r: Sorteio, s: Sessao, ate: "vi" | "atc" | "ic" | "pi",
   const saida: LinhaEvento[] = [];
   const produto = POR_SKU.get(s.skus[0])!;
   const pagina = paginaDoProduto(produto);
-  const nVi = r.peso([[1, 45], [2, 30], [3, 17], [4, 8]] as const);
+  // A maioria das visitas de anuncio ve um produto so (media ~1,3).
+  const nVi = r.peso([[1, 72], [2, 25], [3, 3]] as const);
   // Distribui do inicio da sessao ate pouco antes do fim.
   const passos = nVi + (ate === "vi" ? 0 : ate === "atc" ? 1 : ate === "ic" ? 2 : 3);
   const duracao = Math.max(60_000, fimMs - s.inicioMs);
@@ -512,6 +514,13 @@ function hostDeOrigem(p: Pick<PedidoPlano, "origem">): string | null {
   if (o.tipo === "pinterest") return "https://www.pinterest.com/";
   return null;
 }
+
+/**
+ * Sessoes sem compra por compra do dia, pelo ponto em que pararam. A
+ * referencia e a de uma loja de anuncio que vende bem: ~3,5% das sessoes
+ * compram, 10-14% poem no carrinho, e 75-85% dos cliques do Meta viram sessao.
+ */
+export const SESSOES_SEM_COMPRA = { vi: 24, atc: 2, ic: 0.6, pi: 0.4 } as const;
 
 /**
  * O funil do dia (ver produto, carrinho, checkout, pagamento) na fila do
@@ -547,15 +556,17 @@ export function funilDoDia(d: DiaPlano, agoraMs: number): LinhaEvento[] {
     }
   }
 
-  // As sessoes que nao compraram: so produto, ate o carrinho, ate o checkout, ate o pagamento.
+  // As sessoes que nao compraram: so produto, ate o carrinho, ate o checkout,
+  // ate o pagamento. Por compra: ~27 sessoes sem compra -- conversao de ~3,5%
+  // das sessoes, carrinho em ~14% delas, metade dos checkouts vira compra.
   const r = new Sorteio(`funil-dia:${d.dia}`);
   const n = vendas.length;
   const ruido = () => r.entre(0.9, 1.1);
   const grupos: ["vi" | "atc" | "ic" | "pi", number][] = [
-    ["vi", Math.round(n * 3.6 * ruido())],
-    ["atc", Math.round(n * 1.75 * ruido())],
-    ["ic", Math.round(n * 0.5 * ruido())],
-    ["pi", Math.round(n * 0.35 * ruido())],
+    ["vi", Math.round(n * SESSOES_SEM_COMPRA.vi * ruido())],
+    ["atc", Math.round(n * SESSOES_SEM_COMPRA.atc * ruido())],
+    ["ic", Math.round(n * SESSOES_SEM_COMPRA.ic * ruido())],
+    ["pi", Math.round(n * SESSOES_SEM_COMPRA.pi * ruido())],
   ];
   const metas = campanhasDoDia(d.dia, "meta");
   for (const [ate, quantas] of grupos) {
@@ -563,7 +574,7 @@ export function funilDoDia(d: DiaPlano, agoraMs: number): LinhaEvento[] {
       const rs = new Sorteio(`sessao:${d.dia}:${ate}:${i}`);
       const inicioMs = instanteLocal(d.dia, segundoDoDia(rs));
       const produto = rs.peso(CATALOGO.filter((c) => c.principal > 0).map((c) => [c, c.principal] as const));
-      const de = rs.peso([["meta", 70], ["google", 10], ["direto", 15], ["outra", 5]] as const);
+      const de = rs.peso([["meta", 64], ["google", 11], ["direto", 18], ["outra", 7]] as const);
       let chegada = paginaDoProduto(produto);
       let fbc: string | null = null;
       let origemHost: string | null = null;
@@ -636,8 +647,10 @@ export function gastoDoDia(d: DiaPlano, total: number, fracao: number, agoraMs: 
   const gastoAteAgora = total * fracao;
   const meta = arred(gastoAteAgora * d.meta.fatiaMeta);
   const google = arred(gastoAteAgora - meta);
-  // Sexta o leilao do Meta e mais caro; o dia ruim do Meta (EVENTOS), mais ainda.
-  const leilao = (diaDaSemana(d.dia) === 5 ? 1.04 : 1) * (d.dia === "2026-08-12" ? 1.25 : 1);
+  // Sexta o leilao do Meta e mais caro; o dia ruim do Meta (EVENTOS) e a
+  // semana da Black Friday, mais ainda.
+  const leilao =
+    (diaDaSemana(d.dia) === 5 ? 1.04 : 1) * (d.dia === "2026-08-12" ? 1.25 : 1) * (semanaBfcm(d.dia) ? 1.35 : 1);
   const ligados = d.pedidos.filter((p) => p.tipo === "venda" && p.criadoMs <= agoraMs);
 
   const campanhas: GastoCampanha[] = [];
@@ -891,7 +904,8 @@ export function granularDeHoje(
   for (const conta of [CONTA_META, CONTA_GOOGLE]) {
     const plataforma = conta === CONTA_META ? "meta" : "google";
     const daConta: Numeros[] = [];
-    for (const c of CAMPANHAS.filter((x) => x.plataforma === plataforma)) {
+    // So o que ja foi criado: campanha que ainda vai entrar no ar nao existe na conta.
+    for (const c of CAMPANHAS.filter((x) => x.plataforma === plataforma && x.inicio <= dia)) {
       const hoje = g.campanhas.find((x) => x.campanha.id === c.id);
       const noAr = Boolean(hoje);
       const cbo = c.tipo !== "ABO";

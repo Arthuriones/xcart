@@ -19,6 +19,7 @@ import {
   type Comparacao,
 } from "@/components/layout/contexto";
 import { modeloDaPlataforma, nomeDaPlataforma, semMigration069, type ModeloCheckout } from "@/lib/checkouts-externos/tipos";
+import { comMarcaDeDemonstracao, ehDemonstracao } from "@/lib/demonstracao";
 
 // ============================================================================
 // O filtro global (loja, periodo, moeda) mora em COOKIE, nao na URL.
@@ -48,22 +49,31 @@ export async function lerComparacao(): Promise<Comparacao> {
   return comparacaoDeCookie(c.get(COOKIE_COMPARAR)?.value);
 }
 
-/** Lojas do usuario da sessao, para seletor e nomes. Erro de banco LANCA. */
-export const listarLojasDoUsuario = cache(async (): Promise<LojaDoSeletor[]> => {
+/**
+ * As lojas do usuario e quais delas sao de demonstracao (074). A marca fica
+ * AQUI: LojaDoSeletor vai para o navegador, e nada da demonstracao vai para a
+ * tela. Sem a 074, nenhuma e. Erro de banco LANCA.
+ */
+const lerLojasDoUsuario = cache(async (): Promise<{ lojas: LojaDoSeletor[]; demonstracao: Set<string> }> => {
   const user = await getCurrentUser();
-  if (!user) return [];
+  if (!user) return { lojas: [], demonstracao: new Set() };
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("stores")
-    .select("id, name, shop_domain")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: true });
+  const { data, error } = await comMarcaDeDemonstracao("id, name, shop_domain", (colunas) =>
+    supabase.from("stores").select(colunas).eq("user_id", user.id).order("created_at", { ascending: true })
+  );
   if (error) throw new Error(`Falha ao ler as lojas: ${error.message}`);
-  return (data || []).map((l: { id: string; name: string | null; shop_domain: string | null }) => {
-    const dominio = String(l.shop_domain || "");
-    return { id: String(l.id), nome: String(l.name || dominio), dominio };
-  });
+  const linhas = (data || []) as unknown as { id: string; name: string | null; shop_domain: string | null }[];
+  return {
+    lojas: linhas.map((l) => {
+      const dominio = String(l.shop_domain || "");
+      return { id: String(l.id), nome: String(l.name || dominio), dominio };
+    }),
+    demonstracao: new Set(linhas.filter(ehDemonstracao).map((l) => String(l.id))),
+  };
 });
+
+/** Lojas do usuario da sessao, para seletor e nomes. Erro de banco LANCA. */
+export const listarLojasDoUsuario = cache(async (): Promise<LojaDoSeletor[]> => (await lerLojasDoUsuario()).lojas);
 
 /** O checkout externo com o que o Dashboard e o topo precisam (sem o token). */
 export interface CheckoutDoUsuario {
@@ -125,7 +135,10 @@ export const listarCheckoutsDoUsuario = cache(async (): Promise<LojaDoSeletor[]>
  * `lojas`/`lojaIds` continuam SO Shopify: quem ja usava segue igual. Com um
  * checkout escolhido, `lojaIds` vem vazio e `checkout` diz qual -- a tela so
  * de loja (Custos, Rastreamento, Eventos) mostra "Esta tela e das lojas
- * Shopify" em vez de "conecte uma loja". Com TODAS, vem tudo dos dois lados.
+ * Shopify" em vez de "conecte uma loja". Com TODAS, vem tudo dos dois lados
+ * -- menos a loja de demonstracao (074): os numeros de Todas sao os da
+ * operacao de verdade. Ela continua no seletor e conta quando escolhida (e
+ * quando e a unica loja, para Todas nao ficar vazio).
  */
 export async function filtroResolvido(): Promise<{
   filtro: FiltroGlobal;
@@ -138,9 +151,9 @@ export async function filtroResolvido(): Promise<{
   /** O checkout escolhido na barra, ou null. */
   checkout: LojaDoSeletor | null;
 }> {
-  const [filtroCru, lojas, checkouts] = await Promise.all([
+  const [filtroCru, { lojas, demonstracao }, checkouts] = await Promise.all([
     lerFiltroGlobal(),
-    listarLojasDoUsuario(),
+    lerLojasDoUsuario(),
     listarCheckoutsDoUsuario(),
   ]);
   const escolhida = lojas.find((l) => l.id === filtroCru.lojaId);
@@ -151,10 +164,11 @@ export async function filtroResolvido(): Promise<{
   if (checkout) {
     return { filtro: filtroCru, lojas, lojaIds: [], checkouts, checkoutIds: [checkout.id], checkout };
   }
+  const reais = lojas.filter((l) => !demonstracao.has(l.id));
   return {
     filtro: { ...filtroCru, lojaId: TODAS },
     lojas,
-    lojaIds: lojas.map((l) => l.id),
+    lojaIds: (reais.length ? reais : lojas).map((l) => l.id),
     checkouts,
     checkoutIds: checkouts.map((c) => c.id),
     checkout: null,

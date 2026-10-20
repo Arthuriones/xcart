@@ -7,12 +7,26 @@
  * ela, nao abre alerta e nao a sincroniza -- os numeros so mudam quando este
  * script roda. Rode o `semear` logo antes de gravar a tela.
  *
+ * ORDEM (a primeira vez):
+ *   1. Aplicar a migration 074 (SQL editor) e conferir com os SELECTs do fim dela.
+ *   2. Merge na main e deploy de PRODUCAO da Vercel em READY -- uma build com
+ *      src/lib/demonstracao.ts (commit 2be37b1 ou depois). Sem ela no ar, o
+ *      cron de 15 min trata a loja como real: chama a Shopify e o Meta com a
+ *      credencial inventada, grava "Token invalido" na loja, abre alerta e
+ *      manda pelo Telegram; o coletor antigo aceita evento para ela. Vale para
+ *      qualquer instancia rodando os crons no mesmo banco (Docker).
+ *   3. So entao o `semear --app-publicado`.
+ *   Antes de um rollback da Vercel para uma build anterior a 2be37b1: `limpar`.
+ *
  * Uso (da raiz do repo, com o .env.local):
- *   npm run op -- scripts/demo-loja.ts semear --dry-run     resumo por dia; NAO grava (le o banco so com SELECT)
- *   npm run op -- scripts/demo-loja.ts semear               cria a loja se faltar e completa ate agora
- *   npm run op -- scripts/demo-loja.ts semear --tudo        regrava todos os dias (padrao: os ultimos 25)
- *   npm run op -- scripts/demo-loja.ts semear --ao-vivo 60  completa hoje a cada 60 s, ate Ctrl+C
- *   npm run op -- scripts/demo-loja.ts limpar               mostra o que sairia
+ *   npm run op -- scripts/demo-loja.ts semear --dry-run                   resumo por dia; NAO grava (le o banco so com SELECT)
+ *   npm run op -- scripts/demo-loja.ts semear --app-publicado             cria a loja se faltar e completa ate agora
+ *   npm run op -- scripts/demo-loja.ts semear --app-publicado --tudo      regrava todos os dias (padrao: os ultimos 25)
+ *   npm run op -- scripts/demo-loja.ts semear --app-publicado --ao-vivo 60  completa hoje a cada 60 s, ate Ctrl+C
+ *   npm run op -- scripts/demo-loja.ts semear --app-publicado --imagens <pasta>
+ *       sobe <pasta>/<SKU>.jpg|jpeg|png|webp (miniatura de 192 px) para o bucket
+ *       publico product-images e grava a foto de Custos (demonstracao_catalogo)
+ *   npm run op -- scripts/demo-loja.ts limpar                             mostra o que sairia
  *   npm run op -- scripts/demo-loja.ts limpar --confirmar <dominio.myshopify.com>
  *
  * Fora da raiz: XCART_ENV=<caminho do .env.local>.
@@ -22,7 +36,10 @@
  * completa o dia de hoje ate a hora atual.
  */
 import { randomBytes } from "node:crypto";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { config } from "dotenv";
+import sharp from "sharp";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { calcularFinanceiro } from "../src/lib/financeiro/calculo";
 import {
@@ -115,6 +132,21 @@ function somenteLeitura(c: Admin): Admin {
   return new Proxy(c, {
     get(alvo, p) {
       if (p === "rpc") return bloquear("rpc");
+      if (p === "storage") {
+        // Listar pode (o limpar sem --confirmar conta as fotos); subir e apagar, nao.
+        return {
+          from: (bucket: string) => {
+            const b = alvo.storage.from(bucket);
+            return new Proxy(b, {
+              get(x, m) {
+                if (m !== "list" && m !== "getPublicUrl") return bloquear(`storage.${String(m)} em ${bucket}`);
+                const v = Reflect.get(x, m);
+                return typeof v === "function" ? v.bind(x) : v;
+              },
+            });
+          },
+        };
+      }
       if (p !== "from") return Reflect.get(alvo, p);
       return (tabela: string) => {
         const q = alvo.from(tabela);
@@ -295,6 +327,38 @@ function contasDaLoja(): AdAccountRow[] {
   ];
 }
 
+/**
+ * O funil dos dias fechados na janela (o que Eventos e o Rastreamento leem):
+ * sessoes, conversao, carrinho e quanto dos cliques do Meta virou sessao.
+ */
+function resumirFunil(s: Semeadura, diasFechados: string[]) {
+  const janela = new Set(diasFechados.filter((d) => d >= somarDia(s.hoje, -(DIAS_DE_FUNIL - 1))));
+  if (!janela.size) return;
+  const sessoes = new Map<string, { atc: boolean; ic: boolean; meta: boolean }>();
+  let eventos = 0;
+  for (const e of s.funil) {
+    if (!janela.has(diaLocal(Date.parse(e.created_at)))) continue;
+    eventos += 1;
+    const k = String(e.visitor_id);
+    const x = sessoes.get(k) ?? { atc: false, ic: false, meta: false };
+    if (e.event_name === "add_to_cart") x.atc = true;
+    if (e.event_name === "begin_checkout") x.ic = true;
+    if (e.event_name === "view_item" && String(e.payload.event_source_url ?? "").includes("utm_source=FB")) x.meta = true;
+    sessoes.set(k, x);
+  }
+  const compras = s.pedidos.filter((p) => p.tipo === "venda" && paraNumero(p.total_bruto) > 0 && janela.has(p.dia_local)).length;
+  const cliquesMeta = s.gastos
+    .filter((g) => janela.has(g.dia))
+    .reduce((t, g) => t + g.campanhas.filter((c) => c.campanha.plataforma === "meta").reduce((a, c) => a + c.cliques, 0), 0);
+  const lista = [...sessoes.values()];
+  const n = Math.max(1, lista.length);
+  const pct = (v: number) => `${((v / n) * 100).toFixed(1)}%`;
+  const meta = lista.filter((x) => x.meta).length;
+  console.log(
+    `  funil (${janela.size} dias fechados na janela): ${n0(lista.length / janela.size)} sessoes/dia · ${n0((eventos + compras) / janela.size)} eventos/dia · compra ${pct(compras)} das sessoes · carrinho ${pct(lista.filter((x) => x.atc).length)} · checkout ${pct(lista.filter((x) => x.ic).length)} · sessoes do Meta ${((meta / Math.max(1, cliquesMeta)) * 100).toFixed(0)}% dos cliques do Meta`
+  );
+}
+
 function resumir(s: Semeadura, fx: FxRateRow[], doBanco: boolean) {
   const custos = custosDosProdutos();
   const r = calcularFinanceiro({
@@ -354,6 +418,7 @@ function resumir(s: Semeadura, fx: FxRateRow[], doBanco: boolean) {
   console.log(`  origem: ${[...origemPor].map(([k, v]) => `${k} ${pct(v, vendas.length)}`).join(" · ")} · sem jornada ${pct(semOrigem, vendas.length)}`);
   console.log(`  moeda do comprador: ${[...moedaPor].map(([k, v]) => `${k} ${pct(v, vendas.length)}`).join(" · ")}`);
   console.log(`  gateway: ${[...gatewayPor].map(([k, v]) => `${k} ${pct(v, vendas.length)}`).join(" · ")}`);
+  resumirFunil(s, fechados.map((d) => d.dia));
   const avisos = r.avisos;
   if (avisos.moedasSemCotacao.length || avisos.lojasSemTaxa.length || avisos.lojasSemCustoPadraoComFalta.length || avisos.fusosDiferentes.length) {
     console.log(`  AVISOS do calculo: ${JSON.stringify(avisos)}`);
@@ -365,6 +430,13 @@ function resumir(s: Semeadura, fx: FxRateRow[], doBanco: boolean) {
   console.log(`  pedidos #1001 a #${ultimoNumero}`);
   const tamanho = (l: object[]) => Math.round(l.reduce((t, x) => t + JSON.stringify(x).length, 0) / Math.max(1, l.length));
   console.log(`  tamanho medio (JSON): fin_orders ${tamanho(s.pedidos)} B · Purchase ${tamanho(s.compras)} B · funil ${tamanho(s.funil)} B`);
+  // A fila ocupa ~2,4 KB por linha com os indices (medido em producao, 19/10:
+  // 49 MB para 20,8 mil linhas); o resto, ~1,6x o JSON. O banco inteiro tinha
+  // 108 MB -- confira o espaco do plano do Supabase antes da primeira carga.
+  const mb = (bytes: number) => Math.round(bytes / 1048576);
+  const fila = (s.compras.length + s.funil.length) * 2400;
+  const resto = (s.pedidos.length * tamanho(s.pedidos) + s.origens.length * tamanho(s.origens) + s.linhasGasto.length * tamanho(s.linhasGasto)) * 1.6;
+  console.log(`  espaco estimado no banco: ~${mb(fila + resto)} MB (fila ~${mb(fila)} MB, que o funil mantem em ${DIAS_DE_FUNIL} dias)`);
 
   if (tem("--amostra")) {
     const um = <T,>(rotulo: string, x: T | undefined) => console.log(`\n--- ${rotulo}\n${JSON.stringify(x, null, 1)}`);
@@ -413,6 +485,33 @@ function aleatorio(n: number): string {
   return randomBytes(n).toString("hex");
 }
 
+/**
+ * O ultimo dia gravado INTEIRO: o menor entre o ultimo de fin_orders e o
+ * ultimo de ad_spend_daily (fin_orders vai por ultimo em gravarDados, entao
+ * uma execucao que caiu no meio nao o adianta). null = comecar do lancamento.
+ */
+async function ultimoDiaGravado(admin: Admin): Promise<string | null> {
+  const { data: ult, error: e1 } = await admin
+    .from("fin_orders")
+    .select("dia_local")
+    .eq("store_id", LOJA_ID)
+    .order("dia_local", { ascending: false })
+    .limit(1);
+  if (e1) falhar(`fin_orders: ${e1.message}`);
+  const { data: gasto, error: e2 } = await admin
+    .from("ad_spend_daily")
+    .select("data")
+    .in("ad_account_id", [CONTA_META.id, CONTA_GOOGLE.id])
+    .eq("nivel", "conta")
+    .order("data", { ascending: false })
+    .limit(1);
+  if (e2) falhar(`ad_spend_daily: ${e2.message}`);
+  const a = ((ult ?? [])[0] as { dia_local?: string } | undefined)?.dia_local ?? null;
+  const b = ((gasto ?? [])[0] as { data?: string } | undefined)?.data ?? null;
+  if (!a || !b) return null;
+  return a < b ? a : b;
+}
+
 async function conferirAntes(admin: Admin, dryRun: boolean): Promise<{ existe: boolean; ultimoDia: string | null; ultimoFunil: string | null }> {
   const { data: loja, error } = await admin.from("stores").select("id, user_id, shop_domain, demonstracao").eq("id", LOJA_ID).maybeSingle();
   if (error) {
@@ -435,18 +534,20 @@ async function conferirAntes(admin: Admin, dryRun: boolean): Promise<{ existe: b
     if (!perfil) falhar(`perfil ${ARTHUR} nao encontrado.`);
   }
   if (!loja) return { existe: false, ultimoDia: null, ultimoFunil: null };
-  const { data: ult } = await admin.from("fin_orders").select("dia_local").eq("store_id", LOJA_ID).order("dia_local", { ascending: false }).limit(1);
-  const { data: fun } = await admin
+  const ultimoDia = await ultimoDiaGravado(admin);
+  const { data: fun, error: erroFunil } = await admin
     .from("tracking_events")
     .select("created_at")
     .eq("store_id", LOJA_ID)
     .not("visitor_id", "is", null)
     .order("created_at", { ascending: false })
     .limit(1);
+  if (erroFunil) falhar(`tracking_events: ${erroFunil.message}`);
   return {
     existe: true,
-    ultimoDia: (ult ?? [])[0]?.dia_local ?? null,
-    ultimoFunil: (fun ?? [])[0]?.created_at ?? null,
+    ultimoDia,
+    // Sem dia inteiro gravado, o funil tambem vai do comeco.
+    ultimoFunil: ultimoDia ? ((fun ?? [])[0]?.created_at ?? null) : null,
   };
 }
 
@@ -549,16 +650,25 @@ async function gravarBase(admin: Admin, existe: boolean) {
   );
 }
 
+/**
+ * fin_orders vai POR ULTIMO: e dele (e do gasto) que a proxima execucao tira
+ * de onde continuar (ultimoDiaGravado). Se esta cair no meio, a proxima
+ * regrava o que faltou -- nenhum dia antigo fica sem gasto, origem ou compra.
+ * As outras tabelas nao tem FK para fin_orders. O funil vai em ordem de
+ * created_at: o `ultimoFunil` da proxima e o ultimo que entrou.
+ */
 async function gravarDados(admin: Admin, s: Semeadura, desde: string, desdeFunil: string | null) {
   const novoDia = (dia: string) => dia >= desde;
   const pedidos = s.pedidos.filter((p) => novoDia(p.dia_local));
   const ids = new Set(pedidos.map((p) => p.shopify_order_id));
-  await gravarEmLotes(admin, "fin_orders", pedidos, "store_id,shopify_order_id");
   await gravarEmLotes(admin, "fin_order_origem", s.origens.filter((o) => ids.has(o.shopify_order_id)), "store_id,shopify_order_id");
   await gravarEmLotes(admin, "tracking_events", s.compras.filter((c) => ids.has(c.order_id)), "id");
-  const funil = desdeFunil ? s.funil.filter((e) => e.created_at > desdeFunil) : s.funil;
+  const funil = (desdeFunil ? s.funil.filter((e) => e.created_at > desdeFunil) : s.funil)
+    .slice()
+    .sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0));
   await gravarEmLotes(admin, "tracking_events", funil, "id");
   await gravarEmLotes(admin, "ad_spend_daily", s.linhasGasto.filter((g) => novoDia(g.data)), "ad_account_id,data,nivel,campanha_id");
+  await gravarEmLotes(admin, "fin_orders", pedidos, "store_id,shopify_order_id");
 
   // Funil fora da janela sai (a compra fica: o Pedidos e o Rastreamento leem).
   const corte = new Date(instanteLocal(somarDia(s.hoje, -(DIAS_DE_FUNIL - 1)), 0)).toISOString();
@@ -573,6 +683,56 @@ async function gravarDados(admin: Admin, s: Semeadura, desde: string, desdeFunil
   const { error: erroGran } = await admin.from("ad_insights_granular").delete().in("ad_account_id", [CONTA_META.id, CONTA_GOOGLE.id]).neq("data", s.hoje);
   if (erroGran) falhar(`ad_insights_granular (dias antigos): ${erroGran.message}`);
   await gravarEmLotes(admin, "ad_insights_granular", granular, "ad_account_id,data,nivel,objeto_id");
+}
+
+// ---------------------------------------------------------------------------
+// Fotos do catalogo (opcional): a miniatura de Custos
+// ---------------------------------------------------------------------------
+
+const EXTENSOES = [".jpg", ".jpeg", ".png", ".webp"];
+const BUCKET_IMAGENS = "product-images";
+
+/** O arquivo de cada SKU na pasta (<SKU>.jpg|jpeg|png|webp, sem diferenca de maiuscula). */
+function imagensDaPasta(pasta: string): Map<string, string> {
+  if (!existsSync(pasta)) falhar(`--imagens: a pasta ${pasta} nao existe.`);
+  const arquivos = readdirSync(pasta);
+  const achadas = new Map<string, string>();
+  for (const item of CATALOGO) {
+    const nome = arquivos.find((a) => EXTENSOES.some((e) => a.toLowerCase() === `${item.sku.toLowerCase()}${e}`));
+    if (nome) achadas.set(item.sku, join(pasta, nome));
+  }
+  return achadas;
+}
+
+function conferirImagens(pasta: string) {
+  const achadas = imagensDaPasta(pasta);
+  const faltam = CATALOGO.filter((i) => !achadas.has(i.sku)).map((i) => i.sku);
+  console.log(`\n--imagens: ${achadas.size} de ${CATALOGO.length} SKUs com foto em ${pasta}${faltam.length ? ` (faltam: ${faltam.join(", ")})` : ""}.`);
+}
+
+/**
+ * Sobe a miniatura (192 px, webp) de cada SKU para o bucket publico do app e
+ * grava a URL em demonstracao_catalogo.imagem. SKU sem arquivo fica como
+ * esta (a foto que ja tinha continua).
+ */
+async function gravarImagens(admin: Admin, pasta: string) {
+  const achadas = imagensDaPasta(pasta);
+  if (achadas.size === 0) falhar(`--imagens: nenhum arquivo <SKU>.jpg|jpeg|png|webp em ${pasta}.`);
+  for (const [sku, arquivo] of achadas) {
+    const miniatura = await sharp(readFileSync(arquivo)).rotate().resize(192, 192, { fit: "cover" }).webp({ quality: 82 }).toBuffer();
+    const caminho = `catalogo/${LOJA_ID}/${sku.toLowerCase()}.webp`;
+    const { error: erroUpload } = await admin.storage
+      .from(BUCKET_IMAGENS)
+      .upload(caminho, miniatura, { contentType: "image/webp", upsert: true, cacheControl: "3600" });
+    if (erroUpload) falhar(`foto de ${sku}: ${erroUpload.message}`);
+    const url = admin.storage.from(BUCKET_IMAGENS).getPublicUrl(caminho).data.publicUrl;
+    if (!url.startsWith("https://")) falhar(`foto de ${sku}: a URL publica nao e https (${url}).`);
+    // ?v= muda a URL quando a foto muda: o navegador nao fica com a antiga.
+    const comVersao = `${url}?v=${sha256(miniatura.toString("base64")).slice(0, 10)}`;
+    const { error } = await admin.from("demonstracao_catalogo").update({ imagem: comVersao }).eq("store_id", LOJA_ID).eq("sku", sku);
+    if (error) falhar(`demonstracao_catalogo (${sku}): ${error.message}`);
+  }
+  console.log(`  demonstracao_catalogo: ${achadas.size} fotos`);
 }
 
 /** A hora das leituras: o que a tela usa para "Atualizado ha X" e para o pixel ativo. */
@@ -622,10 +782,27 @@ async function gravarFrescor(admin: Admin, agoraMs: number) {
 // Comandos
 // ---------------------------------------------------------------------------
 
+const ORDEM = `A ordem:
+  1. Aplicar a migration 074 (SQL editor) e conferir com os SELECTs do fim dela.
+  2. Merge na main e deploy de PRODUCAO da Vercel em READY, com src/lib/demonstracao.ts
+     (commit 2be37b1 ou depois). Nenhuma instancia com codigo anterior (Docker,
+     preview com os crons) rodando no mesmo banco.
+  3. npm run op -- scripts/demo-loja.ts semear --app-publicado
+
+Sem o app novo no ar, o cron de 15 min trata a loja como real: chama a Shopify e o
+Meta com a credencial inventada, grava "Token invalido" na loja, abre alerta e manda
+pelo Telegram, e o coletor antigo aceita evento para ela.
+Antes de um rollback da Vercel para uma build anterior a 2be37b1, rode o limpar.`;
+
 async function semear() {
   const dryRun = tem("--dry-run");
   const tudo = tem("--tudo");
   const aoVivo = tem("--ao-vivo") ? Math.max(15, Number(valorDe("--ao-vivo") ?? 60)) : null;
+  const pastaImagens = valorDe("--imagens");
+  if (tem("--imagens") && !pastaImagens) falhar("--imagens pede a pasta: --imagens <pasta com <SKU>.jpg|png|webp>.");
+  if (!dryRun && !tem("--app-publicado")) {
+    falhar(`o semear grava a loja no banco de producao. Confirme com --app-publicado que o app que a reconhece ja esta no ar.\n\n${ORDEM}`);
+  }
   const admin = conectar(dryRun);
   if (!admin && !dryRun) falhar("sem NEXT_PUBLIC_SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY (rode da raiz, com o .env.local, ou XCART_ENV=...).");
   if (!admin) console.log("Sem credencial do banco: --dry-run com cambio de reserva.");
@@ -643,11 +820,14 @@ async function semear() {
     console.log(
       `\n--dry-run: nada foi gravado. A loja ${estado.existe ? `existe (ultimo dia gravado ${estado.ultimoDia ?? "-"}); seriam regravados os dias desde ${desde}` : "ainda nao existe; seria criada com os dias desde " + LANCAMENTO}.`
     );
+    if (pastaImagens) conferirImagens(pastaImagens);
+    console.log(`\nPara gravar de verdade: semear --app-publicado. ${ORDEM}`);
     return;
   }
 
   console.log(`\nSemeando ${NOME_LOJA} (${DOMINIO}) ate ${new Date(agoraMs).toISOString()} -- dias desde ${desde}`);
   await gravarBase(admin!, estado.existe);
+  if (pastaImagens) await gravarImagens(admin!, pastaImagens);
   await gravarDados(admin!, s, desde, tudo ? null : estado.ultimoFunil ? new Date(Date.parse(estado.ultimoFunil) - 15 * 60_000).toISOString() : null);
   await gravarFrescor(admin!, agoraMs);
   const hojeNoPlano = s.porDia.get(s.hoje)!;
@@ -670,6 +850,14 @@ async function semear() {
   }
 }
 
+/** Os caminhos das fotos que o --imagens subiu para a loja (catalogo/<id>/). */
+async function fotosNoBucket(admin: Admin, lojaId: string): Promise<string[]> {
+  const pasta = `catalogo/${lojaId}`;
+  const { data, error } = await admin.storage.from(BUCKET_IMAGENS).list(pasta, { limit: 1000 });
+  if (error) falhar(`fotos (storage): ${error.message}`);
+  return (data ?? []).filter((a) => a.name && a.id).map((a) => `${pasta}/${a.name}`);
+}
+
 async function limpar() {
   const confirmado = valorDe("--confirmar");
   const admin = conectar(!confirmado);
@@ -681,16 +869,18 @@ async function limpar() {
     return;
   }
   const ids = lojas.map((l) => l.id as string);
-  const contar = async (tabela: string, coluna = "store_id") => {
-    const { count, error: e } = await admin.from(tabela).select(coluna, { count: "exact", head: true }).in(coluna, ids);
+  const contar = async (tabela: string, coluna = "store_id", de: string[] = ids) => {
+    const { count, error: e } = await admin.from(tabela).select(coluna, { count: "exact", head: true }).in(coluna, de);
     if (e) falhar(`${tabela}: ${e.message}`);
     return count ?? 0;
   };
-  const { data: contas } = await admin.from("ad_accounts").select("id").in("store_id", ids);
+  const { data: contas, error: erroContas } = await admin.from("ad_accounts").select("id").in("store_id", ids);
+  if (erroContas) falhar(`ad_accounts: ${erroContas.message}`);
   const contaIds = (contas ?? []).map((c) => c.id as string);
-  const contarContas = async (tabela: string) => {
-    if (!contaIds.length) return 0;
-    const { count } = await admin.from(tabela).select("ad_account_id", { count: "exact", head: true }).in("ad_account_id", contaIds);
+  const contarContas = async (tabela: string, de: string[] = contaIds) => {
+    if (!de.length) return 0;
+    const { count, error: e } = await admin.from(tabela).select("ad_account_id", { count: "exact", head: true }).in("ad_account_id", de);
+    if (e) falhar(`${tabela}: ${e.message}`);
     return count ?? 0;
   };
   const tabelas = ["fin_orders", "fin_order_origem", "tracking_events", "product_costs", "fin_sync_state", "fin_store_settings", "tracking_configs", "tracking_destinations", "alertas", "demonstracao_catalogo"];
@@ -699,6 +889,9 @@ async function limpar() {
   antes.ad_accounts = contaIds.length;
   antes.ad_spend_daily = await contarContas("ad_spend_daily");
   antes.ad_insights_granular = await contarContas("ad_insights_granular");
+  let fotos = 0;
+  for (const id of ids) fotos += (await fotosNoBucket(admin, id)).length;
+  antes["fotos (storage)"] = fotos;
 
   console.log(`\nLojas de demonstracao: ${lojas.map((l) => `${l.name} · ${l.shop_domain} (${l.id})`).join(", ")}`);
   for (const [t, n] of Object.entries(antes)) console.log(`  ${t}: ${n0(n)}`);
@@ -709,6 +902,11 @@ async function limpar() {
   }
   if (!lojas.some((l) => l.shop_domain === confirmado)) falhar(`--confirmar ${confirmado} nao e o dominio de uma loja de demonstracao.`);
   const alvo = lojas.filter((l) => l.shop_domain === confirmado).map((l) => l.id as string);
+  // As contas da loja confirmada, lidas ANTES de apagar: a conferencia do fim
+  // olha so ela (outra loja de demonstracao, se houver, fica como esta).
+  const { data: contasDoAlvo, error: erroContasAlvo } = await admin.from("ad_accounts").select("id").in("store_id", alvo);
+  if (erroContasAlvo) falhar(`ad_accounts: ${erroContasAlvo.message}`);
+  const contaIdsAlvo = (contasDoAlvo ?? []).map((c) => c.id as string);
 
   // 1) Contas primeiro: a FK delas e ON DELETE SET NULL, e sem isto ficariam
   //    orfas em Integracoes. Levam gasto, campanhas e segredos (cascade).
@@ -719,17 +917,31 @@ async function limpar() {
     const { error: e } = await admin.from("tracking_events").delete().in("store_id", alvo).lt("created_at", `${somarDia(dia, 7)}T00:00:00Z`);
     if (e) falhar(`tracking_events: ${e.message}`);
   }
-  // 3) A loja: o resto vai junto (cascade).
+  // 3) As fotos do catalogo (--imagens), se subiram: o storage nao tem cascade.
+  for (const id of alvo) {
+    const caminhos = await fotosNoBucket(admin, id);
+    if (!caminhos.length) continue;
+    const { error: e } = await admin.storage.from(BUCKET_IMAGENS).remove(caminhos);
+    if (e) falhar(`fotos (storage): ${e.message}`);
+  }
+  // 4) A loja: o resto vai junto (cascade).
   const { error: e2 } = await admin.from("stores").delete().in("id", alvo).eq("user_id", ARTHUR).eq("demonstracao", true);
   if (e2) falhar(`stores: ${e2.message}`);
 
-  // 4) Conferir.
+  // 5) Conferir: so a loja confirmada e as contas dela.
   let sobrou = 0;
-  for (const t of tabelas) sobrou += await contar(t);
-  const { count: contasRestantes } = await admin.from("ad_accounts").select("id", { count: "exact", head: true }).in("id", contaIds.length ? contaIds : ["00000000-0000-0000-0000-000000000000"]);
-  const { count: lojasRestantes } = await admin.from("stores").select("id", { count: "exact", head: true }).in("id", alvo);
-  sobrou += (contasRestantes ?? 0) + (lojasRestantes ?? 0);
-  if (sobrou > 0) falhar(`sobraram ${sobrou} linhas. Confira com SELECT.`);
+  for (const t of tabelas) sobrou += await contar(t, "store_id", alvo);
+  if (contaIdsAlvo.length) {
+    const { count: contasRestantes, error: e3 } = await admin.from("ad_accounts").select("id", { count: "exact", head: true }).in("id", contaIdsAlvo);
+    if (e3) falhar(`ad_accounts: ${e3.message}`);
+    sobrou += contasRestantes ?? 0;
+    for (const t of ["ad_spend_daily", "ad_insights_granular"]) sobrou += await contarContas(t, contaIdsAlvo);
+  }
+  const { count: lojasRestantes, error: e4 } = await admin.from("stores").select("id", { count: "exact", head: true }).in("id", alvo);
+  if (e4) falhar(`stores: ${e4.message}`);
+  sobrou += lojasRestantes ?? 0;
+  for (const id of alvo) sobrou += (await fotosNoBucket(admin, id)).length;
+  if (sobrou > 0) falhar(`sobraram ${sobrou} linhas da loja ${confirmado}. Confira com SELECT.`);
   console.log(`\nApagado: ${confirmado} e tudo dela. Conferido: zero linhas restantes.`);
 }
 
@@ -737,7 +949,9 @@ async function limpar() {
   if (comando === "semear") await semear();
   else if (comando === "limpar") await limpar();
   else {
-    console.log("Uso: npm run op -- scripts/demo-loja.ts semear [--dry-run] [--tudo] [--ao-vivo 60] | limpar [--confirmar <dominio>]");
+    console.log(
+      "Uso: npm run op -- scripts/demo-loja.ts semear --dry-run | semear --app-publicado [--tudo] [--ao-vivo 60] [--imagens <pasta>] | limpar [--confirmar <dominio>]"
+    );
     process.exit(comando ? 1 : 0);
   }
 })().catch((e) => {

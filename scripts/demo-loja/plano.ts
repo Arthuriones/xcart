@@ -542,6 +542,7 @@ export const CAMPANHAS: Campanha[] = [
     nome: "CBO | Fall Sleep Sale | Broad | US",
     tipo: "CBO",
     inicio: "2026-10-09",
+    fim: "2026-11-19",
     peso: 0.22,
     rendimento: 1.02,
     orcamento: 700,
@@ -550,6 +551,39 @@ export const CAMPANHAS: Campanha[] = [
       conjunto("m9", "Broad | US | 25-65+ | Fall", 1, [
         ["VID 19 | Fall Reset Your Sleep", 1.1],
         ["IMG 10 | Bundle & Save", 0.8],
+      ]),
+    ],
+  }),
+  campanhaMeta({
+    nome: "CBO | BFCM 30% Off | Broad | US+CA",
+    tipo: "CBO",
+    inicio: "2026-11-20",
+    fim: "2026-12-01",
+    peso: 0.7,
+    rendimento: 1.12,
+    orcamento: 2400,
+    custoMidia: 27,
+    conjuntos: [
+      conjunto("m10", "Broad | US+CA | 25-65+ | BFCM", 1.2, [
+        ["VID 20 | Black Friday 30% Off | 9x16", 1.3],
+        ["IMG 11 | BFCM Countdown Static", 0.8],
+      ]),
+      conjunto("m10", "RT | Engaged 60d | BFCM", 0.6, [["DPA | Catalog Carousel | BFCM", 1]]),
+    ],
+  }),
+  campanhaMeta({
+    nome: "CBO | Holiday Gift Guide | Broad | US",
+    tipo: "CBO",
+    inicio: "2026-12-02",
+    fim: "2026-12-18",
+    peso: 0.3,
+    rendimento: 0.98,
+    orcamento: 900,
+    custoMidia: 24,
+    conjuntos: [
+      conjunto("m11", "Broad | US | 25-65+ | Gifting", 1, [
+        ["VID 21 | Gift of Better Sleep | 9x16", 1.2],
+        ["IMG 12 | Gift Guide Static", 0.7],
       ]),
     ],
   }),
@@ -622,7 +656,13 @@ export const POSICIONAMENTOS: [string, number][] = [
   ["Instagram_Explore", 3],
 ];
 
-export const FLUXOS_EMAIL = ["Welcome Series", "Abandoned Checkout", "Browse Abandonment", "Fall Sale Campaign"];
+/** Os fluxos de e-mail no ar no dia: a campanha de promocao so na semana dela. */
+export function fluxosDeEmail(dia: string): string[] {
+  const fluxos = ["Welcome Series", "Abandoned Checkout", "Browse Abandonment"];
+  if (dia >= "2026-10-09" && dia <= "2026-11-19") fluxos.push("Fall Sale Campaign");
+  if (dia >= "2026-11-20" && dia <= "2026-12-01") fluxos.push("Black Friday Campaign");
+  return fluxos;
+}
 
 // ---------------------------------------------------------------------------
 // Pedidos
@@ -789,7 +829,34 @@ const EVENTOS: Record<string, number> = {
   "2026-10-03": 1.12, // criativo novo escalando
   "2026-10-04": 1.16,
   "2026-10-05": 1.1,
+  // Semana antes da Black Friday: CPM sobe, muita gente espera a promocao.
+  "2026-11-20": 0.93,
+  "2026-11-23": 0.9,
+  "2026-11-24": 0.92,
+  "2026-11-25": 1.05,
+  "2026-11-26": 1.18, // Thanksgiving: promocao aberta
+  "2026-11-27": 1.62, // Black Friday
+  "2026-11-28": 1.42,
+  "2026-11-29": 1.34,
+  "2026-11-30": 1.55, // Cyber Monday
+  "2026-12-01": 1.12,
+  // Fim do prazo de entrega antes do Natal e a semana do Natal.
+  "2026-12-14": 1.1,
+  "2026-12-15": 1.08,
+  "2026-12-19": 0.9,
+  "2026-12-20": 0.86,
+  "2026-12-21": 0.84,
+  "2026-12-22": 0.8,
+  "2026-12-23": 0.76,
+  "2026-12-24": 0.66,
+  "2026-12-25": 0.62,
+  "2026-12-26": 0.92,
 };
+
+/** A semana da Black Friday (CPM mais caro no leilao do Meta). */
+export function semanaBfcm(dia: string): boolean {
+  return dia >= "2026-11-24" && dia <= "2026-12-01";
+}
 
 export interface MetaDoDia {
   lucro: number;
@@ -798,9 +865,22 @@ export interface MetaDoDia {
   fatiaMeta: number;
 }
 
+/**
+ * Crescimento do lucro sobre a base: linear nos primeiros 90 dias (+27%) e,
+ * depois, chegando devagar num teto (+32%, ~8,4 mil/dia de media) -- a loja
+ * nao cresce para sempre, e a media fica na faixa de 5-10 mil. No dia 89 a
+ * curva continua com a mesma inclinacao, sem quina no grafico.
+ */
+export function crescimento(idx: number): number {
+  const linear = 0.27 / 89; // por dia, nos primeiros 90 dias
+  if (idx <= 89) return linear * idx;
+  const teto = 0.053; // o que ainda cresce depois do dia 89
+  return 0.27 + teto * (1 - Math.exp(-((idx - 89) * linear) / teto));
+}
+
 export function metaDoDia(dia: string, idx: number): MetaDoDia {
   const r = new Sorteio(`meta:${dia}`);
-  const tendencia = 6350 * (1 + (0.27 * idx) / 89);
+  const tendencia = 6350 * (1 + crescimento(idx));
   const rampa = idx < 10 ? 0.38 + 0.062 * idx : 1;
   const semana = DIA_DA_SEMANA[diaDaSemana(dia)];
   const ruido = Math.exp(0.11 * r.normal());
@@ -881,7 +961,10 @@ function origemDoPedido(r: Sorteio, dia: string, criadoMs: number): OrigemPlano 
       gclid: `Cj0KCQjw${r.texto(80, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-")}`,
     };
   }
-  if (tipo === "email") return { tipo, fluxo: FLUXOS_EMAIL[r.inteiro(0, FLUXOS_EMAIL.length - 1)], cliqueMs: antes(true) };
+  if (tipo === "email") {
+    const fluxos = fluxosDeEmail(dia);
+    return { tipo, fluxo: fluxos[r.inteiro(0, fluxos.length - 1)], cliqueMs: antes(true) };
+  }
   if (tipo === "pinterest") return { tipo, cliqueMs: antes(true) };
   if (tipo === "direto") return { tipo, visitaMs: criadoMs - r.entre(3, 40) * 60_000 };
   return { tipo: "sem_jornada" };

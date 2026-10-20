@@ -22,10 +22,15 @@
 -- le sem ela e nenhuma loja e de demonstracao. O script de semear recusa
 -- rodar sem ela.
 --
--- ORDEM: APLICAR ANTES DO DEPLOY (ou junto). O codigo velho nao le nada
--- daqui. O novo sem a 074 funciona, mas paga uma leitura a mais de `stores`
--- por evento no coletor publico (/api/tracking/collect): pede a coluna, leva
--- o 42703 e le de novo sem ela.
+-- ORDEM: 1) esta migration, 2) deploy de producao em READY, 3) SO ENTAO o
+-- `semear --app-publicado` do script. A 074 vai antes do deploy (ou junto):
+-- o codigo velho nao le nada daqui, e o novo sem ela funciona, mas paga uma
+-- leitura a mais de `stores` por evento no coletor publico
+-- (/api/tracking/collect). O SEMEAR e que nao pode vir antes do deploy: com o
+-- codigo velho no ar, os crons tratam a loja marcada como real (Shopify e Meta
+-- com a credencial inventada, "Token invalido", alerta no Telegram) e o
+-- coletor velho aceita evento para ela. Rollback da Vercel para uma build
+-- anterior a 2be37b1: rode o `limpar` antes.
 --
 -- Desfazer: scripts/demo-loja.ts limpar apaga a loja e tudo dela. A coluna e
 -- a tabela podem ficar: sem loja marcada, nada muda.

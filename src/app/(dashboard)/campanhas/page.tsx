@@ -3,8 +3,11 @@ import Link from "next/link";
 import { Plug } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
+import { filtroResolvido } from "@/lib/filtro-global";
+import { TODAS } from "@/lib/financeiro/tipos";
 import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErroLucro } from "../financeiro/erro-lucro";
 import { CampanhasTela } from "./campanhas-tela";
 import type { LinhaCampanha } from "./tipos";
 
@@ -15,26 +18,56 @@ export const metadata = {
   description: "Dashboard analítico de campanhas, conjuntos e anúncios de tráfego pago.",
 };
 
-async function carregarDadosCampanhas() {
+interface ContaLida {
+  id: string;
+  nome: string | null;
+  plataforma: string;
+  external_id: string;
+  store_id: string | null;
+  checkout_id?: string | null;
+}
+
+async function carregarDadosCampanhas(): Promise<{
+  contas: { id: string; nome: string; plataforma: string }[];
+  linhas: LinhaCampanha[];
+  colunasSalvas: string[];
+  erro: string | null;
+}> {
   const supabase = await createClient();
   const user = await getCurrentUser();
 
   if (!user) {
-    return { contas: [], linhas: [], colunasSalvas: [] };
+    return { contas: [], linhas: [], colunasSalvas: [], erro: null };
   }
 
-  // 1. Busca contas de anúncio do usuário
-  const { data: contasData } = await supabase
+  // 1. Contas de anúncio do usuário, no filtro do topo: a da loja (ou do
+  //    checkout) escolhida; com Todas, as das lojas de Todas e as sem loja.
+  //    `*` como no Lucro: checkout_id so existe depois da 069. Erro de banco
+  //    aparece -- nunca vira "nenhuma conta conectada".
+  let filtro: Awaited<ReturnType<typeof filtroResolvido>>;
+  try {
+    filtro = await filtroResolvido();
+  } catch (e) {
+    return { contas: [], linhas: [], colunasSalvas: [], erro: e instanceof Error ? e.message : String(e) };
+  }
+  const { data: contasData, error: erroContas } = await supabase
     .from("ad_accounts")
-    .select("id, nome, plataforma, external_id, status")
+    .select("*")
     .eq("user_id", user.id)
     .order("nome", { ascending: true });
-
-  const contas = (contasData || []).map((c) => ({
-    id: c.id,
-    nome: c.nome || `Conta ${c.external_id}`,
-    plataforma: c.plataforma,
-  }));
+  if (erroContas) {
+    return { contas: [], linhas: [], colunasSalvas: [], erro: `Falha ao ler as contas de anúncio: ${erroContas.message}` };
+  }
+  const lojaSet = new Set(filtro.lojaIds);
+  const checkoutSet = new Set(filtro.checkoutIds);
+  const todas = filtro.filtro.lojaId === TODAS;
+  const contas = ((contasData || []) as ContaLida[])
+    .filter((c) => (c.store_id ? lojaSet.has(c.store_id) : c.checkout_id ? checkoutSet.has(c.checkout_id) : todas))
+    .map((c) => ({
+      id: c.id,
+      nome: c.nome || `Conta ${c.external_id}`,
+      plataforma: c.plataforma,
+    }));
 
   // 2. Busca preferências de colunas do usuário
   const { data: prefData } = await supabase
@@ -45,12 +78,19 @@ async function carregarDadosCampanhas() {
 
   const colunasSalvas = (prefData?.colunas || []) as string[];
 
-  // 3. Busca insights granulares
-  const { data: insightsData } = await supabase
-    .from("ad_insights_granular")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("data", { ascending: false });
+  // 3. Busca insights granulares (so das contas do filtro)
+  const contaIds = contas.map((c) => c.id);
+  const { data: insightsData, error: erroInsights } = contaIds.length
+    ? await supabase
+        .from("ad_insights_granular")
+        .select("*")
+        .eq("user_id", user.id)
+        .in("ad_account_id", contaIds)
+        .order("data", { ascending: false })
+    : { data: [], error: null };
+  if (erroInsights) {
+    return { contas, linhas: [], colunasSalvas, erro: `Falha ao ler as campanhas: ${erroInsights.message}` };
+  }
 
   // Mapeia para LinhaCampanha
   const linhas: LinhaCampanha[] = (insightsData || []).map((row) => {
@@ -96,11 +136,11 @@ async function carregarDadosCampanhas() {
     };
   });
 
-  return { contas, linhas, colunasSalvas };
+  return { contas, linhas, colunasSalvas, erro: null };
 }
 
 export default async function CampanhasPage() {
-  const { contas, linhas, colunasSalvas } = await carregarDadosCampanhas();
+  const { contas, linhas, colunasSalvas, erro } = await carregarDadosCampanhas();
 
   return (
     <div className="flex flex-col gap-6" data-largura="total">
@@ -124,7 +164,9 @@ export default async function CampanhasPage() {
         </div>
       </div>
 
-      {contas.length === 0 ? (
+      {erro ? (
+        <ErroLucro titulo="Não conseguimos abrir as campanhas agora" detalhe={erro} />
+      ) : contas.length === 0 ? (
         <EmptyState
           icone={<Plug className="h-8 w-8 text-t3" />}
           titulo="Nenhuma conta de anúncio conectada"
