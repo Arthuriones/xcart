@@ -1,7 +1,7 @@
 import type { BomQuando, FormatoVariacao } from "@/components/ui/variacao";
 import type { CorSerie, SerieGrafico } from "@/components/ui/line-chart";
 import type { TomStatus } from "@/components/ui/status-badge";
-import { diaCurto } from "@/components/layout/contexto";
+import { MESES, diaCurto } from "@/components/layout/contexto";
 import {
   FUSO_RELATORIO_PADRAO,
   ROTAS,
@@ -69,8 +69,6 @@ const DIA_SEMANA = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta",
 export function diaDaSemana(dia: string): string {
   return DIA_SEMANA[new Date(`${dia}T12:00:00Z`).getUTCDay()] ?? "";
 }
-
-const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
 /** "Nome · dominio" sem .myshopify.com (o nome no banco e velho em algumas lojas). */
 export function nomeDaLoja(l: Pick<LojaDoSeletor, "nome" | "dominio">): string {
@@ -315,6 +313,19 @@ export function agrupar(pontos: Ponto[], dias: string[], gran: Granularidade): G
   return [...meses.entries()].map(([chave, lista]) =>
     grupoDe(MESES[Number(chave.slice(5, 7)) - 1] ?? chave, lista)
   );
+}
+
+/** Acima disto o grafico abre por semana: uma barra por dia nao se le. */
+export const DIAS_PARA_SEMANA = 45;
+
+/** Como o grafico abre: por dia ate DIAS_PARA_SEMANA dias, depois por semana. */
+export function granularidadePadrao(dias: readonly string[]): Granularidade {
+  return dias.length > DIAS_PARA_SEMANA ? "semana" : "dia";
+}
+
+/** De quantas em quantas barras o eixo leva rotulo. */
+export function rotuloACada(barras: number): number {
+  return barras <= 10 ? 1 : barras <= 20 ? 2 : barras <= 40 ? 5 : 7;
 }
 
 /** Quais granularidades fazem sentido para estes dias. */

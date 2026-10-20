@@ -9,7 +9,7 @@ import { LineChart } from "@/components/ui/line-chart";
 import { Section } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { calcularVariacao } from "@/components/ui/variacao";
-import { ROTULO_PERIODO, diaCurto, rotuloFuso, rotuloIntervalo } from "@/components/layout/contexto";
+import { diaCurto, rotuloDoPeriodo, rotuloFuso, rotuloIntervalo } from "@/components/layout/contexto";
 import { formatarDinheiro, type FinStoreSettingsRow } from "@/lib/financeiro/tipos";
 import {
   lerConfigFinanceiraDaLoja,
@@ -105,7 +105,7 @@ export function FinanceiroLoja({
     <div className="flex flex-col gap-4">
       <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-label text-t2">
         <span>
-          {ROTULO_PERIODO[filtro.periodo]} · {rotuloIntervalo(r.intervalos.atual)} · {rotuloFuso(fuso)} · {moeda}
+          {rotuloDoPeriodo(filtro.periodo, r.intervalos.atual, hoje)} · {rotuloFuso(fuso)} · {moeda}
         </span>
         <span>O período e a moeda mudam na tela Lucro.</span>
       </p>

@@ -7,7 +7,15 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Segmented } from "@/components/ui/segmented";
 import type { PontoDia } from "@/lib/leitura/serie-diaria";
 import { COR_PARTE } from "./cascata";
-import { agrupar, dinheiro, granularidades, temMovimento, type Granularidade } from "./lucro-dados";
+import {
+  agrupar,
+  dinheiro,
+  granularidadePadrao,
+  granularidades,
+  rotuloACada,
+  temMovimento,
+  type Granularidade,
+} from "./lucro-dados";
 
 // ============================================================================
 // "Faturamento": uma barra por dia (ou semana/mes), empilhada em lucro,
@@ -52,12 +60,16 @@ export function GraficoFaturamento({
   rotuloReceita?: string;
 }) {
   const [tipo, setTipo] = useState<Tipo>("barra");
-  const [granEscolhida, setGran] = useState<Granularidade>("dia");
+  // null = o padrao do periodo: por semana quando o periodo passa de 45 dias.
+  const [granEscolhida, setGran] = useState<Granularidade | null>(null);
   const [hov, setHov] = useState<number | null>(null);
 
   const dias = pontos.map((p) => p.dia);
   const opcoesGran = granularidades(dias);
-  const gran = opcoesGran.find((o) => o.valor === granEscolhida && !o.desabilitado) ? granEscolhida : "dia";
+  const valida = (g: Granularidade | null): g is Granularidade =>
+    g !== null && opcoesGran.some((o) => o.valor === g && !o.desabilitado);
+  const padrao = granularidadePadrao(dias);
+  const gran: Granularidade = valida(granEscolhida) ? granEscolhida : valida(padrao) ? padrao : "dia";
 
   const barras: Barra[] = agrupar(pontos, dias, gran).map((g) => {
     const s = g.soma ?? { pedidos: 0, receita: 0, cmv: 0, taxas: 0, gastoMeta: 0, gastoGoogle: 0 };
@@ -81,7 +93,7 @@ export function GraficoFaturamento({
   const passo = passoDo(max * 1.05);
   const topo = passo * 4;
   const ticks = [4, 3, 2, 1, 0].map((i) => compacto.format(i * passo));
-  const cada = n <= 10 ? 1 : n <= 20 ? 2 : 5;
+  const cada = rotuloACada(n);
   const altura = (v: number) => `${(Math.max(0, v) / topo) * 100}%`;
 
   const partes = (b: Barra): [string, number, string][] =>

@@ -4,7 +4,7 @@ import { listarContasDoUsuario } from "@/lib/ads/contas";
 import { filtroResolvido } from "@/lib/filtro-global";
 import { lerGastoPorConta } from "@/lib/leitura/gasto-por-conta";
 import { lerDestinosDeCompra, type DestinoDeCompra } from "@/lib/leitura/integracoes";
-import { ROTULO_PERIODO, rotuloIntervalo } from "@/components/layout/contexto";
+import { rotuloDoPeriodo } from "@/components/layout/contexto";
 import {
   FUSO_RELATORIO_PADRAO,
   TODAS,
@@ -98,7 +98,8 @@ export async function carregarAnuncios(
     filtro.lojaId !== TODAS ? (lojas.find((l) => l.id === filtro.lojaId) ?? checkout ?? null) : null;
   // O mesmo "hoje" do Lucro: o da loja escolhida, ou Sao Paulo com todas.
   const fuso = (lojaFiltrada && fusos[lojaFiltrada.id]) || FUSO_RELATORIO_PADRAO;
-  const intervalo = intervaloDoPeriodo(filtro.periodo, diaNoFuso(agora, fuso)).atual;
+  const hoje = diaNoFuso(agora, fuso);
+  const intervalo = intervaloDoPeriodo(filtro.periodo, hoje).atual;
 
   const daPlataforma = todas.filter((c) => c.plataforma === plataforma);
   // Com uma loja escolhida: as contas dela e as que ainda nao tem loja (sao
@@ -160,7 +161,7 @@ export async function carregarAnuncios(
       erroFuso,
       fuso,
       moeda: filtro.moeda,
-      periodo: `${ROTULO_PERIODO[filtro.periodo]} (${rotuloIntervalo(intervalo)})`,
+      periodo: rotuloDoPeriodo(filtro.periodo, intervalo, hoje),
       gastos,
       erroGasto: gasto.erro,
       destinos: lojaFiltrada ? destinos.d.filter((d) => d.storeId === lojaFiltrada.id) : destinos.d,

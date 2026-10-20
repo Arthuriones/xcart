@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { STATUS, StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/components/ui/cn";
-import { ROTULO_PERIODO, rotuloIntervalo } from "@/components/layout/contexto";
+import { rotuloDoPeriodo } from "@/components/layout/contexto";
 import { formatarDinheiro } from "@/lib/financeiro/tipos";
 import {
   ORDEM_CONEXAO,
@@ -289,7 +289,7 @@ export function ListaLojas({ resumo }: { resumo: ResumoLojas }) {
     );
   }
 
-  const periodoTexto = `${ROTULO_PERIODO[resumo.periodo]} (${rotuloIntervalo(resumo.intervalo)}) · ${moeda}`;
+  const periodoTexto = `${rotuloDoPeriodo(resumo.periodo, resumo.intervalo, resumo.hoje)} · ${moeda}`;
 
   return (
     <div className="flex flex-col gap-4">

@@ -76,6 +76,8 @@ export function textoEnvio(plataforma: "Meta" | "Google", e: EstadoEnvio): strin
       return `${plataforma}: compra na fila de envio`;
     case "aguardando":
       return `${plataforma}: pedido recente, envio a caminho`;
+    case "sem_registro":
+      return `${plataforma}: sem registro do envio (guardado por 90 dias)`;
     case "nao_se_aplica":
       return `${plataforma}: este pedido não vira conversão`;
     case "teste":
@@ -91,7 +93,7 @@ export function textoEnvio(plataforma: "Meta" | "Google", e: EstadoEnvio): strin
 export function corEnvio(e: EstadoEnvio): "ok" | "err" | "neutro" | "apagado" {
   if (e === "enviado") return "ok";
   if (e === "falhou" || e === "faltou") return "err";
-  if (e === "sem_pixel" || e === "nao_se_aplica" || e === "teste") return "apagado";
+  if (e === "sem_pixel" || e === "nao_se_aplica" || e === "teste" || e === "sem_registro") return "apagado";
   return "neutro";
 }
 
@@ -222,6 +224,14 @@ export function jornadaDoPedido(p: PedidoTela, dinheiro: (v: number) => string):
       tom: "neutral",
       marca: "meta",
     });
+  } else if (p.meta === "sem_registro") {
+    j.push({
+      titulo: "Envio ao Meta sem registro",
+      detalhe: "O registro de cada envio fica guardado 90 dias, e este pedido é mais antigo.",
+      hora: "",
+      tom: "neutral",
+      marca: "meta",
+    });
   } else if (p.meta === "nao_se_aplica" && p.motivo) {
     j.push({ titulo: "Não vai para o Meta", detalhe: `Motivo: ${p.motivo}`, hora: "", tom: "neutral", marca: "meta" });
   }
@@ -253,6 +263,7 @@ const ENVIO_CSV: Record<EstadoEnvio, string> = {
   faltou: "não enviado",
   pendente: "na fila",
   aguardando: "a caminho",
+  sem_registro: "sem registro",
   sem_pixel: "sem pixel",
   nao_se_aplica: "não se aplica",
   teste: "teste",

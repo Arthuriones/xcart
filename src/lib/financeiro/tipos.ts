@@ -64,6 +64,26 @@ export const PERIODOS: { id: PeriodoId; rotulo: string }[] = [
 
 export const PERIODO_PADRAO: PeriodoId = "7d";
 
+/**
+ * O periodo da barra: um preset (PERIODOS) ou "Personalizado", um intervalo
+ * de datas fixas escolhido no calendario. PERIODOS continua SO com os presets
+ * (o teste da loja de demonstracao percorre a lista).
+ *
+ * No cookie, o personalizado vai como "AAAA-MM-DD_AAAA-MM-DD" (um dia so: as
+ * duas pontas iguais). Um deploy antigo nao reconhece e cai no padrao.
+ */
+export type Periodo = PeriodoId | Intervalo;
+
+/**
+ * Teto do personalizado, em dias. O calculo le o periodo atual E o anterior
+ * de mesmo tamanho, em paginas de 1000 em sequencia: 92 dias ja sao 184 lidos,
+ * o triplo do maior preset. Subir pede ler o anterior so quando ha comparacao.
+ */
+export const TETO_PERSONALIZADO_DIAS = 92;
+
+/** Ate quantos dias para tras o calendario deixa escolher. */
+export const VOLTA_MAXIMA_DIAS = 365;
+
 export type MoedaRelatorio = "BRL" | "USD" | "EUR";
 export const MOEDAS_RELATORIO: MoedaRelatorio[] = ["BRL", "USD", "EUR"];
 export const MOEDA_PADRAO: MoedaRelatorio = "BRL";
@@ -74,7 +94,7 @@ export const FUSO_RELATORIO_PADRAO = "America/Sao_Paulo";
 export interface FiltroGlobal {
   /** TODAS ou o uuid de uma loja. NAO conferido: quem usa filtra pelas lojas do usuario. */
   lojaId: string;
-  periodo: PeriodoId;
+  periodo: Periodo;
   moeda: MoedaRelatorio;
 }
 
@@ -108,9 +128,47 @@ export function filtroDeCookies(v: {
   moeda?: string | null;
 }): FiltroGlobal {
   const loja = v.loja;
-  const periodo = PERIODOS.find((p) => p.id === v.periodo)?.id ?? PERIODO_PADRAO;
+  const periodo = lerPeriodo(v.periodo) ?? PERIODO_PADRAO;
   const moeda = MOEDAS_RELATORIO.find((m) => m === v.moeda) ?? MOEDA_PADRAO;
   return { lojaId: ehUuid(loja) ? loja.toLowerCase() : TODAS, periodo, moeda };
+}
+
+/** O periodo e o "Personalizado" (datas fixas), e nao um preset? */
+export function ehPersonalizado(p: Periodo): p is Intervalo {
+  return typeof p === "object" && p !== null;
+}
+
+/** Periodo -> valor do cookie: o id do preset, ou "AAAA-MM-DD_AAAA-MM-DD". */
+export function serializarPeriodo(p: Periodo): string {
+  return ehPersonalizado(p) ? `${p.desde}_${p.ate}` : p;
+}
+
+const RE_DIA_DO_CALENDARIO = /^(20\d\d)-(\d\d)-(\d\d)$/;
+
+/** "AAAA-MM-DD" que existe no calendario: 2026-02-30 e 2026-13-01 nao passam. */
+export function diaValido(v: unknown): v is string {
+  if (typeof v !== "string") return false;
+  const m = RE_DIA_DO_CALENDARIO.exec(v);
+  if (!m) return false;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return d.toISOString().slice(0, 10) === v;
+}
+
+/**
+ * Valor do cookie -> periodo, ou null. Sem o "hoje" (o fuso depende da loja):
+ * aqui so o formato, a data real, desde <= ate e o teto. O futuro e cortado
+ * em intervaloDoPeriodo, que ja recebe o hoje no fuso certo.
+ */
+export function lerPeriodo(v: string | null | undefined): Periodo | null {
+  if (!v) return null;
+  const preset = PERIODOS.find((p) => p.id === v);
+  if (preset) return preset.id;
+  const partes = v.split("_");
+  if (partes.length !== 2) return null;
+  const [desde, ate] = partes;
+  if (!diaValido(desde) || !diaValido(ate) || desde > ate) return null;
+  if (diasNoIntervalo({ desde, ate }) > TETO_PERSONALIZADO_DIAS) return null;
+  return { desde, ate };
 }
 
 /**
@@ -173,13 +231,37 @@ export function diasDoIntervalo(i: Intervalo): string[] {
 }
 
 /**
+ * Personalizado -> intervalo atual e anterior. O fim nunca passa de hoje (o
+ * cookie foi gravado noutro fuso, ou a loja da barra mudou): o que sobra no
+ * futuro e cortado, e um intervalo todo no futuro vira so hoje. O anterior e o
+ * mesmo numero de dias logo antes: um dia compara com o dia anterior, como
+ * Hoje e Ontem.
+ */
+function intervaloPersonalizado(i: Intervalo, hoje: string): { atual: Intervalo; anterior: Intervalo } {
+  const ate = i.ate < hoje ? i.ate : hoje;
+  const desde = i.desde < ate ? i.desde : ate;
+  const n = diasNoIntervalo({ desde, ate });
+  return {
+    atual: { desde, ate },
+    anterior: { desde: somarDias(desde, -n), ate: somarDias(desde, -1) },
+  };
+}
+
+/**
  * Periodo -> intervalo atual e o anterior, de mesmo tamanho, para comparar.
- * `hoje` ja vem no fuso certo (diaNoFuso).
+ * `hoje` ja vem no fuso certo (diaNoFuso). Personalizado que nao passa na
+ * validacao do cookie (lerPeriodo) vale o padrao, nunca erro.
  */
 export function intervaloDoPeriodo(
-  periodo: PeriodoId,
+  periodo: Periodo,
   hoje: string
 ): { atual: Intervalo; anterior: Intervalo } {
+  if (ehPersonalizado(periodo)) {
+    const conferido = lerPeriodo(serializarPeriodo(periodo));
+    return conferido && ehPersonalizado(conferido)
+      ? intervaloPersonalizado(conferido, hoje)
+      : intervaloDoPeriodo(PERIODO_PADRAO, hoje);
+  }
   const primeiroDoMes = (dia: string) => `${dia.slice(0, 7)}-01`;
   switch (periodo) {
     case "hoje":

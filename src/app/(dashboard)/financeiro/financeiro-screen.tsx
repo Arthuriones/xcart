@@ -1,5 +1,5 @@
-import { ROTULO_PERIODO, rotuloIntervalo, type Comparacao } from "@/components/layout/contexto";
-import { TODAS } from "@/lib/financeiro/tipos";
+import { rotuloDoPeriodo, type Comparacao } from "@/components/layout/contexto";
+import { TODAS, diaNoFuso } from "@/lib/financeiro/tipos";
 import type { DadosFinanceiro } from "@/lib/financeiro/queries";
 import { pontoDeLinha, type SerieDiaria } from "@/lib/leitura/serie-diaria";
 import type { PorProduto } from "@/lib/leitura/por-produto";
@@ -69,7 +69,7 @@ export function FinanceiroScreen({
       : undefined;
   const rotuloLoja = lojaEscolhida ? nomeDaLoja(lojaEscolhida) : "Todas as lojas";
   // So para o leitor de tela do grafico: na tela, a barra do topo ja diz.
-  const contexto = `${rotuloLoja} · ${ROTULO_PERIODO[filtro.periodo]} (${rotuloIntervalo(r.intervalos.atual)}) · ${moeda}`;
+  const contexto = `${rotuloLoja} · ${rotuloDoPeriodo(filtro.periodo, r.intervalos.atual, diaNoFuso(new Date(), dados.fuso))} · ${moeda}`;
 
   const situacoes = situacaoDasLojas(dados.lojaIds, dados.estados, conexao.desinstaladas);
   const semAcesso = (id: string) => {

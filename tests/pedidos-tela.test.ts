@@ -214,6 +214,20 @@ describe("estadoMeta", () => {
     expect(estadoMeta({ ...base, processadoEm: "2026-10-04T11:50:00Z" })).toBe("aguardando");
   });
 
+  it("pedido mais velho que o expurgo da fila (90 dias): sem registro, nunca vermelho", () => {
+    const velho = { ...base, metaDesde: "2026-01-01T00:00:00Z" };
+    // 89 dias: o Purchase enviado ainda estaria na fila -- a falta e real.
+    expect(estadoMeta({ ...velho, processadoEm: "2026-07-07T12:00:00Z" })).toBe("faltou");
+    // 92 dias: o enviado ja foi apagado, a falta nao diz nada.
+    expect(estadoMeta({ ...velho, processadoEm: "2026-07-04T12:00:00Z" })).toBe("sem_registro");
+    // O que ainda esta na fila continua valendo.
+    expect(estadoMeta({ ...velho, processadoEm: "2026-07-04T12:00:00Z", eventos: ["enviado"] })).toBe("enviado");
+    // Sem pixel e o que nao vira conversao continuam cinza pelo motivo deles.
+    expect(estadoMeta({ ...velho, metaDesde: null, processadoEm: "2026-07-04T12:00:00Z" })).toBe("sem_pixel");
+    expect(estadoMeta({ ...velho, aplica: false, processadoEm: "2026-07-04T12:00:00Z" })).toBe("nao_se_aplica");
+    expect(corEnvio("sem_registro")).toBe("apagado");
+  });
+
   it("Google pela tag nunca e verde nem vermelho", () => {
     expect(corEnvio("tag")).toBe("neutro");
     expect(corEnvio("enviado")).toBe("ok");
@@ -354,6 +368,32 @@ describe("montarPedidos", () => {
     expect(passaNoFiltro(pa, "falha")).toBe(true);
     expect(passaNoFiltro(pb, "falha")).toBe(false);
     expect(passaNoFiltro(pb, "meta")).toBe(true);
+  });
+
+  it("periodo antigo (personalizado): pedido sem registro fica fora de Nao chegou e da conta", () => {
+    const antigo = pedido({ processado_em: "2026-06-20T15:00:00Z", dia_local: "2026-06-20" });
+    const e = entrada([antigo], {
+      intervalos: {
+        atual: { desde: "2026-06-20", ate: "2026-06-20" },
+        anterior: { desde: "2026-06-19", ate: "2026-06-19" },
+      },
+    });
+    const { pedidos, resumo } = montarPedidos({
+      entrada: e,
+      lojas: e.lojas,
+      fuso: "America/Sao_Paulo",
+      eventos: [],
+      destinos: destinos.map((d) => ({ ...d, created_at: "2026-01-01T00:00:00Z" })),
+      lojasLigadas: [LOJA],
+      agoraMs: AGORA,
+    });
+    expect(pedidos[0].meta).toBe("sem_registro");
+    expect(passaNoFiltro(pedidos[0], "falha")).toBe(false);
+    expect(resumo.rastreadas).toBeNull();
+    expect(linhaCsv(pedidos[0])).toContain("sem registro");
+    const j = jornadaDoPedido(pedidos[0], String);
+    expect(j.some((x) => x.titulo === "Envio ao Meta sem registro" && x.tom === "neutral")).toBe(true);
+    expect(j.some((x) => x.tom === "err")).toBe(false);
   });
 
   it("loja com rastreamento desligado: cinza, nunca vermelho", () => {

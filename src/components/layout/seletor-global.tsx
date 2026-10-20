@@ -4,7 +4,18 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Tooltip } from "@base-ui/react/tooltip";
-import { Calendar, Check, ChevronDown, Plus, RefreshCw, Search, SlidersHorizontal, Store, X } from "lucide-react";
+import {
+  Calendar,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  Plus,
+  RefreshCw,
+  Search,
+  SlidersHorizontal,
+  Store,
+  X,
+} from "lucide-react";
 import clsx from "clsx";
 import { ROTA_CONECTAR_OPERACAO, ROTULO_CONECTAR_OPERACAO } from "@/lib/conectar-operacao";
 import {
@@ -14,18 +25,26 @@ import {
   MOEDAS_RELATORIO,
   PERIODOS,
   TODAS,
+  ehPersonalizado,
+  intervaloDoPeriodo,
+  serializarPeriodo,
   type FiltroGlobal,
   type Intervalo,
   type LojaDoSeletor,
   type MoedaRelatorio,
+  type Periodo,
   type PeriodoId,
 } from "@/lib/financeiro/tipos";
+import { Calendario } from "./calendario";
 import {
   COOKIE_COMPARAR,
   ROTULO_COMPARACAO,
   ROTULO_PERIODO,
+  ROTULO_PERSONALIZADO,
   gravarCookie,
   horaNoFuso,
+  nomeDoPeriodo,
+  rotuloDatas,
   rotuloFuso,
   rotuloIntervalo,
   type Comparacao,
@@ -56,12 +75,13 @@ export interface DadosContexto {
   /** Fuso do "hoje" do relatorio: o da loja escolhida, ou Sao Paulo. */
   fuso: string;
   hoje: string;
+  /** Os presets, ja calculados no servidor. O personalizado e calculado aqui (intervalosDe). */
   intervalos: Record<PeriodoId, { atual: Intervalo; anterior: Intervalo }>;
 }
 
 interface Valores {
   lojaId: string;
-  periodo: PeriodoId;
+  periodo: Periodo;
   moeda: MoedaRelatorio;
   comparacao: Comparacao;
 }
@@ -72,6 +92,19 @@ const COOKIES: Record<keyof Valores, string> = {
   moeda: COOKIE_MOEDA,
   comparacao: COOKIE_COMPARAR,
 };
+
+/** O valor como vai no cookie: o periodo personalizado e um objeto. */
+function noCookie(v: Valores, chave: keyof Valores): string {
+  return chave === "periodo" ? serializarPeriodo(v.periodo) : String(v[chave]);
+}
+
+/**
+ * Atual e anterior do periodo. tipos.ts e puro: a conta do personalizado aqui
+ * e a mesma do servidor, com o mesmo "hoje" (o do fuso do relatorio).
+ */
+function intervalosDe(dados: DadosContexto, p: Periodo): { atual: Intervalo; anterior: Intervalo } {
+  return ehPersonalizado(p) ? intervaloDoPeriodo(p, dados.hoje) : dados.intervalos[p];
+}
 
 /**
  * Estado da barra: responde na hora (otimista) e o servidor confirma no
@@ -99,8 +132,9 @@ export function useContexto(dados: DadosContexto | null) {
     const proximo = { ...valores, ...mudanca };
     let mudou = false;
     for (const chave of Object.keys(mudanca) as (keyof Valores)[]) {
-      if (proximo[chave] === valores[chave]) continue;
-      gravarCookie(COOKIES[chave], String(proximo[chave]));
+      const valor = noCookie(proximo, chave);
+      if (valor === noCookie(valores, chave)) continue;
+      gravarCookie(COOKIES[chave], valor);
       mudou = true;
     }
     if (!mudou) return;
@@ -316,12 +350,14 @@ function LinkConectar({ grande, aoIr }: { grande?: boolean; aoIr: () => void }) 
 }
 
 function Radio({
+  id,
   marcado,
   rotulo,
   sub,
   grande,
   onEscolher,
 }: {
+  id?: string;
   marcado: boolean;
   rotulo: string;
   sub?: string;
@@ -330,6 +366,7 @@ function Radio({
 }) {
   return (
     <button
+      id={id}
       type="button"
       role="radio"
       aria-checked={marcado}
@@ -404,6 +441,10 @@ export function BarraContexto({
 }) {
   const [aberto, setAberto] = useState<"loja" | "periodo" | "comparar" | null>(null);
   const [busca, setBusca] = useState("");
+  // Pop do periodo: a lista de presets ou o calendario do personalizado, com
+  // as datas escolhidas ainda nao aplicadas.
+  const [calendario, setCalendario] = useState(false);
+  const [datas, setDatas] = useState<Intervalo | null>(null);
   const v = ctx.valores;
   if (!v || modo.tipo === "nenhum") return null;
 
@@ -415,10 +456,15 @@ export function BarraContexto({
     aberto: aberto === qual,
     aoMudar: (a: boolean) => {
       setAberto(a ? qual : null);
-      if (!a) setBusca("");
+      if (!a) {
+        setBusca("");
+        setCalendario(false);
+      }
     },
   });
-  const atual = dados.intervalos[v.periodo];
+  const atual = intervalosDe(dados, v.periodo);
+  const personalizado = ehPersonalizado(v.periodo);
+  const notaFuso = <p className="px-2 pb-1.5 pt-1 text-label text-t2">Os dias contam no {rotuloFuso(dados.fuso)}.</p>;
 
   return (
     <div
@@ -507,28 +553,79 @@ export function BarraContexto({
             gatilho={
               <button type="button" className={clsx(GATILHO, "border-border-strong bg-surface text-ink")}>
                 <Calendar className="size-4 shrink-0 text-t2" strokeWidth={1.75} aria-hidden />
-                <span className="whitespace-nowrap">{ROTULO_PERIODO[v.periodo]}</span>
-                <span className="num hidden whitespace-nowrap text-t2 min-[1360px]:inline">
-                  {rotuloIntervalo(atual.atual)}
-                </span>
+                <span className="whitespace-nowrap">{nomeDoPeriodo(v.periodo, atual.atual, dados.hoje)}</span>
+                {!personalizado && (
+                  <span className="num hidden whitespace-nowrap text-t2 min-[1360px]:inline">
+                    {rotuloIntervalo(atual.atual)}
+                  </span>
+                )}
                 <ChevronDown className="size-3.5 shrink-0 text-t3" strokeWidth={1.75} aria-hidden />
               </button>
             }
           >
-            <div role="radiogroup" aria-label="Período" className="flex flex-col">
-              {PERIODOS.map((p) => (
-                <Radio
-                  key={p.id}
-                  marcado={p.id === v.periodo}
-                  rotulo={ROTULO_PERIODO[p.id]}
-                  sub={rotuloIntervalo(dados.intervalos[p.id].atual)}
-                  onEscolher={() => {
-                    ctx.gravar({ periodo: p.id });
-                    setAberto(null);
+            {calendario ? (
+              <div className="flex flex-col gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCalendario(false);
+                    // O botao "Personalizado" volta a existir no proximo quadro.
+                    requestAnimationFrame(() => document.getElementById("periodo-personalizado")?.focus());
                   }}
-                />
-              ))}
-            </div>
+                  className="flex h-ctl-md items-center gap-1 self-start rounded-control px-2 text-dense text-t1 hover:bg-hover hover:text-ink"
+                >
+                  <ChevronLeft className="size-4" strokeWidth={1.75} aria-hidden />
+                  Voltar
+                </button>
+                <div className="px-1">
+                  <Calendario hoje={dados.hoje} valor={datas} aoMudar={setDatas} focarAoAbrir />
+                </div>
+                <div className="px-1 pt-1">
+                  <button
+                    type="button"
+                    disabled={!datas}
+                    onClick={() => {
+                      if (datas) ctx.gravar({ periodo: datas });
+                      setAberto(null);
+                      setCalendario(false);
+                    }}
+                    className="h-ctl-md w-full rounded-control bg-solid text-dense font-medium text-on-solid hover:bg-solid-hover disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Aplicar
+                  </button>
+                </div>
+                {notaFuso}
+              </div>
+            ) : (
+              <>
+                <div role="radiogroup" aria-label="Período" className="flex flex-col">
+                  {PERIODOS.map((p) => (
+                    <Radio
+                      key={p.id}
+                      marcado={p.id === v.periodo}
+                      rotulo={ROTULO_PERIODO[p.id]}
+                      sub={rotuloIntervalo(dados.intervalos[p.id].atual)}
+                      onEscolher={() => {
+                        ctx.gravar({ periodo: p.id });
+                        setAberto(null);
+                      }}
+                    />
+                  ))}
+                  <span aria-hidden className="mx-2 my-1 h-px bg-border" />
+                  <Radio
+                    id="periodo-personalizado"
+                    marcado={personalizado}
+                    rotulo={ROTULO_PERSONALIZADO}
+                    sub={personalizado ? rotuloDatas(atual.atual, dados.hoje) : "Escolher datas"}
+                    onEscolher={() => {
+                      setDatas(personalizado ? atual.atual : null);
+                      setCalendario(true);
+                    }}
+                  />
+                </div>
+                {notaFuso}
+              </>
+            )}
           </Pop>
 
           {comparar && (
@@ -666,6 +763,10 @@ export function ContextoCelular({
 }) {
   const [aberto, setAberto] = useState(false);
   const [rascunho, setRascunho] = useState<Valores | null>(null);
+  // A pilula "Personalizado" marcada: o calendario aparece embaixo. "tocou":
+  // foi o toque agora (e nao a folha abrindo ja nele), e o calendario rola ate
+  // ficar a vista.
+  const [calendario, setCalendario] = useState<"fechado" | "aberto" | "tocou">("fechado");
   const v = ctx.valores;
   if (!v || modo.tipo === "nenhum") return null;
 
@@ -674,12 +775,14 @@ export function ContextoCelular({
   const r = rascunho ?? v;
   const nomeLoja = nomeDaLoja(dados.lojas, v.lojaId);
   const resumo = [nomeLoja ?? "Todas as lojas"];
-  if (completo) resumo.push(ROTULO_PERIODO[v.periodo], v.moeda);
+  if (completo) resumo.push(nomeDoPeriodo(v.periodo, intervalosDe(dados, v.periodo).atual, dados.hoje), v.moeda);
   if (modo.tipo === "loja") resumo.push("só a loja");
+  const rascunhoPersonalizado = ehPersonalizado(r.periodo) ? intervalosDe(dados, r.periodo).atual : null;
 
   function abrir(a: boolean) {
     setAberto(a);
     setRascunho(a ? v : null);
+    setCalendario(a && v !== null && ehPersonalizado(v.periodo) ? "aberto" : "fechado");
   }
 
   const secao = "flex flex-col gap-2";
@@ -741,15 +844,23 @@ export function ContextoCelular({
                   Período
                 </span>
                 <div role="radiogroup" aria-labelledby="cel-periodo" className="flex flex-wrap gap-2">
-                  {PERIODOS.map((p) => {
-                    const on = p.id === r.periodo;
+                  {[...PERIODOS.map((p) => p.id), null].map((id) => {
+                    // null = a pilula "Personalizado".
+                    const on = id === null ? calendario !== "fechado" : calendario === "fechado" && id === r.periodo;
                     return (
                       <button
-                        key={p.id}
+                        key={id ?? "personalizado"}
                         type="button"
                         role="radio"
                         aria-checked={on}
-                        onClick={() => setRascunho({ ...r, periodo: p.id })}
+                        onClick={() => {
+                          if (id === null) {
+                            if (calendario === "fechado") setCalendario("tocou");
+                            return;
+                          }
+                          setRascunho({ ...r, periodo: id });
+                          setCalendario("fechado");
+                        }}
                         className={clsx(
                           "h-ctl-lg rounded-full border px-3.5 text-dense",
                           on
@@ -757,11 +868,22 @@ export function ContextoCelular({
                             : "border-border-strong text-t1"
                         )}
                       >
-                        {ROTULO_PERIODO[p.id]}
+                        {id === null ? ROTULO_PERSONALIZADO : ROTULO_PERIODO[id]}
                       </button>
                     );
                   })}
                 </div>
+                {calendario !== "fechado" && (
+                  <div className="pt-1">
+                    <Calendario
+                      hoje={dados.hoje}
+                      valor={rascunhoPersonalizado}
+                      aoMudar={(i) => setRascunho({ ...r, periodo: i })}
+                      grande
+                      rolarAoAbrir={calendario === "tocou"}
+                    />
+                  </div>
+                )}
               </div>
               {comparar && (
                 <div className={secao}>
@@ -775,7 +897,7 @@ export function ContextoCelular({
                         grande
                         marcado={c === r.comparacao}
                         rotulo={ROTULO_COMPARACAO[c]}
-                        sub={c === "anterior" ? rotuloIntervalo(dados.intervalos[r.periodo].anterior) : undefined}
+                        sub={c === "anterior" ? rotuloIntervalo(intervalosDe(dados, r.periodo).anterior) : undefined}
                         onEscolher={() => setRascunho({ ...r, comparacao: c })}
                       />
                     ))}

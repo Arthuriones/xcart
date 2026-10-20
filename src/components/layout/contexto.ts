@@ -1,4 +1,11 @@
-import { linhaDeCookie, type Intervalo, type PeriodoId } from "@/lib/financeiro/tipos";
+import {
+  diasNoIntervalo,
+  ehPersonalizado,
+  linhaDeCookie,
+  type Intervalo,
+  type Periodo,
+  type PeriodoId,
+} from "@/lib/financeiro/tipos";
 
 // ============================================================================
 // Contexto dos numeros (loja, periodo, comparacao, moeda, fuso): o que a barra
@@ -13,8 +20,9 @@ export const COOKIE_COMPARAR = "xc_comparar";
 
 /**
  * So as comparacoes que o calculo ja sabe fazer: o periodo anterior de mesmo
- * tamanho (intervaloDoPeriodo) ou nenhuma. "Mesmo periodo do ano passado" e
- * "personalizado" pedem intervalo livre, que espera aprovacao (decisao 7).
+ * tamanho (intervaloDoPeriodo) ou nenhuma. "Mesmo periodo do ano passado" pede
+ * outra regra de anterior, que espera aprovacao (decisao 7). O periodo
+ * "Personalizado" (datas do calendario) compara com os mesmos N dias antes.
  */
 export type Comparacao = "anterior" | "nenhum";
 export const COMPARACAO_PADRAO: Comparacao = "anterior";
@@ -53,6 +61,74 @@ export const ROTULO_COMPARACAO: Record<Comparacao, string> = {
   anterior: "Período anterior",
   nenhum: "Sem comparação",
 };
+
+/** O "Personalizado" da barra: datas fixas escolhidas no calendario. */
+export const ROTULO_PERSONALIZADO = "Personalizado";
+
+/** Meses abreviados, sem ponto: "15 out", e o grafico agrupado por mes. */
+export const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+export const MESES_LONGOS = [
+  "janeiro",
+  "fevereiro",
+  "março",
+  "abril",
+  "maio",
+  "junho",
+  "julho",
+  "agosto",
+  "setembro",
+  "outubro",
+  "novembro",
+  "dezembro",
+];
+
+/** "2026-10-05" -> ["5", "out", "2026"]: dia sem zero a esquerda. */
+function partesDoDia(dia: string): [string, string, string] {
+  return [String(Number(dia.slice(8, 10))), MESES[Number(dia.slice(5, 7)) - 1] ?? "", dia.slice(0, 4)];
+}
+
+/**
+ * Datas do personalizado, curtas. O ano so aparece quando nao e o de hoje.
+ * - um dia: "15 out" ("15 out 2025");
+ * - mesmo mes: "10–14 out";
+ * - meses diferentes: "10 set – 14 out";
+ * - anos diferentes: "28 dez 2025 – 3 jan 2026".
+ */
+export function rotuloDatas(i: Intervalo, hoje: string): string {
+  const [d1, m1, a1] = partesDoDia(i.desde);
+  const [d2, m2, a2] = partesDoDia(i.ate);
+  const ano = (a: string) => (a !== hoje.slice(0, 4) ? ` ${a}` : "");
+  if (i.desde === i.ate) return `${d2} ${m2}${ano(a2)}`;
+  if (a1 !== a2) return `${d1} ${m1} ${a1} – ${d2} ${m2} ${a2}`;
+  if (m1 === m2) return `${d1}–${d2} ${m2}${ano(a2)}`;
+  return `${d1} ${m1} – ${d2} ${m2}${ano(a2)}`;
+}
+
+/** "5 dias", "1 dia". */
+export function rotuloDias(i: Intervalo): string {
+  const n = diasNoIntervalo(i);
+  return n === 1 ? "1 dia" : `${n} dias`;
+}
+
+/**
+ * O nome curto do periodo, para o botao do topo e o resumo do celular:
+ * "Últimos 7 dias", ou as datas do personalizado ("10–14 out").
+ * `intervalo` e o atual ja calculado (intervaloDoPeriodo).
+ */
+export function nomeDoPeriodo(p: Periodo, intervalo: Intervalo, hoje: string): string {
+  return ehPersonalizado(p) ? rotuloDatas(intervalo, hoje) : ROTULO_PERIODO[p];
+}
+
+/**
+ * O periodo por extenso, para titulos e leitor de tela: "Últimos 7 dias
+ * (13/10–19/10)". O personalizado ja e as datas: so "10–14 out".
+ */
+export function rotuloDoPeriodo(p: Periodo, intervalo: Intervalo, hoje: string): string {
+  return ehPersonalizado(p)
+    ? rotuloDatas(intervalo, hoje)
+    : `${ROTULO_PERIODO[p]} (${rotuloIntervalo(intervalo)})`;
+}
 
 /** "2026-10-02" -> "02/10". */
 export function diaCurto(dia: string): string {

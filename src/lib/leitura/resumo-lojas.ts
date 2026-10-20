@@ -21,7 +21,7 @@ import {
   type Intervalo,
   type LojaDoSeletor,
   type MoedaRelatorio,
-  type PeriodoId,
+  type Periodo,
   type ProductCostRow,
   type SeveridadeAlerta,
 } from "@/lib/financeiro/tipos";
@@ -234,9 +234,11 @@ export type ResumoLojas = {
   lojas: ResumoLoja[];
   /** Alguma loja esta numa rota: a coluna Papel aparece. */
   temRota: boolean;
-  periodo: PeriodoId;
+  periodo: Periodo;
   moeda: MoedaRelatorio;
   intervalo: Intervalo;
+  /** O hoje do periodo (Sao Paulo): o rotulo do personalizado so poe o ano quando nao e este. */
+  hoje: string;
   financeiroIndisponivel: boolean;
   rastreamentoIndisponivel: boolean;
 };
@@ -268,6 +270,7 @@ export async function lerResumoLojas(): Promise<ResumoLojas> {
     periodo: filtro.periodo,
     moeda: filtro.moeda,
     intervalo: intervalos.atual,
+    hoje,
     financeiroIndisponivel: false,
     rastreamentoIndisponivel: false,
   };

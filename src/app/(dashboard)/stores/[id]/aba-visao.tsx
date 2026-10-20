@@ -4,7 +4,7 @@ import { KpiCard } from "@/components/ui/kpi-card";
 import { Section } from "@/components/ui/section";
 import { STATUS, StatusBadge } from "@/components/ui/status-badge";
 import { calcularVariacao } from "@/components/ui/variacao";
-import { ROTULO_PERIODO, rotuloFuso, rotuloIntervalo } from "@/components/layout/contexto";
+import { rotuloDoPeriodo, rotuloFuso } from "@/components/layout/contexto";
 import {
   lerAlertasDaLoja,
   lerFinanceiroDaLoja,
@@ -153,7 +153,7 @@ export function VisaoGeral({
 }
 
 function Numeros({ dados, lojaId }: { dados: FinanceiroDaLoja; lojaId: string }) {
-  const { resultado: r, filtro, comparacao, fuso } = dados;
+  const { resultado: r, filtro, comparacao, fuso, hoje } = dados;
   const moeda = r.moeda;
   const a = r.atual;
   const p = r.anterior;
@@ -167,7 +167,7 @@ function Numeros({ dados, lojaId }: { dados: FinanceiroDaLoja; lojaId: string })
     <div className="flex flex-col gap-3">
       <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-label text-t2">
         <span>
-          {ROTULO_PERIODO[filtro.periodo]} · {rotuloIntervalo(r.intervalos.atual)} · {rotuloFuso(fuso)} · {moeda}
+          {rotuloDoPeriodo(filtro.periodo, r.intervalos.atual, hoje)} · {rotuloFuso(fuso)} · {moeda}
         </span>
         <LinkComLoja
           lojaId={lojaId}

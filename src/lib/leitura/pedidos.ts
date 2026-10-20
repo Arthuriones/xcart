@@ -261,6 +261,8 @@ export function origemDaGravada(
  * - enviado / falhou / pendente: o que a fila diz do Purchase deste pedido;
  * - faltou: loja com Meta ligado e nenhum Purchase para o pedido;
  * - aguardando: o mesmo, mas o pedido tem menos de 15 minutos;
+ * - sem_registro: o mesmo, mas o pedido e mais velho que o expurgo da fila
+ *   (90 dias): o Purchase que saiu ja foi apagado, e a falta nao diz nada;
  * - sem_pixel: a loja nao tinha Meta ligado (ou o pixel nasceu depois);
  * - nao_se_aplica: pedido que nunca vira conversao (draft, valor zero...);
  * - teste: compra de teste do dono, que nao sai para a plataforma;
@@ -273,6 +275,7 @@ export type EstadoEnvio =
   | "pendente"
   | "faltou"
   | "aguardando"
+  | "sem_registro"
   | "sem_pixel"
   | "nao_se_aplica"
   | "teste"
@@ -282,6 +285,14 @@ export type StatusFila = "enviado" | "falhou" | "pendente";
 
 /** Pedido mais novo que isto ainda pode estar a caminho da fila. */
 export const JANELA_AGUARDANDO_MS = 15 * 60 * 1000;
+
+/**
+ * O purge_tracking (migration 048) apaga o evento 'enviado' com mais de 90
+ * dias. Pedido mais velho que isto sem Purchase na fila nao e "nao chegou":
+ * o registro e que acabou. (O 'falhou' sai em 30 dias, mas ai a falta continua
+ * sendo "nao chegou" -- ele nao tinha chegado.)
+ */
+export const RETENCAO_EVENTOS_MS = 90 * 24 * 60 * 60 * 1000;
 
 /** O pedido e anterior ao instante (ISO)? Data torta nao conta como anterior. */
 function antesDe(processadoEm: string, desde: string): boolean {
@@ -321,6 +332,7 @@ export function estadoMeta(e: {
   if (!e.aplica) return "nao_se_aplica";
   if (antesDe(e.processadoEm, e.metaDesde)) return "sem_pixel";
   const pedidoMs = Date.parse(e.processadoEm);
+  if (Number.isFinite(pedidoMs) && e.agoraMs - pedidoMs > RETENCAO_EVENTOS_MS) return "sem_registro";
   if (Number.isFinite(pedidoMs) && e.agoraMs - pedidoMs < JANELA_AGUARDANDO_MS) return "aguardando";
   return "faltou";
 }
