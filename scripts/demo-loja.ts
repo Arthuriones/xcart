@@ -33,11 +33,12 @@
  *
  * O BANCO E PEQUENO: producao esta no plano free do Supabase (500 MB; cheio,
  * fica so leitura e para webhook, coletor e roteamento das lojas reais). A
- * loja guarda so janelas que rolam (semeadura.ts): pedidos, origem e gasto de
- * 50 dias (ate o dia 1 do mes anterior, para "Mes passado" sair inteiro),
- * Purchase de 35 dias e o funil das ultimas 48 h. O semear de verdade mede a
- * carga no banco (tamanho.ts, so SELECT) e RECUSA gravar se ela passar de
- * 70 MB ou se o banco mais ela passar de 400 MB. Rode todo dia: cada execucao
+ * loja guarda so janelas que rolam (semeadura.ts): pedidos, origem e gasto
+ * desde o dia 1 do mes retrasado (60 a 92 dias: o periodo atual e o anterior
+ * de todo periodo do app), Purchase dos ultimos 35 dias ou desde o dia 1 do
+ * mes anterior (35 a 62 dias) e o funil das ultimas 48 h. O semear de verdade
+ * mede a carga no banco (tamanho.ts, so SELECT) e RECUSA gravar se ela passar
+ * de 70 MB ou se o banco mais ela passar de 400 MB. Rode todo dia: cada execucao
  * apaga o que saiu da janela, e a loja nao cresce.
  *
  * Re-executavel e idempotente: os ids sao fixos (uuid v5 da semente) e cada
@@ -62,7 +63,6 @@ import {
   CONTAS_DESDE,
   DESTINO_GOOGLE,
   DESTINO_META,
-  DIAS_DE_COMPRA,
   DOMINIO,
   FUSO,
   HORAS_DE_FUNIL,
@@ -70,6 +70,7 @@ import {
   LOJA_CONECTADA_EM,
   LOJA_ID,
   MAIOR_JANELA,
+  MAIOR_JANELA_DE_COMPRA,
   MOEDA,
   NOME_LOJA,
   RASTREAMENTO_DESDE,
@@ -264,7 +265,7 @@ function resumir(s: Semeadura, fx: FxRateRow[], doBanco: boolean) {
   console.log(`\nLoja de demonstracao: ${NOME_LOJA} · ${DOMINIO} (id ${LOJA_ID})`);
   console.log(`Agora: ${iso(s.agoraMs)} · hoje no fuso da loja (${FUSO}): ${s.hoje}`);
   console.log(
-    `Janelas: pedidos/origem/gasto desde ${s.cortes.janela} (${diasEntre(s.cortes.janela, s.hoje).length} dias) · Purchase desde ${iso(s.cortes.compras)} (${DIAS_DE_COMPRA} dias) · funil desde ${iso(s.cortes.funil)} (${HORAS_DE_FUNIL} h)`
+    `Janelas: pedidos/origem/gasto desde ${s.cortes.janela} (${diasEntre(s.cortes.janela, s.hoje).length} dias) · Purchase desde ${iso(s.cortes.compras)} (${diasDeCompra(s)} dias) · funil desde ${iso(s.cortes.funil)} (${HORAS_DE_FUNIL} h)`
   );
   console.log(`Cambio: ${doBanco ? "fx_rates do banco" : "cotacao de reserva (sem banco)"}\n`);
   console.log(
@@ -357,12 +358,19 @@ function granularDe(s: Semeadura, brl: number): LinhaGranular[] {
   );
 }
 
+/** Os dias locais com Purchase na fila, contando hoje (35 a 62). */
+function diasDeCompra(s: Semeadura): number {
+  return diasEntre(diaLocal(s.cortes.compras), s.hoje).length;
+}
+
+const ROTULO_COMPRAS = "tracking_events: Purchase";
+
 /** O que a loja ocupa nas tabelas que crescem (a loja, as contas e a config sao umas poucas linhas). */
 function partesDaCarga(s: Semeadura, brl: number): ParteDaCarga[] {
   return [
     { rotulo: "fin_orders", tabela: "fin_orders", linhas: s.pedidos },
     { rotulo: "fin_order_origem", tabela: "fin_order_origem", linhas: s.origens },
-    { rotulo: `tracking_events: Purchase (${DIAS_DE_COMPRA} d)`, tabela: "tracking_events", linhas: s.compras },
+    { rotulo: `${ROTULO_COMPRAS} (${diasDeCompra(s)} d)`, tabela: "tracking_events", linhas: s.compras },
     { rotulo: `tracking_events: funil (${HORAS_DE_FUNIL} h)`, tabela: "tracking_events", linhas: s.funil },
     { rotulo: "ad_spend_daily", tabela: "ad_spend_daily", linhas: s.linhasGasto },
     { rotulo: "ad_insights_granular (hoje)", tabela: "ad_insights_granular", linhas: granularDe(s, brl) },
@@ -388,12 +396,20 @@ function imprimirEspaco(e: Estimativa, s: Semeadura) {
     );
   }
   console.log(`  ${"total".padEnd(36)} ${pad("", 7)} ${pad("", 7)} ${pad("", 11)} ${pad(`${mb(e.total)} MB`, 9)}  (limite da carga ${mb(LIMITE_DA_CARGA)} MB)`);
-  // Pedidos, origem e gasto crescem com a janela; Purchase, funil e o resto nao.
+  // Pedidos, origem e gasto crescem com a janela; Purchase com a janela de
+  // compras; o funil (48 h) e o resto nao.
   const dias = diasEntre(s.cortes.janela, s.hoje).length;
-  const crescem = e.partes
-    .filter((p) => p.tabela === "fin_orders" || p.tabela === "fin_order_origem" || p.tabela === "ad_spend_daily")
-    .reduce((t, p) => t + p.bytes, 0);
-  console.log(`  na janela mais longa (${MAIOR_JANELA} dias; hoje sao ${dias}): ~${mb(e.total + (crescem * (MAIOR_JANELA - dias)) / dias)} MB`);
+  const diasCompra = diasDeCompra(s);
+  const escala = (p: (typeof e.partes)[number]) =>
+    p.tabela === "fin_orders" || p.tabela === "fin_order_origem" || p.tabela === "ad_spend_daily"
+      ? MAIOR_JANELA / dias
+      : p.rotulo.startsWith(ROTULO_COMPRAS)
+        ? MAIOR_JANELA_DE_COMPRA / diasCompra
+        : 1;
+  const maior = e.partes.reduce((t, p) => t + p.bytes * escala(p), 0);
+  console.log(
+    `  nas janelas mais longas (${MAIOR_JANELA} dias de pedidos, ${MAIOR_JANELA_DE_COMPRA} de Purchase; hoje sao ${dias} e ${diasCompra}): ~${mb(maior)} MB`
+  );
   if (e.banco !== null) {
     console.log(`  banco agora (pg_database_size): ${mb(e.banco)} MB · banco + carga: ${mb(e.banco + e.total)} MB (limite ${mb(LIMITE_DO_BANCO)} MB)`);
   }
@@ -447,13 +463,51 @@ async function ultimoDiaGravado(admin: Admin): Promise<string | null> {
   return a < b ? a : b;
 }
 
-async function conferirAntes(admin: Admin, dryRun: boolean): Promise<{ existe: boolean; ultimoDia: string | null; ultimoFunil: string | null }> {
+/**
+ * O comeco do que esta gravado: o primeiro dia de fin_orders e o primeiro
+ * Purchase. Se a janela crescer (constante nova), os dias que faltam ficam
+ * ATRAS do gravado, e o padrao (so os ultimos DIAS_REGRAVADOS) nunca os
+ * preencheria -- o semear compara com as janelas e regrava a inteira.
+ */
+async function comecoGravado(admin: Admin): Promise<{ primeiroDia: string | null; primeiraCompra: string | null }> {
+  const { data: dia, error: e1 } = await admin
+    .from("fin_orders")
+    .select("dia_local")
+    .eq("store_id", LOJA_ID)
+    .order("dia_local", { ascending: true })
+    .limit(1);
+  if (e1) falhar(`fin_orders: ${e1.message}`);
+  const { data: compra, error: e2 } = await admin
+    .from("tracking_events")
+    .select("created_at")
+    .eq("store_id", LOJA_ID)
+    .eq("event_name", "Purchase")
+    .order("created_at", { ascending: true })
+    .limit(1);
+  if (e2) falhar(`tracking_events: ${e2.message}`);
+  return {
+    primeiroDia: ((dia ?? [])[0] as { dia_local?: string } | undefined)?.dia_local ?? null,
+    primeiraCompra: ((compra ?? [])[0] as { created_at?: string } | undefined)?.created_at ?? null,
+  };
+}
+
+interface EstadoGravado {
+  existe: boolean;
+  ultimoDia: string | null;
+  ultimoFunil: string | null;
+  primeiroDia: string | null;
+  primeiraCompra: string | null;
+}
+
+const NADA_GRAVADO: EstadoGravado = { existe: false, ultimoDia: null, ultimoFunil: null, primeiroDia: null, primeiraCompra: null };
+
+async function conferirAntes(admin: Admin, dryRun: boolean): Promise<EstadoGravado> {
   const { data: loja, error } = await admin.from("stores").select("id, user_id, shop_domain, demonstracao").eq("id", LOJA_ID).maybeSingle();
   if (error) {
     if (ehColunaAusente(error)) {
       if (dryRun) {
         console.log("AVISO: a migration 074 (stores.demonstracao) ainda nao foi aplicada -- o semear de verdade recusa rodar sem ela.");
-        return { existe: false, ultimoDia: null, ultimoFunil: null };
+        return NADA_GRAVADO;
       }
       falhar("a migration 074 (stores.demonstracao) nao esta aplicada. Aplique antes: sem a marca, o cron trataria a loja como real.");
     }
@@ -468,8 +522,9 @@ async function conferirAntes(admin: Admin, dryRun: boolean): Promise<{ existe: b
     const { data: perfil } = await admin.from("profiles").select("id").eq("id", ARTHUR).maybeSingle();
     if (!perfil) falhar(`perfil ${ARTHUR} nao encontrado.`);
   }
-  if (!loja) return { existe: false, ultimoDia: null, ultimoFunil: null };
+  if (!loja) return NADA_GRAVADO;
   const ultimoDia = await ultimoDiaGravado(admin);
+  const comeco = await comecoGravado(admin);
   const { data: fun, error: erroFunil } = await admin
     .from("tracking_events")
     .select("created_at")
@@ -483,7 +538,19 @@ async function conferirAntes(admin: Admin, dryRun: boolean): Promise<{ existe: b
     ultimoDia,
     // Sem dia inteiro gravado, o funil tambem vai do comeco.
     ultimoFunil: ultimoDia ? ((fun ?? [])[0]?.created_at ?? null) : null,
+    ...comeco,
   };
+}
+
+/**
+ * Falta dia ATRAS do que esta gravado? As janelas so andam para frente
+ * (plano.ts), entao isto so acontece quando uma constante muda ou alguem
+ * apaga linha a mao -- ai o semear regrava a janela inteira.
+ */
+function faltaOComeco(e: EstadoGravado, s: Semeadura): boolean {
+  if (!e.ultimoDia) return false;
+  if (!e.primeiroDia || e.primeiroDia > s.cortes.janela) return true;
+  return !e.primeiraCompra || diaLocal(Date.parse(e.primeiraCompra)) > diaLocal(s.cortes.compras);
 }
 
 async function gravarBase(admin: Admin, existe: boolean) {
@@ -661,8 +728,8 @@ async function gravarDados(
 /**
  * O que saiu das janelas sai do banco -- rodar todo dia mantem a loja do
  * mesmo tamanho: funil com mais de HORAS_DE_FUNIL, Purchase antes do corte
- * das compras, e pedido, origem e gasto antes de inicioDaJanela. fin_orders
- * por ultimo, como na gravacao.
+ * das compras (primeiroDiaDeCompra), e pedido, origem e gasto antes de
+ * inicioDaJanela. fin_orders por ultimo, como na gravacao.
  */
 async function apagarForaDaJanela(admin: Admin, s: Semeadura) {
   const apagar = async (rotulo: string, q: PromiseLike<{ error: { message: string } | null; count: number | null }>) => {
@@ -677,7 +744,7 @@ async function apagarForaDaJanela(admin: Admin, s: Semeadura) {
     admin.from("tracking_events").delete({ count: "exact" }).eq("store_id", LOJA_ID).in("event_name", FUNIL).lt("created_at", iso(s.cortes.funil))
   );
   await apagar(
-    `tracking_events: Purchase com mais de ${DIAS_DE_COMPRA} dias`,
+    `tracking_events: Purchase antes de ${diaLocal(s.cortes.compras)}`,
     admin.from("tracking_events").delete({ count: "exact" }).eq("store_id", LOJA_ID).eq("event_name", "Purchase").lt("created_at", iso(s.cortes.compras))
   );
   await apagar("fin_order_origem", admin.from("fin_order_origem").delete({ count: "exact" }).eq("store_id", LOJA_ID).lt("pedido_em", inicio));
@@ -686,12 +753,13 @@ async function apagarForaDaJanela(admin: Admin, s: Semeadura) {
 }
 
 /**
- * O pixel do Meta "nasce" no corte das compras. A fila so guarda Purchase de
- * DIAS_DE_COMPRA dias, e a tela Pedidos pinta de vermelho ("nao enviado") o
- * pedido de loja com pixel que nao tem Purchase -- com o destino criado no
+ * O pixel do Meta "nasce" no corte das compras. A fila so guarda Purchase
+ * desde primeiroDiaDeCompra, e a tela Pedidos pinta de vermelho ("nao
+ * enviado") o pedido de loja com pixel que nao tem Purchase -- com o destino criado no
  * corte, o pedido mais velho que ele fica "sem pixel" (cinza), como numa loja
- * que ligou o pixel depois. O Rastreamento olha 7 dias e nao muda. So escreve
- * quando o corte anda (uma vez por dia).
+ * que ligou o pixel depois. O corte fica antes do periodo atual de toda tela
+ * (Pedidos em 30 dias, Este mes e Mes passado; o Rastreamento em 7 dias). So
+ * escreve quando o corte anda.
  */
 async function pixelDoMetaDesdeOCorte(admin: Admin, corteMs: number) {
   const corte = iso(corteMs);
@@ -826,16 +894,18 @@ async function semear() {
   if (!admin && !dryRun) falhar("sem NEXT_PUBLIC_SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY (rode da raiz, com o .env.local, ou XCART_ENV=...).");
   if (!admin) console.log("Sem credencial do banco: --dry-run com cambio de reserva.");
 
-  const estado = admin ? await conferirAntes(admin, dryRun) : { existe: false, ultimoDia: null, ultimoFunil: null };
+  const estado = admin ? await conferirAntes(admin, dryRun) : NADA_GRAVADO;
   const agoraMs = Date.now();
   const hoje = diaLocal(agoraMs);
   const janela = inicioDaJanela(hoje);
   const fx = await lerCambio(admin, janela, hoje);
   const cambio = montarCambio(fx.linhas);
   const s = montar(agoraMs, cambio, fx.linhas);
-  // Sem dia inteiro gravado (ou com --tudo), a janela inteira; senao os
-  // ultimos DIAS_REGRAVADOS, nunca antes da janela.
-  const desde = tudo || !estado.ultimoDia ? janela : [janela, somarDia(estado.ultimoDia, -DIAS_REGRAVADOS)].sort().pop()!;
+  // Sem dia inteiro gravado, com dia faltando atras do gravado (a janela
+  // cresceu) ou com --tudo, a janela inteira; senao os ultimos
+  // DIAS_REGRAVADOS, nunca antes da janela.
+  const comecoFalta = faltaOComeco(estado, s);
+  const desde = tudo || !estado.ultimoDia || comecoFalta ? janela : [janela, somarDia(estado.ultimoDia, -DIAS_REGRAVADOS)].sort().pop()!;
   const desdeFunil = (ultimo: string | null) => (ultimo ? iso(Date.parse(ultimo) - 15 * 60_000) : null);
 
   // O espaco no banco, medido so com SELECT. O de verdade nao grava sem a
@@ -846,7 +916,7 @@ async function semear() {
     resumir(s, fx.linhas, fx.doBanco);
     imprimirEspaco(espaco, s);
     console.log(
-      `\n--dry-run: nada foi gravado. A loja ${estado.existe ? `existe (ultimo dia gravado ${estado.ultimoDia ?? "-"}); seriam regravados os dias desde ${desde}` : `ainda nao existe; seria criada com os dias desde ${janela}`}.`
+      `\n--dry-run: nada foi gravado. A loja ${estado.existe ? `existe (gravada de ${estado.primeiroDia ?? "-"} a ${estado.ultimoDia ?? "-"}); seriam regravados os dias desde ${desde}${comecoFalta ? " (falta dia atras do gravado: a janela inteira)" : ""}` : `ainda nao existe; seria criada com os dias desde ${janela}`}.`
     );
     if (pastaImagens) conferirImagens(pastaImagens);
     console.log(`\nPara gravar de verdade: semear --app-publicado. ${ORDEM}`);

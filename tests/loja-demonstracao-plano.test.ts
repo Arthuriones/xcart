@@ -5,13 +5,15 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 //
 // O banco de producao esta no plano free do Supabase (500 MB): a loja guarda
 // so janelas que rolam. O que trava aqui:
-//   - a janela de pedidos cobre o periodo ATUAL de todo periodo do app
-//     (Hoje, Ontem, 7 dias, 30 dias, Mes, Mes passado) em qualquer dia, e
-//     nunca passa de MAIOR_JANELA dias;
+//   - a janela de pedidos cobre o periodo ATUAL e o ANTERIOR (o Dashboard
+//     compara por padrao) de todo periodo do app (Hoje, Ontem, 7 dias,
+//     30 dias, Mes, Mes passado) em qualquer dia, com 60 a 92 dias;
+//   - a janela de Purchase cobre o periodo atual de todo periodo (a tela
+//     Pedidos), com 35 a 62 dias;
 //   - a economia sai na faixa combinada pela conta do proprio app
 //     (calcularFinanceiro): 140-160 pedidos/dia, AOV 125-140, lucro medio de
 //     5-10 mil/dia, ROAS 2,4-2,8;
-//   - Purchase so dos ultimos 35 dias, funil so das ultimas 48 h, e o payload
+//   - Purchase so da janela de compras, funil so das ultimas 48 h, e o payload
 //     so com o que as telas leem;
 //   - a recusa do semear: sem medida, acima de 70 MB, ou banco + carga acima
 //     de 400 MB.
@@ -23,14 +25,16 @@ import { calcularFinanceiro } from "@/lib/financeiro/calculo";
 import { intervaloDoPeriodo, paraNumero, PERIODOS, type FinOrderRow } from "@/lib/financeiro/tipos";
 import {
   DIAS_DE_COMPRA,
-  DIAS_DE_HISTORICO,
   HORAS_DE_FUNIL,
   LANCAMENTO,
   MAIOR_JANELA,
+  MAIOR_JANELA_DE_COMPRA,
+  MENOR_JANELA,
   diasEntre,
   diaLocal,
   inicioDaJanela,
   instanteLocal,
+  primeiroDiaDeCompra,
   somarDia,
 } from "../scripts/demo-loja/plano";
 import { custosDosProdutos, urlDoFeed } from "../scripts/demo-loja/linhas";
@@ -50,28 +54,50 @@ const RESERVA: Record<string, number> = { USD: 1, CAD: 1.38, GBP: 0.76, AUD: 1.5
 const AGORA = Date.parse("2026-10-19T22:00:00Z");
 
 describe("janela do historico", () => {
-  it("50 dias, ou ate o dia 1 do mes anterior quando ele fica mais longe", () => {
-    expect(inicioDaJanela("2026-10-19")).toBe("2026-08-31");
-    expect(diasEntre(inicioDaJanela("2026-10-19"), "2026-10-19")).toHaveLength(DIAS_DE_HISTORICO);
-    // Fim de novembro: "Mes passado" e outubro inteiro.
-    expect(inicioDaJanela("2026-11-30")).toBe("2026-10-01");
-    expect(inicioDaJanela("2026-12-31")).toBe("2026-11-01");
-    // A mais longa: 31 de agosto (julho e agosto de 31 dias).
-    expect(diasEntre(inicioDaJanela("2027-08-31"), "2027-08-31")).toHaveLength(MAIOR_JANELA);
+  it("do dia 1 do mes retrasado: 60 a 92 dias", () => {
+    expect(inicioDaJanela("2026-10-19")).toBe("2026-08-01");
+    expect(inicioDaJanela("2026-11-01")).toBe("2026-09-01");
+    expect(inicioDaJanela("2026-11-30")).toBe("2026-09-01");
+    expect(inicioDaJanela("2026-12-31")).toBe("2026-10-01");
+    // A mais curta: 1 de marco (janeiro e fevereiro, 59 dias, + hoje).
+    expect(diasEntre(inicioDaJanela("2027-03-01"), "2027-03-01")).toHaveLength(MENOR_JANELA);
+    // A mais longa: 30 de setembro (julho e agosto de 31 dias).
+    expect(diasEntre(inicioDaJanela("2027-09-30"), "2027-09-30")).toHaveLength(MAIOR_JANELA);
     // Nunca antes do lancamento.
-    expect(inicioDaJanela("2026-08-10")).toBe(LANCAMENTO);
+    expect(inicioDaJanela("2026-09-10")).toBe(LANCAMENTO);
   });
 
-  it("cobre o periodo atual de Hoje, Ontem, 7 dias, 30 dias, Mes e Mes passado em todo dia de um ano", () => {
+  it("Purchase: os ultimos 35 dias ou desde o dia 1 do mes anterior", () => {
+    expect(primeiroDiaDeCompra("2026-10-19")).toBe("2026-09-01");
+    expect(primeiroDiaDeCompra("2026-11-02")).toBe("2026-09-29");
+    expect(primeiroDiaDeCompra("2026-11-30")).toBe("2026-10-01");
+    expect(diasEntre(primeiroDiaDeCompra("2027-03-01"), "2027-03-01")).toHaveLength(DIAS_DE_COMPRA);
+    expect(diasEntre(primeiroDiaDeCompra("2027-08-31"), "2027-08-31")).toHaveLength(MAIOR_JANELA_DE_COMPRA);
+  });
+
+  it("cobre o atual e o anterior de todo periodo (e o atual com Purchase) em todo dia de um ano, e so anda para frente", () => {
     const primeiro = somarDia(LANCAMENTO, MAIOR_JANELA);
+    let antes = inicioDaJanela(primeiro);
+    let comprasAntes = primeiroDiaDeCompra(primeiro);
     for (let hoje = primeiro; hoje <= somarDia(primeiro, 366); hoje = somarDia(hoje, 1)) {
       const inicio = inicioDaJanela(hoje);
+      const compras = primeiroDiaDeCompra(hoje);
       const dias = diasEntre(inicio, hoje).length;
-      expect(dias).toBeGreaterThanOrEqual(DIAS_DE_HISTORICO);
+      const diasCompra = diasEntre(compras, hoje).length;
+      expect(dias).toBeGreaterThanOrEqual(MENOR_JANELA);
       expect(dias).toBeLessThanOrEqual(MAIOR_JANELA);
+      expect(diasCompra).toBeGreaterThanOrEqual(DIAS_DE_COMPRA);
+      expect(diasCompra).toBeLessThanOrEqual(MAIOR_JANELA_DE_COMPRA);
+      expect(compras >= inicio).toBe(true);
+      // Nenhum dia novo atras do gravado: a janela nunca volta.
+      expect(inicio >= antes && compras >= comprasAntes, `${hoje}: a janela voltou`).toBe(true);
+      antes = inicio;
+      comprasAntes = compras;
       for (const p of PERIODOS) {
-        const { atual } = intervaloDoPeriodo(p.id, hoje);
+        const { atual, anterior } = intervaloDoPeriodo(p.id, hoje);
         expect(atual.desde >= inicio, `${p.id} em ${hoje}: ${atual.desde} antes de ${inicio}`).toBe(true);
+        expect(anterior.desde >= inicio, `${p.id} (anterior) em ${hoje}: ${anterior.desde} antes de ${inicio}`).toBe(true);
+        expect(atual.desde >= compras, `${p.id} em ${hoje}: Purchase so desde ${compras}`).toBe(true);
       }
     }
   });
@@ -97,10 +123,11 @@ describe("o estado de agora (montar)", () => {
       hoje: s.hoje,
       agoraMs: AGORA,
     });
+    // porDia vem do dia mais novo para o mais velho.
     const fechados = r.porDia.filter((d) => !d.parcial);
-    expect(fechados.length).toBe(DIAS_DE_HISTORICO - 1);
+    expect(fechados.length).toBe(diasEntre(s.cortes.janela, s.hoje).length - 1);
     const media = (k: "lucro" | "pedidos") => fechados.reduce((t, d) => t + d[k], 0) / fechados.length;
-    const ultimos = (n: number) => fechados.slice(-n).reduce((t, d) => t + d.lucro, 0) / n;
+    const ultimos = (n: number) => fechados.slice(0, n).reduce((t, d) => t + d.lucro, 0) / n;
     expect(media("pedidos")).toBeGreaterThanOrEqual(140);
     expect(media("pedidos")).toBeLessThanOrEqual(160);
     for (const lucro of [media("lucro"), ultimos(30), ultimos(7)]) {
@@ -115,12 +142,34 @@ describe("o estado de agora (montar)", () => {
     expect(r.atual.lucro).toBeCloseTo(r.atual.receita - r.atual.cmv - r.atual.taxas - r.atual.gasto, 0);
   });
 
-  it("so a janela: pedidos desde o inicio dela, Purchase de 35 dias, funil de 48 h", () => {
-    expect(s.cortes.janela).toBe("2026-08-31");
+  it("comparacao com o periodo anterior (o padrao do Dashboard) sem salto: o anterior esta inteiro no banco", () => {
+    for (const id of ["7d", "30d", "mes", "mes_passado"] as const) {
+      const r = calcularFinanceiro({
+        lojas: [lojaFinanceira],
+        pedidos: s.pedidos,
+        custos: custosDosProdutos(),
+        configs: [configLoja],
+        contas: contasDaLoja(),
+        gastos: s.linhasGasto,
+        cambio: [],
+        intervalos: intervaloDoPeriodo(id, s.hoje),
+        moeda: "USD",
+        hoje: s.hoje,
+        agoraMs: AGORA,
+      });
+      for (const k of ["receita", "lucro", "pedidos", "gasto"] as const) {
+        const variacao = r.atual[k] / r.anterior[k] - 1;
+        expect(Math.abs(variacao), `${id} ${k}: ${(variacao * 100).toFixed(1)}%`).toBeLessThan(0.25);
+      }
+    }
+  });
+
+  it("so a janela: pedidos desde o dia 1 do mes retrasado, Purchase desde o dia 1 do mes anterior, funil de 48 h", () => {
+    expect(s.cortes.janela).toBe("2026-08-01");
     expect(s.pedidos.length).toBeGreaterThan(0);
     expect(s.pedidos.every((p) => p.dia_local >= s.cortes.janela && p.dia_local <= s.hoje)).toBe(true);
     expect(s.linhasGasto.every((g) => g.data >= s.cortes.janela)).toBe(true);
-    expect(s.cortes.compras).toBe(instanteLocal(somarDia(s.hoje, -(DIAS_DE_COMPRA - 1)), 0));
+    expect(s.cortes.compras).toBe(instanteLocal("2026-09-01", 0));
     expect(s.compras.length).toBeGreaterThan(0);
     expect(s.compras.every((c) => Date.parse(c.created_at) >= s.cortes.compras && Date.parse(c.created_at) <= AGORA)).toBe(true);
     expect(s.cortes.funil).toBe(AGORA - HORAS_DE_FUNIL * 3_600_000);

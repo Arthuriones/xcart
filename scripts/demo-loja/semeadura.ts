@@ -4,8 +4,11 @@
  * guarda, e o gasto de anuncio de cada dia fechado pela meta de lucro.
  *
  * Janelas (o banco de producao esta no plano free do Supabase, 500 MB):
- *   - pedidos, origem e gasto: de inicioDaJanela (50 a 62 dias) ate agora;
- *   - Purchase na fila: os ultimos DIAS_DE_COMPRA dias locais;
+ *   - pedidos, origem e gasto: de inicioDaJanela (dia 1 do mes retrasado,
+ *     60 a 92 dias) ate agora -- o periodo atual e o anterior de todo
+ *     periodo do app;
+ *   - Purchase na fila: de primeiroDiaDeCompra (35 a 62 dias: os ultimos 35
+ *     ou, se for antes, desde o dia 1 do mes anterior);
  *   - funil (ver produto, carrinho, checkout, pagamento): as ultimas
  *     HORAS_DE_FUNIL horas.
  *

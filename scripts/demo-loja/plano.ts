@@ -52,22 +52,29 @@ export const CONTAS_DESDE = "2026-07-18T13:05:44.000Z";
 export const TAXA_PCT = 3.1;
 export const TAXA_FIXA = 0.3;
 /**
- * Historico gravado: os ultimos 50 dias, estendido ate o dia 1 do mes
- * anterior quando ele fica mais longe (ver inicioDaJanela). Cobre o periodo
- * atual de Hoje, Ontem, 7 dias, 30 dias, Mes e Mes passado em qualquer dia.
+ * Historico gravado (pedidos, origem e gasto): do dia 1 do mes RETRASADO ate
+ * hoje, de 60 a 92 dias (inicioDaJanela). E o menor comeco que cobre, em
+ * qualquer dia, o periodo atual E o anterior de todo periodo do app: o
+ * Dashboard compara com o anterior por padrao, "Mes passado" compara com o
+ * mes retrasado inteiro e "30 dias" com os 30 antes (ate hoje - 59). Cobre
+ * tambem os 60 dias que Custos le (e que a loja real traz na primeira carga).
  */
-export const DIAS_DE_HISTORICO = 50;
+export const MENOR_JANELA = 60;
+/** A janela mais longa: 1 de julho ate 30 de setembro (ou 1 de outubro ate 31 de dezembro). */
+export const MAIOR_JANELA = 92;
 /**
- * Compras (Purchase) na fila: os ultimos 35 dias locais, contando hoje. Cobrem
- * os 7 dias do Rastreamento e os 30 da tela Pedidos; o destino do Meta "nasce"
- * no corte (corteDasCompras), entao o pedido mais velho aparece em Pedidos
+ * Compras (Purchase) na fila: os ultimos 35 dias locais (contando hoje) ou,
+ * se for antes, desde o dia 1 do mes anterior (primeiroDiaDeCompra) -- de 35
+ * a 62 dias. Cobrem os 7 dias do Rastreamento e o periodo atual de toda tela
+ * Pedidos (30 dias, Este mes e Mes passado inteiros). O destino do Meta
+ * "nasce" no corte (corteDasCompras): o pedido mais velho aparece em Pedidos
  * como "sem pixel", nunca como "nao enviado".
  */
 export const DIAS_DE_COMPRA = 35;
+/** A janela de compras mais longa: 1 de julho ate 31 de agosto. */
+export const MAIOR_JANELA_DE_COMPRA = 62;
 /** Funil (ver produto, carrinho, checkout, pagamento) na fila: so as ultimas 48 h. */
 export const HORAS_DE_FUNIL = 48;
-/** A janela mais longa que inicioDaJanela pode dar (31 de agosto: de 1 de julho). */
-export const MAIOR_JANELA = 62;
 
 // ---------------------------------------------------------------------------
 // Ids, sorteio, tempo
@@ -164,17 +171,41 @@ export function somarDia(dia: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** "AAAA-MM-01" do mes do dia. */
+function primeiroDoMes(dia: string): string {
+  return `${dia.slice(0, 7)}-01`;
+}
+
+/** "AAAA-MM-01" de `n` meses antes do mes do dia. */
+function primeiroDoMesAntes(dia: string, n: number): string {
+  let d = primeiroDoMes(dia);
+  for (let i = 0; i < n; i += 1) d = primeiroDoMes(somarDia(d, -1));
+  return d;
+}
+
 /**
- * O primeiro dia gravado: os ultimos DIAS_DE_HISTORICO dias ou, se for antes,
- * o dia 1 do mes anterior -- "Mes passado" e o mes anterior INTEIRO, e no fim
- * de um mes de 31 dias ele comeca 61 dias atras. Nunca antes do LANCAMENTO.
- * Vai de 50 a 62 dias (MAIOR_JANELA).
+ * O primeiro dia gravado: o dia 1 do mes retrasado (60 a 92 dias, contando
+ * hoje). Sempre <= hoje - 59, entao cobre o anterior de "30 dias", e e o
+ * comeco do anterior de "Mes passado". Nunca antes do LANCAMENTO. So anda para
+ * frente (uma vez por mes): nenhum dia novo aparece atras do que ja esta
+ * gravado.
  */
 export function inicioDaJanela(hoje: string): string {
-  const ultimos = somarDia(hoje, -(DIAS_DE_HISTORICO - 1));
-  const primeiroDoMesAnterior = `${somarDia(`${hoje.slice(0, 7)}-01`, -1).slice(0, 7)}-01`;
-  const inicio = ultimos < primeiroDoMesAnterior ? ultimos : primeiroDoMesAnterior;
+  const inicio = primeiroDoMesAntes(hoje, 2);
   return inicio < LANCAMENTO ? LANCAMENTO : inicio;
+}
+
+/**
+ * O primeiro dia com Purchase na fila: os ultimos DIAS_DE_COMPRA dias ou, se
+ * for antes, o dia 1 do mes anterior ("Mes passado" inteiro em Pedidos). De
+ * 35 a 62 dias, sempre dentro da janela de pedidos. Tambem so anda para frente.
+ */
+export function primeiroDiaDeCompra(hoje: string): string {
+  const ultimos = somarDia(hoje, -(DIAS_DE_COMPRA - 1));
+  const doMesAnterior = primeiroDoMesAntes(hoje, 1);
+  const dia = ultimos < doMesAnterior ? ultimos : doMesAnterior;
+  const janela = inicioDaJanela(hoje);
+  return dia < janela ? janela : dia;
 }
 
 export function diasEntre(desde: string, ate: string): string[] {
@@ -250,9 +281,9 @@ export function segundoDoDia(r: Sorteio): number {
   return hora * 3600 + r.entre(0, 3600);
 }
 
-/** O primeiro instante com compra na fila: a meia-noite local de DIAS_DE_COMPRA - 1 dias atras. */
+/** O primeiro instante com compra na fila: a meia-noite local de primeiroDiaDeCompra. */
 export function corteDasCompras(hoje: string): number {
-  return instanteLocal(somarDia(hoje, -(DIAS_DE_COMPRA - 1)), 0);
+  return instanteLocal(primeiroDiaDeCompra(hoje), 0);
 }
 
 /** Fracao (0..1) do volume do dia que ja passou as `segundos` locais. */
@@ -922,22 +953,27 @@ export interface MetaDoDia {
 }
 
 /**
- * Crescimento do lucro sobre a base: linear nos primeiros 90 dias (+27%) e,
- * depois, chegando devagar num teto (+32%, ~8,3 mil/dia de meta, ~160
+ * Crescimento do lucro sobre a base: linear nos primeiros 90 dias (+17%) e,
+ * depois, chegando devagar num teto (+22%, ~8,3 mil/dia de meta, ~160
  * pedidos/dia) -- a loja nao cresce para sempre, e a media fica na faixa de
- * 5-10 mil. No dia 89 a curva continua com a mesma inclinacao, sem quina no
+ * 5-10 mil. Inclinacao baixa de proposito: a janela guarda o mes retrasado
+ * (o anterior de "Mes passado"), e ele fica na faixa de 140-160 pedidos/dia
+ * tambem. No dia 89 a curva continua com a mesma inclinacao, sem quina no
  * grafico.
  */
 export function crescimento(idx: number): number {
-  const linear = 0.27 / 89; // por dia, nos primeiros 90 dias
+  const linear = 0.17 / 89; // por dia, nos primeiros 90 dias
   if (idx <= 89) return linear * idx;
   const teto = 0.053; // o que ainda cresce depois do dia 89
-  return 0.27 + teto * (1 - Math.exp(-((idx - 89) * linear) / teto));
+  return 0.17 + teto * (1 - Math.exp(-((idx - 89) * linear) / teto));
 }
+
+/** A meta de lucro de base, antes do crescimento, do dia da semana e do ruido. */
+const BASE_DO_LUCRO = 6800;
 
 export function metaDoDia(dia: string, idx: number): MetaDoDia {
   const r = new Sorteio(`meta:${dia}`);
-  const tendencia = 6300 * (1 + crescimento(idx));
+  const tendencia = BASE_DO_LUCRO * (1 + crescimento(idx));
   const rampa = idx < 10 ? 0.38 + 0.062 * idx : 1;
   const semana = DIA_DA_SEMANA[diaDaSemana(dia)];
   const ruido = Math.exp(0.11 * r.normal());
