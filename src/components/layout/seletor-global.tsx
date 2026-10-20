@@ -778,6 +778,10 @@ export function ContextoCelular({
   if (completo) resumo.push(nomeDoPeriodo(v.periodo, intervalosDe(dados, v.periodo).atual, dados.hoje), v.moeda);
   if (modo.tipo === "loja") resumo.push("só a loja");
   const rascunhoPersonalizado = ehPersonalizado(r.periodo) ? intervalosDe(dados, r.periodo).atual : null;
+  // Pilula "Personalizado" marcada e nenhum dia ainda: o rascunho segue no
+  // preset de antes, e aplicar gravaria esse preset calado. Como no desktop,
+  // o Aplicar espera o primeiro dia.
+  const faltaDia = completo && calendario !== "fechado" && !rascunhoPersonalizado;
 
   function abrir(a: boolean) {
     setAberto(a);
@@ -812,13 +816,14 @@ export function ContextoCelular({
         rodape={
           <button
             type="button"
+            disabled={faltaDia}
             onClick={() => {
               ctx.gravar(r);
               abrir(false);
             }}
-            className="h-ctl-lg w-full rounded-control bg-solid text-body font-medium text-on-solid hover:bg-solid-hover"
+            className="h-ctl-lg w-full rounded-control bg-solid text-body font-medium text-on-solid hover:bg-solid-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Aplicar
+            {faltaDia ? "Escolha um dia" : "Aplicar"}
           </button>
         }
       >
@@ -897,7 +902,11 @@ export function ContextoCelular({
                         grande
                         marcado={c === r.comparacao}
                         rotulo={ROTULO_COMPARACAO[c]}
-                        sub={c === "anterior" ? rotuloIntervalo(intervalosDe(dados, r.periodo).anterior) : undefined}
+                        sub={
+                          c === "anterior" && !faltaDia
+                            ? rotuloIntervalo(intervalosDe(dados, r.periodo).anterior)
+                            : undefined
+                        }
                         onEscolher={() => setRascunho({ ...r, comparacao: c })}
                       />
                     ))}

@@ -134,10 +134,14 @@ export function Calendario({
   // Entre os dois cliques, a faixa vai do inicio ao dia sob o mouse/foco.
   const previa = inicio && sobre && !diaBloqueado(sobre, limites, inicio) ? sobre : inicio;
   const faixa = inicio && previa ? ordenar(inicio, previa) : valor;
-  const celula = grande ? "size-ctl-lg" : "size-ctl-md";
+  // 7 x 44px = 308px: abaixo de 360px de tela (320px, a tela externa do Fold)
+  // a folha, com px-4, ganharia rolagem lateral -- ali a celula vai a 40px.
+  const celula = grande ? "size-ctl-lg max-[360px]:size-10" : "size-ctl-md";
 
+  // Depois do primeiro clique o dia ja vale (o Aplicar aplica so ele): o
+  // segundo clique e opcional, so para um intervalo.
   const aviso = inicio
-    ? `Início em ${rotuloDatas({ desde: inicio, ate: inicio }, hoje)}. Escolha o último dia.`
+    ? `${rotuloDatas({ desde: inicio, ate: inicio }, hoje)} · 1 dia. Para um intervalo, escolha o último dia.`
     : valor
       ? `${rotuloDatas(valor, hoje)} · ${rotuloDias(valor)}`
       : "Escolha o primeiro dia.";
@@ -206,7 +210,9 @@ export function Calendario({
                       onMouseEnter={() => setSobre(dia)}
                       onFocus={() => setSobre(dia)}
                       className={clsx(
-                        "num grid place-items-center text-dense outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus",
+                        // Sem outline-none: no Tailwind 4 ele zera o --tw-outline-style e o
+                        // anel do focus-visible nunca aparece (ver globals.css).
+                        "num grid place-items-center text-dense focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus",
                         celula,
                         ponta
                           ? "rounded-control bg-solid font-semibold text-on-solid"

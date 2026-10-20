@@ -22,7 +22,8 @@ export const COOKIE_COMPARAR = "xc_comparar";
  * So as comparacoes que o calculo ja sabe fazer: o periodo anterior de mesmo
  * tamanho (intervaloDoPeriodo) ou nenhuma. "Mesmo periodo do ano passado" pede
  * outra regra de anterior, que espera aprovacao (decisao 7). O periodo
- * "Personalizado" (datas do calendario) compara com os mesmos N dias antes.
+ * "Personalizado" (datas do calendario) compara com os mesmos N dias antes;
+ * alinhado ao mes, como "Este mes"/"Mes passado" (ver intervaloPersonalizado).
  */
 export type Comparacao = "anterior" | "nenhum";
 export const COMPARACAO_PADRAO: Comparacao = "anterior";

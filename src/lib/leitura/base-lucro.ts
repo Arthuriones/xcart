@@ -8,8 +8,8 @@ import { semMigration069, type PedidoExternoRow } from "@/lib/checkouts-externos
 import type { EntradaFinanceiro, LojaFinanceira, PedidoExternoFin } from "@/lib/financeiro/calculo";
 import { contarAmostra, intervaloDaAmostra, type AmostraEntrega, type PedidoCod } from "@/lib/financeiro/contra-entrega";
 import {
-  FUSO_RELATORIO_PADRAO,
   diaNoFuso,
+  fusoDoFiltro,
   intervaloDoPeriodo,
   somarDias,
   type AdAccountRow,
@@ -142,13 +142,9 @@ export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseL
     : [];
   const estadoPorLoja = new Map(estados.map((e) => [e.store_id, e]));
 
-  // O "hoje" no fuso da loja (ou do checkout) quando o filtro tem um so.
-  const fusoRef =
-    lojaIds.length === 1 && checkoutsDoFiltro.length === 0
-      ? estadoPorLoja.get(lojaIds[0])?.fuso || FUSO_RELATORIO_PADRAO
-      : lojaIds.length === 0 && checkoutsDoFiltro.length === 1
-        ? checkoutsDoFiltro[0].fuso || FUSO_RELATORIO_PADRAO
-        : FUSO_RELATORIO_PADRAO;
+  // O "hoje" no fuso da loja (ou do checkout) quando o filtro tem um so --
+  // a mesma regra do topo (topo-dados.tsx), que limita o calendario.
+  const fusoRef = fusoDoFiltro(lojaIds, checkoutsDoFiltro, (id) => estadoPorLoja.get(id)?.fuso);
   const hoje = diaNoFuso(new Date(), fusoRef);
   const intervalos = intervaloDoPeriodo(filtro.periodo, hoje);
   const desde = enxuta ? intervalos.atual.desde : intervalos.anterior.desde;

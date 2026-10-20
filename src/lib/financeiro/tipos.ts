@@ -209,6 +209,24 @@ export function diaNoFuso(instante: Date, fuso?: string | null): string {
   }
 }
 
+/**
+ * O fuso do "hoje" do relatorio: o da loja (ou do checkout) quando o filtro
+ * resolvido tem so ela, senao o de Sao Paulo. A mesma regra no Dashboard
+ * (base-lucro), no topo (calendario e rotulo) e nas telas que leem o periodo
+ * por conta propria -- com "Todas" e uma loja so, o topo usava Sao Paulo e o
+ * Dashboard o fuso da loja, e perto da meia-noite o botao dizia "20 out" e o
+ * titulo "19 out".
+ */
+export function fusoDoFiltro(
+  lojaIds: readonly string[],
+  checkouts: readonly { fuso?: string | null }[],
+  fusoDaLoja: (id: string) => string | null | undefined
+): string {
+  if (lojaIds.length === 1 && checkouts.length === 0) return fusoDaLoja(lojaIds[0]) || FUSO_RELATORIO_PADRAO;
+  if (lojaIds.length === 0 && checkouts.length === 1) return checkouts[0].fuso || FUSO_RELATORIO_PADRAO;
+  return FUSO_RELATORIO_PADRAO;
+}
+
 export function somarDias(dia: string, n: number): string {
   const d = new Date(`${dia}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
@@ -236,11 +254,26 @@ export function diasDoIntervalo(i: Intervalo): string[] {
  * futuro e cortado, e um intervalo todo no futuro vira so hoje. O anterior e o
  * mesmo numero de dias logo antes: um dia compara com o dia anterior, como
  * Hoje e Ontem.
+ *
+ * Alinhado ao mes, compara como o preset do mesmo intervalo, senao a mesma
+ * tela daria duas variacoes para o "mesmo" periodo: um mes inteiro (1-30 set)
+ * compara com o mes anterior inteiro, como "Mes passado"; do dia 1 ate hoje,
+ * com o mesmo trecho do mes anterior, como "Este mes". No dia 7 e no 30 o
+ * "Este mes" coincide com "7 dias"/"30 dias" (que ja sao os N dias antes):
+ * ali fica a regra dos N dias.
  */
 function intervaloPersonalizado(i: Intervalo, hoje: string): { atual: Intervalo; anterior: Intervalo } {
   const ate = i.ate < hoje ? i.ate : hoje;
   const desde = i.desde < ate ? i.desde : ate;
   const n = diasNoIntervalo({ desde, ate });
+  if (n > 1 && desde === `${ate.slice(0, 7)}-01`) {
+    if (ate === hoje) {
+      if (n !== 7 && n !== 30) return intervaloDoPeriodo("mes", hoje);
+    } else if (somarDias(ate, 1).endsWith("-01")) {
+      // "Mes passado" visto do dia seguinte ao fim: atual = este mes inteiro.
+      return intervaloDoPeriodo("mes_passado", somarDias(ate, 1));
+    }
+  }
   return {
     atual: { desde, ate },
     anterior: { desde: somarDias(desde, -n), ate: somarDias(desde, -1) },

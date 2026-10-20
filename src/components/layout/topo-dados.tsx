@@ -2,13 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { filtroResolvido, lerCheckoutsDoUsuario, lerComparacao } from "@/lib/filtro-global";
 import { contarAlertasAbertos } from "@/lib/leitura/notificacoes";
-import {
-  FUSO_RELATORIO_PADRAO,
-  PERIODOS,
-  TODAS,
-  diaNoFuso,
-  intervaloDoPeriodo,
-} from "@/lib/financeiro/tipos";
+import { PERIODOS, diaNoFuso, fusoDoFiltro, intervaloDoPeriodo } from "@/lib/financeiro/tipos";
 import type { DadosContexto, LojaContexto } from "./seletor-global";
 import { TopNav } from "./top-nav";
 
@@ -32,7 +26,7 @@ export async function TopoDados() {
 }
 
 async function lerContexto(): Promise<DadosContexto> {
-  const [{ filtro, lojas, checkouts, checkout }, comparacao, user] = await Promise.all([
+  const [{ filtro, lojas, lojaIds, checkouts, checkoutIds }, comparacao, user] = await Promise.all([
     filtroResolvido(),
     lerComparacao(),
     getCurrentUser(),
@@ -65,15 +59,16 @@ async function lerContexto(): Promise<DadosContexto> {
     ...checkouts.map((c) => ({ ...c, semAcesso: false })),
   ];
 
-  // O mesmo fuso que o Lucro usa para o "hoje": o da loja (ou do checkout)
-  // escolhido, ou o de Sao Paulo com todas as lojas (ver getFinanceiro).
-  const fusoCheckout = checkout
-    ? (await lerCheckoutsDoUsuario()).find((c) => c.id === checkout.id)?.fuso
-    : null;
-  const fuso =
-    fusoCheckout ||
-    (filtro.lojaId !== TODAS && estados.get(filtro.lojaId)?.fuso) ||
-    FUSO_RELATORIO_PADRAO;
+  // O mesmo fuso que o Lucro usa para o "hoje" (base-lucro.ts): o da loja
+  // (ou do checkout) quando o filtro resolvido tem so ela -- inclusive "Todas"
+  // com uma loja so --, senao o de Sao Paulo. E o hoje do calendario e do
+  // rotulo do botao: com outro fuso, o topo deixava escolher o dia que o
+  // servidor corta.
+  const ckSet = new Set(checkoutIds);
+  const checkoutsDoFiltro = checkoutIds.length
+    ? (await lerCheckoutsDoUsuario()).filter((c) => ckSet.has(c.id))
+    : [];
+  const fuso = fusoDoFiltro(lojaIds, checkoutsDoFiltro, (id) => estados.get(id)?.fuso);
   const hoje = diaNoFuso(new Date(), fuso);
   const intervalos = Object.fromEntries(
     PERIODOS.map((p) => [p.id, intervaloDoPeriodo(p.id, hoje)])

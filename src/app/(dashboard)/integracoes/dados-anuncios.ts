@@ -1,14 +1,14 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { listarContasDoUsuario } from "@/lib/ads/contas";
-import { filtroResolvido } from "@/lib/filtro-global";
+import { filtroResolvido, lerCheckoutsDoUsuario } from "@/lib/filtro-global";
 import { lerGastoPorConta } from "@/lib/leitura/gasto-por-conta";
 import { lerDestinosDeCompra, type DestinoDeCompra } from "@/lib/leitura/integracoes";
 import { rotuloDoPeriodo } from "@/components/layout/contexto";
 import {
-  FUSO_RELATORIO_PADRAO,
   TODAS,
   diaNoFuso,
+  fusoDoFiltro,
   intervaloDoPeriodo,
   type ContaAnuncioResumo,
   type LojaDoSeletor,
@@ -90,14 +90,19 @@ export async function carregarAnuncios(
   } catch (e) {
     return { ok: false, erro: mensagem(e) };
   }
-  const { filtro, lojas, checkouts, checkout } = filtroLojas;
+  const { filtro, lojas, lojaIds, checkouts, checkoutIds, checkout } = filtroLojas;
   const agora = new Date();
 
   const { fusos, erro: erroFuso } = await fusosDasLojas(lojas.map((l) => l.id));
   const lojaFiltrada =
     filtro.lojaId !== TODAS ? (lojas.find((l) => l.id === filtro.lojaId) ?? checkout ?? null) : null;
-  // O mesmo "hoje" do Lucro: o da loja escolhida, ou Sao Paulo com todas.
-  const fuso = (lojaFiltrada && fusos[lojaFiltrada.id]) || FUSO_RELATORIO_PADRAO;
+  // O mesmo "hoje" do Lucro e do topo (fusoDoFiltro): o da loja ou do
+  // checkout quando o filtro tem so ela, senao Sao Paulo.
+  const ckSet = new Set(checkoutIds);
+  const checkoutsDoFiltro = checkoutIds.length
+    ? (await lerCheckoutsDoUsuario().catch(() => [])).filter((c) => ckSet.has(c.id))
+    : [];
+  const fuso = fusoDoFiltro(lojaIds, checkoutsDoFiltro, (id) => fusos[id]);
   const hoje = diaNoFuso(agora, fuso);
   const intervalo = intervaloDoPeriodo(filtro.periodo, hoje).atual;
 

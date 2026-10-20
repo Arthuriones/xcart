@@ -5,11 +5,13 @@ import {
   PERIODOS,
   PERIODO_PADRAO,
   TETO_PERSONALIZADO_DIAS,
+  FUSO_RELATORIO_PADRAO,
   diaNoFuso,
   diaValido,
   diasNoIntervalo,
   ehPersonalizado,
   filtroDeCookies,
+  fusoDoFiltro,
   intervaloDoPeriodo,
   lerPeriodo,
   linhaDeCookie,
@@ -181,6 +183,48 @@ describe("intervalo do personalizado e o periodo anterior", () => {
     expect(intervaloDoPeriodo(dias("2026-01-01", 200), hoje)).toEqual(padrao);
   });
 
+  it("alinhado ao mes compara como o preset do mesmo intervalo", () => {
+    // Mes inteiro = "Mes passado": o anterior e o mes anterior inteiro, nao
+    // os 30 dias logo antes (2-31 ago).
+    expect(intervaloDoPeriodo({ desde: "2026-09-01", ate: "2026-09-30" }, hoje)).toEqual(
+      intervaloDoPeriodo("mes_passado", hoje)
+    );
+    // Mes inteiro mais antigo, e fevereiro contra janeiro.
+    expect(intervaloDoPeriodo({ desde: "2026-08-01", ate: "2026-08-31" }, hoje).anterior).toEqual({
+      desde: "2026-07-01",
+      ate: "2026-07-31",
+    });
+    expect(intervaloDoPeriodo({ desde: "2026-03-01", ate: "2026-03-31" }, "2026-05-10").anterior).toEqual({
+      desde: "2026-02-01",
+      ate: "2026-02-28",
+    });
+    // Do dia 1 ate hoje = "Este mes": o mesmo trecho do mes anterior.
+    expect(intervaloDoPeriodo({ desde: "2026-10-01", ate: "2026-10-19" }, hoje)).toEqual(
+      intervaloDoPeriodo("mes", hoje)
+    );
+    // O cookie passava de hoje: depois do corte, e o "Este mes".
+    expect(intervaloDoPeriodo({ desde: "2026-10-01", ate: "2026-10-31" }, hoje)).toEqual(
+      intervaloDoPeriodo("mes", hoje)
+    );
+  });
+
+  it("no dia 7 e no 30, do dia 1 ate hoje segue 7 e 30 dias; um dia so, o dia anterior", () => {
+    expect(intervaloDoPeriodo({ desde: "2026-10-01", ate: "2026-10-07" }, "2026-10-07")).toEqual(
+      intervaloDoPeriodo("7d", "2026-10-07")
+    );
+    expect(intervaloDoPeriodo({ desde: "2026-09-01", ate: "2026-09-30" }, "2026-09-30")).toEqual(
+      intervaloDoPeriodo("30d", "2026-09-30")
+    );
+    expect(intervaloDoPeriodo({ desde: "2026-10-01", ate: "2026-10-01" }, "2026-10-01")).toEqual(
+      intervaloDoPeriodo("hoje", "2026-10-01")
+    );
+    // Comeca no dia 1 mas nao fecha o mes nem chega a hoje: os N dias antes.
+    expect(intervaloDoPeriodo({ desde: "2026-10-01", ate: "2026-10-10" }, hoje).anterior).toEqual({
+      desde: "2026-09-21",
+      ate: "2026-09-30",
+    });
+  });
+
   it("presets nao mudaram", () => {
     expect(intervaloDoPeriodo("hoje", hoje).atual).toEqual({ desde: hoje, ate: hoje });
     expect(intervaloDoPeriodo("ontem", hoje).atual).toEqual({ desde: "2026-10-18", ate: "2026-10-18" });
@@ -194,6 +238,24 @@ describe("intervalo do personalizado e o periodo anterior", () => {
       atual: { desde: "2026-09-01", ate: "2026-09-30" },
       anterior: { desde: "2026-08-01", ate: "2026-08-31" },
     });
+  });
+});
+
+describe("fuso do hoje do relatorio", () => {
+  const fusos: Record<string, string> = { a: "America/New_York", b: "Europe/Paris" };
+  const fusoDe = (id: string) => fusos[id];
+
+  it("uma loja so no filtro (escolhida ou a unica de Todas) usa o fuso dela", () => {
+    expect(fusoDoFiltro(["a"], [], fusoDe)).toBe("America/New_York");
+    expect(fusoDoFiltro(["z"], [], fusoDe)).toBe(FUSO_RELATORIO_PADRAO);
+  });
+
+  it("um checkout so usa o fuso dele; o resto, Sao Paulo", () => {
+    expect(fusoDoFiltro([], [{ fuso: "Europe/Lisbon" }], fusoDe)).toBe("Europe/Lisbon");
+    expect(fusoDoFiltro([], [{ fuso: null }], fusoDe)).toBe(FUSO_RELATORIO_PADRAO);
+    expect(fusoDoFiltro(["a"], [{ fuso: "Europe/Lisbon" }], fusoDe)).toBe(FUSO_RELATORIO_PADRAO);
+    expect(fusoDoFiltro(["a", "b"], [], fusoDe)).toBe(FUSO_RELATORIO_PADRAO);
+    expect(fusoDoFiltro([], [], fusoDe)).toBe(FUSO_RELATORIO_PADRAO);
   });
 });
 
@@ -330,6 +392,19 @@ describe("calendario na tela", () => {
   it("nao deixa ir para o mes que vem", () => {
     expect(html).toMatch(/aria-label="Próximo mês" aria-disabled="true"/);
     expect(html).not.toMatch(/aria-label="Mês anterior" aria-disabled/);
+  });
+
+  it("o dia mostra o anel de foco do teclado (sem outline-none, que o apaga)", () => {
+    expect(html).toMatch(/data-dia="2026-10-14"[^>]*focus-visible:outline-2/);
+    expect(html).not.toContain("outline-none");
+  });
+
+  it("na folha do celular a celula cabe em 320px", () => {
+    const folha = renderToStaticMarkup(
+      createElement(Calendario, { hoje: "2026-10-19", valor: null, aoMudar: () => {}, grande: true })
+    );
+    expect(folha).toMatch(/data-dia="2026-10-19"[^>]*size-ctl-lg max-\[360px\]:size-10/);
+    expect(folha).toContain("Escolha o primeiro dia.");
   });
 });
 
