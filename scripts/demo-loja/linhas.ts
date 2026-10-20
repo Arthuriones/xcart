@@ -22,7 +22,6 @@ import type { LinhaOrigem } from "../../src/lib/tracking/origem-pedido";
 import type { JornadaShopify, VisitaShopify } from "../../src/lib/tracking/origem-pedido";
 import { idDoEvento } from "../../src/lib/tracking/purchase";
 import { idDoEventoDeNavegador, idDoEventoDoCheckout, type ChaveEvento } from "../../src/lib/tracking/eventos";
-import { montarIdsDeProdutos } from "../../src/lib/tracking/id-produto";
 import {
   ARTHUR,
   CAMPANHAS,
@@ -42,10 +41,10 @@ import {
   campanhasDoDia,
   conjuntosDoDia,
   diaDaSemana,
+  fatorDoEvento,
   instanteLocal,
   segundoDoDia,
   semanaBfcm,
-  sha256,
   somarDia,
   uuid,
   type Campanha,
@@ -320,29 +319,6 @@ export interface LinhaEvento {
 /** O aviso que o envio grava quando o evento nao tem clique do Meta (fila.ts). */
 const AVISO_SEM_FBC = "sem fbc: nao veio de clique em anuncio do Meta";
 
-const NAVEGADORES: [string, number][] = [
-  ["Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 398.0.0.31.110", 22],
-  ["Mozilla/5.0 (iPhone; CPU iPhone OS 18_6_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 [FBAN/FBIOS;FBAV/528.0.0.41.104]", 14],
-  ["Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1", 24],
-  ["Mozilla/5.0 (Linux; Android 15; SM-S928U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36", 14],
-  ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36", 14],
-  ["Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15", 12],
-];
-
-function navegador(chave: string): string {
-  return new Sorteio(`ua:${chave}`).peso(NAVEGADORES);
-}
-
-function contentIds(skus: string[]): string[] {
-  return montarIdsDeProdutos(
-    null,
-    skus.map((sku) => {
-      const i = POR_SKU.get(sku)!;
-      return { variantId: i.variantId, productId: i.productId, sku };
-    })
-  );
-}
-
 function fbcDe(p: Pick<PedidoPlano, "origem">): string | null {
   return p.origem.tipo === "meta" ? `fb.1.${Math.floor(p.origem.cliqueMs)}.${p.origem.fbclid}` : null;
 }
@@ -369,58 +345,62 @@ function linhaEnviada(
   };
 }
 
+/**
+ * O payload de um evento da loja de demonstracao: SO o que alguma tela le.
+ *   - Pedidos (pedidos-banco.ts): payload.user_data.fbc e event_source_url do
+ *     Purchase (a origem de reserva, quando a gravada nao tem plataforma), e a
+ *     marca de teste (teste / test_event_code), que aqui nunca existe;
+ *   - Rastreamento (tracking_painel_v2): user_data.fbc ("de anuncio") e a
+ *     marca de teste;
+ *   - Eventos ao vivo (tracking_feed_v2): user_data.fbc e utm_source /
+ *     utm_campaign de event_source_url.
+ * O resto do que o webhook e o coletor gravam (hashes, user agent, itens,
+ * valor) nao aparece em tela nenhuma e custava ~1 KB por linha no plano free.
+ * Nada le o payload desta loja para enviar: a fila so drena 'pendente', e
+ * estas linhas nascem 'enviado'.
+ */
+function payloadMinimo(url: string | null, fbc: string | null): Record<string, unknown> {
+  return { ...(url ? { event_source_url: url } : {}), ...(fbc ? { user_data: { fbc } } : {}) };
+}
+
+/**
+ * A URL do evento de funil com so o que o feed le dela (utm_source e
+ * utm_campaign). Sem nenhum dos dois, nada: o feed mostraria o mesmo vazio.
+ */
+export function urlDoFeed(url: string): string | null {
+  const i = url.indexOf("?");
+  if (i < 0) return null;
+  const q = new URLSearchParams(url.slice(i + 1));
+  const curta = new URLSearchParams();
+  for (const k of ["utm_source", "utm_campaign"]) {
+    const v = q.get(k);
+    if (v) curta.set(k, v);
+  }
+  const texto = curta.toString();
+  return texto ? `${url.slice(0, i)}?${texto}` : null;
+}
+
 /** O Purchase do pedido, como o webhook orders/create grava (null = nao vira compra, ou ainda nao chegou). */
 export function compraDoPedido(p: PedidoPlano, agoraMs: number): LinhaEvento | null {
   if (p.tipo !== "venda" || p.total <= 0) return null;
   const r = new Sorteio(`compra:${p.id}`);
   const criadoMs = p.criadoMs + Math.round(r.entre(1500, 9000));
   if (criadoMs > agoraMs) return null;
-  const fbc = fbcDe(p);
-  const skus = p.linhas.map((l) => l.sku);
-  const payload = {
-    event_name: "Purchase",
-    event_time: Math.floor(p.criadoMs / 1000),
-    event_id: idDoEvento(p.id),
-    action_source: "website",
-    user_data: {
-      em: [sha256(`em:${p.visitante}`)],
-      ph: [sha256(`ph:${p.visitante}`)],
-      country: [sha256(p.pais.toLowerCase())],
-      external_id: [sha256(`cliente:${p.id}`), sha256(p.visitante)],
-      client_user_agent: navegador(p.visitante),
-      fbp: p.fbp,
-      ...(fbc ? { fbc } : {}),
-    },
-    custom_data: {
-      currency: MOEDA,
-      value: p.total,
-      content_type: "product",
-      content_ids: contentIds(skus),
-      contents: p.linhas.map((l) => ({ id: POR_SKU.get(l.sku)!.variantId, quantity: l.qtd, item_price: l.preco })),
-      num_items: p.linhas.reduce((s, l) => s + l.qtd, 0),
-      order_id: p.id,
-    },
-    event_source_url: urlDeChegada(p),
-  };
+  // A URL de chegada inteira: com o fbclid/gclid, e dela que a tela Pedidos
+  // tira a origem quando a gravada nao tem plataforma.
+  const chegada = urlDeChegada(p);
   return linhaEnviada(r, {
     id: uuid(`compra:${p.id}`),
     event_name: "Purchase",
     event_id: idDoEvento(p.id),
     order_id: p.id,
-    payload,
+    payload: payloadMinimo(chegada.includes("?") ? chegada : null, fbcDe(p)),
     visitor_id: null,
     referrer: null,
     checkout_token: null,
     criadoMs,
   });
 }
-
-const NOME_NO_META: Record<string, string> = {
-  view_item: "ViewContent",
-  add_to_cart: "AddToCart",
-  begin_checkout: "InitiateCheckout",
-  payment_info: "AddPaymentInfo",
-};
 
 interface Sessao {
   chave: string;
@@ -443,31 +423,16 @@ function eventoDeFunil(
   ms: number,
   i: number,
   url: string,
-  referrer: string | null,
-  skus: string[]
+  referrer: string | null
 ): LinhaEvento {
   const doPixel = chave === "begin_checkout" || chave === "payment_info";
   const eventId = doPixel ? idDoEventoDoCheckout(chave, s.token) : idDoEventoDeNavegador(chave, s.visitante, Math.floor(ms));
-  const payload: Record<string, unknown> = {
-    event_name: NOME_NO_META[chave],
-    event_time: Math.floor(ms / 1000),
-    event_id: eventId,
-    action_source: "website",
-    user_data: {
-      external_id: [sha256(s.visitante)],
-      client_user_agent: navegador(s.visitante),
-      fbp: s.fbp,
-      ...(s.fbc ? { fbc: s.fbc } : {}),
-    },
-    event_source_url: url,
-    custom_data: { content_type: "product", content_ids: contentIds(skus) },
-  };
   return linhaEnviada(r, {
     id: uuid(`funil:${s.chave}:${chave}:${i}`),
     event_name: chave,
     event_id: eventId,
     order_id: eventId,
-    payload,
+    payload: payloadMinimo(urlDoFeed(url), s.fbc),
     visitor_id: s.visitante,
     referrer,
     checkout_token: doPixel ? s.token : null,
@@ -494,15 +459,15 @@ function eventosDaSessao(r: Sorteio, s: Sessao, ate: "vi" | "atc" | "ic" | "pi",
     const sku = i === 0 ? s.skus[0] : r.peso(CATALOGO.map((c) => [c.sku, c.principal + c.extra] as const));
     const url = i === 0 ? s.chegada : paginaDoProduto(POR_SKU.get(sku)!);
     const ref = i === 0 ? s.origemHost : pagina;
-    saida.push(eventoDeFunil(r, s, "view_item", i === 0 ? s.inicioMs : proximo(), i, url, ref, [sku]));
+    saida.push(eventoDeFunil(r, s, "view_item", i === 0 ? s.inicioMs : proximo(), i, url, ref));
   }
   if (ate === "vi") return saida;
-  saida.push(eventoDeFunil(r, s, "add_to_cart", proximo(), 0, pagina, pagina, [s.skus[0]]));
+  saida.push(eventoDeFunil(r, s, "add_to_cart", proximo(), 0, pagina, pagina));
   if (ate === "atc") return saida;
   const checkout = `https://${DOMINIO}/checkouts/cn/${s.token}/en-us`;
-  saida.push(eventoDeFunil(r, s, "begin_checkout", proximo(), 0, checkout, `https://${DOMINIO}/cart`, s.skus));
+  saida.push(eventoDeFunil(r, s, "begin_checkout", proximo(), 0, checkout, `https://${DOMINIO}/cart`));
   if (ate === "ic") return saida;
-  saida.push(eventoDeFunil(r, s, "payment_info", proximo(), 0, checkout, `https://${DOMINIO}/cart`, s.skus));
+  saida.push(eventoDeFunil(r, s, "payment_info", proximo(), 0, checkout, `https://${DOMINIO}/cart`));
   return saida;
 }
 
@@ -560,7 +525,10 @@ export function funilDoDia(d: DiaPlano, agoraMs: number): LinhaEvento[] {
   // ate o pagamento. Por compra: ~27 sessoes sem compra -- conversao de ~3,5%
   // das sessoes, carrinho em ~14% delas, metade dos checkouts vira compra.
   const r = new Sorteio(`funil-dia:${d.dia}`);
-  const n = vendas.length;
+  // Dia de pico (promocao, Black Friday) converte mais: menos sessoes sem
+  // compra por compra. Sem isto, as sessoes do Meta passavam dos cliques do
+  // Meta na semana da Black Friday (o CPM sobe e o clique fica mais caro).
+  const n = vendas.length / Math.max(1, fatorDoEvento(d.dia)) / (semanaBfcm(d.dia) ? 1.35 : 1);
   const ruido = () => r.entre(0.9, 1.1);
   const grupos: ["vi" | "atc" | "ic" | "pi", number][] = [
     ["vi", Math.round(n * SESSOES_SEM_COMPRA.vi * ruido())],
@@ -672,7 +640,7 @@ export function gastoDoDia(d: DiaPlano, total: number, fracao: number, agoraMs: 
       if (plataforma === "meta") {
         const cpm = c.custoMidia * Math.exp(0.07 * r.normal()) * leilao;
         impressoes = Math.round((gasto / cpm) * 1000);
-        const ctr = (c.nome.startsWith("RT") ? 0.024 : 0.0145) * Math.exp(0.1 * r.normal());
+        const ctr = (c.nome.startsWith("RT") ? 0.021 : 0.0125) * Math.exp(0.1 * r.normal());
         cliques = Math.round(impressoes * ctr);
         const f = r.entre(0.84, 0.96);
         compras = Math.round(pedidos.length * f);
@@ -936,7 +904,7 @@ export function granularDeHoje(
             grupo_id: null,
             grupo_nome: null,
             orcamento: cbo ? c.orcamento : 0,
-            cpaDesejado: plataforma === "meta" && c.tipo !== "ABO" ? 38 : null,
+            cpaDesejado: plataforma === "meta" && c.tipo !== "ABO" ? 52 : null,
             retargeting: c.nome.startsWith("RT"),
           },
           totalCampanha

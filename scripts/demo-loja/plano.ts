@@ -12,6 +12,11 @@
  * meta, preso num ROAS crivel. Como o estado final ja conta os reembolsos que
  * ainda vao acontecer, o gasto de um dia passado nunca muda entre execucoes.
  *
+ * O plano nasce sempre do LANCAMENTO (a numeracao #1001... e o id de cada
+ * pedido dependem dos dias anteriores), mas o banco guarda so a JANELA
+ * (inicioDaJanela): o banco de producao esta no plano free do Supabase, e a
+ * loja de demonstracao nao pode crescer sem fim.
+ *
  * Usado so por scripts/demo-loja.ts. Nada aqui e importado pelo app.
  */
 import { createHash } from "node:crypto";
@@ -33,7 +38,10 @@ export const MARCA = "Quillmere";
 export const SEMENTE = "xcart-demo-quillmere-1";
 export const FUSO = "America/New_York";
 export const MOEDA = "USD";
-/** Primeiro dia de venda. 90 dias ate 19/10/2026. */
+/**
+ * Primeiro dia de venda: a ancora da numeracao (#1001) e da curva de
+ * crescimento. O banco nao guarda desde aqui -- so a janela (inicioDaJanela).
+ */
 export const LANCAMENTO = "2026-07-22";
 /** A loja foi conectada uma semana antes da primeira venda. */
 export const LOJA_CONECTADA_EM = "2026-07-15T14:12:31.000Z";
@@ -43,8 +51,23 @@ export const CONTAS_DESDE = "2026-07-18T13:05:44.000Z";
 /** Taxa de pagamento da loja (Shopify Payments + PayPal, media). */
 export const TAXA_PCT = 3.1;
 export const TAXA_FIXA = 0.3;
-/** Dias de funil (ver produto, carrinho, checkout) na fila: o resto e so a compra. */
-export const DIAS_DE_FUNIL = 8;
+/**
+ * Historico gravado: os ultimos 50 dias, estendido ate o dia 1 do mes
+ * anterior quando ele fica mais longe (ver inicioDaJanela). Cobre o periodo
+ * atual de Hoje, Ontem, 7 dias, 30 dias, Mes e Mes passado em qualquer dia.
+ */
+export const DIAS_DE_HISTORICO = 50;
+/**
+ * Compras (Purchase) na fila: os ultimos 35 dias locais, contando hoje. Cobrem
+ * os 7 dias do Rastreamento e os 30 da tela Pedidos; o destino do Meta "nasce"
+ * no corte (corteDasCompras), entao o pedido mais velho aparece em Pedidos
+ * como "sem pixel", nunca como "nao enviado".
+ */
+export const DIAS_DE_COMPRA = 35;
+/** Funil (ver produto, carrinho, checkout, pagamento) na fila: so as ultimas 48 h. */
+export const HORAS_DE_FUNIL = 48;
+/** A janela mais longa que inicioDaJanela pode dar (31 de agosto: de 1 de julho). */
+export const MAIOR_JANELA = 62;
 
 // ---------------------------------------------------------------------------
 // Ids, sorteio, tempo
@@ -141,6 +164,19 @@ export function somarDia(dia: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * O primeiro dia gravado: os ultimos DIAS_DE_HISTORICO dias ou, se for antes,
+ * o dia 1 do mes anterior -- "Mes passado" e o mes anterior INTEIRO, e no fim
+ * de um mes de 31 dias ele comeca 61 dias atras. Nunca antes do LANCAMENTO.
+ * Vai de 50 a 62 dias (MAIOR_JANELA).
+ */
+export function inicioDaJanela(hoje: string): string {
+  const ultimos = somarDia(hoje, -(DIAS_DE_HISTORICO - 1));
+  const primeiroDoMesAnterior = `${somarDia(`${hoje.slice(0, 7)}-01`, -1).slice(0, 7)}-01`;
+  const inicio = ultimos < primeiroDoMesAnterior ? ultimos : primeiroDoMesAnterior;
+  return inicio < LANCAMENTO ? LANCAMENTO : inicio;
+}
+
 export function diasEntre(desde: string, ate: string): string[] {
   const saida: string[] = [];
   for (let d = desde; d <= ate; d = somarDia(d, 1)) saida.push(d);
@@ -214,6 +250,11 @@ export function segundoDoDia(r: Sorteio): number {
   return hora * 3600 + r.entre(0, 3600);
 }
 
+/** O primeiro instante com compra na fila: a meia-noite local de DIAS_DE_COMPRA - 1 dias atras. */
+export function corteDasCompras(hoje: string): number {
+  return instanteLocal(somarDia(hoje, -(DIAS_DE_COMPRA - 1)), 0);
+}
+
 /** Fracao (0..1) do volume do dia que ja passou as `segundos` locais. */
 export function fracaoDoDia(segundos: number): number {
   const h = Math.min(23, Math.floor(segundos / 3600));
@@ -276,18 +317,28 @@ function item(
   };
 }
 
+/**
+ * Linha premium do nicho, com kits: o ticket medio fica em ~US$ 130 (o kit e
+ * o 2-Pack puxam para cima; mascara, fronha e travesseiro de joelho entram
+ * como item a mais). O custo do fornecedor fica em ~18-20% da receita.
+ */
 export const CATALOGO: ItemCatalogo[] = [
-  item("QM-CTR-STD", "Quillmere Contour Memory Foam Pillow", "Standard", "contour-memory-foam-pillow", 59.95, 9.4, 4.1, 30, 15, { custo: 8.6, frete: 3.9 }),
-  item("QM-CTR-KNG", "Quillmere Contour Memory Foam Pillow", "King", "contour-memory-foam-pillow", 69.95, 11.2, 4.6, 12, 5, { custo: 10.3, frete: 4.4 }),
-  item("QM-CTR-2PK", "Quillmere Contour Pillow 2-Pack", null, "contour-pillow-2-pack", 109.95, 18.8, 6.2, 11, 0, { custo: 17.2, frete: 5.9 }),
-  item("QM-WB-15", "Quillmere Cooling Weighted Blanket", "15 lb", "cooling-weighted-blanket", 129.0, 21.5, 9.8, 9, 0),
-  item("QM-WB-20", "Quillmere Cooling Weighted Blanket", "20 lb", "cooling-weighted-blanket", 149.0, 25.9, 11.4, 4, 0),
-  item("QM-BMB-Q", "Quillmere Bamboo Sheet Set", "Queen", "bamboo-sheet-set", 89.95, 14.8, 4.9, 9, 5),
-  item("QM-BMB-K", "Quillmere Bamboo Sheet Set", "King", "bamboo-sheet-set", 99.95, 16.6, 5.3, 5, 0),
-  item("QM-KNEE-01", "Quillmere Knee Alignment Pillow", null, "knee-alignment-pillow", 39.95, 5.9, 2.8, 9, 20),
-  item("QM-MASK-SLK", "Quillmere Mulberry Silk Sleep Mask", null, "mulberry-silk-sleep-mask", 24.95, 2.35, 1.15, 6, 35),
-  item("QM-PC-COOL", "Quillmere Cooling Pillowcase Set", null, "cooling-pillowcase-set", 34.95, 4.1, 1.6, 5, 20),
+  item("QM-CTR-STD", "Quillmere Contour Memory Foam Pillow", "Standard", "contour-memory-foam-pillow", 79.0, 9.4, 4.1, 28, 7, { custo: 8.6, frete: 3.9 }),
+  item("QM-CTR-KNG", "Quillmere Contour Memory Foam Pillow", "King", "contour-memory-foam-pillow", 89.0, 11.2, 4.6, 10, 2, { custo: 10.3, frete: 4.4 }),
+  item("QM-CTR-2PK", "Quillmere Contour Pillow 2-Pack", null, "contour-pillow-2-pack", 149.0, 18.8, 6.2, 12, 0, { custo: 17.2, frete: 5.9 }),
+  item("QM-KIT-DEEP", "Quillmere Deep Sleep Kit", null, "deep-sleep-kit", 139.0, 16.2, 6.4, 14, 0, { custo: 15.4, frete: 6.2 }),
+  item("QM-KIT-ULT", "Quillmere Ultimate Sleep Bundle", null, "ultimate-sleep-bundle", 279.0, 40.1, 13.2, 4, 0, { custo: 38.5, frete: 12.8 }),
+  item("QM-WB-15", "Quillmere Cooling Weighted Blanket", "15 lb", "cooling-weighted-blanket", 179.0, 26.5, 11.8, 7, 0),
+  item("QM-WB-20", "Quillmere Cooling Weighted Blanket", "20 lb", "cooling-weighted-blanket", 199.0, 30.9, 13.4, 3, 0),
+  item("QM-BMB-Q", "Quillmere Bamboo Sheet Set", "Queen", "bamboo-sheet-set", 129.0, 17.8, 5.9, 7, 3),
+  item("QM-BMB-K", "Quillmere Bamboo Sheet Set", "King", "bamboo-sheet-set", 139.0, 19.6, 6.3, 4, 0),
+  item("QM-KNEE-01", "Quillmere Knee Alignment Pillow", null, "knee-alignment-pillow", 49.0, 5.9, 2.8, 6, 20),
+  item("QM-MASK-SLK", "Quillmere Mulberry Silk Sleep Mask", null, "mulberry-silk-sleep-mask", 34.0, 2.35, 1.15, 3, 35),
+  item("QM-PC-COOL", "Quillmere Cooling Pillowcase Set", null, "cooling-pillowcase-set", 44.0, 4.1, 1.6, 3, 22),
 ];
+
+/** Kit e pacote saem um por pedido (a quantidade ja esta no kit). */
+const KITS = new Set(["QM-CTR-2PK", "QM-KIT-DEEP", "QM-KIT-ULT"]);
 
 export const POR_SKU = new Map(CATALOGO.map((i) => [i.sku, i]));
 
@@ -339,7 +390,7 @@ export interface Campanha {
   rendimento: number;
   /** Orcamento diario na campanha (CBO, ASC, Google). */
   orcamento?: number;
-  /** CPM medio (Meta) ou CPC medio (Google), USD. */
+  /** CPM medio (Meta, Q4 nos EUA para publico de produto premium) ou CPC medio (Google), USD. */
   custoMidia: number;
   conjuntos: Conjunto[];
   /** Crescimento do peso ao longo do tempo (ASC escalando). */
@@ -390,7 +441,7 @@ export const CAMPANHAS: Campanha[] = [
     peso: 1.0,
     rendimento: 1.0,
     orcamento: 2600,
-    custoMidia: 21.5,
+    custoMidia: 26.9,
     conjuntos: [
       conjunto("m1", "Broad | US | 25-65+ | Advantage+ Audience", 1.3, [
         ["VID 07 | UGC Neck Pain Hook | 9x16", 1.6],
@@ -419,23 +470,23 @@ export const CAMPANHAS: Campanha[] = [
     inicio: "2026-07-22",
     peso: 0.16,
     rendimento: 0.72,
-    custoMidia: 23,
+    custoMidia: 28.8,
     conjuntos: [
       conjunto("m2", "Test W30 | Hooks | Broad US", 1, [["VID 01 | Hook Wake Up No Pain", 1], ["VID 02 | Hook Pillow Graveyard", 1]], {
-        orcamento: 80,
+        orcamento: 180,
         fim: "2026-08-20",
       }),
       conjunto("m2", "Test W34 | UGC Batch | Broad US", 1, [["VID 08 | UGC Mom of 3", 1], ["VID 09 | UGC Nurse Night Shift", 1]], {
-        orcamento: 80,
+        orcamento: 180,
         inicio: "2026-08-17",
         fim: "2026-09-16",
       }),
       conjunto("m2", "Test W38 | Statics | Broad US", 1, [["IMG 05 | Review Screenshot", 1], ["IMG 06 | Price Anchor", 1]], {
-        orcamento: 80,
+        orcamento: 180,
         inicio: "2026-09-14",
       }),
       conjunto("m2", "Test W41 | Founder Story | Broad US", 1, [["VID 15 | Founder Story 45s", 1], ["VID 16 | Founder Story 15s", 1]], {
-        orcamento: 80,
+        orcamento: 180,
         inicio: "2026-10-06",
       }),
     ],
@@ -447,7 +498,7 @@ export const CAMPANHAS: Campanha[] = [
     peso: 0.11,
     rendimento: 1.65,
     orcamento: 350,
-    custoMidia: 29,
+    custoMidia: 36.2,
     conjuntos: [
       conjunto("m5", "RT | ATC 14d | Exclude Purchasers 30d", 1, [
         ["DPA | Catalog Carousel", 1.2],
@@ -464,7 +515,7 @@ export const CAMPANHAS: Campanha[] = [
     peso: 0.24,
     rendimento: 0.82,
     orcamento: 600,
-    custoMidia: 20,
+    custoMidia: 25,
     conjuntos: [
       conjunto("m4", "Interests | Home Decor + Bedding | US", 1, [
         ["VID 05 | Bamboo vs Cotton | 9x16", 1],
@@ -480,7 +531,7 @@ export const CAMPANHAS: Campanha[] = [
     peso: 0.42,
     rendimento: 0.96,
     orcamento: 1100,
-    custoMidia: 19.5,
+    custoMidia: 24.4,
     conjuntos: [
       conjunto("m3", "Broad | US+CA | 25-65+", 1.2, [
         ["VID 10 | Anxiety Relief UGC | 9x16", 1.4],
@@ -497,7 +548,7 @@ export const CAMPANHAS: Campanha[] = [
     escala: { ate: "2026-09-22", fator: 3.4 },
     rendimento: 1.08,
     orcamento: 3200,
-    custoMidia: 18,
+    custoMidia: 22.5,
     conjuntos: [
       conjunto("m6", "ASC+ | All Products | Worldwide", 1, [
         ["VID 07 | UGC Neck Pain Hook | 9x16", 1.3],
@@ -515,7 +566,7 @@ export const CAMPANHAS: Campanha[] = [
     peso: 0.55,
     rendimento: 1.15,
     orcamento: 1800,
-    custoMidia: 22,
+    custoMidia: 27.5,
     conjuntos: [
       conjunto("m7", "Broad | US | 25-65+ | Sale", 1, [
         ["VID 17 | Labor Day 25% Off", 1.3],
@@ -530,7 +581,7 @@ export const CAMPANHAS: Campanha[] = [
     peso: 0.32,
     rendimento: 0.9,
     orcamento: 800,
-    custoMidia: 15.5,
+    custoMidia: 19.4,
     conjuntos: [
       conjunto("m8", "Broad | UK+AU | 25-65+", 1, [
         ["VID 07 | UGC Neck Pain Hook | 9x16", 1.2],
@@ -546,7 +597,7 @@ export const CAMPANHAS: Campanha[] = [
     peso: 0.22,
     rendimento: 1.02,
     orcamento: 700,
-    custoMidia: 22.5,
+    custoMidia: 28.1,
     conjuntos: [
       conjunto("m9", "Broad | US | 25-65+ | Fall", 1, [
         ["VID 19 | Fall Reset Your Sleep", 1.1],
@@ -562,7 +613,7 @@ export const CAMPANHAS: Campanha[] = [
     peso: 0.7,
     rendimento: 1.12,
     orcamento: 2400,
-    custoMidia: 27,
+    custoMidia: 33.8,
     conjuntos: [
       conjunto("m10", "Broad | US+CA | 25-65+ | BFCM", 1.2, [
         ["VID 20 | Black Friday 30% Off | 9x16", 1.3],
@@ -579,7 +630,7 @@ export const CAMPANHAS: Campanha[] = [
     peso: 0.3,
     rendimento: 0.98,
     orcamento: 900,
-    custoMidia: 24,
+    custoMidia: 30,
     conjuntos: [
       conjunto("m11", "Broad | US | 25-65+ | Gifting", 1, [
         ["VID 21 | Gift of Better Sleep | 9x16", 1.2],
@@ -753,7 +804,7 @@ const EXTRAS = CATALOGO.filter((i) => i.extra > 0).map((i) => [i, i.extra] as co
 function montarLinhas(r: Sorteio): LinhaPlano[] {
   const linhas: LinhaPlano[] = [];
   const principal = r.peso(PRINCIPAIS);
-  const qtd = principal.sku === "QM-CTR-2PK" ? 1 : r.peso([[1, 90], [2, 9], [3, 1]] as const);
+  const qtd = KITS.has(principal.sku) ? 1 : r.peso([[1, 90], [2, 9], [3, 1]] as const);
   linhas.push({ sku: principal.sku, qtd, preco: principal.preco });
   const extras = r.peso([[0, 70], [1, 24], [2, 6]] as const);
   for (let i = 0; i < extras; i += 1) {
@@ -853,6 +904,11 @@ const EVENTOS: Record<string, number> = {
   "2026-12-26": 0.92,
 };
 
+/** O fator do dia em EVENTOS (1 = dia comum). */
+export function fatorDoEvento(dia: string): number {
+  return EVENTOS[dia] ?? 1;
+}
+
 /** A semana da Black Friday (CPM mais caro no leilao do Meta). */
 export function semanaBfcm(dia: string): boolean {
   return dia >= "2026-11-24" && dia <= "2026-12-01";
@@ -867,9 +923,10 @@ export interface MetaDoDia {
 
 /**
  * Crescimento do lucro sobre a base: linear nos primeiros 90 dias (+27%) e,
- * depois, chegando devagar num teto (+32%, ~8,4 mil/dia de media) -- a loja
- * nao cresce para sempre, e a media fica na faixa de 5-10 mil. No dia 89 a
- * curva continua com a mesma inclinacao, sem quina no grafico.
+ * depois, chegando devagar num teto (+32%, ~8,3 mil/dia de meta, ~160
+ * pedidos/dia) -- a loja nao cresce para sempre, e a media fica na faixa de
+ * 5-10 mil. No dia 89 a curva continua com a mesma inclinacao, sem quina no
+ * grafico.
  */
 export function crescimento(idx: number): number {
   const linear = 0.27 / 89; // por dia, nos primeiros 90 dias
@@ -880,7 +937,7 @@ export function crescimento(idx: number): number {
 
 export function metaDoDia(dia: string, idx: number): MetaDoDia {
   const r = new Sorteio(`meta:${dia}`);
-  const tendencia = 6350 * (1 + crescimento(idx));
+  const tendencia = 6300 * (1 + crescimento(idx));
   const rampa = idx < 10 ? 0.38 + 0.062 * idx : 1;
   const semana = DIA_DA_SEMANA[diaDaSemana(dia)];
   const ruido = Math.exp(0.11 * r.normal());
