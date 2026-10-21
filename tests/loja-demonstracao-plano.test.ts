@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 // ============================================================================
-// Loja de demonstracao: o plano e o tamanho no banco (scripts/demo-loja/*).
+// Loja de demonstracao: o plano (src/lib/demonstracao/*) e o tamanho no banco (scripts/demo-loja/tamanho.ts).
 //
 // O banco de producao esta no plano free do Supabase (500 MB): a loja guarda
 // so janelas que rolam. O que trava aqui:
@@ -36,9 +36,9 @@ import {
   instanteLocal,
   primeiroDiaDeCompra,
   somarDia,
-} from "../scripts/demo-loja/plano";
-import { custosDosProdutos, urlDoFeed } from "../scripts/demo-loja/linhas";
-import { configLoja, contasDaLoja, intervalosDaJanela, lojaFinanceira, montar, type Semeadura } from "../scripts/demo-loja/semeadura";
+} from "@/lib/demonstracao/plano";
+import { custosDosProdutos, urlDoFeed } from "@/lib/demonstracao/linhas";
+import { configLoja, contasDaLoja, intervalosDaJanela, lojaFinanceira, montar, type Semeadura } from "@/lib/demonstracao/semeadura";
 import {
   LIMITE_DA_CARGA,
   LIMITE_DO_BANCO,

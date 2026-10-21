@@ -6,9 +6,9 @@
  * loja de demonstracao grava exatamente o que o sync gravaria. O Purchase e o
  * funil sao montados no formato que o webhook e o coletor gravam na fila.
  *
- * Puro: nada de banco aqui.
+ * Puro: nada de banco aqui (quem grava e o gravacao.ts).
  */
-import { mapearOrigem, mapearPedido, type NoPedidoShopify } from "../../src/lib/financeiro/mapear-pedido";
+import { mapearOrigem, mapearPedido, type NoPedidoShopify } from "@/lib/financeiro/mapear-pedido";
 import {
   chaveSku,
   custoVigente,
@@ -16,12 +16,13 @@ import {
   qtdParaCusto,
   type AdSpendDailyRow,
   type FinOrderRow,
+  type FxRateRow,
   type ProductCostRow,
-} from "../../src/lib/financeiro/tipos";
-import type { LinhaOrigem } from "../../src/lib/tracking/origem-pedido";
-import type { JornadaShopify, VisitaShopify } from "../../src/lib/tracking/origem-pedido";
-import { idDoEvento } from "../../src/lib/tracking/purchase";
-import { idDoEventoDeNavegador, idDoEventoDoCheckout, type ChaveEvento } from "../../src/lib/tracking/eventos";
+} from "@/lib/financeiro/tipos";
+import type { LinhaOrigem } from "@/lib/tracking/origem-pedido";
+import type { JornadaShopify, VisitaShopify } from "@/lib/tracking/origem-pedido";
+import { idDoEvento } from "@/lib/tracking/purchase";
+import { idDoEventoDeNavegador, idDoEventoDoCheckout, type ChaveEvento } from "@/lib/tracking/eventos";
 import {
   ARTHUR,
   CAMPANHAS,
@@ -55,6 +56,36 @@ import {
 
 /** Unidades da moeda por 1 USD no dia (a cotacao de fx_rates). */
 export type Cambio = (moeda: string, dia: string) => number;
+
+/** As moedas dos compradores (PAISES do plano) e o BRL da tela Campanhas. */
+export const MOEDAS_CLIENTE = ["CAD", "GBP", "AUD", "EUR", "BRL"];
+/** Cotacao de reserva (unidades por USD) da moeda sem cotacao nenhuma no banco (e o --dry-run sem banco). */
+export const COTACAO_RESERVA: Record<string, number> = { USD: 1, CAD: 1.38, GBP: 0.76, AUD: 1.53, EUR: 0.87, BRL: 5.42 };
+
+/**
+ * Unidades por USD no dia: a ultima cotacao ate o dia, ou a de reserva. O
+ * cron e o script montam daqui, das mesmas linhas de fx_rates (lerCambio).
+ */
+export function montarCambio(linhas: readonly FxRateRow[]): Cambio {
+  const porMoeda = new Map<string, { data: string; v: number }[]>();
+  for (const l of linhas) {
+    const lista = porMoeda.get(l.moeda) ?? [];
+    lista.push({ data: String(l.data).slice(0, 10), v: paraNumero(l.por_usd) });
+    porMoeda.set(l.moeda, lista);
+  }
+  return (moeda, dia) => {
+    if (moeda === "USD") return 1;
+    const lista = porMoeda.get(moeda) ?? [];
+    let achado: number | null = null;
+    for (const c of lista) if (c.data <= dia && c.v > 0) achado = c.v;
+    return achado ?? COTACAO_RESERVA[moeda] ?? 1;
+  };
+}
+
+/** O BRL da tela Campanhas: a ultima cotacao lida (as linhas vem por data). */
+export function cotacaoBrl(fx: readonly FxRateRow[]): number {
+  return paraNumero(fx.filter((l) => l.moeda === "BRL").pop()?.por_usd) || 5.4;
+}
 
 const CTX = { storeId: LOJA_ID, userId: ARTHUR, fuso: FUSO };
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -142,14 +173,33 @@ function urlDeChegada(p: PedidoPlano): string {
   return j?.lastVisit?.landingPage ?? `https://${DOMINIO}/`;
 }
 
-/** O pedido no instante `agora`, como a query FinPedidos da Shopify devolveria. */
-export function paraShopify(p: PedidoPlano, agoraMs: number, cambio: Cambio): NoPedidoShopify {
+/** O que ja aconteceu com o pedido no instante `agora`. */
+function estadoDoPedido(p: PedidoPlano, agoraMs: number) {
   const cancelado = p.cancelado && p.cancelado.emMs <= agoraMs ? p.cancelado : null;
   const reembolso = !cancelado && p.reembolso && p.reembolso.emMs <= agoraMs ? p.reembolso : null;
   // Reembolso total antes do envio: o pedido nunca sai.
   const naoSai = Boolean(p.cancelado) || Boolean(p.reembolso?.total && p.reembolso.emMs < p.enviaEmMs);
   const enviado = !naoSai && p.enviaEmMs <= agoraMs;
   const entregue = enviado && p.entregaEmMs <= agoraMs;
+  const momentos = [p.criadoMs, cancelado?.emMs, reembolso?.emMs, enviado ? p.enviaEmMs : null, entregue ? p.entregaEmMs : null]
+    .filter((v): v is number => typeof v === "number");
+  // O updatedAt da Shopify: a ultima mudanca (mais o carimbo de 4 s), nunca no futuro.
+  const atualizadoMs = Math.min(Math.max(...momentos) + 4_000, agoraMs);
+  return { cancelado, reembolso, enviado, entregue, atualizadoMs };
+}
+
+/**
+ * O updatedAt do pedido em `agora` (fin_orders.atualizado_em): a linha do
+ * pedido so muda quando ele muda. E o cursor do cron (gravacao.ts): o que
+ * mudou desde a ultima rodada, como o sync de verdade pergunta a Shopify.
+ */
+export function atualizadoEm(p: PedidoPlano, agoraMs: number): number {
+  return estadoDoPedido(p, agoraMs).atualizadoMs;
+}
+
+/** O pedido no instante `agora`, como a query FinPedidos da Shopify devolveria. */
+export function paraShopify(p: PedidoPlano, agoraMs: number, cambio: Cambio): NoPedidoShopify {
+  const { cancelado, reembolso, enviado, entregue, atualizadoMs } = estadoDoPedido(p, agoraMs);
 
   const recebido = cancelado?.como === "VOIDED" ? 0 : p.total;
   const reembolsado = cancelado ? (cancelado.como === "REFUNDED" ? p.total : 0) : (reembolso?.valor ?? 0);
@@ -167,10 +217,6 @@ export function paraShopify(p: PedidoPlano, agoraMs: number, cambio: Cambio): No
             : "PARTIALLY_REFUNDED"
           : "PAID";
   const semItens = Boolean(cancelado) || Boolean(reembolso?.total);
-
-  const momentos = [p.criadoMs, cancelado?.emMs, reembolso?.emMs, enviado ? p.enviaEmMs : null, entregue ? p.entregaEmMs : null]
-    .filter((v): v is number => typeof v === "number");
-  const atualizado = Math.max(...momentos) + 4_000;
   const dinheiro = (v: number) => ({ shopMoney: { amount: v.toFixed(2) } });
 
   return {
@@ -178,7 +224,7 @@ export function paraShopify(p: PedidoPlano, agoraMs: number, cambio: Cambio): No
     name: `#${p.numero}`,
     createdAt: iso(p.criadoMs),
     processedAt: iso(p.criadoMs),
-    updatedAt: iso(Math.min(atualizado, agoraMs)),
+    updatedAt: iso(atualizadoMs),
     cancelledAt: cancelado ? iso(cancelado.emMs) : null,
     test: false,
     sourceName: p.tipo === "reenvio" ? "shopify_draft_order" : "web",

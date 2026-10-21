@@ -1,10 +1,12 @@
 // ============================================================================
 // Loja de demonstracao (migration 074, stores.demonstracao).
 //
-// Uma loja com pedidos, custos, gasto e eventos gravados direto no banco por
-// scripts/demo-loja.ts, sem Shopify, Meta ou Google por tras. As telas a leem
-// como qualquer loja. O que fala com fora a pula -- a credencial dela e
-// inventada, e cada tentativa viraria "Token invalido" na tela e alerta:
+// Uma loja com pedidos, custos, gasto e eventos gravados direto no banco pelo
+// gerador desta pasta (plano/linhas/semeadura) -- o cron api/jobs/demonstracao
+// a mantem em dia (atualizar.ts, gravacao.ts) e o scripts/demo-loja.ts a cria
+// e apaga --, sem Shopify, Meta ou Google por tras. As telas a leem como
+// qualquer loja. O que fala com fora a pula -- a credencial dela e inventada,
+// e cada tentativa viraria "Token invalido" na tela e alerta:
 //
 //   - o sync de pedidos (api/jobs/financeiro/pedidos) e o gasto do Meta
 //     (api/jobs/ads/meta), no cron e no "Atualizar agora";

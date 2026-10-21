@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeSupabase } from "./_fake-supabase";
 
 // ============================================================================
-// Loja de demonstracao (migration 074, src/lib/demonstracao.ts): uma loja com
+// Loja de demonstracao (migration 074, src/lib/demonstracao/): uma loja com
 // dados gravados pelo script, sem Shopify, Meta ou Google por tras. O que
 // trava aqui:
 //   - a marca e lida com e sem a 074 (coluna ausente = nenhuma loja marcada);

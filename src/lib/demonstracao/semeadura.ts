@@ -12,16 +12,17 @@
  *   - funil (ver produto, carrinho, checkout, pagamento): as ultimas
  *     HORAS_DE_FUNIL horas.
  *
- * Puro: nada de banco aqui. O scripts/demo-loja.ts le o cambio e grava.
+ * Puro: nada de banco aqui. Quem le o cambio e grava e o gravacao.ts (o cron
+ * e o scripts/demo-loja.ts).
  */
-import { calcularFinanceiro } from "../../src/lib/financeiro/calculo";
+import { calcularFinanceiro } from "@/lib/financeiro/calculo";
 import type {
   AdAccountRow,
   AdSpendDailyRow,
   FinOrderRow,
   FinStoreSettingsRow,
   FxRateRow,
-} from "../../src/lib/financeiro/tipos";
+} from "@/lib/financeiro/tipos";
 import {
   ARTHUR,
   CONTA_GOOGLE,
@@ -39,14 +40,17 @@ import {
   fracaoDoDia,
   gerarPlano,
   inicioDaJanela,
+  instanteLocal,
   segundosLocais,
   somarDia,
   type DiaPlano,
+  type PedidoPlano,
 } from "./plano";
 import {
   compraDoPedido,
   funilDoDia,
   gastoDoDia,
+  granularDeHoje,
   linhaDaOrigem,
   linhaDoPedido,
   linhasDeGasto,
@@ -55,6 +59,7 @@ import {
   type Cambio,
   type GastoDoDia,
   type LinhaEvento,
+  type LinhaGranular,
 } from "./linhas";
 
 /** ROAS real minimo e maximo de um dia: fora disso o gasto e ajustado e o lucro sai da meta. */
@@ -124,6 +129,13 @@ export interface Semeadura {
   origens: NonNullable<ReturnType<typeof linhaDaOrigem>>[];
   compras: LinhaEvento[];
   funil: LinhaEvento[];
+  /**
+   * Os eventos do funil de HOJE que aconteceram antes da meia-noite (a sessao
+   * do primeiro pedido do dia comeca ate 50 min antes dele): so existem depois
+   * que o dia entra no plano, atras do ultimo evento gravado. Ja estao em
+   * `funil`; a primeira rodada do dia os manda (gravacao.ts).
+   */
+  madrugada: LinhaEvento[];
   gastos: GastoDoDia[];
   linhasGasto: AdSpendDailyRow[];
   /** O gasto do dia inteiro (a conta do lucro) e a meta, por dia. */
@@ -135,15 +147,30 @@ export function intervalosDaJanela(janela: string, hoje: string) {
   return { atual: { desde: janela, ate: hoje }, anterior: { desde: somarDia(janela, -1), ate: somarDia(janela, -1) } };
 }
 
-export function montar(agoraMs: number, cambio: Cambio, fx: FxRateRow[]): Semeadura {
+/**
+ * O que vira linha. Sem selecao, a janela inteira (o `semear`). O cron pede so
+ * o que pode ter mudado -- os dias de hoje (e de ontem na virada) e os pedidos
+ * que mudaram desde a ultima rodada --, e cada dia sai IGUAL ao da janela
+ * inteira: a conta do gasto e o funil de um dia so dependem dos pedidos dele.
+ */
+export interface Selecao {
+  /** Dias inteiros: pedidos, origem, Purchase, funil e gasto. */
+  dias?: (dia: string) => boolean;
+  /** Pedidos de outros dias que tambem viram linha (fin_orders, origem e Purchase). */
+  pedido?: (p: PedidoPlano) => boolean;
+}
+
+export function montar(agoraMs: number, cambio: Cambio, fx: FxRateRow[], selecao?: Selecao): Semeadura {
   const hoje = diaLocal(agoraMs);
   const cortes = cortesDe(agoraMs);
   const plano = gerarPlano(hoje).filter((d) => d.dia >= cortes.janela);
   const custos = custosDosProdutos();
+  const diaInteiro = (d: DiaPlano) => !selecao?.dias || selecao.dias(d.dia);
+  const inteiros = plano.filter(diaInteiro);
 
   // 1) O gasto de cada dia sai do estado FINAL dos pedidos (o reembolso que
   //    ainda vai acontecer ja conta): o gasto de um dia passado nunca muda.
-  const finais = plano.flatMap((d) => d.pedidos.map((p) => linhaDoPedido(p, FIM_DOS_TEMPOS, cambio)));
+  const finais = inteiros.flatMap((d) => d.pedidos.map((p) => linhaDoPedido(p, FIM_DOS_TEMPOS, cambio)));
   const contaFinal = calcularFinanceiro({
     lojas: [lojaFinanceira],
     pedidos: finais,
@@ -157,7 +184,7 @@ export function montar(agoraMs: number, cambio: Cambio, fx: FxRateRow[]): Semead
     hoje,
   });
   const porDia: Semeadura["porDia"] = new Map();
-  for (const d of plano) {
+  for (const d of inteiros) {
     const t = contaFinal.porDia.find((x) => x.dia === d.dia)!;
     const sobra = t.receita - t.cmv - t.taxas - d.meta.lucro;
     const gastoDia = Math.min(t.receita / ROAS_MIN, Math.max(t.receita / ROAS_MAX, sobra));
@@ -169,25 +196,51 @@ export function montar(agoraMs: number, cambio: Cambio, fx: FxRateRow[]): Semead
   const origens: Semeadura["origens"] = [];
   const compras: LinhaEvento[] = [];
   const funil: LinhaEvento[] = [];
+  const madrugada: LinhaEvento[] = [];
+  const meiaNoite = instanteLocal(hoje, 0);
   const gastos: GastoDoDia[] = [];
   const diaDoFunil = diaLocal(cortes.funil);
   const fracaoHoje = fracaoDoDia(segundosLocais(agoraMs));
   for (const d of plano) {
+    const inteiro = diaInteiro(d);
     for (const p of d.pedidos) {
       if (p.criadoMs > agoraMs) continue;
+      if (!inteiro && !selecao?.pedido?.(p)) continue;
       pedidos.push(linhaDoPedido(p, agoraMs, cambio));
       const o = linhaDaOrigem(p, agoraMs, cambio);
       if (o) origens.push(o);
       const c = compraDoPedido(p, agoraMs);
       if (c && Date.parse(c.created_at) >= cortes.compras) compras.push(c);
     }
+    if (!inteiro) continue;
     if (d.dia >= diaDoFunil) {
-      for (const e of funilDoDia(d, agoraMs)) if (Date.parse(e.created_at) >= cortes.funil) funil.push(e);
+      for (const e of funilDoDia(d, agoraMs)) {
+        if (Date.parse(e.created_at) < cortes.funil) continue;
+        funil.push(e);
+        if (d.dia === hoje && Date.parse(e.created_at) < meiaNoite) madrugada.push(e);
+      }
     }
     gastos.push(gastoDoDia(d, porDia.get(d.dia)!.gastoDia, d.dia === hoje ? fracaoHoje : 1, agoraMs));
   }
   const linhasGasto = gastos.flatMap((g) =>
     linhasDeGasto(g, g.dia === hoje ? new Date(agoraMs - 3 * 60_000).toISOString() : sincronizadoDoDia(g.dia, agoraMs))
   );
-  return { agoraMs, hoje, cortes, plano, pedidos, origens, compras, funil, gastos, linhasGasto, porDia };
+  return { agoraMs, hoje, cortes, plano, pedidos, origens, compras, funil, madrugada, gastos, linhasGasto, porDia };
+}
+
+/**
+ * Campanhas, conjuntos e anuncios de hoje (a tela Campanhas mostra um retrato
+ * so, sem filtro de data). Pede o dia de hoje inteiro na Semeadura.
+ */
+export function granularDe(s: Semeadura, brlPorUsd: number): LinhaGranular[] {
+  const hoje = s.gastos.find((g) => g.dia === s.hoje);
+  if (!hoje) return [];
+  return granularDeHoje(
+    hoje,
+    s.hoje,
+    new Map(s.pedidos.filter((p) => p.dia_local === s.hoje).map((p) => [p.shopify_order_id, p])),
+    custosDosProdutos(),
+    brlPorUsd,
+    new Date(s.agoraMs).toISOString()
+  );
 }

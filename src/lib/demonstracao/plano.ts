@@ -17,7 +17,9 @@
  * (inicioDaJanela): o banco de producao esta no plano free do Supabase, e a
  * loja de demonstracao nao pode crescer sem fim.
  *
- * Usado so por scripts/demo-loja.ts. Nada aqui e importado pelo app.
+ * Puro (sem banco e sem server-only): o cron (api/jobs/demonstracao, via
+ * gravacao.ts) e o scripts/demo-loja.ts geram as linhas DAQUI -- o mesmo
+ * instante da a mesma linha nos dois. Nenhuma tela importa isto.
  */
 import { createHash } from "node:crypto";
 
@@ -36,7 +38,24 @@ export const ARTHUR = "55c773d6-873a-456a-8695-296ff1433a53";
  */
 export const MARCA = "Quillmere";
 export const SEMENTE = "xcart-demo-quillmere-1";
-export const FUSO = "America/New_York";
+/**
+ * O fuso da loja (fin_sync_state.fuso e o das contas de anuncio): o dia dos
+ * pedidos, o gasto por dia e as horas. Brasilia desde 21/10/2026 -- o Arthur
+ * grava os videos para publico brasileiro, e o "Hoje" da tela vira a meia-noite
+ * daqui. Antes era America/New_York (FUSO_DOS_IDS_S).
+ *
+ * Trocar o fuso: os pedidos continuam os mesmos (o mesmo dia do plano, a mesma
+ * hora do relogio local, o mesmo id e numero), so o instante anda. O que esta
+ * gravado no fuso antigo e regravado inteiro pelo cron ou pelo `semear` quando
+ * fin_sync_state.fuso nao bate com este (modoDaRodada, gravacao.ts).
+ */
+export const FUSO = "America/Sao_Paulo";
+/**
+ * O deslocamento do fuso em que os primeiros pedidos foram gravados
+ * (America/New_York, UTC-4 no lancamento), em segundos: entra no id do
+ * pedido (gerarPlano) para o id ficar o mesmo depois da troca de fuso.
+ */
+const FUSO_DOS_IDS_S = 4 * 3600;
 export const MOEDA = "USD";
 /**
  * Primeiro dia de venda: a ancora da numeracao (#1001) e da curva de
@@ -239,7 +258,7 @@ function formato(fuso: string): Intl.DateTimeFormat {
 }
 
 /** Quanto o relogio do fuso esta a frente do UTC, em ms, no instante. */
-function deslocamento(ms: number, fuso: string): number {
+export function deslocamento(ms: number, fuso: string): number {
   const partes = formato(fuso).formatToParts(new Date(ms));
   const v = (t: string) => Number(partes.find((p) => p.type === t)?.value);
   const comoUtc = Date.UTC(v("year"), v("month") - 1, v("day"), v("hour"), v("minute"), v("second"));
@@ -266,8 +285,8 @@ export function segundosLocais(ms: number, fuso = FUSO): number {
 }
 
 /**
- * Pedidos por hora no fuso da loja (EUA principal): vale de madrugada, pico
- * no almoco e das 19 as 21 h.
+ * Pedidos por hora no relogio da loja (FUSO): vale de madrugada, pico no
+ * almoco e das 19 as 21 h.
  */
 const CURVA_HORA = [
   3.2, 2.2, 1.5, 1.1, 1.0, 1.2, 1.9, 2.8, 3.6, 4.2, 4.6, 5.0, 5.5, 5.2, 4.9, 4.8, 4.9, 5.2, 5.8, 6.6, 6.9, 6.6,
@@ -1182,6 +1201,17 @@ export function planejarDia(dia: string, idx: number, economia: EconomiaMedia): 
 const BASE_ID = 6_412_384_000_000;
 const LANCAMENTO_MS = Date.parse(`${LANCAMENTO}T00:00:00Z`);
 
+/**
+ * Os segundos do id: o relogio LOCAL desde a meia-noite do lancamento, mais o
+ * deslocamento do fuso em que a loja nasceu. No fuso de antes (New York, sem
+ * horario de verao entre o lancamento e a troca) da exatamente o id que ja
+ * esta gravado; em qualquer outro fuso, o mesmo pedido (mesma hora do relogio
+ * local) tem o mesmo id -- a troca de fuso regrava as linhas, nao duplica.
+ */
+export function segundosDoId(criadoMs: number): number {
+  return Math.max(0, Math.floor((criadoMs + deslocamento(criadoMs, FUSO) - LANCAMENTO_MS) / 1000) + FUSO_DOS_IDS_S);
+}
+
 /** Todos os dias de LANCAMENTO ate `ate`, numerados (#1001...) na ordem em que nasceram. */
 export function gerarPlano(ate: string): DiaPlano[] {
   const economia = economiaMedia();
@@ -1190,8 +1220,7 @@ export function gerarPlano(ate: string): DiaPlano[] {
   for (const d of dias) {
     for (const p of d.pedidos) {
       p.numero = numero;
-      const segundos = Math.max(0, Math.floor((p.criadoMs - LANCAMENTO_MS) / 1000));
-      p.id = String(BASE_ID + segundos * 1000 + (numero % 1000));
+      p.id = String(BASE_ID + segundosDoId(p.criadoMs) * 1000 + (numero % 1000));
       numero += 1;
     }
   }

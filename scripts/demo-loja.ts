@@ -1,16 +1,20 @@
 /**
  * Loja de demonstracao na conta do Arthur: pedidos, custos, gasto de anuncio,
  * origem por campanha e eventos de rastreamento gravados direto no banco, sem
- * Shopify, Meta ou Google por tras (migration 074, src/lib/demonstracao.ts).
+ * Shopify, Meta ou Google por tras (migration 074, src/lib/demonstracao/).
  *
  * A loja e marcada (stores.demonstracao): o app nao chama nada de fora por
- * ela, nao abre alerta e nao a sincroniza -- os numeros so mudam quando este
- * script roda. Rode o `semear` logo antes de gravar a tela.
+ * ela, nao abre alerta e nao a sincroniza com a Shopify. Quem a mantem em dia
+ * e o cron api/jobs/demonstracao (15 em 15 min, src/lib/demonstracao/
+ * atualizar.ts): completa ate agora pelo MESMO gerador daqui
+ * (src/lib/demonstracao/plano.ts, linhas.ts, semeadura.ts, gravacao.ts) e
+ * apaga, uma vez por dia, o que saiu das janelas. Este script cria a loja,
+ * sobe as fotos, mede o espaco, regrava de uma vez e apaga a loja.
  *
  * ORDEM (a primeira vez):
  *   1. Aplicar a migration 074 (SQL editor) e conferir com os SELECTs do fim dela.
  *   2. Merge na main e deploy de PRODUCAO da Vercel em READY -- uma build com
- *      src/lib/demonstracao.ts (commit 2be37b1 ou depois). Sem ela no ar, o
+ *      src/lib/demonstracao/ (commit 2be37b1 ou depois). Sem ela no ar, o
  *      cron de 15 min trata a loja como real: chama a Shopify e o Meta com a
  *      credencial inventada, grava "Token invalido" na loja, abre alerta e
  *      manda pelo Telegram; o coletor antigo aceita evento para ela. Vale para
@@ -21,8 +25,10 @@
  * Uso (da raiz do repo, com o .env.local):
  *   npm run op -- scripts/demo-loja.ts semear --dry-run                   resumo por dia e espaco no banco; NAO grava (le o banco so com SELECT)
  *   npm run op -- scripts/demo-loja.ts semear --app-publicado             cria a loja se faltar, completa ate agora e apaga o que saiu da janela
- *   npm run op -- scripts/demo-loja.ts semear --app-publicado --tudo      regrava a janela inteira (padrao: os ultimos 20 dias)
- *   npm run op -- scripts/demo-loja.ts semear --app-publicado --ao-vivo 60  completa hoje a cada 60 s, ate Ctrl+C
+ *                                                                          (confere com o banco os ultimos 20 dias -- ou a janela inteira, se o
+ *                                                                          fuso gravado nao e o do gerador -- e grava so o que difere)
+ *   npm run op -- scripts/demo-loja.ts semear --app-publicado --tudo      regrava a janela inteira sem conferir (formato novo de linha)
+ *   npm run op -- scripts/demo-loja.ts semear --app-publicado --ao-vivo 60  depois, a rodada do cron a cada 60 s, ate Ctrl+C
  *   npm run op -- scripts/demo-loja.ts semear --app-publicado --imagens <pasta>
  *       sobe <pasta>/<SKU>.jpg|jpeg|png|webp (miniatura de 192 px) para o bucket
  *       publico product-images e grava a foto de Custos (demonstracao_catalogo)
@@ -38,14 +44,14 @@
  * de todo periodo do app), Purchase dos ultimos 35 dias ou desde o dia 1 do
  * mes anterior (35 a 62 dias) e o funil das ultimas 48 h. O semear de verdade
  * mede a carga no banco (tamanho.ts, so SELECT) e RECUSA gravar se ela passar
- * de 70 MB ou se o banco mais ela passar de 400 MB. Rode todo dia: cada execucao
- * apaga o que saiu da janela, e a loja nao cresce.
+ * de 70 MB ou se o banco mais ela passar de 400 MB. O cron nao usa a
+ * Management API: a trava dele e a contagem de linhas da loja por tabela
+ * (TETO_DE_LINHAS, gravacao.ts).
  *
  * Re-executavel e idempotente: os ids sao fixos (uuid v5 da semente) e cada
- * dia nasce do mesmo sorteio, entao rodar de novo regrava o mesmo dado e
- * completa o dia de hoje ate a hora atual. Origem e eventos nao mudam depois
- * de nascer: entram uma vez (ON CONFLICT DO NOTHING), sem versao morta a cada
- * execucao.
+ * dia nasce do mesmo sorteio, entao rodar de novo da o mesmo dado e completa
+ * o dia de hoje ate a hora atual. O script e o cron gravam pelas mesmas
+ * funcoes: um em cima do outro nao duplica nada.
  */
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -54,7 +60,7 @@ import { config } from "dotenv";
 import sharp from "sharp";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { calcularFinanceiro } from "../src/lib/financeiro/calculo";
-import { paraNumero, receitaDoPedido, type AdSpendDailyRow, type FinOrderRow, type FxRateRow } from "../src/lib/financeiro/tipos";
+import { paraNumero, type FxRateRow } from "../src/lib/financeiro/tipos";
 import {
   ARTHUR,
   CATALOGO,
@@ -81,9 +87,11 @@ import {
   instanteLocal,
   sha256,
   somarDia,
-} from "./demo-loja/plano";
-import { custosDosProdutos, granularDeHoje, type Cambio, type LinhaGranular } from "./demo-loja/linhas";
-import { configLoja, contasDaLoja, intervalosDaJanela, lojaFinanceira, montar, type Semeadura } from "./demo-loja/semeadura";
+} from "../src/lib/demonstracao/plano";
+import { cotacaoBrl, custosDosProdutos, montarCambio } from "../src/lib/demonstracao/linhas";
+import { configLoja, contasDaLoja, granularDe, intervalosDaJanela, lojaFinanceira, montar, type Semeadura } from "../src/lib/demonstracao/semeadura";
+import { lerCambio, lerEstado, planejar, type Estado, type Modo, type Pendente } from "../src/lib/demonstracao/gravacao";
+import { atualizarLoja, modoDoScript, semearAgora } from "../src/lib/demonstracao/atualizar";
 import { LIMITE_DA_CARGA, LIMITE_DO_BANCO, conferirEspaco, estimarCarga, mb, type Estimativa, type ParteDaCarga } from "./demo-loja/tamanho";
 
 config({ path: process.env.XCART_ENV || ".env.local" });
@@ -95,17 +103,6 @@ const valorDe = (flag: string): string | null => {
   const i = args.indexOf(flag);
   return i >= 0 && args[i + 1] && !args[i + 1].startsWith("--") ? args[i + 1] : null;
 };
-
-/**
- * Dias de fin_orders regravados a cada execucao: o pedido muda (envio,
- * entrega, reembolso) ate 18 dias depois de nascer (linhaDoTempo, plano.ts);
- * os mais velhos ja estao no estado final.
- */
-const DIAS_REGRAVADOS = 20;
-const MOEDAS_CLIENTE = ["CAD", "GBP", "AUD", "EUR", "BRL"];
-/** Cotacao de reserva (unidades por USD) quando o banco nao responde: so para o --dry-run sem banco. */
-const COTACAO_RESERVA: Record<string, number> = { USD: 1, CAD: 1.38, GBP: 0.76, AUD: 1.53, EUR: 0.87, BRL: 5.42 };
-const FUNIL = ["view_item", "add_to_cart", "begin_checkout", "payment_info"];
 
 type Admin = SupabaseClient;
 
@@ -162,47 +159,6 @@ function conectar(dryRun: boolean): Admin | null {
 
 const ehColunaAusente = (e: { code?: string; message?: string } | null) =>
   Boolean(e && (e.code === "42703" || e.code === "PGRST204" || /column .* does not exist/i.test(e.message ?? "")));
-
-// ---------------------------------------------------------------------------
-// Cambio
-// ---------------------------------------------------------------------------
-
-async function lerCambio(admin: Admin | null, desde: string, ate: string): Promise<{ linhas: FxRateRow[]; doBanco: boolean }> {
-  if (!admin) return { linhas: [], doBanco: false };
-  const linhas: FxRateRow[] = [];
-  for (let de = 0; ; de += 1000) {
-    const { data, error } = await admin
-      .from("fx_rates")
-      .select("data, moeda, por_usd, fonte")
-      .in("moeda", MOEDAS_CLIENTE)
-      .gte("data", somarDia(desde, -10))
-      .lte("data", ate)
-      .order("data", { ascending: true })
-      .order("moeda", { ascending: true })
-      .range(de, de + 999);
-    if (error) falhar(`fx_rates: ${error.message}`);
-    linhas.push(...((data ?? []) as FxRateRow[]));
-    if ((data ?? []).length < 1000) break;
-  }
-  return { linhas, doBanco: true };
-}
-
-/** Unidades por USD no dia: a ultima cotacao ate o dia, ou a de reserva. */
-function montarCambio(linhas: FxRateRow[]): Cambio {
-  const porMoeda = new Map<string, { data: string; v: number }[]>();
-  for (const l of linhas) {
-    const lista = porMoeda.get(l.moeda) ?? [];
-    lista.push({ data: String(l.data).slice(0, 10), v: paraNumero(l.por_usd) });
-    porMoeda.set(l.moeda, lista);
-  }
-  return (moeda, dia) => {
-    if (moeda === "USD") return 1;
-    const lista = porMoeda.get(moeda) ?? [];
-    let achado: number | null = null;
-    for (const c of lista) if (c.data <= dia && c.v > 0) achado = c.v;
-    return achado ?? COTACAO_RESERVA[moeda] ?? 1;
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Resumo (a conta do app sobre o que seria gravado)
@@ -342,22 +298,6 @@ function resumir(s: Semeadura, fx: FxRateRow[], doBanco: boolean) {
 // Espaco no banco (tamanho.ts: so SELECT)
 // ---------------------------------------------------------------------------
 
-function cotacaoBrl(fx: FxRateRow[]): number {
-  return paraNumero(fx.filter((l) => l.moeda === "BRL").pop()?.por_usd) || 5.4;
-}
-
-/** Campanhas, conjuntos e anuncios de hoje (a tela Campanhas mostra um retrato so). */
-function granularDe(s: Semeadura, brl: number): LinhaGranular[] {
-  return granularDeHoje(
-    s.gastos.find((g) => g.dia === s.hoje)!,
-    s.hoje,
-    new Map(s.pedidos.filter((p) => p.dia_local === s.hoje).map((p) => [p.shopify_order_id, p])),
-    custosDosProdutos(),
-    brl,
-    iso(s.agoraMs)
-  );
-}
-
 /** Os dias locais com Purchase na fila, contando hoje (35 a 62). */
 function diasDeCompra(s: Semeadura): number {
   return diasEntre(diaLocal(s.cortes.compras), s.hoje).length;
@@ -437,77 +377,16 @@ function aleatorio(n: number): string {
 }
 
 /**
- * O ultimo dia gravado INTEIRO: o menor entre o ultimo de fin_orders e o
- * ultimo de ad_spend_daily (fin_orders vai por ultimo em gravarDados, entao
- * uma execucao que caiu no meio nao o adianta). null = comecar do inicio da janela.
+ * A loja do gerador no banco: existe? Se existe, e a de demonstracao do
+ * Arthur (senao nada e gravado). Sem a 074, o semear de verdade recusa.
  */
-async function ultimoDiaGravado(admin: Admin): Promise<string | null> {
-  const { data: ult, error: e1 } = await admin
-    .from("fin_orders")
-    .select("dia_local")
-    .eq("store_id", LOJA_ID)
-    .order("dia_local", { ascending: false })
-    .limit(1);
-  if (e1) falhar(`fin_orders: ${e1.message}`);
-  const { data: gasto, error: e2 } = await admin
-    .from("ad_spend_daily")
-    .select("data")
-    .in("ad_account_id", [CONTA_META.id, CONTA_GOOGLE.id])
-    .eq("nivel", "conta")
-    .order("data", { ascending: false })
-    .limit(1);
-  if (e2) falhar(`ad_spend_daily: ${e2.message}`);
-  const a = ((ult ?? [])[0] as { dia_local?: string } | undefined)?.dia_local ?? null;
-  const b = ((gasto ?? [])[0] as { data?: string } | undefined)?.data ?? null;
-  if (!a || !b) return null;
-  return a < b ? a : b;
-}
-
-/**
- * O comeco do que esta gravado: o primeiro dia de fin_orders e o primeiro
- * Purchase. Se a janela crescer (constante nova), os dias que faltam ficam
- * ATRAS do gravado, e o padrao (so os ultimos DIAS_REGRAVADOS) nunca os
- * preencheria -- o semear compara com as janelas e regrava a inteira.
- */
-async function comecoGravado(admin: Admin): Promise<{ primeiroDia: string | null; primeiraCompra: string | null }> {
-  const { data: dia, error: e1 } = await admin
-    .from("fin_orders")
-    .select("dia_local")
-    .eq("store_id", LOJA_ID)
-    .order("dia_local", { ascending: true })
-    .limit(1);
-  if (e1) falhar(`fin_orders: ${e1.message}`);
-  const { data: compra, error: e2 } = await admin
-    .from("tracking_events")
-    .select("created_at")
-    .eq("store_id", LOJA_ID)
-    .eq("event_name", "Purchase")
-    .order("created_at", { ascending: true })
-    .limit(1);
-  if (e2) falhar(`tracking_events: ${e2.message}`);
-  return {
-    primeiroDia: ((dia ?? [])[0] as { dia_local?: string } | undefined)?.dia_local ?? null,
-    primeiraCompra: ((compra ?? [])[0] as { created_at?: string } | undefined)?.created_at ?? null,
-  };
-}
-
-interface EstadoGravado {
-  existe: boolean;
-  ultimoDia: string | null;
-  ultimoFunil: string | null;
-  primeiroDia: string | null;
-  primeiraCompra: string | null;
-}
-
-const NADA_GRAVADO: EstadoGravado = { existe: false, ultimoDia: null, ultimoFunil: null, primeiroDia: null, primeiraCompra: null };
-
-async function conferirAntes(admin: Admin, dryRun: boolean): Promise<EstadoGravado> {
+async function conferirLoja(admin: Admin, dryRun: boolean): Promise<{ existe: boolean }> {
   const { data: loja, error } = await admin.from("stores").select("id, user_id, shop_domain, demonstracao").eq("id", LOJA_ID).maybeSingle();
   if (error) {
     if (ehColunaAusente(error)) {
       if (dryRun) {
         console.log("AVISO: a migration 074 (stores.demonstracao) ainda nao foi aplicada -- o semear de verdade recusa rodar sem ela.");
-        return NADA_GRAVADO;
+        return { existe: false };
       }
       falhar("a migration 074 (stores.demonstracao) nao esta aplicada. Aplique antes: sem a marca, o cron trataria a loja como real.");
     }
@@ -522,36 +401,10 @@ async function conferirAntes(admin: Admin, dryRun: boolean): Promise<EstadoGrava
     const { data: perfil } = await admin.from("profiles").select("id").eq("id", ARTHUR).maybeSingle();
     if (!perfil) falhar(`perfil ${ARTHUR} nao encontrado.`);
   }
-  if (!loja) return NADA_GRAVADO;
-  const ultimoDia = await ultimoDiaGravado(admin);
-  const comeco = await comecoGravado(admin);
-  const { data: fun, error: erroFunil } = await admin
-    .from("tracking_events")
-    .select("created_at")
-    .eq("store_id", LOJA_ID)
-    .not("visitor_id", "is", null)
-    .order("created_at", { ascending: false })
-    .limit(1);
-  if (erroFunil) falhar(`tracking_events: ${erroFunil.message}`);
-  return {
-    existe: true,
-    ultimoDia,
-    // Sem dia inteiro gravado, o funil tambem vai do comeco.
-    ultimoFunil: ultimoDia ? ((fun ?? [])[0]?.created_at ?? null) : null,
-    ...comeco,
-  };
+  return { existe: Boolean(loja) };
 }
 
-/**
- * Falta dia ATRAS do que esta gravado? As janelas so andam para frente
- * (plano.ts), entao isto so acontece quando uma constante muda ou alguem
- * apaga linha a mao -- ai o semear regrava a janela inteira.
- */
-function faltaOComeco(e: EstadoGravado, s: Semeadura): boolean {
-  if (!e.ultimoDia) return false;
-  if (!e.primeiroDia || e.primeiroDia > s.cortes.janela) return true;
-  return !e.primeiraCompra || diaLocal(Date.parse(e.primeiraCompra)) > diaLocal(s.cortes.compras);
-}
+const ESTADO_VAZIO: Estado = { fuso: null, cursorMs: null, temPedidos: false, primeiroDia: null, primeiraCompra: null, ultimoFunil: null };
 
 async function gravarBase(admin: Admin, existe: boolean) {
   if (!existe) {
@@ -652,126 +505,6 @@ async function gravarBase(admin: Admin, existe: boolean) {
   );
 }
 
-/**
- * O que esta execucao ja gravou. So o --ao-vivo aproveita entre as voltas: a
- * cada minuto vai so o que mudou, nao os ~300 pedidos de hoje e ontem de novo
- * -- cada regravacao deixa uma versao morta da linha no banco.
- */
-interface Gravado {
-  pedidos: Map<string, string>;
-  gasto: Map<string, string>;
-  /** Origem e eventos nao mudam depois de nascer: basta saber que entraram. */
-  origens: Set<string>;
-  eventos: Set<string>;
-}
-
-function nadaGravado(): Gravado {
-  return { pedidos: new Map(), gasto: new Map(), origens: new Set(), eventos: new Set() };
-}
-
-/** O pedido sem o carimbo da leitura (sincronizado_em muda a cada execucao). */
-const assinaturaDoPedido = (p: FinOrderRow) => JSON.stringify({ ...p, sincronizado_em: null });
-const chaveDoGasto = (g: AdSpendDailyRow) => `${g.ad_account_id}|${g.data}|${g.nivel}|${g.campanha_id}`;
-
-/**
- * fin_orders vai POR ULTIMO: e dele (e do gasto) que a proxima execucao tira
- * de onde continuar (ultimoDiaGravado). Se esta cair no meio, a proxima
- * regrava o que faltou -- nenhum dia antigo fica sem gasto, origem ou compra.
- * As outras tabelas nao tem FK para fin_orders. O funil vai em ordem de
- * created_at: o `ultimoFunil` da proxima e o ultimo que entrou.
- *
- * Origem e eventos (Purchase e funil) nao mudam depois de nascer -- o mesmo
- * pedido da a mesma linha --, entao entram uma vez (ON CONFLICT DO NOTHING):
- * regravar deixaria uma versao morta de cada um a cada execucao. Com
- * `regravarTudo` (--tudo) eles sao regravados, para um formato novo de linha
- * chegar as que ja existem.
- */
-async function gravarDados(
-  admin: Admin,
-  s: Semeadura,
-  o: { desde: string; desdeFunil: string | null; regravarTudo: boolean; gravado: Gravado }
-) {
-  const { desde, desdeFunil, regravarTudo, gravado } = o;
-  const soNovos = !regravarTudo;
-  const novoDia = (dia: string) => dia >= desde;
-  const pedidos = s.pedidos.filter((p) => novoDia(p.dia_local));
-  const ids = new Set(pedidos.map((p) => p.shopify_order_id));
-  const origens = s.origens.filter((x) => ids.has(x.shopify_order_id) && !gravado.origens.has(x.shopify_order_id));
-  await gravarEmLotes(admin, "fin_order_origem", origens, "store_id,shopify_order_id", soNovos);
-  const compras = s.compras.filter((c) => ids.has(c.order_id) && !gravado.eventos.has(c.id));
-  await gravarEmLotes(admin, "tracking_events", compras, "id", soNovos, "Purchase");
-  const funil = (desdeFunil && soNovos ? s.funil.filter((e) => e.created_at > desdeFunil) : s.funil)
-    .filter((e) => !gravado.eventos.has(e.id))
-    .sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0));
-  await gravarEmLotes(admin, "tracking_events", funil, "id", soNovos, "funil");
-  const gasto = s.linhasGasto.filter((g) => novoDia(g.data) && gravado.gasto.get(chaveDoGasto(g)) !== JSON.stringify(g));
-  await gravarEmLotes(admin, "ad_spend_daily", gasto, "ad_account_id,data,nivel,campanha_id");
-  const mudados = pedidos.filter((p) => gravado.pedidos.get(p.shopify_order_id) !== assinaturaDoPedido(p));
-  await gravarEmLotes(admin, "fin_orders", mudados, "store_id,shopify_order_id");
-  // So depois de tudo gravado: uma execucao que caiu no meio nao marca nada.
-  for (const x of origens) gravado.origens.add(x.shopify_order_id);
-  for (const e of compras) gravado.eventos.add(e.id);
-  for (const e of funil) gravado.eventos.add(e.id);
-  for (const g of gasto) gravado.gasto.set(chaveDoGasto(g), JSON.stringify(g));
-  for (const p of mudados) gravado.pedidos.set(p.shopify_order_id, assinaturaDoPedido(p));
-
-  await apagarForaDaJanela(admin, s);
-  await pixelDoMetaDesdeOCorte(admin, s.cortes.compras);
-
-  // Campanhas: o retrato de hoje, e so ele (a tela nao filtra por data).
-  const brl = cotacaoBrl((await lerCambio(admin, s.hoje, s.hoje)).linhas);
-  const { error: erroGran } = await admin.from("ad_insights_granular").delete().in("ad_account_id", [CONTA_META.id, CONTA_GOOGLE.id]).neq("data", s.hoje);
-  if (erroGran) falhar(`ad_insights_granular (dias antigos): ${erroGran.message}`);
-  await gravarEmLotes(admin, "ad_insights_granular", granularDe(s, brl), "ad_account_id,data,nivel,objeto_id");
-}
-
-/**
- * O que saiu das janelas sai do banco -- rodar todo dia mantem a loja do
- * mesmo tamanho: funil com mais de HORAS_DE_FUNIL, Purchase antes do corte
- * das compras (primeiroDiaDeCompra), e pedido, origem e gasto antes de
- * inicioDaJanela. fin_orders por ultimo, como na gravacao.
- */
-async function apagarForaDaJanela(admin: Admin, s: Semeadura) {
-  const apagar = async (rotulo: string, q: PromiseLike<{ error: { message: string } | null; count: number | null }>) => {
-    const { error, count } = await q;
-    if (error) falhar(`${rotulo} (fora da janela): ${error.message}`);
-    if (count) console.log(`  ${rotulo}: ${n0(count)} apagadas (fora da janela)`);
-  };
-  const inicio = iso(instanteLocal(s.cortes.janela, 0));
-  const contas = [CONTA_META.id, CONTA_GOOGLE.id];
-  await apagar(
-    `tracking_events: funil com mais de ${HORAS_DE_FUNIL} h`,
-    admin.from("tracking_events").delete({ count: "exact" }).eq("store_id", LOJA_ID).in("event_name", FUNIL).lt("created_at", iso(s.cortes.funil))
-  );
-  await apagar(
-    `tracking_events: Purchase antes de ${diaLocal(s.cortes.compras)}`,
-    admin.from("tracking_events").delete({ count: "exact" }).eq("store_id", LOJA_ID).eq("event_name", "Purchase").lt("created_at", iso(s.cortes.compras))
-  );
-  await apagar("fin_order_origem", admin.from("fin_order_origem").delete({ count: "exact" }).eq("store_id", LOJA_ID).lt("pedido_em", inicio));
-  await apagar("ad_spend_daily", admin.from("ad_spend_daily").delete({ count: "exact" }).in("ad_account_id", contas).lt("data", s.cortes.janela));
-  await apagar("fin_orders", admin.from("fin_orders").delete({ count: "exact" }).eq("store_id", LOJA_ID).lt("dia_local", s.cortes.janela));
-}
-
-/**
- * O pixel do Meta "nasce" no corte das compras. A fila so guarda Purchase
- * desde primeiroDiaDeCompra, e a tela Pedidos pinta de vermelho ("nao
- * enviado") o pedido de loja com pixel que nao tem Purchase -- com o destino criado no
- * corte, o pedido mais velho que ele fica "sem pixel" (cinza), como numa loja
- * que ligou o pixel depois. O corte fica antes do periodo atual de toda tela
- * (Pedidos em 30 dias, Este mes e Mes passado; o Rastreamento em 7 dias). So
- * escreve quando o corte anda.
- */
-async function pixelDoMetaDesdeOCorte(admin: Admin, corteMs: number) {
-  const corte = iso(corteMs);
-  const { error } = await admin
-    .from("tracking_destinations")
-    .update({ created_at: corte })
-    .eq("id", DESTINO_META.id)
-    .eq("store_id", LOJA_ID)
-    .neq("created_at", corte);
-  if (error) falhar(`tracking_destinations (Meta): ${error.message}`);
-}
-
 // ---------------------------------------------------------------------------
 // Fotos do catalogo (opcional): a miniatura de Custos
 // ---------------------------------------------------------------------------
@@ -822,64 +555,42 @@ async function gravarImagens(admin: Admin, pasta: string) {
   console.log(`  demonstracao_catalogo: ${achadas.size} fotos`);
 }
 
-/** A hora das leituras: o que a tela usa para "Atualizado ha X" e para o pixel ativo. */
-async function gravarFrescor(admin: Admin, agoraMs: number) {
-  const ha = (min: number) => new Date(agoraMs - min * 60_000).toISOString();
-  const { count } = await admin.from("fin_orders").select("store_id", { count: "exact", head: true }).eq("store_id", LOJA_ID);
-  const { error: e1 } = await admin.from("fin_sync_state").upsert(
-    {
-      store_id: LOJA_ID,
-      user_id: ARTHUR,
-      fuso: FUSO,
-      moeda: MOEDA,
-      cursor_atualizado: ha(2),
-      sincronizando_desde: null,
-      ultimo_sync_em: ha(1),
-      ultimo_sync_ok_em: ha(1),
-      ultimo_erro: null,
-      ultimo_erro_tipo: null,
-      carga_inicial_ok: true,
-      pedidos_total: count ?? 0,
-      retomar_busca: null,
-      retomar_cursor: null,
-      origem_backfill_em: "2026-07-15T14:31:40.000Z",
-      updated_at: ha(1),
-    },
-    { onConflict: "store_id" }
-  );
-  if (e1) falhar(`fin_sync_state: ${e1.message}`);
-  const { error: e2 } = await admin
-    .from("ad_accounts")
-    .update({ ultimo_sync_em: ha(2), ultimo_sync_ok_em: ha(2), ultimo_reprocesso_em: ha(240), sincronizando_desde: null, ultimo_erro: null, updated_at: ha(2) })
-    .eq("id", CONTA_META.id);
-  if (e2) falhar(`ad_accounts (Meta): ${e2.message}`);
-  const { error: e3 } = await admin
-    .from("ad_accounts")
-    .update({ ultimo_sync_em: ha(17), ultimo_sync_ok_em: ha(17), ultimo_dado_gerado_em: ha(19), ultimo_erro: null, updated_at: ha(17) })
-    .eq("id", CONTA_GOOGLE.id);
-  if (e3) falhar(`ad_accounts (Google): ${e3.message}`);
-  const { error: e4 } = await admin
-    .from("tracking_configs")
-    .update({ web_pixel_visto_em: ha(1), web_pixel_com_id_em: ha(1) })
-    .eq("store_id", LOJA_ID);
-  if (e4) falhar(`tracking_configs: ${e4.message}`);
-}
-
 // ---------------------------------------------------------------------------
 // Comandos
 // ---------------------------------------------------------------------------
 
 const ORDEM = `A ordem:
   1. Aplicar a migration 074 (SQL editor) e conferir com os SELECTs do fim dela.
-  2. Merge na main e deploy de PRODUCAO da Vercel em READY, com src/lib/demonstracao.ts
+  2. Merge na main e deploy de PRODUCAO da Vercel em READY, com src/lib/demonstracao/
      (commit 2be37b1 ou depois). Nenhuma instancia com codigo anterior (Docker,
      preview com os crons) rodando no mesmo banco.
   3. npm run op -- scripts/demo-loja.ts semear --app-publicado
+  Depois disso o cron api/jobs/demonstracao mantem a loja em dia sozinho.
 
 Sem o app novo no ar, o cron de 15 min trata a loja como real: chama a Shopify e o
 Meta com a credencial inventada, grava "Token invalido" na loja, abre alerta e manda
 pelo Telegram, e o coletor antigo aceita evento para ela.
 Antes de um rollback da Vercel para uma build anterior a 2be37b1, rode o limpar.`;
+
+/** O que a rodada gravaria, por tabela. */
+function imprimirPlano(p: Pendente, modo: Modo, motivo: string) {
+  const linha = (rotulo: string, n: number, novas?: number) =>
+    n ? `  ${rotulo.padEnd(30)} ${pad(n0(n), 7)}${novas !== undefined ? `  (${n0(novas)} novas)` : ""}` : null;
+  const linhas = [
+    linha("fin_orders", p.pedidos.length, p.novas.fin_orders),
+    linha("fin_order_origem", p.origens.length, p.soFaltantes.origens ? undefined : p.novas.fin_order_origem),
+    linha("tracking_events (Purchase)", p.compras.length),
+    linha("tracking_events (funil)", p.funil.length),
+    linha("ad_spend_daily", p.gasto.length, p.novas.ad_spend_daily),
+    linha("podar: tracking_events", p.podarEventos.length),
+    linha("podar: fin_order_origem", p.podarOrigens.length),
+  ].filter(Boolean);
+  console.log(`\nModo ${modo} (${motivo}). Conferido com o banco, so o que difere:`);
+  console.log(linhas.length ? linhas.join("\n") : "  nada -- o banco ja esta como o gerador.");
+  if (p.desconhecidos.length) {
+    console.log(`  RECUSARIA: ${p.desconhecidos.length} pedido(s) no banco que o gerador nao conhece (ex.: ${p.desconhecidos.slice(0, 3).join(", ")}).`);
+  }
+}
 
 async function semear() {
   const dryRun = tem("--dry-run");
@@ -894,30 +605,31 @@ async function semear() {
   if (!admin && !dryRun) falhar("sem NEXT_PUBLIC_SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY (rode da raiz, com o .env.local, ou XCART_ENV=...).");
   if (!admin) console.log("Sem credencial do banco: --dry-run com cambio de reserva.");
 
-  const estado = admin ? await conferirAntes(admin, dryRun) : NADA_GRAVADO;
+  const loja = admin ? await conferirLoja(admin, dryRun) : { existe: false };
+  const estado = admin && loja.existe ? await lerEstado(admin) : ESTADO_VAZIO;
   const agoraMs = Date.now();
   const hoje = diaLocal(agoraMs);
   const janela = inicioDaJanela(hoje);
-  const fx = await lerCambio(admin, janela, hoje);
-  const cambio = montarCambio(fx.linhas);
-  const s = montar(agoraMs, cambio, fx.linhas);
-  // Sem dia inteiro gravado, com dia faltando atras do gravado (a janela
-  // cresceu) ou com --tudo, a janela inteira; senao os ultimos
-  // DIAS_REGRAVADOS, nunca antes da janela.
-  const comecoFalta = faltaOComeco(estado, s);
-  const desde = tudo || !estado.ultimoDia || comecoFalta ? janela : [janela, somarDia(estado.ultimoDia, -DIAS_REGRAVADOS)].sort().pop()!;
-  const desdeFunil = (ultimo: string | null) => (ultimo ? iso(Date.parse(ultimo) - 15 * 60_000) : null);
+  const fx = admin ? await lerCambio(admin, janela, hoje) : [];
+  const s = montar(agoraMs, montarCambio(fx), fx);
+  // O script confere no minimo os ultimos DIAS_REGRAVADOS dias e limpa as
+  // janelas (o "diario" do cron); fuso trocado, comeco faltando ou loja nova:
+  // a janela inteira.
+  const { modo, motivo } = modoDoScript(estado, agoraMs, tudo);
 
   // O espaco no banco, medido so com SELECT. O de verdade nao grava sem a
   // medida, nem acima dos limites.
-  const espaco = await estimarCarga(partesDaCarga(s, cotacaoBrl(fx.linhas)));
+  const espaco = await estimarCarga(partesDaCarga(s, cotacaoBrl(fx)));
 
   if (dryRun) {
-    resumir(s, fx.linhas, fx.doBanco);
+    resumir(s, fx, Boolean(admin));
     imprimirEspaco(espaco, s);
-    console.log(
-      `\n--dry-run: nada foi gravado. A loja ${estado.existe ? `existe (gravada de ${estado.primeiroDia ?? "-"} a ${estado.ultimoDia ?? "-"}); seriam regravados os dias desde ${desde}${comecoFalta ? " (falta dia atras do gravado: a janela inteira)" : ""}` : `ainda nao existe; seria criada com os dias desde ${janela}`}.`
-    );
+    if (admin && loja.existe) {
+      imprimirPlano(await planejar(admin, s, modo, estado, { tudo }), modo, motivo);
+      console.log(`\n--dry-run: nada foi gravado. A loja existe (gravada desde ${estado.primeiroDia ?? "-"}, fuso ${estado.fuso ?? "-"}${estado.cursorMs ? `, completa ate ${iso(estado.cursorMs)}` : ""}).`);
+    } else {
+      console.log(`\n--dry-run: nada foi gravado. A loja ainda nao existe; seria criada com os dias desde ${janela}.`);
+    }
     if (pastaImagens) conferirImagens(pastaImagens);
     console.log(`\nPara gravar de verdade: semear --app-publicado. ${ORDEM}`);
     return;
@@ -929,28 +641,21 @@ async function semear() {
     falhar(`nada foi gravado: ${recusa} Libere espaco no banco (ou rode o limpar) antes.`);
   }
   console.log(`\nEspaco: carga ~${mb(espaco.total)} MB, banco ${mb(espaco.banco!)} MB -> ${mb(espaco.banco! + espaco.total)} MB (limites ${mb(LIMITE_DA_CARGA)} e ${mb(LIMITE_DO_BANCO)} MB).`);
-  console.log(`Semeando ${NOME_LOJA} (${DOMINIO}) ate ${iso(agoraMs)} -- dias desde ${desde} (janela desde ${janela})`);
-  const gravado = nadaGravado();
-  await gravarBase(admin!, estado.existe);
+  console.log(`Semeando ${NOME_LOJA} (${DOMINIO}) ate ${iso(agoraMs)} no fuso ${FUSO} -- modo ${modo} (${motivo}), janela desde ${janela}`);
+  await gravarBase(admin!, loja.existe);
   if (pastaImagens) await gravarImagens(admin!, pastaImagens);
-  await gravarDados(admin!, s, { desde, desdeFunil: tudo ? null : desdeFunil(estado.ultimoFunil), regravarTudo: tudo, gravado });
-  await gravarFrescor(admin!, agoraMs);
+  const { apagadas, gravadas } = await semearAgora(admin!, s, fx, estado, { tudo });
+  for (const [t, n] of Object.entries(apagadas)) if (n) console.log(`  ${t}: ${n0(n)} apagadas (fora da janela)`);
+  for (const [t, n] of Object.entries(gravadas)) if (n) console.log(`  ${t}: ${n0(n)}`);
   const hojeNoPlano = s.porDia.get(s.hoje)!;
   console.log(`\nPronto. Pedidos ate #${s.pedidos.reduce((m, p) => Math.max(m, Number(String(p.nome).slice(1)) || 0), 0)}; meta de lucro de hoje ${n2(hojeNoPlano.meta)} (dia inteiro).`);
 
   if (aoVivo) {
-    console.log(`\nAo vivo: completando hoje a cada ${aoVivo} s (so o que mudou). Ctrl+C para parar.`);
+    console.log(`\nAo vivo: a rodada do cron a cada ${aoVivo} s (so o que mudou). Ctrl+C para parar.`);
     for (;;) {
       await new Promise((ok) => setTimeout(ok, aoVivo * 1000));
-      const agora = Date.now();
-      const est = await conferirAntes(admin!, false);
-      const fxv = await lerCambio(admin!, inicioDaJanela(diaLocal(agora)), diaLocal(agora));
-      const sv = montar(agora, montarCambio(fxv.linhas), fxv.linhas);
-      // Hoje (e ontem, na virada do dia), e o funil desde o ultimo evento gravado.
-      await gravarDados(admin!, sv, { desde: somarDia(sv.hoje, -1), desdeFunil: desdeFunil(est.ultimoFunil), regravarTudo: false, gravado });
-      await gravarFrescor(admin!, agora);
-      const hojePedidos = sv.pedidos.filter((p) => p.dia_local === sv.hoje);
-      console.log(`  ${iso(agora)}: ${hojePedidos.length} pedidos hoje, receita ${n2(hojePedidos.reduce((t, p) => t + receitaDoPedido(p), 0))}`);
+      const r = await atualizarLoja(admin!, Date.now());
+      console.log(`  ${iso(Date.now())}: ${r.pulada ? `PULADA: ${r.pulada}` : `${r.modo} ${JSON.stringify(r.gravadas ?? {})}`} (${r.ms} ms)`);
     }
   }
 }
