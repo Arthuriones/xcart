@@ -7,6 +7,7 @@ import { Tooltip } from "@base-ui/react/tooltip";
 import {
   Calendar,
   Check,
+  CreditCard,
   ChevronDown,
   ChevronLeft,
   Plus,
@@ -484,12 +485,25 @@ export function BarraContexto({
               className={clsx(
                 GATILHO,
                 "min-w-0 max-w-70 text-ink",
-                filtrada ? "border-info-border bg-info-bg" : "border-border-strong bg-surface"
+                // Filtrada, o gatilho e o "x" formam uma pilula so: o lado
+                // direito dele e a divisoria do "x".
+                filtrada ? "rounded-r-none border-r-0 border-info-border bg-info-bg" : "border-border-strong bg-surface"
               )}
             >
-              <Store className="size-4 shrink-0 text-t2" strokeWidth={1.75} aria-hidden />
+              {filtrada && prefixoDa(dados.lojas, v.lojaId) === "Checkout" ? (
+                <CreditCard className="size-4 shrink-0 text-info" strokeWidth={1.75} aria-hidden />
+              ) : (
+                <Store className={clsx("size-4 shrink-0", filtrada ? "text-info" : "text-t2")} strokeWidth={1.75} aria-hidden />
+              )}
               <span className="truncate">
-                {filtrada ? `${prefixoDa(dados.lojas, v.lojaId)}: ${nomeLoja}` : "Todas as lojas"}
+                {filtrada ? (
+                  <>
+                    <span className="sr-only">{prefixoDa(dados.lojas, v.lojaId)}: </span>
+                    {nomeLoja}
+                  </>
+                ) : (
+                  "Todas as lojas"
+                )}
               </span>
               <ChevronDown className="size-3.5 shrink-0 text-t3" strokeWidth={1.75} aria-hidden />
             </button>
@@ -537,9 +551,10 @@ export function BarraContexto({
             type="button"
             onClick={() => ctx.gravar({ lojaId: TODAS })}
             aria-label="Voltar para todas as lojas"
-            className="-ml-px grid size-ctl-md place-items-center rounded-control border border-info-border bg-info-bg text-info hover:text-ink"
+            title="Ver todas as lojas"
+            className="grid h-ctl-md w-8 shrink-0 place-items-center rounded-control rounded-l-none border border-info-border bg-info-bg text-info/80 transition-colors hover:bg-info-border/50 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
           >
-            <X className="size-3.5" strokeWidth={2} aria-hidden />
+            <X className="size-3.5" strokeWidth={2.25} aria-hidden />
           </button>
         )}
       </div>
