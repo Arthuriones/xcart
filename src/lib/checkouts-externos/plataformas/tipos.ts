@@ -6,11 +6,11 @@ import type { IdPlataformaCheckout, ModeloCheckout, SituacaoExterna } from "../t
 // traduz o corpo do webhook dela para o EventoNormalizado; o resto (trava de
 // idempotencia, ordem dos eventos, gravacao, Dashboard) e um so.
 //
-// Puro: sem banco, sem rede. Testado em tests/checkout-externo-sphere.test.ts
-// e tests/checkout-externo-cakto.test.ts.
+// Puro: sem banco, sem rede. Testado em tests/checkout-externo-sphere.test.ts,
+// tests/checkout-externo-cakto.test.ts e tests/checkout-externo-hubla.test.ts.
 // ============================================================================
 
-/** A venda propria (modelo "venda", Cakto). Ausente na Sphere. */
+/** A venda propria (modelo "venda": Cakto, Hubla). Ausente na Sphere. */
 export interface VendaNormalizada {
   /** Taxa da plataforma (fees). null = nao veio. */
   taxa: number | null;
@@ -29,6 +29,17 @@ export interface VendaNormalizada {
   chargebackEm: string | null;
   /** refund_requested: a venda segue paga, "em risco". */
   reembolsoPedidoEm: string | null;
+  /**
+   * A cobranca que se paga depois (Pix/boleto) acabou de nascer: a "gerada" da
+   * compra pelo servidor (compra.ts). Ausente = pelo nome do evento (`*_gerado`
+   * da Cakto). A Hubla tem um invoice.created so, para todo metodo.
+   */
+  cobrancaGerada?: boolean;
+  /**
+   * Renovacao, upgrade ou parcela 2+ (Hubla): entra no lucro, mas nao vai ao
+   * Meta/TikTok -- nao tem clique de anuncio.
+   */
+  recorrencia?: boolean;
 }
 
 /**
@@ -56,6 +67,14 @@ export interface RastreioNormalizado {
    * da query nao sai daqui. compra.ts o usa quando o campo `callback` falta.
    */
   vidNaUrl: string | null;
+  /**
+   * A sessao do pagamento (Hubla: paymentSession). Sem eles, so os da
+   * identidade da ponte (Fase D). Vao em claro para o Meta e o TikTok, como os
+   * da identidade.
+   */
+  ip?: string | null;
+  userAgent?: string | null;
+  ttp?: string | null;
 }
 
 /**
@@ -115,7 +134,8 @@ export type Leitura = { ok: true; evento: EventoNormalizado } | { ok: false; err
 /**
  * Uma entrega com varios pedidos (a V2 da Cakto manda principal, order bump
  * e upsell juntos), ou nenhum: `ignorado` = evento que nao vira pedido
- * (abandono, assinatura) e responde 200.
+ * (abandono, assinatura, o status_updated da Hubla que repete um evento
+ * proprio) e responde 200.
  */
 export type LeituraVarios = { ok: true; eventos: EventoNormalizado[]; ignorado?: string } | { ok: false; erro: string };
 
@@ -126,22 +146,28 @@ export interface PlataformaCheckout {
   nome: string;
   /** comissao = afiliado (Sphere); venda = checkout do vendedor (Cakto). */
   modelo: ModeloCheckout;
-  /** Sphere: a URL e o segredo. Cakto: a URL acha o checkout e o HMAC prova a origem. */
-  autenticacao: "token_na_url" | "hmac_header";
+  /**
+   * Sphere: a URL e o segredo. Cakto: a URL acha o checkout e o HMAC prova a
+   * origem. Hubla: a URL acha o checkout e o token fixo do header prova.
+   */
+  autenticacao: "token_na_url" | "hmac_header" | "token_no_header";
   /**
    * Quando a plataforma manda de novo. "status": responde 503 e ela tenta
-   * (Sphere). "timeout": so erro de rede ou timeout volta sozinho (Cakto) --
+   * (Sphere, Hubla). "timeout": so erro de rede ou timeout volta sozinho (Cakto) --
    * falha nossa segura a resposta ate o timeout dela.
    */
   reenvio: "status" | "timeout";
   /** Os gatilhos a marcar no painel da plataforma. */
   gatilhos: readonly string[];
-  /** O evento que e "venda" no celular: "pedido.criado" (Sphere), "purchase_approved" (Cakto). */
+  /** O evento que e "venda" no celular: "pedido.criado" (Sphere), "purchase_approved" (Cakto), "invoice.payment_succeeded" (Hubla). */
   eventoDeVenda: string;
-  /** O corpo ja em JSON. `agora` limita as datas aceitas. */
-  ler(corpo: unknown, agora: Date): Leitura;
-  /** Varios pedidos numa entrega. Ausente = `ler` (um pedido). */
-  lerTodos?(corpo: unknown, agora: Date): LeituraVarios;
+  /**
+   * O corpo ja em JSON. `agora` limita as datas aceitas. `headers` = os da
+   * entrega (a Hubla marca o teste so no header x-hubla-sandbox).
+   */
+  ler(corpo: unknown, agora: Date, headers?: Headers): Leitura;
+  /** Varios pedidos numa entrega, ou nenhum (`ignorado`). Ausente = `ler` (um pedido). */
+  lerTodos?(corpo: unknown, agora: Date, headers?: Headers): LeituraVarios;
   /**
    * Confere a origem com o corpo CRU (byte a byte) e os headers. Ausente = a
    * URL basta (Sphere). `segredo` = o secret salvo da plataforma.

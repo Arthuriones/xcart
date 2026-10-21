@@ -53,7 +53,7 @@ export interface OpcaoConectar {
 const DE = `${PARAM_DE}=${DE_CONECTAR}`;
 
 /** O checkout externo numa frase: a mesma aqui e na tela Lojas. */
-export const RESUMO_CHECKOUT_EXTERNO = "Venda fora da Shopify: a sua (Cakto) ou por comissão (Sphere).";
+export const RESUMO_CHECKOUT_EXTERNO = "Venda fora da Shopify: a sua (Cakto, Hubla) ou por comissão (Sphere).";
 
 export const OPCOES_CONECTAR: OpcaoConectar[] = [
   {

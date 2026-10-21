@@ -1,12 +1,13 @@
 import type { IdPlataformaCheckout } from "../tipos";
 import { cakto } from "./cakto";
+import { hubla } from "./hubla";
 import { sphere } from "./sphere";
 import type { PlataformaCheckout } from "./tipos";
 
 export type { EventoNormalizado, Leitura, LeituraVarios, PlataformaCheckout } from "./tipos";
 
-// So o servidor importa daqui: o adaptador da Cakto usa node:crypto (HMAC).
-const PLATAFORMAS: Record<IdPlataformaCheckout, PlataformaCheckout> = { sphere, cakto };
+// So o servidor importa daqui: os adaptadores da Cakto e da Hubla usam node:crypto.
+const PLATAFORMAS: Record<IdPlataformaCheckout, PlataformaCheckout> = { sphere, cakto, hubla };
 
 /** O adaptador da plataforma, ou null para uma que o xcart ainda nao recebe. */
 export function plataformaDe(id: string | null | undefined): PlataformaCheckout | null {

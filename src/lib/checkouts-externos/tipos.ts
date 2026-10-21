@@ -7,20 +7,20 @@
 // "Checkout" na tela; checkouts_externos no banco. O nome foge de "loja de
 // checkout" (roteamento, src/lib/checkout-routes) e de tracking_checkouts.
 //
-// Dois modelos (072): comissao (Sphere, afiliado) e venda (Cakto, o lojista
-// e o produtor). Ver MODELO_PLATAFORMA e src/lib/checkouts-externos/venda.ts.
+// Dois modelos (072): comissao (Sphere, afiliado) e venda (Cakto e Hubla, o
+// lojista e o produtor). Ver MODELO_PLATAFORMA e src/lib/checkouts-externos/venda.ts.
 // ============================================================================
 
-export type IdPlataformaCheckout = "sphere" | "cakto";
+export type IdPlataformaCheckout = "sphere" | "cakto" | "hubla";
 
 /**
  * comissao = afiliado (Sphere): a receita e a comissao, com Previsto pela taxa
- * de aprovacao. venda = o lojista e o produtor (Cakto): faturamento, taxa e
- * liquido, como uma loja online (src/lib/checkouts-externos/venda.ts).
+ * de aprovacao. venda = o lojista e o produtor (Cakto, Hubla): faturamento,
+ * taxa e liquido, como uma loja online (src/lib/checkouts-externos/venda.ts).
  */
 export type ModeloCheckout = "comissao" | "venda";
 
-/** O que a tela oferece em "Conectar checkout". Cakto e Sphere recebem hoje. */
+/** O que a tela oferece em "Conectar checkout". Cakto, Hubla e Sphere recebem hoje. */
 export const PLATAFORMAS_CHECKOUT: {
   id: IdPlataformaCheckout | "yampi" | "cartpanda" | "kiwify";
   nome: string;
@@ -28,6 +28,7 @@ export const PLATAFORMAS_CHECKOUT: {
   ativa: boolean;
 }[] = [
   { id: "cakto", nome: "Cakto", descricao: "Venda própria: faturamento, taxa e líquido.", ativa: true },
+  { id: "hubla", nome: "Hubla", descricao: "Venda própria: faturamento, taxa e líquido.", ativa: true },
   { id: "sphere", nome: "Sphere Affiliates", descricao: "Afiliado COD na Europa: comissão por pedido.", ativa: true },
   { id: "yampi", nome: "Yampi", descricao: "Em breve", ativa: false },
   { id: "cartpanda", nome: "CartPanda", descricao: "Em breve", ativa: false },
@@ -55,6 +56,7 @@ export function plataformaDoNovo(novo: string | string[] | null | undefined): Id
 export const NOME_PLATAFORMA: Record<IdPlataformaCheckout, string> = {
   sphere: "Sphere Affiliates",
   cakto: "Cakto",
+  hubla: "Hubla",
 };
 
 export function nomeDaPlataforma(id: string | null | undefined): string {
@@ -64,6 +66,7 @@ export function nomeDaPlataforma(id: string | null | undefined): string {
 export const MODELO_PLATAFORMA: Record<IdPlataformaCheckout, ModeloCheckout> = {
   sphere: "comissao",
   cakto: "venda",
+  hubla: "venda",
 };
 
 /** Plataforma desconhecida fica no modelo da 069 (comissao): nada muda para ela. */
@@ -71,10 +74,11 @@ export function modeloDaPlataforma(id: string | null | undefined): ModeloCheckou
   return (id && MODELO_PLATAFORMA[id as IdPlataformaCheckout]) || "comissao";
 }
 
-/** A moeda que o cadastro sugere: a Sphere fala em euro, a Cakto em real. */
+/** A moeda que o cadastro sugere: a Sphere fala em euro, a Cakto e a Hubla em real. */
 export const MOEDA_PADRAO: Record<IdPlataformaCheckout, string> = {
   sphere: "EUR",
   cakto: "BRL",
+  hubla: "BRL",
 };
 
 export function moedaPadraoDe(id: string | null | undefined): string {
@@ -128,14 +132,40 @@ export const GATILHOS_CAKTO = [
 ] as const;
 
 /**
- * A plataforma assina a entrega com um secret que o lojista cola no xcart
- * (o adaptador tem `autenticar`). Aqui para a tela, que nao importa adaptador.
+ * Os eventos a marcar na regra de webhook da Hubla (Integracoes > Webhook).
+ * O status_updated so vale para chargeback, disputa e cancelamento (o resto
+ * repete um evento proprio); lead, assinatura e membro chegam e o xcart
+ * responde 200 sem gravar (hubla.ts).
+ */
+export const GATILHOS_HUBLA = [
+  "invoice.created",
+  "invoice.payment_succeeded",
+  "invoice.payment_failed",
+  "invoice.expired",
+  "invoice.refunded",
+  "invoice.status_updated",
+] as const;
+
+/**
+ * A plataforma prova a entrega com um secret que o lojista cola no xcart (o
+ * adaptador tem `autenticar`): o HMAC da Cakto, o x-hubla-token da Hubla.
+ * Aqui para a tela, que nao importa adaptador.
  */
 export function usaSegredo(id: string | null | undefined): boolean {
-  return id === "cakto";
+  return id === "cakto" || id === "hubla";
 }
 
-/** O secret do webhook da Cakto: 8 a 200 caracteres visiveis, sem espaco (CHECK da 072). */
+/** Como a plataforma chama o que o lojista cola: o token da Hubla, o secret da Cakto. */
+export function nomeDoSegredo(id: string | null | undefined): "token" | "secret" {
+  return id === "hubla" ? "token" : "secret";
+}
+
+/** "Token inválido: ..." / "Secret inválido: ...": a mesma frase na tela e nas rotas. */
+export function erroDoSegredo(id: string | null | undefined): string {
+  return `${nomeDoSegredo(id) === "token" ? "Token" : "Secret"} inválido: de 8 a 200 caracteres, sem espaço.`;
+}
+
+/** O secret da Cakto ou o token da Hubla: 8 a 200 caracteres visiveis, sem espaco (CHECK da 072). */
 export const RE_SEGREDO_PLATAFORMA = /^[!-~]{8,200}$/;
 
 export function segredoValido(v: unknown): string | null {
@@ -158,10 +188,20 @@ export const ROTULO_EVENTO: Record<string, string> = {
   refund: "Reembolso",
   refund_requested: "Reembolso pedido",
   chargeback: "Chargeback",
+  "invoice.created": "Fatura criada",
+  "invoice.payment_succeeded": "Pagamento aprovado",
+  "invoice.payment_failed": "Pagamento falhou",
+  "invoice.expired": "Fatura expirada",
+  "invoice.refunded": "Reembolso",
+  "invoice.status_updated:chargeback": "Chargeback",
+  "invoice.status_updated:disputed": "Disputa aberta",
+  "invoice.status_updated:canceled": "Fatura cancelada",
 };
 
 export function rotuloDoEvento(evento: string | null | undefined): string {
   const e = String(evento || "");
+  // O status_updated da Hubla leva o status no nome (o do sandbox pode ser qualquer um).
+  if (!ROTULO_EVENTO[e] && e.startsWith("invoice.status_updated:")) return "Status atualizado";
   return ROTULO_EVENTO[e] || e || "—";
 }
 
@@ -199,7 +239,7 @@ export function compraQuandoDe(v: unknown): CompraQuando {
 
 /**
  * O xcart manda a compra deste checkout ao Meta e ao TikTok? So no modelo
- * venda (Cakto): a Sphere nao manda dado do comprador nem click id.
+ * venda (Cakto, Hubla): a Sphere nao manda dado do comprador nem click id.
  */
 export function rastreiaCompra(plataforma: string | null | undefined): boolean {
   return modeloDaPlataforma(plataforma) === "venda";
@@ -283,7 +323,7 @@ export interface RastreamentoDoCheckout {
  * O host do checkout de cada plataforma que rastreia: o `data-xcart-destinos`
  * da ponte na pagina de vendas (VSL). Sem curinga, como a ponte exige.
  */
-export const HOST_DO_CHECKOUT: Partial<Record<IdPlataformaCheckout, string>> = { cakto: "pay.cakto.com.br" };
+export const HOST_DO_CHECKOUT: Partial<Record<IdPlataformaCheckout, string>> = { cakto: "pay.cakto.com.br", hubla: "pay.hub.la" };
 
 /**
  * A tag da ponte (xcart-bridge.js) para a pagina de vendas que leva a este

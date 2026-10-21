@@ -264,6 +264,7 @@ export type PedidoExternoFin = Pick<
       | "chargeback_em"
       | "reembolso_pedido_em"
       | "custo"
+      | "status_comissao"
     >
   >;
 

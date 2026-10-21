@@ -19,7 +19,7 @@ import { respostaJson } from "./resposta";
 // loja -- sobrevive a troca de dominio, porque a Shopify redireciona o
 // permanente para o atual preservando a query.
 //
-// O botao tambem pode levar a um CHECKOUT EXTERNO (Cakto): ai a tag e a do
+// O botao tambem pode levar a um CHECKOUT EXTERNO (Cakto, Hubla): ai a tag e a do
 // checkout (data-xcart-checkout) e o botao aponta para o link da oferta la,
 // sem nada a mais -- a ponte acrescenta o visitante, as UTMs e o clique.
 //
@@ -84,7 +84,7 @@ export function PaginaExterna({ storeId }: { storeId: string }) {
       <div className="flex flex-col gap-2.5 px-4 py-3.5">
         <p className="text-label text-t1">
           Oferta numa página fora da Shopify (VSL, advertorial) com o botão indo direto para o checkout da loja ou para
-          a Cakto. Gera o script da página e o link do botão.
+          a Cakto ou a Hubla. Gera o script da página e o link do botão.
         </p>
         <div>
           <Button size="sm" variant="secondary" onClick={() => setAberto(true)}>
@@ -257,7 +257,7 @@ function KitDaLoja({ storeId }: { storeId: string }) {
   );
 }
 
-/** O botao vai para o link da oferta no checkout externo (Cakto). */
+/** O botao vai para o link da oferta no checkout externo (Cakto, Hubla). */
 function KitDoCheckout({ checkout }: { checkout: CheckoutDaPagina }) {
   const plataforma = nomeDaPlataforma(checkout.plataforma);
   const host = HOST_DO_CHECKOUT[checkout.plataforma] ?? "o checkout";

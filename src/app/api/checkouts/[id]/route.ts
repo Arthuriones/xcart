@@ -1,8 +1,10 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   MOEDAS_COMISSAO,
+  erroDoSegredo,
   fusoValido,
   modeloDaPlataforma,
+  nomeDoSegredo,
   nomeValido,
   segredoValido,
   usaSegredo,
@@ -41,7 +43,7 @@ interface Corpo {
   notificar_aprovada?: unknown;
   notificar_pendente?: unknown;
   notificar_estorno?: unknown;
-  /** O secret do webhook da Cakto. Nunca volta na resposta. */
+  /** O secret do webhook da Cakto ou o token da Hubla. Nunca volta na resposta. */
   segredo?: unknown;
   trocarUrl?: unknown;
 }
@@ -102,14 +104,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (corpo.segredo !== undefined && corpo.segredo !== null && corpo.segredo !== "") {
     if (!usaSegredo(atual.plataforma)) return json(400, { ok: false, erro: "Esta plataforma não usa secret." });
     segredo = segredoValido(corpo.segredo);
-    if (!segredo) return json(400, { ok: false, erro: "Secret inválido: de 8 a 200 caracteres, sem espaço." });
+    if (!segredo) return json(400, { ok: false, erro: erroDoSegredo(atual.plataforma) });
   }
   const trocarUrl = corpo.trocarUrl === true;
   if (Object.keys(mudanca).length === 0 && !trocarUrl && !segredo) return json(400, { ok: false, erro: "Nada para mudar." });
 
   const admin = createAdminClient();
 
-  // O secret da plataforma (Cakto) primeiro: so o service role grava (a tabela
+  // O secret (Cakto) ou o token (Hubla) primeiro: so o service role grava (a tabela
   // nao tem policy). Salvo, o erro de "secret faltando/errado" sai da tela --
   // o proximo evento confirma.
   let temSegredo: boolean | undefined;
@@ -119,7 +121,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .update({ segredo_plataforma: segredo, updated_at: new Date().toISOString() })
       .eq("checkout_id", atual.id)
       .select("checkout_id");
-    if (error) return json(500, { ok: false, erro: `Falha ao salvar o secret: ${error.message}` });
+    if (error) return json(500, { ok: false, erro: `Falha ao salvar o ${nomeDoSegredo(atual.plataforma)}: ${error.message}` });
     if (!data || data.length === 0) return json(409, { ok: false, erro: "Este checkout está sem URL. Use “Trocar URL”." });
     temSegredo = true;
     mudanca.ultimo_erro = null;

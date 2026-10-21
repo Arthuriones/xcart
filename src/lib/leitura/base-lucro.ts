@@ -74,8 +74,8 @@ const COLUNAS_ENVIO = "cod, status_envio, entrega, enviado_em, entregue_em, devo
 const COLUNAS_AMOSTRA = `store_id, dia_local, tipo, gateways, cancelado_em, status_financeiro, recebido, reembolsado, linhas, ${COLUNAS_ENVIO}`;
 /** O que o calculo le de um pedido de checkout externo. */
 const COLUNAS_EXTERNO = "checkout_id, situacao, moeda, valor, receita, moeda_receita, dia_local";
-/** Mais o que a venda (Cakto, 072) precisa. Sem a 072, a leitura cai na lista de cima. */
-const COLUNAS_EXTERNO_VENDA = `${COLUNAS_EXTERNO}, pedido_id, criado_em, metodo_pagamento, grupo, taxa, comissoes, vence_em, reembolsado_em, chargeback_em, reembolso_pedido_em, custo`;
+/** Mais o que a venda (Cakto e Hubla, 072) precisa. Sem a 072, a leitura cai na lista de cima. */
+const COLUNAS_EXTERNO_VENDA = `${COLUNAS_EXTERNO}, pedido_id, criado_em, metodo_pagamento, grupo, taxa, comissoes, vence_em, reembolsado_em, chargeback_em, reembolso_pedido_em, custo, status_comissao`;
 
 /**
  * Le pedidos_externos; sem a 069 aplicada, nenhum. Coluna ausente (a 072) NAO

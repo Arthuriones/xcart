@@ -34,6 +34,8 @@ import {
   segredoValido,
   textoDaMoeda,
   usaSegredo,
+  nomeDoSegredo,
+  erroDoSegredo,
   type CheckoutResumo,
   type IdPlataformaCheckout,
 } from "@/lib/checkouts-externos/tipos";
@@ -49,9 +51,10 @@ import { RastreamentoCheckout } from "./rastreamento-checkout";
 // rotas /api/checkouts (a sessao confere o dono; quem grava e o servidor).
 // O teste NUNCA entra nos numeros: o endpoint reconhece e nao grava pedido.
 //
-// Cakto (venda): a Cakto gera o secret quando o webhook e criado la, entao o
-// campo dele fica no painel da URL (e no Editar, para trocar). O secret vai
-// so para o servidor: a tela so sabe SE ha um salvo (GET /url).
+// Cakto e Hubla (venda): a Cakto gera o secret quando o webhook e criado la, e
+// a Hubla mostra o token na aba Autenticacao, entao o campo fica no painel da
+// URL (e no Editar, para trocar). Ele vai so para o servidor: a tela so sabe
+// SE ha um salvo (GET /url).
 // ============================================================================
 
 const API = "/api/checkouts";
@@ -105,9 +108,33 @@ const PASSOS_CAKTO = [
   </>,
 ];
 
+const PASSOS_HUBLA = [
+  <>
+    Na Hubla, abra <Forte>Integrações › Webhook</Forte>, aba <Forte>Configurações</Forte>, e clique em{" "}
+    <Forte>Adicionar regra</Forte>.
+  </>,
+  <>
+    Cole a URL acima e escolha <Forte>todos os seus produtos</Forte>.
+  </>,
+  <>
+    Marque os eventos de fatura: criada, status atualizado, pagamento realizado, pagamento falhou, expirada e
+    reembolsada.
+  </>,
+  <>
+    Em <Forte>Como enviar seus dados</Forte>, marque <Forte>Integração recomendada</Forte> e salve.
+  </>,
+  <>
+    Na aba <Forte>Autenticação</Forte>, copie o <Forte>Hubla Webhook Token</Forte> e cole aqui embaixo.
+  </>,
+  <>
+    Na regra, abra as opções e clique em <Forte>Testar configuração</Forte>. O teste não entra nos números.
+  </>,
+];
+
 function passosDe(plataforma: string) {
-  return plataforma === "cakto" ? PASSOS_CAKTO : PASSOS_SPHERE;
+  return plataforma === "cakto" ? PASSOS_CAKTO : plataforma === "hubla" ? PASSOS_HUBLA : PASSOS_SPHERE;
 }
+
 
 /** "na Sphere", "na Cakto": o nome curto das frases (a Sphere e so "Sphere" nos textos dela). */
 function nomeCurto(plataforma: string | null | undefined): string {
@@ -119,15 +146,17 @@ function cidade(fuso: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// O secret da plataforma (Cakto): colar e salvar
+// O secret da plataforma (Cakto) ou o token (Hubla): colar e salvar
 // ---------------------------------------------------------------------------
 
 function CampoSegredo({
   checkoutId,
+  plataforma,
   temSegredo,
   aoSalvar,
 }: {
   checkoutId: string;
+  plataforma: string;
   /** null = ainda nao se sabe (o GET /url nao voltou). */
   temSegredo: boolean | null;
   aoSalvar: () => void;
@@ -136,23 +165,26 @@ function CampoSegredo({
   const [valor, setValor] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const nome = nomeDaPlataforma(plataforma);
+  const qual = nomeDoSegredo(plataforma);
+  const teste = plataforma === "hubla" ? "Testar configuração" : "Testar";
 
   async function salvar() {
     const s = segredoValido(valor);
-    if (!s) return setErro("Cole o secret inteiro: de 8 a 200 caracteres, sem espaço.");
+    if (!s) return setErro(`Cole o ${qual} inteiro: de 8 a 200 caracteres, sem espaço.`);
     setErro(null);
     setSalvando(true);
     const r = await chamar(`${API}/${checkoutId}`, { method: "PATCH", body: JSON.stringify({ segredo: s }) });
     setSalvando(false);
     if (!r.ok) return setErro(r.erro);
     setValor("");
-    toast.success("Secret salvo", { description: "Agora clique em Testar na Cakto." });
+    toast.success(qual === "token" ? "Token salvo" : "Secret salvo", { description: `Agora clique em ${teste} na ${nome}.` });
     aoSalvar();
   }
 
   return (
     <div className="flex flex-col gap-1.5">
-      <Label htmlFor={`${id}-segredo`}>Secret do webhook</Label>
+      <Label htmlFor={`${id}-segredo`}>{qual === "token" ? "Token do webhook" : "Secret do webhook"}</Label>
       <div className="flex gap-2">
         <Input
           id={`${id}-segredo`}
@@ -161,7 +193,7 @@ function CampoSegredo({
           spellCheck={false}
           value={valor}
           onChange={(ev) => setValor(ev.target.value)}
-          placeholder={temSegredo ? "Salvo · cole outro para trocar" : "Cole o secret da Cakto"}
+          placeholder={temSegredo ? "Salvo · cole outro para trocar" : `Cole o ${qual} da ${nome}`}
           className="min-w-0 flex-1 font-mono text-dense"
           aria-invalid={erro ? true : undefined}
           aria-describedby={`${id}-segredo-ajuda`}
@@ -173,9 +205,9 @@ function CampoSegredo({
       <p id={`${id}-segredo-ajuda`} className={erro ? "text-label text-err" : "text-label text-t2"}>
         {erro ??
           (temSegredo === false
-            ? "Sem o secret, o xcart recusa os eventos da Cakto."
+            ? `Sem o ${qual}, o xcart recusa os eventos da ${nome}.`
             : temSegredo
-              ? "Secret salvo. Ele confere cada evento que chega."
+              ? `${qual === "token" ? "Token salvo" : "Secret salvo"}. Ele confere cada evento que chega.`
               : "Ele confere cada evento que chega.")}
       </p>
     </div>
@@ -214,8 +246,8 @@ function PainelUrl({
     aoMudarRef.current = aoMudar;
   });
 
-  // A URL so sai quando o lojista abre o painel (nunca na lista). Na Cakto,
-  // junto vem SE o secret ja foi colado (nunca o secret). Uma vez por painel:
+  // A URL so sai quando o lojista abre o painel (nunca na lista). Na Cakto e
+  // na Hubla, junto vem SE o secret/token ja foi colado (nunca ele). Uma vez por painel:
   // o que veio no cadastro dispensa o pedido.
   useEffect(() => {
     if (urlInicial && (!assina || typeof temSegredoInicial === "boolean")) return;
@@ -319,6 +351,7 @@ function PainelUrl({
       {assina ? (
         <CampoSegredo
           checkoutId={checkout.id}
+          plataforma={checkout.plataforma}
           temSegredo={temSegredo}
           aoSalvar={() => {
             setTemSegredo(true);
@@ -338,7 +371,7 @@ function PainelUrl({
           pending={testando}
           onClick={testar}
           disabled={!checkout.ativo || semSegredo}
-          title={semSegredo ? "Salve o secret antes de testar" : undefined}
+          title={semSegredo ? `Salve o ${nomeDoSegredo(checkout.plataforma)} antes de testar` : undefined}
         >
           {testando ? null : <SendIcon aria-hidden />}
           Enviar evento de teste
@@ -355,11 +388,13 @@ function PainelUrl({
 const TEXTO_DADOS: Record<IdPlataformaCheckout, string> = {
   sphere: "Comissão por pedido: entra no Dashboard como Recebido e A receber.",
   cakto: "Venda própria: entra no Dashboard com faturamento, taxa e líquido.",
+  hubla: "Venda própria: entra no Dashboard com faturamento, taxa e líquido.",
 };
 
 const EXEMPLO_NOME: Record<IdPlataformaCheckout, string> = {
   sphere: "Ex.: Sphere Itália",
   cakto: "Ex.: Cakto Curso X",
+  hubla: "Ex.: Hubla Mentoria X",
 };
 
 function Adicionar({
@@ -427,7 +462,7 @@ function Adicionar({
     }
     const s = segredo.trim() ? segredoValido(segredo) : null;
     if (segredo.trim() && !s) {
-      setErro("Secret inválido: de 8 a 200 caracteres, sem espaço.");
+      setErro(erroDoSegredo(plataforma));
       return;
     }
     setErro(null);
@@ -509,13 +544,15 @@ function Adicionar({
               </Select>
               <p className="text-label text-t2">
                 {venda
-                  ? "Vale quando a Cakto não manda a moeda da venda."
+                  ? `Vale quando a ${curto} não manda a moeda da venda.`
                   : "A Sphere não diz a moeda da comissão: use a do seu painel lá."}
               </p>
             </div>
             {usaSegredo(plataforma) ? (
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor={`${id}-segredo`}>Secret do webhook (opcional)</Label>
+                <Label htmlFor={`${id}-segredo`}>
+                  {nomeDoSegredo(plataforma) === "token" ? "Token do webhook (opcional)" : "Secret do webhook (opcional)"}
+                </Label>
                 <Input
                   id={`${id}-segredo`}
                   type="password"
@@ -523,10 +560,14 @@ function Adicionar({
                   spellCheck={false}
                   value={segredo}
                   onChange={(ev) => setSegredo(ev.target.value)}
-                  placeholder="Se já tiver o da Cakto"
+                  placeholder={`Se já tiver o da ${curto}`}
                   className="font-mono text-dense"
                 />
-                <p className="text-label text-t2">A Cakto mostra o secret ao criar o webhook. Dá para colar no próximo passo.</p>
+                <p className="text-label text-t2">
+                  {plataforma === "hubla"
+                    ? "A Hubla mostra o token na aba Autenticação do webhook. Dá para colar no próximo passo."
+                    : "A Cakto mostra o secret ao criar o webhook. Dá para colar no próximo passo."}
+                </p>
               </div>
             ) : null}
             {avancado ? (
@@ -607,7 +648,7 @@ function Adicionar({
 }
 
 // ---------------------------------------------------------------------------
-// Editar: nome, moeda, taxa padrao (comissao), fuso, avisos, secret (Cakto)
+// Editar: nome, moeda, taxa padrao (comissao), fuso, avisos, secret (Cakto) ou token (Hubla)
 // ---------------------------------------------------------------------------
 
 function Editar({
@@ -619,7 +660,7 @@ function Editar({
   checkout: CheckoutResumo;
   aoFechar: () => void;
   aoSalvar: () => void;
-  /** Venda (Cakto): abre o Rastreamento (Meta e TikTok) do checkout. */
+  /** Venda (Cakto, Hubla): abre o Rastreamento (Meta e TikTok) do checkout. */
   aoRastrear: () => void;
 }) {
   const id = useId();
@@ -642,7 +683,7 @@ function Editar({
     if (!nome.trim()) return setErro("Dê um nome ao checkout.");
     if (!venda && (!Number.isFinite(t) || t < 0 || t > 100)) return setErro("A taxa vai de 0 a 100%.");
     const s = segredo.trim() ? segredoValido(segredo) : null;
-    if (segredo.trim() && !s) return setErro("Secret inválido: de 8 a 200 caracteres, sem espaço.");
+    if (segredo.trim() && !s) return setErro(erroDoSegredo(checkout.plataforma));
     setErro(null);
     setSalvando(true);
     const r = await chamar<{ aviso?: string }>(`${API}/${checkout.id}`, {
@@ -730,7 +771,7 @@ function Editar({
           </div>
           {assina ? (
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor={`${id}-segredo`}>Trocar o secret do webhook</Label>
+              <Label htmlFor={`${id}-segredo`}>Trocar o {nomeDoSegredo(checkout.plataforma)} do webhook</Label>
               <Input
                 id={`${id}-segredo`}
                 type="password"
@@ -894,7 +935,7 @@ export function CheckoutsTela({
       {checkouts.length === 0 ? (
         <EmptyState
           titulo="Nenhum checkout"
-          descricao="Ligue a Cakto ou a Sphere Affiliates para ver as vendas e o lucro no Dashboard."
+          descricao="Ligue a Cakto, a Hubla ou a Sphere Affiliates para ver as vendas e o lucro no Dashboard."
           acao={
             semMigration ? undefined : (
               <Button onClick={() => setAdicionando(true)}>
@@ -1050,7 +1091,7 @@ export function CheckoutsTela({
         titulo={`Trocar a URL de ${trocando?.nome ?? "checkout"}?`}
         descricao={
           trocando && usaSegredo(trocando.plataforma)
-            ? `A URL antiga para de funcionar na hora. Cole a nova no webhook da ${nomeCurto(trocando.plataforma)} logo em seguida, senão os eventos se perdem. O secret continua o mesmo.`
+            ? `A URL antiga para de funcionar na hora. Cole a nova no webhook da ${nomeCurto(trocando.plataforma)} logo em seguida, senão os eventos se perdem. O ${nomeDoSegredo(trocando.plataforma)} continua o mesmo.`
             : "A URL antiga para de funcionar na hora e os afiliados ligados a ela ficam livres. Cole a nova na Sphere logo em seguida, senão os eventos se perdem."
         }
         confirmar="Trocar URL"

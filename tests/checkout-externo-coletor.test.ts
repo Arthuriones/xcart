@@ -282,6 +282,12 @@ describe("so checkout ativo, de venda, com pixel ligado", () => {
     await coletarDoCheckout(b.repo, corpo(), ctx());
     expect(b.linhas.map((l) => l.plataforma)).toEqual(["meta"]);
   });
+
+  it("a Hubla (venda) tambem rastreia; sem a URL da pagina, o page.url do TikTok e o checkout dela", async () => {
+    const b = banco({ checkout: { plataforma: "hubla" } });
+    expect(await coletarDoCheckout(b.repo, corpo({ pageUrl: null }), ctx())).toMatchObject({ ok: true });
+    expect(tiktokDe(b)[0].page.url).toBe("https://pay.hub.la/");
+  });
 });
 
 describe("os tetos do coletor das lojas", () => {

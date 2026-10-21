@@ -12,10 +12,12 @@ import { compraQuandoDe, nomeDaPlataforma } from "./tipos";
 //
 // A ORDEM DO TRABALHO
 //
-//   plataforma que assina (Cakto) -> confere a origem com o corpo CRU; sem
-//     secret salvo ou assinatura errada -> 401, e o erro fica no checkout
+//   plataforma que assina (Cakto) ou manda token (Hubla) -> confere a origem
+//     (o HMAC do corpo CRU, o x-hubla-token); sem secret/token salvo ou com
+//     ele errado -> 401, e o erro fica no checkout
 //   corpo invalido -> 400, e o erro fica no checkout (a tela mostra)
-//   evento que nao vira pedido (abandono, assinatura) -> 200 ignorado
+//   evento que nao vira pedido (abandono, assinatura, o status_updated da
+//     Hubla que repete um evento proprio) -> 200 ignorado
 //   evento de teste -> so marca "teste recebido"; NUNCA vira pedido
 //   pausado e pedido que nao existe -> 200 ignorado (pedido novo nao entra).
 //     Pedido que JA existe segue o caminho normal, so sem notificar: a
@@ -28,8 +30,8 @@ import { compraQuandoDe, nomeDaPlataforma } from "./tipos";
 //     gravado NAO tem o evento (a gravacao falhou e a trava nao saiu), refaz:
 //     senao a retentativa e o Reenviar cairiam em duplicado para sempre.
 //   pedido gravado (trava otimista pela versao) -> 200
-//   falhou ao gravar -> a trava sai e responde 503. A Sphere tenta de novo
-//     com o 503; a Cakto NAO (so timeout e erro de rede): `segurar` pede a
+//   falhou ao gravar -> a trava sai e responde 503. A Sphere e a Hubla tentam
+//     de novo com o 503; a Cakto NAO (so timeout e erro de rede): `segurar` pede a
 //     rota para segurar a resposta ate o timeout dela, e o erro fica no
 //     checkout com a instrucao de reenvio (que vale mesmo com a trava presa).
 //
@@ -159,10 +161,24 @@ function resp(status: ResultadoRecebimento["status"], corpo: Record<string, unkn
   return { status, corpo, notificar: null };
 }
 
-/** Uma ou varias: o adaptador de varios (Cakto) ou o de um so (Sphere). */
-function lerEntrega(plataforma: PlataformaCheckout, corpo: unknown, agora: Date): LeituraVarios {
-  if (plataforma.lerTodos) return plataforma.lerTodos(corpo, agora);
-  const r = plataforma.ler(corpo, agora);
+/** Onde o lojista manda de novo: o Reenviar da Cakto, o Reprocessar do historico da Hubla. */
+export function comoReenviar(plataforma: Pick<PlataformaCheckout, "autenticacao">): string {
+  return plataforma.autenticacao === "token_no_header" ? "use Reprocessar no histórico de eventos dela" : "use Reenviar no painel dela";
+}
+
+/**
+ * A Hubla reenvia na hora, 5 vezes em ~75 s, e para: banco fora por mais que
+ * isso perde o evento. Ela (origem conferida, reenvio por status) marca o
+ * erro na tela com o caminho do Reprocessar. A Sphere segue sem marca.
+ */
+export function marcaFalhaSemSegurar(plataforma: Pick<PlataformaCheckout, "autenticar" | "reenvio">): boolean {
+  return Boolean(plataforma.autenticar) && plataforma.reenvio === "status";
+}
+
+/** Uma ou varias: o adaptador de varios (Cakto, Hubla) ou o de um so (Sphere). */
+function lerEntrega(plataforma: PlataformaCheckout, corpo: unknown, agora: Date, headers?: Headers): LeituraVarios {
+  if (plataforma.lerTodos) return plataforma.lerTodos(corpo, agora, headers);
+  const r = plataforma.ler(corpo, agora, headers);
   return r.ok ? { ok: true, eventos: [r.evento] } : r;
 }
 
@@ -252,7 +268,8 @@ function notificacaoDaVenda(
   const venceram = aplicados.filter((a) => a.venceu);
   const pagos = venceram.filter((a) => a.ev.evento === plataforma.eventoDeVenda && a.ev.receita.situacao === "pago");
   if (pagos.length > 0) return notificacaoDaCobranca("venda", checkout, pagos);
-  const pendentes = venceram.filter((a) => a.ev.receita.situacao === "pendente");
+  // So a cobranca que se paga depois (a Hubla marca o cartao com cobrancaGerada false).
+  const pendentes = venceram.filter((a) => a.ev.receita.situacao === "pendente" && a.ev.venda?.cobrancaGerada !== false);
   if (checkout.notificar_pendente && pendentes.length > 0) return notificacaoDaCobranca("pendente", checkout, pendentes);
   const estornos = venceram.filter((a) => a.ev.receita.situacao === "revertido");
   if (checkout.notificar_estorno && estornos.length > 0) return notificacaoDaCobranca("estorno", checkout, estornos);
@@ -276,15 +293,20 @@ export async function receberEvento(
   if (plataforma.autenticar) {
     const auth = plataforma.autenticar(entrega?.raw ?? "", entrega?.headers ?? new Headers(), entrega?.segredo ?? null, agora);
     if (!auth.ok) {
+      // A Hubla manda um token fixo (nao assina) e reenvia pelo histórico de eventos.
+      const token = plataforma.autenticacao === "token_no_header";
+      const reenviar = comoReenviar(plataforma);
       const motivo = auth.semSegredo
-        ? `Cole aqui o secret do webhook da ${nome} e use Reenviar no painel dela.`
-        : `A assinatura da ${nome} não confere (${auth.erro}). Confira o secret colado aqui e use Reenviar no painel dela.`;
+        ? `Cole aqui o ${token ? "token" : "secret"} do webhook da ${nome} e ${reenviar}.`
+        : token
+          ? `O token da ${nome} não confere (${auth.erro}). Confira o token colado aqui e ${reenviar}.`
+          : `A assinatura da ${nome} não confere (${auth.erro}). Confira o secret colado aqui e ${reenviar}.`;
       await repo.marcarCheckout(checkout.id, { ultimo_erro: motivo.slice(0, 500), ultimo_erro_em: agoraIso });
       return resp(401, { ok: false, erro: "nao autorizado" });
     }
   }
 
-  const leitura = lerEntrega(plataforma, corpo, agora);
+  const leitura = lerEntrega(plataforma, corpo, agora, entrega?.headers);
   if (!leitura.ok) {
     await repo.marcarCheckout(checkout.id, { ultimo_erro: `Evento recusado: ${leitura.erro}`.slice(0, 500), ultimo_erro_em: agoraIso });
     return resp(400, { ok: false, erro: leitura.erro });
@@ -325,6 +347,8 @@ export async function receberEvento(
   let pausados = 0;
   let duplicados = 0;
   let falhou = false;
+  /** Hubla: trava recente sem o evento no pedido (ver o ramo `refazendo`). */
+  let emAndamento = false;
   for (const ev of eventos) {
     // Pausado: pedido novo nao entra (nem liga afiliado, nem trava o evento).
     if (!checkout.ativo && !(await repo.lerPedido(checkout.id, ev.pedidoId))) {
@@ -356,10 +380,17 @@ export async function receberEvento(
     if (refazendo) {
       const em = repo.travaRecebidaEm ? await repo.travaRecebidaEm(trava).catch(() => null) : null;
       const idade = em ? agora.getTime() - Date.parse(em) : NaN;
-      if (
-        (Number.isFinite(idade) && idade < TRAVA_EM_ANDAMENTO_MS) ||
-        eventoJaRefletido(await repo.lerPedido(checkout.id, ev.pedidoId), ev, checkout.fuso)
-      ) {
+      const recente = Number.isFinite(idade) && idade < TRAVA_EM_ANDAMENTO_MS;
+      if (recente && marcaFalhaSemSegurar(plataforma)) {
+        // Hubla: as retentativas chegam em ~5, 15 e 35 s, todas dentro da
+        // janela. "Duplicado" ali e 200 e ela para -- se a gravacao e o soltar
+        // falharam juntos, a venda se perdia. Sem o evento no pedido, 503: a
+        // proxima acha o evento (200) ou, ja velha, refaz.
+        if (eventoJaRefletido(await repo.lerPedido(checkout.id, ev.pedidoId), ev, checkout.fuso)) duplicados += 1;
+        else emAndamento = true;
+        continue;
+      }
+      if (recente || eventoJaRefletido(await repo.lerPedido(checkout.id, ev.pedidoId), ev, checkout.fuso)) {
         duplicados += 1;
         continue;
       }
@@ -412,14 +443,21 @@ export async function receberEvento(
   if (falhou) {
     if (plataforma.reenvio === "timeout") {
       await repo.marcarCheckout(checkout.id, {
-        ultimo_erro: `Falha nossa ao gravar um evento. A ${nome} manda de novo em alguns minutos; se o erro ficar, use Reenviar no painel dela.`,
+        ultimo_erro: `Falha nossa ao gravar um evento. A ${nome} manda de novo em alguns minutos; se o erro ficar, ${comoReenviar(plataforma)}.`,
         ultimo_erro_em: agoraIso,
       });
       return { status: 503, corpo: { ok: false, erro: "tente de novo" }, notificar, segurar: true, ...comEnvios };
     }
+    if (marcaFalhaSemSegurar(plataforma)) {
+      await repo.marcarCheckout(checkout.id, {
+        ultimo_erro: `Falha nossa ao gravar um evento. A ${nome} tenta de novo por cerca de 1 minuto; se o erro ficar, ${comoReenviar(plataforma)}.`,
+        ultimo_erro_em: agoraIso,
+      });
+    }
     return { status: 503, corpo: { ok: false, erro: "tente de novo" }, notificar, ...comEnvios };
   }
 
+  if (aplicados.length === 0 && emAndamento) return resp(503, { ok: false, erro: "tente de novo" });
   if (aplicados.length === 0) {
     return pausados > 0 && duplicados === 0
       ? resp(200, { ok: true, ignorado: "checkout pausado" })

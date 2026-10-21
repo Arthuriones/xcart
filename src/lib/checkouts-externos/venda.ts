@@ -14,7 +14,8 @@ import type { SituacaoExterna } from "./tipos";
 //               vence_em (mais a folga do metodo), conta como perdido. Sem
 //               vence_em, a janela padrao do metodo.
 //   pago      = aprovado. Com reembolso_pedido_em, "em risco".
-//   expirado  = recusado ou cancelado.
+//   expirado  = recusado ou cancelado. O Pix/boleto que a Hubla avisa que
+//               venceu (status "overdue") e vencida, como o pendente vencido.
 //   revertido = reembolso ou chargeback (pela data que veio).
 //
 // O pedido do Dashboard e a COBRANCA (grupo), nao o item: order bump e
@@ -70,6 +71,8 @@ export interface PedidoDeVenda {
   reembolsado_em?: string | null;
   chargeback_em?: string | null;
   reembolso_pedido_em?: string | null;
+  /** O status da plataforma (Hubla: "overdue" = a fatura venceu). */
+  status_comissao?: string | null;
 }
 
 function ms(iso: string | null | undefined): number | null {
@@ -107,8 +110,13 @@ export function estadoDaVenda(p: PedidoDeVenda, agoraMs: number): EstadoVenda {
     case "aprovado":
     case "pago":
       return p.reembolso_pedido_em ? "em_risco" : "paga";
-    case "expirado":
-      return "recusada";
+    case "expirado": {
+      // A Hubla avisa o vencimento (invoice.expired): o Pix/boleto que nao foi
+      // pago venceu, nao foi recusado. O cartao que falhou segue recusado.
+      const metodo = chaveDoMetodo(p.metodo_pagamento);
+      const venceu = String(p.status_comissao || "").toLowerCase() === "overdue" && (metodo === "pix" || metodo === "boleto");
+      return venceu ? "vencida" : "recusada";
+    }
     case "revertido": {
       // Chargeback vence o reembolso quando os dois vieram: e o que custa mais.
       return p.chargeback_em ? "chargeback" : "reembolsada";

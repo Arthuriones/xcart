@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { safeFetch } from "@/lib/net/safe-url";
 import { plataformaDe } from "@/lib/checkouts-externos/plataformas";
 import { segredoDaPlataforma } from "@/lib/checkouts-externos/repo-supabase";
+import { nomeDoSegredo } from "@/lib/checkouts-externos/tipos";
 import {
   NAO_ENCONTRADO,
   checkoutDaSessao,
@@ -49,11 +50,11 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     if (!plataforma || !token) return json(409, { ok: false, erro: "Este checkout está sem URL. Use “Trocar URL”." });
     url = urlPublica(token);
     const agora = new Date();
-    // Plataforma que assina (Cakto): o teste vai assinado com o secret salvo,
-    // pelo mesmo autenticar de uma entrega real.
+    // Plataforma que confere a origem (Cakto, Hubla): o teste vai com o secret
+    // ou o token salvo, pelo mesmo autenticar de uma entrega real.
     const segredo = plataforma.autenticar ? await segredoDaPlataforma(admin, checkout.id) : null;
     if (plataforma.autenticar && !segredo) {
-      return json(409, { ok: false, erro: `Cole o secret do webhook da ${plataforma.nome} antes de testar.` });
+      return json(409, { ok: false, erro: `Cole o ${nomeDoSegredo(checkout.plataforma)} do webhook da ${plataforma.nome} antes de testar.` });
     }
     corpoTeste = JSON.stringify(plataforma.exemplo(agora, segredo));
     if (segredo && plataforma.assinar) assinatura = plataforma.assinar(corpoTeste, segredo, agora);

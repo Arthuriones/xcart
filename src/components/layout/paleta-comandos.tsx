@@ -284,7 +284,7 @@ export function PaletaComandos({
       {
         chave: "acao-conectar",
         rotulo: ROTULO_CONECTAR_OPERACAO,
-        busca: "conectar loja shopify checkout sphere",
+        busca: "conectar loja shopify checkout sphere cakto hubla",
         icone: Store,
         acao: () => ir(ROTA_CONECTAR_OPERACAO),
       },

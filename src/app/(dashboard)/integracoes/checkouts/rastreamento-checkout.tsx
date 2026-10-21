@@ -28,9 +28,9 @@ import { chamar } from "../api";
 import { haQuantoTempo, quando } from "../regras";
 
 // ============================================================================
-// Rastreamento do checkout (Cakto, 073): o xcart manda a compra ao Meta e ao
-// TikTok pelo servidor. Um pixel por rede, "Mandar a compra" (gerada ou so
-// aprovada), o aviso de tirar o pixel nativo da Cakto, o uso do limite do
+// Rastreamento do checkout (Cakto e Hubla, 073): o xcart manda a compra ao
+// Meta e ao TikTok pelo servidor. Um pixel por rede, "Mandar a compra" (gerada
+// ou so aprovada), o aviso de tirar o pixel nativo da plataforma, o uso do limite do
 // plano, a tag da ponte para a pagina de vendas (Fase D: PageView e
 // InitiateCheckout, e o visitante no link) e as ultimas compras enviadas.
 // Tudo por /api/checkouts/[id]/rastreamento: o token vai so para o servidor,
@@ -312,9 +312,20 @@ export function RastreamentoCheckout({ checkout, aoFechar }: { checkout: Checkou
         ) : (
           <div className="flex flex-col gap-4">
             <Callout tom="warn" titulo="Um emissor por pixel">
-              Na {plataforma}, tire o Pixel do Meta (e o token da API de Conversões) e o Pixel e o token do TikTok em{" "}
-              <span className="font-medium text-ink">Produto › Configurações › Pixel de conversão</span>. Com os dois
-              mandando, a compra conta em dobro. O Google Ads continua na {plataforma}.
+              {checkout.plataforma === "hubla" ? (
+                <>
+                  Na Hubla, tire o Pixel do Meta e o token da API de Conversões em{" "}
+                  <span className="font-medium text-ink">Produtos › o produto › Configurações › Pixel</span>, e o pixel
+                  do TikTok em <span className="font-medium text-ink">Pixels de Rastreamento</span>. Com os dois
+                  mandando, a compra conta em dobro. O Google Ads continua na Hubla.
+                </>
+              ) : (
+                <>
+                  Na {plataforma}, tire o Pixel do Meta (e o token da API de Conversões) e o Pixel e o token do TikTok em{" "}
+                  <span className="font-medium text-ink">Produto › Configurações › Pixel de conversão</span>. Com os dois
+                  mandando, a compra conta em dobro. O Google Ads continua na {plataforma}.
+                </>
+              )}
             </Callout>
 
             <div className="flex flex-col gap-1.5">

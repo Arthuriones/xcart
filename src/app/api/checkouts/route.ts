@@ -6,6 +6,7 @@ import {
   PLATAFORMAS_CHECKOUT,
   fusoValido,
   moedaPadraoDe,
+  erroDoSegredo,
   nomeDaPlataforma,
   nomeValido,
   segredoValido,
@@ -72,7 +73,7 @@ export async function POST(request: Request) {
   if (corpo.segredo !== undefined && corpo.segredo !== null && corpo.segredo !== "") {
     if (!assina) return json(400, { ok: false, erro: "Esta plataforma não usa secret." });
     segredo = segredoValido(corpo.segredo);
-    if (!segredo) return json(400, { ok: false, erro: "Secret inválido: de 8 a 200 caracteres, sem espaço." });
+    if (!segredo) return json(400, { ok: false, erro: erroDoSegredo(plataforma.id) });
   }
 
   // Conta pela sessao (RLS): so os checkouts do proprio usuario.

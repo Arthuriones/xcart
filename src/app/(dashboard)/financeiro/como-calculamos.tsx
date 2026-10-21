@@ -57,9 +57,9 @@ const CHECKOUT_EXTERNO = {
 };
 
 const CHECKOUT_VENDA = {
-  titulo: "Checkout de venda (Cakto)",
+  titulo: "Checkout de venda (Cakto, Hubla)",
   texto:
-    "Na Cakto a venda é sua. Faturamento é o valor da venda paga, sem a taxa que o comprador paga à Cakto. Taxas são a taxa da Cakto mais as comissões de afiliado e coprodutor; o que sobra é o seu líquido, e o lucro é o líquido menos os anúncios ligados ao checkout. Pix e boleto gerados ficam em A receber até vencer; vencido não conta. Reembolso e chargeback saem do dia da venda. Order bump e upsell entram no pedido principal.",
+    "Na Cakto e na Hubla a venda é sua. Faturamento é o valor da venda paga, sem a taxa que o comprador paga à plataforma (como os juros do parcelamento). Taxas são a taxa da plataforma mais as comissões de afiliado e coprodutor; o que sobra é o seu líquido, e o lucro é o líquido menos os anúncios ligados ao checkout. Pix e boleto gerados ficam em A receber até vencer; vencido não conta. Reembolso e chargeback saem do dia da venda. Order bump entra no pedido principal; o upsell também na Cakto, e na Hubla é um pedido próprio. Renovação de assinatura conta como venda nova.",
 };
 
 export function ComoCalculamos({

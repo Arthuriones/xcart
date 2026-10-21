@@ -8,10 +8,16 @@ import type { CompraQuando, PlataformaRastreio } from "./tipos";
 import { PREFIXO_VID, RE_VID, vidDoParametro } from "./plataformas/comum";
 
 // ============================================================================
-// A compra do checkout externo (Cakto) pelo SERVIDOR: Meta (Conversions API)
-// e TikTok (Events API). Decisao do Arthur (19/10/2026): quem manda a compra
-// das vendas da Cakto e o xcart; o lojista tira o pixel e o token nativos da
-// Cakto (um emissor por pixel). O Google fica com a tag nativa dela.
+// A compra do checkout externo (Cakto, Hubla) pelo SERVIDOR: Meta (Conversions
+// API) e TikTok (Events API). Decisao do Arthur (19/10/2026): quem manda a
+// compra das vendas da Cakto e o xcart; o lojista tira o pixel e o token
+// nativos da plataforma (um emissor por pixel). O Google fica com a tag nativa.
+//
+// Hubla: a cobranca gerada e o invoice.created de Pix/boleto
+// (`venda.cobrancaGerada`; o de cartao espera o pagamento), a renovacao, o
+// upgrade e a parcela 2+ do Parcelamento Inteligente nao mandam
+// (`venda.recorrencia`), e IP, user agent e _ttp vem da sessao do pagamento
+// (`rastreio.ip`/`userAgent`/`ttp`) quando a identidade da ponte nao tem.
 //
 // QUANDO SAI (por checkout, `compra_quando`):
 //   "gerada" (padrao): no PRIMEIRO evento de venda da cobranca -- Pix, boleto,
@@ -50,7 +56,7 @@ export const JANELA_COMPRA_MS = 7 * 86_400_000;
 const COBRANCA_GERADA = /^[a-z_]+_gerado$/;
 
 /** O checkout de onde a compra veio, quando o webhook nao traz a URL. */
-const URL_DO_CHECKOUT: Record<string, string> = { cakto: "https://pay.cakto.com.br/" };
+const URL_DO_CHECKOUT: Record<string, string> = { cakto: "https://pay.cakto.com.br/", hubla: "https://pay.hub.la/" };
 
 // O vid da ponte ("xc.<vid>" no `callback`): o formato mora em comum.ts, que
 // o adaptador da Cakto tambem usa para ler a query do checkoutUrl.
@@ -70,10 +76,11 @@ export function idDaCompra(plataforma: string, grupo: string): string {
  * vale tambem quando ela chega ja paga (o payload e montado na hora do envio).
  */
 export function ehEventoDeCompra(ev: EventoNormalizado, quando: CompraQuando, eventoDeVenda: string): boolean {
-  if (ev.teste) return false;
+  if (ev.teste || ev.venda?.recorrencia) return false;
   const s = ev.receita.situacao;
   if (ev.evento === eventoDeVenda) return s === "pago";
-  return quando === "gerada" && COBRANCA_GERADA.test(ev.evento) && (s === "pendente" || s === "pago");
+  const gerada = ev.venda?.cobrancaGerada ?? COBRANCA_GERADA.test(ev.evento);
+  return quando === "gerada" && gerada && (s === "pendente" || s === "pago");
 }
 
 export interface CompraDaCobranca {
@@ -163,7 +170,7 @@ export function telefoneDoComprador(telefone: string | null | undefined, pais: s
 }
 
 export interface ContextoDaCompra {
-  /** A plataforma do checkout ("cakto"): o prefixo do event_id e a URL padrao. */
+  /** A plataforma do checkout ("cakto", "hubla"): o prefixo do event_id e a URL padrao. */
   plataforma: string;
   agoraMs: number;
   /** A moeda do checkout: vale quando a venda nao trouxe a dela. */
@@ -253,9 +260,10 @@ function baseDaCompra(compra: CompraDaCobranca, ctx: ContextoDaCompra) {
         : montarFbc(semArroba(r?.fbclid), quandoCriado)),
     fbp: fbpDoWebhook || semArroba(id?.fbp),
     ttclid: semArroba(id?.ttclid) || semArroba(r?.ttclid),
-    ttp: semArroba(id?.ttp),
-    ip: semArroba(id?.clientIp),
-    ua: semArroba(id?.userAgent),
+    ttp: semArroba(id?.ttp) || semArroba(r?.ttp),
+    // A sessao do pagamento (Hubla) vence: e quem pagou, na hora da compra.
+    ip: semArroba(r?.ip) || semArroba(id?.clientIp),
+    ua: semArroba(r?.userAgent) || semArroba(id?.userAgent),
   };
 }
 
