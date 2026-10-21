@@ -1241,23 +1241,28 @@ function textoFixo(nome: string, n: number, alfabeto = ALFANUM): string {
 export const LOJA_ID = uuid("loja");
 /** O .myshopify.com no formato das lojas de verdade (6 + 2 caracteres). */
 export const DOMINIO = `${textoFixo("dominio-a", 6)}-${textoFixo("dominio-b", 2)}.myshopify.com`;
-export const NOME_LOJA = MARCA;
+/**
+ * O nome da loja na tela (seletor, Dashboard, contas e pixel). Separado da
+ * marca dos produtos: o Arthur renomeou a loja em 21/10/2026 e os produtos
+ * continuam Quillmere. Trocar so o nome nao mexe em semente, id nem dominio.
+ */
+export const NOME_LOJA = "Payments A+J";
 
 export const CONTA_META = {
   id: uuid("conta:meta"),
   external_id: digitos("conta-meta", 16, "10"),
-  nome: `${MARCA} | US 01`,
+  nome: `${NOME_LOJA} | US 01`,
 };
 export const CONTA_GOOGLE = {
   id: uuid("conta:google"),
   external_id: digitos("conta-google", 10, "4"),
-  nome: `${MARCA} Google Ads`,
+  nome: `${NOME_LOJA} Google Ads`,
 };
 
 export const DESTINO_META = {
   id: uuid("destino:meta"),
   conta: digitos("pixel-meta", 16, "1"),
-  nome: `${MARCA} Pixel`,
+  nome: `${NOME_LOJA} Pixel`,
 };
 export const DESTINO_GOOGLE = {
   id: uuid("destino:google"),
