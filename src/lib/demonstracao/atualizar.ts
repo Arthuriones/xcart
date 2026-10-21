@@ -166,8 +166,9 @@ export async function atualizarLoja(admin: Admin, agoraMs: number, limite = LIMI
 }
 
 /**
- * O modo do `semear` do script: no minimo o diario (confere os ultimos
- * DIAS_REGRAVADOS dias e limpa as janelas); --tudo regrava sem conferir.
+ * O modo do `semear` do script: no minimo o diario (confere desde
+ * DIAS_REGRAVADOS dias antes do dia do cursor e limpa as janelas); --tudo
+ * regrava sem conferir.
  */
 export function modoDoScript(estado: Estado, agoraMs: number, tudo: boolean): { modo: Modo; motivo: string } {
   if (tudo) return { modo: "completo", motivo: "--tudo: a janela inteira, sem olhar se difere" };

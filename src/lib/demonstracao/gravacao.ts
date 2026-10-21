@@ -14,8 +14,9 @@ import "server-only";
 //     hoje e o retrato de Campanhas. Hoje e ontem sao CONFERIDOS com o banco
 //     a cada rodada (1 pagina): o cambio do dia e o id do gerador.
 //   - diario (a primeira rodada do dia no fuso da loja): o incremental mais a
-//     conferencia dos ultimos DIAS_REGRAVADOS dias (pedido, origem, Purchase e
-//     gasto) e a limpeza do que saiu das janelas que rolam.
+//     conferencia (pedido, origem, Purchase e gasto) desde DIAS_REGRAVADOS dias
+//     antes do dia do CURSOR -- com o cron parado dias, o pedido mais velho que
+//     mudou depois dele tambem volta -- e a limpeza do que saiu das janelas.
 //   - completo (fuso trocado, sem cursor, cursor velho, comeco faltando): a
 //     janela inteira conferida com o banco, linha a linha, e so o que difere
 //     vai. Retomavel: com teto por rodada, a proxima continua de onde parou.
@@ -212,11 +213,19 @@ export function modoDaRodada(e: Estado, agoraMs: number): { modo: Modo; motivo: 
   return { modo: "incremental", motivo: "o que mudou desde a ultima rodada" };
 }
 
-/** Os dias conferidos com o banco linha a linha. */
-export function desdeDaConferencia(modo: Modo, agoraMs: number): string {
+/**
+ * Os dias conferidos com o banco linha a linha. No diario, contados do dia do
+ * CURSOR (a ultima rodada que fechou), nunca de hoje: o pedido muda ate 19
+ * dias locais depois de nascer, entao o que nasceu antes de `cursor - 20` ja
+ * estava no estado final quando o cursor foi gravado -- e o que nasceu depois
+ * pode ter mudado com o cron parado, por mais velho que seja hoje.
+ */
+export function desdeDaConferencia(modo: Modo, agoraMs: number, cursorMs: number | null): string {
   const hoje = diaLocal(agoraMs);
   const janela = inicioDaJanela(hoje);
-  const desde = modo === "completo" ? janela : modo === "diario" ? somarDia(hoje, -DIAS_REGRAVADOS) : somarDia(hoje, -1);
+  const doCursor = cursorMs === null ? hoje : diaLocal(cursorMs);
+  const base = doCursor < hoje ? doCursor : hoje;
+  const desde = modo === "completo" ? janela : modo === "diario" ? somarDia(base, -DIAS_REGRAVADOS) : somarDia(hoje, -1);
   return desde < janela ? janela : desde;
 }
 
@@ -227,7 +236,7 @@ export function desdeDaConferencia(modo: Modo, agoraMs: number): string {
  */
 export function selecaoDaRodada(modo: Modo, e: Estado, agoraMs: number): Selecao | undefined {
   if (modo === "completo") return undefined;
-  const desde = desdeDaConferencia(modo, agoraMs);
+  const desde = desdeDaConferencia(modo, agoraMs, e.cursorMs);
   const hoje = diaLocal(agoraMs);
   const horizonte = somarDia(hoje, -DIAS_REGRAVADOS);
   const desdeCursor = (e.cursorMs ?? 0) - MARGEM_MS;
@@ -381,7 +390,7 @@ export async function planejar(
   // confere os ids do mesmo jeito). Pede a janela inteira montada.
   const modo: Modo = opcoes.tudo ? "completo" : modoPedido;
   const forcar = Boolean(opcoes.tudo);
-  const desde = desdeDaConferencia(modo, s.agoraMs);
+  const desde = desdeDaConferencia(modo, s.agoraMs, e.cursorMs);
   const p: Pendente = {
     origens: [],
     compras: [],

@@ -25,8 +25,9 @@
  * Uso (da raiz do repo, com o .env.local):
  *   npm run op -- scripts/demo-loja.ts semear --dry-run                   resumo por dia e espaco no banco; NAO grava (le o banco so com SELECT)
  *   npm run op -- scripts/demo-loja.ts semear --app-publicado             cria a loja se faltar, completa ate agora e apaga o que saiu da janela
- *                                                                          (confere com o banco os ultimos 20 dias -- ou a janela inteira, se o
- *                                                                          fuso gravado nao e o do gerador -- e grava so o que difere)
+ *                                                                          (confere com o banco desde 20 dias antes da ultima rodada que fechou --
+ *                                                                          ou a janela inteira, se o fuso gravado nao e o do gerador -- e grava
+ *                                                                          so o que difere)
  *   npm run op -- scripts/demo-loja.ts semear --app-publicado --tudo      regrava a janela inteira sem conferir (formato novo de linha)
  *   npm run op -- scripts/demo-loja.ts semear --app-publicado --ao-vivo 60  depois, a rodada do cron a cada 60 s, ate Ctrl+C
  *   npm run op -- scripts/demo-loja.ts semear --app-publicado --imagens <pasta>
@@ -612,9 +613,9 @@ async function semear() {
   const janela = inicioDaJanela(hoje);
   const fx = admin ? await lerCambio(admin, janela, hoje) : [];
   const s = montar(agoraMs, montarCambio(fx), fx);
-  // O script confere no minimo os ultimos DIAS_REGRAVADOS dias e limpa as
-  // janelas (o "diario" do cron); fuso trocado, comeco faltando ou loja nova:
-  // a janela inteira.
+  // O script confere no minimo desde DIAS_REGRAVADOS dias antes da ultima
+  // rodada que fechou (o "diario" do cron) e limpa as janelas; fuso trocado,
+  // comeco faltando ou loja nova: a janela inteira.
   const { modo, motivo } = modoDoScript(estado, agoraMs, tudo);
 
   // O espaco no banco, medido so com SELECT. O de verdade nao grava sem a

@@ -12,6 +12,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 //   - teto por rodada (o resto vai nas seguintes, sem perder nada) e trava de
 //     tamanho (nao grava acima do teto de linhas);
 //   - pedido gravado que o gerador nao conhece: nao grava (duplicaria a loja);
+//   - o cron (ou o script) parado dias: o diario confere desde 20 dias antes
+//     do dia do CURSOR, e o pedido velho que mudou nesse meio volta certo;
 //   - fuso de Brasilia: o dia vira na meia-noite de Brasilia, e a troca de fuso
 //     regrava a janela no lugar (mesmos ids, so o instante anda), sem
 //     duplicar -- tambem com teto, em varias rodadas, com o "Hoje" primeiro;
@@ -46,6 +48,7 @@ import { contasDaLoja, montar } from "@/lib/demonstracao/semeadura";
 import {
   DIAS_REGRAVADOS,
   TETO_DE_LINHAS,
+  desdeDaConferencia,
   lerCambio,
   lerEstado,
   modoDaRodada,
@@ -85,7 +88,7 @@ const TABELAS = [
 
 function cambio(): FxRateRow[] {
   const linhas: FxRateRow[] = [];
-  for (let d = "2026-07-10"; d <= "2026-08-31"; d = somarDia(d, 1)) {
+  for (let d = "2026-07-10"; d <= "2026-09-30"; d = somarDia(d, 1)) {
     const i = Number(d.slice(8, 10));
     linhas.push(
       { data: d, moeda: "CAD", por_usd: 1.37 + i / 10_000, fonte: "frankfurter" },
@@ -268,6 +271,42 @@ describe("o cron completa a loja ate agora", () => {
     expect(b.tabelas.tracking_events).toHaveLength(s.compras.length + s.funil.length);
     expect(b.tabelas.ad_spend_daily).toHaveLength(s.linhasGasto.length);
   }, 60_000);
+
+  // O cron parado dias (deploy quebrado, trava de tamanho, gerador que nao
+  // bate -- sem aviso no Telegram): o pedido que nasceu antes de hoje - 20 e
+  // mudou depois do cursor (reembolso ate 18 dias, entrega ate 16) tem que
+  // voltar. Com a conferencia contada de hoje, 6 dias parado deixavam 5
+  // pedidos errados para sempre, e 12 dias, 396.
+  const PAROU = Date.parse("2026-08-25T15:00:00.000Z");
+  for (const dias of [6, 12]) {
+    it(`o cron parado ${dias} dias: confere desde o cursor, e o banco volta ao do semear no mesmo instante`, async () => {
+      const agora = PAROU + dias * 24 * H;
+      const cron = base();
+      await semear(cron, PAROU);
+      let r = await rodada(cron, agora);
+      expect(r.modo).toBe("diario");
+      for (let voltas = 0; r.adiadas; voltas += 1) {
+        r = await rodada(cron, agora);
+        expect(voltas).toBeLessThan(20);
+      }
+      const depois = agora + 15 * 60_000;
+      expect((await rodada(cron, depois)).modo).toBe("incremental");
+      const novo = base();
+      await semear(novo, depois);
+      expect(normalizado(cron)).toEqual(normalizado(novo));
+    }, 180_000);
+  }
+
+  it("o semear do script 12 dias depois do ultimo: confere desde o cursor tambem", async () => {
+    const agora = PAROU + 12 * 24 * H;
+    const b = base();
+    await semear(b, PAROU);
+    const r = await semear(b, agora);
+    expect(r.modo).toBe("diario");
+    const novo = base();
+    await semear(novo, agora);
+    expect(normalizado(b)).toEqual(normalizado(novo));
+  }, 180_000);
 });
 
 describe("seguranca do cron", () => {
@@ -546,6 +585,20 @@ describe("modo da rodada", () => {
     expect(modoDaRodada({ ...ok, primeiroDia: "2026-08-15" }, agora).modo).toBe("completo");
     expect(modoDaRodada({ ...ok, primeiraCompra: "2026-09-05T12:00:00.000Z" }, agora).modo).toBe("completo");
     expect(modoDaRodada({ ...ok, temPedidos: false }, agora).modo).toBe("completo");
+  });
+
+  it("o diario confere desde 20 dias antes do dia do cursor (e nunca menos que hoje - 20)", () => {
+    // Cursor de ontem as 23:50 de Brasilia: 20/10 - 20.
+    expect(desdeDaConferencia("diario", agora, Date.parse("2026-10-21T02:50:00.000Z"))).toBe("2026-09-30");
+    // Parado 12 dias: 09/10 - 20.
+    expect(desdeDaConferencia("diario", agora, agora - 12 * 24 * H)).toBe("2026-09-19");
+    // Cursor um pouco no futuro (relogio torto, ja amanha): conta de hoje.
+    expect(desdeDaConferencia("diario", agora, agora + 13 * H)).toBe("2026-10-01");
+    expect(desdeDaConferencia("incremental", agora, ok.cursorMs)).toBe("2026-10-20");
+    expect(desdeDaConferencia("completo", agora, ok.cursorMs)).toBe(inicioDaJanela("2026-10-21"));
+    // Nunca antes da janela.
+    const cedo = Date.parse("2026-07-30T15:00:00.000Z");
+    expect(desdeDaConferencia("diario", cedo, cedo - 5 * 24 * H)).toBe(inicioDaJanela("2026-07-30"));
   });
 });
 
