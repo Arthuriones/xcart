@@ -70,9 +70,9 @@ export function montarUrlLoginMeta({
   url.searchParams.set("redirect_uri", redirectUri);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("state", state);
-  // Permissoes para perfil, email e leitura de contas e campanhas de anuncio
-  // Nota: read_insights foi descontinuado pela Meta no Graph API v18+ e substituido por ads_read.
-  url.searchParams.set("scope", "public_profile,email,ads_read");
+  // Permissoes para perfil (public_profile) e leitura de contas/campanhas (ads_read).
+  // Nao exige email nem read_insights (depreciado) para funcionar direto no Facebook Login for Business.
+  url.searchParams.set("scope", "public_profile,ads_read");
 
   return url.toString();
 }
@@ -165,11 +165,11 @@ export interface PerfilMeta {
 }
 
 /**
- * Busca informacoes basicas do perfil do Facebook que fez o login (Nome, email e foto de perfil).
+ * Busca informacoes basicas do perfil do Facebook que fez o login (Nome e foto de perfil).
  */
 export async function buscarPerfilMeta(accessToken: string): Promise<PerfilMeta> {
   const url = new URL(`${GRAPH_BASE}/me`);
-  url.searchParams.set("fields", "id,name,email,picture.width(200).height(200)");
+  url.searchParams.set("fields", "id,name,picture.width(200).height(200)");
   url.searchParams.set("access_token", accessToken);
 
   let resp: Response;
