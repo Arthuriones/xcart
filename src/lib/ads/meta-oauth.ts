@@ -71,7 +71,8 @@ export function montarUrlLoginMeta({
   url.searchParams.set("response_type", "code");
   url.searchParams.set("state", state);
   // Permissoes para perfil, email e leitura de contas e campanhas de anuncio
-  url.searchParams.set("scope", "public_profile,email,ads_read,read_insights");
+  // Nota: read_insights foi descontinuado pela Meta no Graph API v18+ e substituido por ads_read.
+  url.searchParams.set("scope", "public_profile,email,ads_read");
 
   return url.toString();
 }

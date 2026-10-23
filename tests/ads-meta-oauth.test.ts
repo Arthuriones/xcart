@@ -68,6 +68,6 @@ describe("Meta OAuth (fluxo 1-clique estilo UTMify)", () => {
     expect(scopes).toContain("public_profile");
     expect(scopes).toContain("email");
     expect(scopes).toContain("ads_read");
-    expect(scopes).toContain("read_insights");
+    expect(scopes).not.toContain("read_insights");
   });
 });
