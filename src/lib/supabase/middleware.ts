@@ -7,6 +7,10 @@ const PUBLIC_PATHS = [
   "/api/checkout-routes/resolve",
   "/api/jobs/bulk-import/process",
   "/routed-checkout-loader.js",
+  "/privacy",
+  "/terms",
+  "/data-deletion",
+  "/user-data-deletion",
 ];
 
 // Liga o Supabase ao par request/response sem recriar a response, para os
