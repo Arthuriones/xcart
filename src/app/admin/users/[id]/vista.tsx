@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { Section } from "@/components/ui/section";
 import { STATUS, StatusBadge } from "@/components/ui/status-badge";
+import { documentoParaLer, formatarTelefone } from "@/lib/cadastro";
 import type { DestinoAdmin } from "@/lib/leitura/admin-rotas";
 import {
   custoIa,
@@ -49,6 +50,8 @@ export function Detalhe({
   };
   const selo = seloAcesso(gerenciavel);
   const status = statusAssinatura(p.subscription_status);
+  const telefone = formatarTelefone(p.telefone);
+  const documento = documentoParaLer(p.documento);
   const nomeLoja = new Map(d.stores.map((s) => [s.id, s.name || s.shop_domain]));
 
   const recargas = d.purchases.map((c, i) => ({
@@ -75,9 +78,39 @@ export function Detalhe({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
-        <Trilha atual={p.email} />
+        <Trilha atual={p.nome || p.email} />
         <div className="flex min-w-0 flex-col gap-2">
-          <h1 className="text-page font-semibold break-all text-ink">{p.email}</h1>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <h1 className="text-page font-semibold break-all text-ink">{p.nome || p.email}</h1>
+            {p.nome ? <p className="text-dense break-all text-t1">{p.email}</p> : null}
+          </div>
+          {/* Dados do cadastro (077). Conta de antes dela nao tem: diz isso, em vez de "—". */}
+          <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 text-dense">
+            <div className="flex items-center gap-1.5">
+              <dt className="text-t2">Telefone</dt>
+              <dd className="num text-ink">
+                {telefone ? (
+                  <a
+                    href={`https://wa.me/55${p.telefone}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-sm underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                    aria-label={`${telefone} no WhatsApp (outra aba)`}
+                  >
+                    {telefone} ↗
+                  </a>
+                ) : (
+                  <span className="text-t2">não informado</span>
+                )}
+              </dd>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <dt className="text-t2">{documento?.tipo ?? "CPF/CNPJ"}</dt>
+              <dd className="num text-ink">
+                {documento ? documento.numero : <span className="text-t2">não informado</span>}
+              </dd>
+            </div>
+          </dl>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-label text-t1">
             {p.is_admin ? <StatusBadge tom="info" texto="Admin" ponto={false} /> : null}
             <StatusBadge tom={selo.tom} texto={selo.texto} />

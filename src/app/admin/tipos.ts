@@ -13,6 +13,12 @@ export interface LojaResumida {
 export interface UsuarioAdmin {
   id: string;
   email: string;
+  /** Nome e sobrenome do cadastro (077); conta antiga, o full_name. null = sem nome. */
+  nome: string | null;
+  /** So digitos (DDD + numero). null = conta de antes da 077. */
+  telefone: string | null;
+  /** CPF ou CNPJ, so digitos. */
+  documento: string | null;
   plan: string | null;
   subscriptionStatus: string | null;
   aiCredits: number | null;
@@ -74,6 +80,10 @@ export interface DetalheUsuarioAdmin {
   profile: {
     id: string;
     email: string;
+    /** Como em UsuarioAdmin: nome completo, telefone e documento (so digitos). */
+    nome: string | null;
+    telefone: string | null;
+    documento: string | null;
     plan: string | null;
     subscription_status: string | null;
     ai_credits: number | null;

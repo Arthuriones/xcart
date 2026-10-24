@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { USD_BRL_REPORTING, precoMensalCentavos } from "@/lib/billing/plans";
 import { lerComPlano } from "@/lib/billing/limites";
+import { nomeCompleto } from "@/lib/cadastro";
+import { lerCadastros } from "@/lib/leitura/cadastro-admin";
 
 export const runtime = "nodejs";
 
@@ -49,6 +51,7 @@ export async function GET() {
     { data: usage },
     { data: compras },
     usersList,
+    cadastros,
   ] = await Promise.all([
     // Sem a coluna `plano` (064 pendente), le sem ela: a lista e o MRR nao
     // podem sair vazios por isso.
@@ -71,14 +74,19 @@ export async function GET() {
       .select("user_id, credits, amount_cents, currency, created_at")
       .order("created_at", { ascending: false }),
     admin.auth.admin.listUsers({ perPage: 1000 }),
+    // Nome, telefone e CPF/CNPJ do cadastro (077), a parte: sem a migration a
+    // lista sai igual, sem eles.
+    lerCadastros(admin),
   ]);
 
   const profiles = perfisLidos.data as PerfilAdmin[] | null;
 
-  // email por id
+  // email (e o full_name do cadastro antigo) por id
   const emailById = new Map<string, string>();
+  const nomeAntigoById = new Map<string, unknown>();
   for (const u of usersList?.data?.users || []) {
     if (u.email) emailById.set(u.id, u.email);
+    nomeAntigoById.set(u.id, u.user_metadata?.full_name);
   }
 
   // lojas por usuario
@@ -105,9 +113,13 @@ export async function GET() {
       const usageAgg = usageByUser.get(p.id) || { costUsd: 0, credits: 0 };
       const hasAccess =
         p.is_admin === true || p.plan === "pro" || p.access_granted === true;
+      const cadastro = cadastros.get(p.id);
       return {
         id: p.id,
         email: emailById.get(p.id) || "—",
+        nome: nomeCompleto(cadastro?.nome, cadastro?.sobrenome, nomeAntigoById.get(p.id)),
+        telefone: cadastro?.telefone ?? null,
+        documento: cadastro?.documento ?? null,
         plan: p.plan,
         subscriptionStatus: p.subscription_status,
         aiCredits: p.ai_credits,

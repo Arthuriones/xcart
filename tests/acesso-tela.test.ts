@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BOTAO,
+  ORDEM_DOS_CAMPOS,
   SENHA_MINIMA,
   SUBTITULO,
   TITULO,
@@ -13,6 +14,7 @@ import {
   pedeLink,
   validarAcesso,
   validarSenhaNova,
+  type CamposAcesso,
   type Modo,
 } from "../src/app/(auth)/acesso";
 
@@ -64,28 +66,74 @@ describe("textos dos modos", () => {
   });
 });
 
+const VAZIO: CamposAcesso = {
+  nome: "",
+  sobrenome: "",
+  email: "",
+  telefone: "",
+  documento: "",
+  senha: "",
+  confirmacao: "",
+};
+const campos = (c: Partial<CamposAcesso>): CamposAcesso => ({ ...VAZIO, ...c });
+
+const CADASTRO_OK = campos({
+  nome: "Arthur",
+  sobrenome: "Ferreira",
+  email: "a@b.co",
+  telefone: "(31) 99123-4567",
+  documento: "529.982.247-25",
+  senha: "segredo-bom-1",
+  confirmacao: "segredo-bom-1",
+});
+
 describe("validação dos campos", () => {
   it("criar: todos os problemas de uma vez", () => {
-    const e = validarAcesso("criar", { nome: " ", email: "", senha: "123" });
-    expect(Object.keys(e).sort()).toEqual(["email", "nome", "senha"]);
+    const e = validarAcesso("criar", campos({ nome: " ", senha: "123" }));
+    expect(Object.keys(e).sort()).toEqual(
+      ["confirmacao", "documento", "email", "nome", "senha", "sobrenome", "telefone"].sort()
+    );
     expect(e.senha).toContain(String(SENHA_MINIMA));
   });
+  it("criar: tudo certo não tem erro nenhum", () => {
+    expect(validarAcesso("criar", CADASTRO_OK)).toEqual({});
+    // CNPJ tambem vale; telefone fixo tambem.
+    expect(validarAcesso("criar", { ...CADASTRO_OK, documento: "11.222.333/0001-81", telefone: "(31) 3234-5678" })).toEqual({});
+  });
+  it("criar: senha de 8 no mínimo e confirmação igual", () => {
+    expect(SENHA_MINIMA).toBe(8);
+    expect(validarAcesso("criar", { ...CADASTRO_OK, senha: "1234567", confirmacao: "1234567" }).senha).toBeTruthy();
+    expect(validarAcesso("criar", { ...CADASTRO_OK, confirmacao: "outra-coisa" }).confirmacao).toBe(
+      "As duas senhas não são iguais."
+    );
+    expect(validarAcesso("criar", { ...CADASTRO_OK, confirmacao: "" }).confirmacao).toBe("Repita a senha para confirmar.");
+  });
+  it("criar: CPF com dígito errado e repetido não passam", () => {
+    expect(validarAcesso("criar", { ...CADASTRO_OK, documento: "529.982.247-24" }).documento).toBe(
+      "CPF inválido. Confira os números."
+    );
+    expect(validarAcesso("criar", { ...CADASTRO_OK, documento: "111.111.111-11" }).documento).toBeTruthy();
+  });
   it("e-mail mal escrito", () => {
-    expect(validarAcesso("link", { nome: "", email: "arthur@", senha: "" }).email).toBeTruthy();
-    expect(validarAcesso("link", { nome: "", email: "a@b.co", senha: "" })).toEqual({});
+    expect(validarAcesso("link", campos({ email: "arthur@" })).email).toBeTruthy();
+    expect(validarAcesso("link", campos({ email: "a@b.co" }))).toEqual({});
   });
   it("entrar não cobra tamanho de senha (só que exista)", () => {
-    expect(validarAcesso("entrar", { nome: "", email: "a@b.co", senha: "1" })).toEqual({});
-    expect(validarAcesso("entrar", { nome: "", email: "a@b.co", senha: "" }).senha).toBeTruthy();
+    expect(validarAcesso("entrar", campos({ email: "a@b.co", senha: "1" }))).toEqual({});
+    expect(validarAcesso("entrar", campos({ email: "a@b.co" })).senha).toBeTruthy();
   });
-  it("link não pede nome nem senha", () => {
-    expect(validarAcesso("esqueci", { nome: "", email: "a@b.co", senha: "" })).toEqual({});
+  it("link e entrar não pedem os dados do cadastro", () => {
+    expect(validarAcesso("esqueci", campos({ email: "a@b.co" }))).toEqual({});
+    expect(validarAcesso("entrar", campos({ email: "a@b.co", senha: "x", documento: "123" }))).toEqual({});
+  });
+  it("a ordem dos campos é a da tela", () => {
+    expect(ORDEM_DOS_CAMPOS).toEqual(["nome", "sobrenome", "email", "telefone", "documento", "senha", "confirmacao"]);
   });
   it("senha nova: mínimo e repetição", () => {
-    expect(validarSenhaNova("12345", "12345").senha).toBeTruthy();
-    expect(validarSenhaNova("abcdef", "").repetida).toBe("Repita a senha para confirmar.");
-    expect(validarSenhaNova("abcdef", "abcdeg").repetida).toBe("As duas senhas não são iguais.");
-    expect(validarSenhaNova("abcdef", "abcdef")).toEqual({});
+    expect(validarSenhaNova("1234567", "1234567").senha).toBeTruthy();
+    expect(validarSenhaNova("abcdefgh", "").repetida).toBe("Repita a senha para confirmar.");
+    expect(validarSenhaNova("abcdefgh", "abcdefgi").repetida).toBe("As duas senhas não são iguais.");
+    expect(validarSenhaNova("abcdefgh", "abcdefgh")).toEqual({});
   });
 });
 
@@ -93,14 +141,15 @@ describe("força da senha", () => {
   it("vazia não mostra nada; curta avisa", () => {
     expect(forcaDaSenha("")).toEqual({ nivel: 0, rotulo: "" });
     expect(forcaDaSenha("abc")).toEqual({ nivel: 0, rotulo: "Curta demais" });
+    expect(forcaDaSenha("abcdefg")).toEqual({ nivel: 0, rotulo: "Curta demais" });
   });
   it("as mais usadas e as repetidas são fracas", () => {
-    expect(forcaDaSenha("123456").rotulo).toBe("Fraca");
+    expect(forcaDaSenha("12345678").rotulo).toBe("Fraca");
     expect(forcaDaSenha("Senha123").rotulo).toBe("Fraca");
     expect(forcaDaSenha("aaaaaaaaaaaaaaaa").rotulo).toBe("Fraca");
   });
   it("comprimento e variedade sobem o nível", () => {
-    expect(forcaDaSenha("abcdef").rotulo).toBe("Fraca");
+    expect(forcaDaSenha("abcdefgh").rotulo).toBe("Fraca");
     expect(forcaDaSenha("abcdef1234").rotulo).toBe("Média");
     expect(forcaDaSenha("Abcdef1234").rotulo).toBe("Forte");
     expect(forcaDaSenha("minha senha bem longa").rotulo).toBe("Forte");
@@ -130,7 +179,9 @@ describe("erros do Supabase em português", () => {
   });
   it("senha igual, fraca e vazada", () => {
     expect(erroDeAcesso({ message: "New password should be different from the old password.", code: "same_password" }).texto).toMatch(/diferente/);
-    expect(erroDeAcesso({ message: "Password should be at least 6 characters.", code: "weak_password" }).texto).toMatch(/6 caracteres/);
+    expect(erroDeAcesso({ message: "Password should be at least 6 characters.", code: "weak_password" }).texto).toMatch(
+      new RegExp(`${SENHA_MINIMA} caracteres`)
+    );
     expect(erroDeAcesso({ message: "Password is known to be weak and easy to guess, please choose a different one." }).texto).toMatch(/vazamentos/);
   });
   it("queda de rede", () => {

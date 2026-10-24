@@ -218,16 +218,34 @@ export function temFiltro(f: FiltrosUsuarios): boolean {
   return f.busca.trim() !== "" || f.acesso !== "todos" || f.plano !== "todos";
 }
 
+/** "João" acha com "joao". */
+function semAcento(s: string): string {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
 export function filtrarUsuarios<
-  T extends { email: string; plan: string | null; isAdmin: boolean; accessGranted: boolean; stores?: { domain: string; name: string }[] },
+  T extends {
+    email: string;
+    plan: string | null;
+    isAdmin: boolean;
+    accessGranted: boolean;
+    stores?: { domain: string; name: string }[];
+    nome?: string | null;
+    telefone?: string | null;
+    documento?: string | null;
+  },
 >(usuarios: readonly T[], f: FiltrosUsuarios): T[] {
   const q = f.busca.trim().toLowerCase();
+  // Telefone e CPF/CNPJ estao gravados so com digitos: "(31) 9912" e "529.982" acham.
+  const numeros = /^[\d\s().\-/+]+$/.test(q) ? q.replace(/\D/g, "") : "";
   return usuarios.filter((u) => {
     if (f.acesso !== "todos" && temAcesso(u) !== (f.acesso === "com")) return false;
     if (f.plano === "pro" && u.plan !== "pro") return false;
     if (f.plano === "free" && u.plan === "pro") return false;
     if (!q) return true;
     if (u.email.toLowerCase().includes(q)) return true;
+    if (u.nome && semAcento(u.nome).includes(semAcento(q))) return true;
+    if (numeros.length >= 3 && [u.telefone, u.documento].some((d) => d && d.includes(numeros))) return true;
     return (u.stores ?? []).some(
       (s) => s.name.toLowerCase().includes(q) || s.domain.toLowerCase().includes(q)
     );

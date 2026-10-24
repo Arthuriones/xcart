@@ -2,8 +2,11 @@
 // Regras puras das telas de acesso (/login e /set-password): os modos do
 // formulario, a validacao dos campos, a traducao dos erros do Supabase, o
 // aviso de link expirado, a forca da senha e o endereco das paginas legais.
-// Sem React e sem rede: travado por tests/acesso-tela.test.ts.
+// Sem React e sem rede: travado por tests/acesso-tela.test.ts. Nome,
+// telefone e CPF/CNPJ do cadastro: src/lib/cadastro.ts.
 // ============================================================================
+
+import { erroDoDocumento, erroDoNome, erroDoTelefone } from "@/lib/cadastro";
 
 export type Modo = "entrar" | "criar" | "link" | "esqueci";
 
@@ -58,8 +61,13 @@ export const TITULO_ERRO: Record<Modo, string> = {
 // Senha
 // ---------------------------------------------------------------------------
 
-/** O minimo do Supabase (e o que /set-password ja cobrava). */
-export const SENHA_MINIMA = 6;
+/**
+ * Senha nova (criar conta e /set-password). Era 6, o minimo do Supabase; o
+ * cadastro novo pede 8. Quem entra com senha antiga de 6 continua entrando:
+ * "entrar" nao confere tamanho. O Supabase so barra no servidor depois de o
+ * minimo do projeto (Auth > Email > Minimum password length) subir para 8.
+ */
+export const SENHA_MINIMA = 8;
 
 export type NivelForca = 0 | 1 | 2 | 3;
 
@@ -114,21 +122,51 @@ export function forcaDaSenha(senha: string): Forca {
 // Validacao dos campos: todos os problemas de uma vez, no campo.
 // ---------------------------------------------------------------------------
 
-export type CamposAcesso = { nome: string; email: string; senha: string };
+export type CamposAcesso = {
+  nome: string;
+  sobrenome: string;
+  email: string;
+  telefone: string;
+  documento: string;
+  senha: string;
+  confirmacao: string;
+};
 export type ErrosDeCampo = Partial<Record<keyof CamposAcesso, string>>;
+
+/** A ordem da tela: o foco vai para o primeiro campo com problema. */
+export const ORDEM_DOS_CAMPOS: readonly (keyof CamposAcesso)[] = [
+  "nome",
+  "sobrenome",
+  "email",
+  "telefone",
+  "documento",
+  "senha",
+  "confirmacao",
+];
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * Entrar e os links so olham e-mail (e a senha, no entrar). Criar conta
+ * confere tudo: nome, sobrenome, e-mail, telefone com DDD, CPF ou CNPJ com o
+ * digito verificador, senha de 8 e a confirmacao igual.
+ */
 export function validarAcesso(modo: Modo, c: CamposAcesso): ErrosDeCampo {
   const erros: ErrosDeCampo = {};
-  if (modo === "criar" && !c.nome.trim()) erros.nome = "Escreva seu nome.";
   const email = c.email.trim();
   if (!email) erros.email = "Escreva seu e-mail.";
-  else if (!EMAIL.test(email)) erros.email = "Confira o e-mail: ele precisa ser como voce@empresa.com.";
+  else if (!EMAIL.test(email)) erros.email = "Confira o e-mail: ele precisa ser como seu@email.com.";
   if (modo === "entrar" && !c.senha) erros.senha = "Escreva sua senha.";
-  if (modo === "criar" && c.senha.length < SENHA_MINIMA) {
-    erros.senha = `A senha precisa ter pelo menos ${SENHA_MINIMA} caracteres.`;
+  if (modo === "criar") {
+    erros.nome = erroDoNome(c.nome, "nome");
+    erros.sobrenome = erroDoNome(c.sobrenome, "sobrenome");
+    erros.telefone = erroDoTelefone(c.telefone);
+    erros.documento = erroDoDocumento(c.documento);
+    const senha = validarSenhaNova(c.senha, c.confirmacao);
+    erros.senha = senha.senha;
+    erros.confirmacao = senha.repetida;
   }
+  for (const k of ORDEM_DOS_CAMPOS) if (!erros[k]) delete erros[k];
   return erros;
 }
 

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ehPlanoId } from "@/lib/billing/plans";
+import { nomeCompleto } from "@/lib/cadastro";
+import { lerCadastros } from "@/lib/leitura/cadastro-admin";
 
 export const runtime = "nodejs";
 
@@ -33,7 +35,7 @@ export async function GET(
   const { admin } = auth;
   const { id } = await params;
 
-  const [{ data: profile }, userRes, { data: stores }, { data: routes }, { data: usage }, { data: purchases }] =
+  const [{ data: profile }, userRes, { data: stores }, { data: routes }, { data: usage }, { data: purchases }, cadastros] =
     await Promise.all([
       admin
         .from("profiles")
@@ -65,6 +67,9 @@ export async function GET(
         .eq("user_id", id)
         .order("created_at", { ascending: false })
         .limit(20),
+      // Nome, telefone e CPF/CNPJ (077) a parte: sem a migration o perfil
+      // continua saindo (no select de cima, a coluna ausente dava 404).
+      lerCadastros(admin, id),
     ]);
 
   if (!profile) {
@@ -90,10 +95,15 @@ export async function GET(
   const storeNameById = new Map<string, string>();
   for (const s of stores || []) storeNameById.set(s.id, s.name || s.shop_domain);
 
+  const cadastro = cadastros.get(id);
+
   return NextResponse.json({
     profile: {
       ...profile,
       email: userRes?.data?.user?.email || "—",
+      nome: nomeCompleto(cadastro?.nome, cadastro?.sobrenome, userRes?.data?.user?.user_metadata?.full_name),
+      telefone: cadastro?.telefone ?? null,
+      documento: cadastro?.documento ?? null,
       hasAccess:
         profile.is_admin === true ||
         profile.plan === "pro" ||
@@ -142,7 +152,8 @@ export async function PATCH(
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (body.plan === "free" || body.plan === "pro") update.plan = body.plan;
-  // Tier (limite de lojas): "loja1" | "lojas3" | "ilimitado", ou null (Pro antigo).
+  // Tier (limite): "roteamento" | "completo" | "ilimitado_v2", os anteriores
+  // "loja1" | "lojas3" | "ilimitado", ou null (Pro antigo).
   if (body.plano === null || ehPlanoId(body.plano)) update.plano = body.plano;
   if (typeof body.aiCredits === "number") {
     update.ai_credits = Math.max(0, Math.floor(body.aiCredits));

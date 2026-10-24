@@ -18,6 +18,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { formatarDocumento, formatarTelefone } from "@/lib/cadastro";
 import {
   FILTROS_PADRAO,
   dataCurta,
@@ -47,6 +48,8 @@ type Linha = {
   id: string;
   u: UsuarioAdmin;
   email: string;
+  /** Ordena pelo que aparece: o nome, ou o e-mail de quem nao tem nome. */
+  quem: string;
   acessoOrdem: number;
   plano: string;
   creditos: number | null;
@@ -127,6 +130,7 @@ export function ListaUsuarios({
         id: u.id,
         u,
         email: u.email,
+        quem: (u.nome || u.email).toLowerCase(),
         acessoOrdem: seloAcesso(u).ordem,
         plano: rotuloPlano(u.plan),
         creditos: u.aiCredits,
@@ -146,16 +150,25 @@ export function ListaUsuarios({
     {
       chave: "usuario",
       titulo: "Usuário",
-      ordenarPor: "email",
+      ordenarPor: "quem",
       className: "min-w-56",
-      celula: (l) => (
-        <span className="flex min-w-0 items-center gap-2">
-          <Link href={`/admin/users/${l.id}`} className={`${LINK} min-w-0 max-w-60 truncate`}>
-            {l.email}
-          </Link>
-          {l.u.isAdmin ? <StatusBadge tom="info" texto="Admin" ponto={false} /> : null}
-        </span>
-      ),
+      celula: (l) => {
+        // Nome em cima, e-mail embaixo; telefone e CPF/CNPJ do cadastro (077)
+        // na terceira linha. Conta antiga sem nome mostra so o e-mail.
+        const contato = [formatarTelefone(l.u.telefone), formatarDocumento(l.u.documento)].filter(Boolean).join(" · ");
+        return (
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <span className="flex min-w-0 items-center gap-2">
+              <Link href={`/admin/users/${l.id}`} className={`${LINK} min-w-0 max-w-60 truncate`}>
+                {l.u.nome || l.email}
+              </Link>
+              {l.u.isAdmin ? <StatusBadge tom="info" texto="Admin" ponto={false} /> : null}
+            </span>
+            {l.u.nome ? <span className="max-w-60 truncate text-label text-t1">{l.email}</span> : null}
+            {contato ? <span className="num max-w-60 truncate text-label text-t2">{contato}</span> : null}
+          </span>
+        );
+      },
     },
     {
       chave: "acesso",
@@ -347,8 +360,8 @@ export function ListaUsuarios({
               type="search"
               value={filtros.busca}
               onChange={(e) => mudarFiltros({ busca: e.target.value })}
-              aria-label="Buscar por e-mail ou loja"
-              placeholder="Buscar por e-mail ou loja"
+              aria-label="Buscar por nome, e-mail, telefone, CPF/CNPJ ou loja"
+              placeholder="Buscar por nome, e-mail, documento ou loja"
               className="h-ctl-md pl-8 text-dense"
             />
           </div>

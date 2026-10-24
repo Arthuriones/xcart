@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { CheckIcon, CircleIcon } from "lucide-react";
+import { CheckIcon, CircleIcon, EyeIcon, EyeOffIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { cn } from "@/components/ui/cn";
@@ -11,8 +11,8 @@ import { SENHA_MINIMA, forcaDaSenha, type NivelForca } from "./acesso";
 
 // ============================================================================
 // Campos das telas de acesso: rotulo sempre visivel, erro no proprio campo
-// (aria-invalid + aria-describedby) e, na senha, mostrar/ocultar, a regra
-// visivel desde o inicio e o medidor de forca.
+// (aria-invalid + aria-describedby) e, na senha, o olho de mostrar/ocultar
+// dentro do campo, a regra visivel desde o inicio e o medidor de forca.
 // 44 px no celular (alvo de toque), 36 no resto -- o padrao do app.
 // ============================================================================
 
@@ -90,7 +90,7 @@ export function CampoSenha({
         <Label htmlFor={id}>{rotulo}</Label>
         {acessorio}
       </div>
-      <div className="flex gap-2">
+      <div className="relative">
         <Input
           id={id}
           type={visivel ? "text" : "password"}
@@ -103,17 +103,19 @@ export function CampoSenha({
           autoFocus={autoFocus}
           aria-invalid={erro ? true : undefined}
           aria-describedby={descritores || undefined}
-          className={ALTURA}
+          className={cn(ALTURA, "pr-11 sm:pr-10")}
         />
+        {/* O olho fica dentro do campo, do tamanho dele (44 px no celular). */}
         <Button
           type="button"
-          variant="secondary"
+          variant="ghost"
+          aria-label="Mostrar senha"
+          aria-pressed={visivel}
           aria-controls={id}
           onClick={() => setVisivel((v) => !v)}
-          className={cn(ALTURA, "min-w-22")}
+          className="absolute inset-y-0 right-0 h-full w-11 rounded-l-none px-0 text-t2 hover:bg-transparent hover:text-ink sm:w-10"
         >
-          {visivel ? "Ocultar" : "Mostrar"}
-          <span className="sr-only"> senha</span>
+          {visivel ? <EyeOffIcon aria-hidden /> : <EyeIcon aria-hidden />}
         </Button>
       </div>
 
