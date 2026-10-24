@@ -26,15 +26,17 @@ import { gastoNaTela, type GastoNaTela } from "./regras";
 // ============================================================================
 
 export interface DadosAnuncios {
-  /** Contas desta plataforma que a tela mostra (filtradas pela loja da barra). */
+  /**
+   * Contas desta plataforma que a tela mostra: TODAS, qualquer que seja a loja
+   * da barra. Filtrada pela loja, a conta ligada a outra loja ou a um checkout
+   * sumia da lista no instante em que era ligada.
+   */
   contas: ContaAnuncioResumo[];
   /** Contas desta plataforma, sem filtro de loja (o token e um so). */
   daPlataforma: ContaAnuncioResumo[];
   lojas: LojaDoSeletor[];
   /** Checkouts externos (069): a conta tambem liga a um deles. */
   checkouts: LojaDoSeletor[];
-  /** Loja (ou checkout) escolhida na barra do topo, ou null com todas. */
-  lojaFiltrada: LojaDoSeletor | null;
   /** store_id -> fuso IANA da loja (do sync de pedidos). */
   fusosLoja: Record<string, string>;
   erroFuso: string | null;
@@ -107,13 +109,8 @@ export async function carregarAnuncios(
   const intervalo = intervaloDoPeriodo(filtro.periodo, hoje).atual;
 
   const daPlataforma = todas.filter((c) => c.plataforma === plataforma);
-  // Com uma loja escolhida: as contas dela e as que ainda nao tem loja (sao
-  // as que pedem para ser ligadas).
-  const contas = lojaFiltrada
-    ? daPlataforma.filter(
-        (c) => c.store_id === lojaFiltrada.id || c.checkout_id === lojaFiltrada.id || (!c.store_id && !c.checkout_id)
-      )
-    : daPlataforma;
+  // Todas as contas, com qualquer loja na barra (ver DadosAnuncios.contas).
+  const contas = daPlataforma;
 
   const [gasto, destinos] = await Promise.all([
     lerGastoPorConta({
@@ -161,7 +158,6 @@ export async function carregarAnuncios(
       conexoes,
       lojas,
       checkouts,
-      lojaFiltrada,
       fusosLoja: fusos,
       erroFuso,
       fuso,

@@ -84,7 +84,6 @@ interface Props {
   erroGasto: string | null;
   fusosLoja: Record<string, string>;
   erroFuso: string | null;
-  lojaFiltrada: string | null;
   agoraMs: number;
   fuso: string;
   moeda: string;
@@ -153,7 +152,6 @@ export function ContasTabela({
   erroGasto,
   fusosLoja,
   erroFuso,
-  lojaFiltrada,
   agoraMs,
   fuso,
   moeda,
@@ -512,9 +510,6 @@ export function ContasTabela({
       aria-busy={atualizando || undefined}
     >
       <div className="flex flex-col gap-3 px-4">
-        {lojaFiltrada ? (
-          <p className="text-label text-t2">Mostrando as contas de {lojaFiltrada} e as sem loja.</p>
-        ) : null}
         {erroGasto ? <ErroLeitura tom="warn" titulo="Não deu para ler o gasto agora." detalhe={erroGasto} /> : null}
         {semLoja.length > 0 ? (
           <Callout
@@ -588,8 +583,7 @@ export function ContasTabela({
             ) : (
               <EmptyState
                 variante="simples"
-                titulo={lojaFiltrada ? `Nenhuma conta ligada a ${lojaFiltrada}` : "Nenhuma conta ainda"}
-                descricao={lojaFiltrada ? "Escolha “Todas as lojas” na barra do topo para ver as outras." : undefined}
+                titulo="Nenhuma conta ainda"
               />
             )
           }

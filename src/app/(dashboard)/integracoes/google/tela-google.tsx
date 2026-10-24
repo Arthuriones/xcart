@@ -251,7 +251,6 @@ export function TelaGoogle({
     erroGasto: string | null;
     fusosLoja: Record<string, string>;
     erroFuso: string | null;
-    lojaFiltrada: string | null;
     agoraMs: number;
     fuso: string;
     moeda: string;

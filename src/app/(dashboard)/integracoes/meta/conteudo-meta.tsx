@@ -86,7 +86,6 @@ export function ConteudoMeta({ d }: { d: DadosAnuncios }) {
               erroGasto={d.erroGasto}
               fusosLoja={d.fusosLoja}
               erroFuso={d.erroFuso}
-              lojaFiltrada={d.lojaFiltrada?.nome ?? null}
               agoraMs={d.agoraMs}
               fuso={d.fuso}
               moeda={d.moeda}
