@@ -641,6 +641,8 @@ export function Assistente({ lojas, origem }: { lojas: Loja[]; origem: string })
           erroLigar={erroLigar}
           onLigarMesmoAssim={ligarMesmoAssim}
           origem={origem}
+          vitrine={{ id: escolha.vitrine, nome: vitrine }}
+          checkout={{ id: escolha.checkout, nome: checkout }}
           imagens={imagens}
           imagensPct={porcento(imagensFeitas, imagens?.total ?? 0)}
           imagensRodando={imagensRodando}

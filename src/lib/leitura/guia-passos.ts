@@ -342,7 +342,7 @@ function passoRastreamento(foto: FotoGuia, b: Base, caminho: CaminhoGuia): Passo
     titulo: "Ligue o rastreamento",
     texto:
       caminho === "vitrine"
-        ? "Envia cada compra ao Meta e ao TikTok pelo servidor e ao Google pela tag. Precisa do script no tema e do pixel do checkout. Ligue na loja de checkout: é nela que o pedido nasce."
+        ? "Envia cada compra ao Meta e ao TikTok pelo servidor e ao Google pela tag. Precisa do script no tema e do pixel do checkout. Ligue na loja de checkout, que é onde o pedido nasce, e na vitrine, com o mesmo pixel, para ver produto e carrinho também saírem pelo servidor."
         : "Envia cada compra ao Meta e ao TikTok pelo servidor e ao Google pela tag. Precisa do script no tema e do pixel do checkout.",
     href: "/tracking",
     cta: "Configurar rastreamento",
@@ -735,7 +735,12 @@ function passoScript(foto: FotoGuia, b: Base): PassoGuia {
     id: "script" as const,
     titulo: "Instale o script na vitrine",
     texto:
-      "É o script que leva o carrinho para a loja de checkout; sem ele a rota não funciona. No Roteamento, abra a rota e use Instalar na vitrine.",
+      "São três códigos no tema da vitrine: o do roteamento, que leva o carrinho para a loja de checkout (sem ele a rota não funciona), a linha do referrer, que esconde da loja de checkout de onde o comprador veio, e o de rastreamento, que manda ver produto e carrinho pelo servidor.",
+    como: [
+      "No Roteamento, abra a rota e vá na aba Instalação.",
+      "Clique em Instalar na vitrine: entram o script do roteamento e a linha do referrer.",
+      "Instale o script de rastreamento pelo Rastreamento da vitrine, ou copie da aba Instalação e cole no theme.liquid, antes de </head>.",
+    ],
     href: ROTA_ROTEAMENTO,
     cta: "Instalar na vitrine",
   };

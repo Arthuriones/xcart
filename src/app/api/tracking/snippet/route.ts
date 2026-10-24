@@ -1,11 +1,72 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
-import { tagScriptNoTema } from "@/lib/leitura/guia-configuracao";
+import { scriptNoTemaDaLoja, tagScriptNoTema } from "@/lib/leitura/guia-configuracao";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { aplicarSnippet } from "@/lib/tracking/snippet-tema";
+import { aplicarSnippet, montarTag } from "@/lib/tracking/snippet-tema";
 
 export const runtime = "nodejs";
+
+/** Acima disto a resposta sai sem saber se a tag ja esta no tema (null). */
+const TETO_TEMA_MS = 5_000;
+
+// ============================================================================
+// GET: a tag para COLAR no tema, para quem nao quer (ou nao pode) usar o
+// botao. Sai da MESMA montarTag e do mesmo formato de id que o POST usa, sem
+// o remarketing -- o padrao do Instalar --, entao colar e instalar dao o mesmo
+// texto. Junto: se o tema publicado ja tem a tag (a regra do guia, guardada
+// por 10 min; null = nao deu para conferir) e se o rastreamento da loja esta
+// ligado, porque a tag sozinha nao manda nada com ele desligado.
+// ============================================================================
+
+export async function GET(request: NextRequest) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const storeId = request.nextUrl.searchParams.get("storeId");
+  if (!storeId) {
+    return NextResponse.json({ error: "storeId ausente." }, { status: 400 });
+  }
+
+  // A tag carrega o id da LINHA de loja: entregar o de outra conta mandaria
+  // os eventos dela para a conta de anuncios errada.
+  const { data: loja } = await supabase
+    .from("stores")
+    .select("id")
+    .eq("id", storeId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!loja) {
+    return NextResponse.json({ error: "Loja nao encontrada." }, { status: 404 });
+  }
+
+  const { remarketingDaLoja } = await import("@/lib/tracking/destinos");
+  let relogio: ReturnType<typeof setTimeout> | undefined;
+  const teto = new Promise<null>((resolver) => {
+    relogio = setTimeout(() => resolver(null), TETO_TEMA_MS);
+  });
+  try {
+    const [google, config, instalado] = await Promise.all([
+      remarketingDaLoja(createAdminClient(), loja.id),
+      supabase.from("tracking_configs").select("enabled").eq("store_id", loja.id).maybeSingle(),
+      Promise.race([scriptNoTemaDaLoja(loja.id).catch(() => null), teto]),
+    ]);
+    return NextResponse.json({
+      ok: true,
+      codigo: montarTag(loja.id, [], google.idTemplate),
+      instalado,
+      ligado: config.error ? null : Boolean(config.data?.enabled),
+    });
+  } finally {
+    clearTimeout(relogio);
+  }
+}
 
 // ============================================================================
 // Instala, atualiza ou remove a tag do xcart no tema, pela tela.

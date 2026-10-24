@@ -3,19 +3,26 @@ import { Section } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { quandoFoi } from "@/lib/leitura/lojas-estado";
 import type { GraphRoute, GraphStore } from "@/lib/checkout-routes/graph";
+import { CodigosDaVitrine, type LojaDaRota } from "./codigos-vitrine";
 import { Instalador } from "./instalar";
 import { estadoDoTema, estadoInstalacao, hrefRota } from "./logica";
 
-/** Aba Instalacao: o estado do script na vitrine, instalar automatico e o codigo manual. */
+/**
+ * Aba Instalacao: o estado do script na vitrine, instalar automatico, os
+ * codigos da vitrine para colar (roteamento, referrer, rastreamento) e o que
+ * vai na loja de checkout.
+ */
 export function AbaInstalacao({
   rota,
   vitrine,
+  checkouts,
   sinal,
   origem,
   agora,
 }: {
   rota: GraphRoute;
   vitrine: GraphStore | undefined;
+  checkouts: LojaDaRota[];
   sinal: { em: string | null; erro: boolean };
   origem: string;
   agora: number;
@@ -64,9 +71,20 @@ export function AbaInstalacao({
           rotaId={rota.id}
           token={rota.publicToken}
           origem={origem}
+          comCodigo={false}
           rotulo={sinal.em ? "Reinstalar na vitrine" : "Instalar na vitrine"}
         />
       </Section>
+
+      <CodigosDaVitrine
+        origem={origem}
+        token={rota.publicToken}
+        vitrineId={rota.sourceStoreId}
+        vitrineNome={vitrine?.name || ""}
+        rotaLigada={rota.enabled}
+        roteamentoNoTema={Boolean(sinal.em) || tema?.tom === "ok"}
+        checkouts={checkouts}
+      />
 
       <Section titulo="Depois de instalar" descricao="Confira com um carrinho de verdade antes de mandar tráfego.">
         <p className="text-dense text-t1 text-pretty">

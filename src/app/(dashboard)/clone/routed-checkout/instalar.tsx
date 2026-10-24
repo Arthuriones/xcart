@@ -31,8 +31,12 @@ function horaAgora(): string {
   }).format(Date.now());
 }
 
-/** Frase de erro por status, sem repetir o texto cru da Shopify. */
-function erroDaInstalacao(status: number, codigo?: string): string {
+/**
+ * Frase de erro por status, sem repetir o texto cru da Shopify. Sem o codigo
+ * embutido (comCodigo false), o que colar mora no bloco "Instale na vitrine"
+ * (codigos-vitrine.tsx), na aba Instalacao e no fim do assistente.
+ */
+function erroDaInstalacao(status: number, codigo: string | undefined, comCodigo: boolean): string {
   // Instalar com a rota pausada travaria o checkout da vitrine: o servidor
   // recusa (ver publicarConfigNoTema).
   if (codigo === "rota_pausada") {
@@ -42,7 +46,9 @@ function erroDaInstalacao(status: number, codigo?: string): string {
   if (status === 409) return "Esta rota não tem loja de checkout com domínio pronto. Confira as lojas na aba Lojas e divisão.";
   if (status === 401) return "Sua sessão venceu. Entre de novo e tente outra vez.";
   if (status === 503) return "Não deu para ler as lojas de checkout agora. Nada foi escrito no tema; tente de novo em instantes.";
-  return "A Shopify não deixou escrever no tema da vitrine. Cole o código na mão, logo abaixo.";
+  return comCodigo
+    ? "A Shopify não deixou escrever no tema da vitrine. Cole o código na mão, logo abaixo."
+    : "A Shopify não deixou escrever no tema da vitrine. Cole os códigos na mão: estão em Instale na vitrine, na aba Instalação da rota.";
 }
 
 export function Instalador({
@@ -74,7 +80,7 @@ export function Instalador({
       const r = await fetch(`/api/checkout-routes/${rotaId}/update-theme`, { method: "POST" });
       const d = (await r.json().catch(() => ({}))) as Resposta;
       if (!r.ok) {
-        setResultado({ ok: false, texto: erroDaInstalacao(r.status, d.code) });
+        setResultado({ ok: false, texto: erroDaInstalacao(r.status, d.code, comCodigo) });
         // Colar o codigo na mao tambem travaria a vitrine com a rota pausada,
         // e o 503 e soluco do banco, nao falta de permissao no tema.
         if (comCodigo && d.code !== "rota_pausada" && r.status !== 503) setManual(true);

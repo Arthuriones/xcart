@@ -5,8 +5,9 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Section } from "@/components/ui/section";
 import { Spinner } from "@/components/ui/spinner";
-import { CodigoManual, Instalador } from "../instalar";
-import { codigoDoScript, hrefRota } from "../logica";
+import { CodigosDaVitrine, type LojaDaRota } from "../codigos-vitrine";
+import { Instalador } from "../instalar";
+import { hrefRota } from "../logica";
 import { Progresso } from "@/components/routed-checkout/cartoes";
 
 export interface DiagnosticoRota {
@@ -44,6 +45,8 @@ export function PassoAtivar({
   erroLigar,
   onLigarMesmoAssim,
   origem,
+  vitrine,
+  checkout,
   imagens,
   imagensPct,
   imagensRodando,
@@ -60,6 +63,9 @@ export function PassoAtivar({
   erroLigar: string | null;
   onLigarMesmoAssim: () => void;
   origem: string;
+  /** As lojas escolhidas no passo 1: os codigos da vitrine e os links da loja de checkout. */
+  vitrine: LojaDaRota;
+  checkout: LojaDaRota;
   imagens: FilaImagens | null;
   imagensPct: number;
   imagensRodando: boolean;
@@ -175,11 +181,22 @@ export function PassoAtivar({
             comprador à loja de checkout.
           </p>
         ) : rota.id ? (
-          <Instalador rotaId={rota.id} token={rota.token} origem={origem} />
+          <Instalador rotaId={rota.id} token={rota.token} origem={origem} comCodigo={false} />
         ) : (
-          <CodigoManual codigo={codigoDoScript(origem, rota.token)} />
+          // Sem id da rota nao ha o que o botao chame: so colar, logo abaixo.
+          <p className="text-dense text-t1 text-pretty">Cole os códigos logo abaixo no tema da vitrine.</p>
         )}
       </Section>
+
+      <CodigosDaVitrine
+        origem={origem}
+        token={rota.token}
+        vitrineId={vitrine.id}
+        vitrineNome={vitrine.nome}
+        rotaLigada={!pausada}
+        roteamentoNoTema={false}
+        checkouts={checkout.id && checkout.id !== vitrine.id ? [checkout] : []}
+      />
 
       {imagens && imagens.total > 0 ? (
         <Section titulo="Imagens sem marca" descricao="Seguem trocando no servidor: você pode sair desta página.">

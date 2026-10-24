@@ -645,6 +645,16 @@ export function codigoDoScript(origem: string, token: string): string {
   return `<script\n  src="${origem}/routed-checkout-loader.js"\n  data-token="${token}"\n  async>\n</script>`;
 }
 
+/**
+ * A linha do referrer para colar no tema da vitrine. A MESMA que o Instalar na
+ * vitrine escreve (comMetaReferrer em src/lib/checkout-routes/tema-script.ts),
+ * travada por tests/roteamento-codigos-vitrine.test.ts. `same-origin` e nao
+ * `no-referrer` de proposito: a loja de checkout e outro dominio e fica sem o
+ * endereco da vitrine do mesmo jeito, e a navegacao dentro da vitrine (que a
+ * analytics da Shopify usa) continua com ele.
+ */
+export const META_REFERRER = '<meta name="referrer" content="same-origin">';
+
 // ---------------------------------------------------------------- funil
 
 export interface BlocoDoFunil {

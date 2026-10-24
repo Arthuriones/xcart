@@ -211,7 +211,23 @@ export function ConsoleView({
                 }
               />
             ),
-            instalacao: <AbaInstalacao rota={rota} vitrine={vitrine} sinal={sinal} origem={origem} agora={agora} />,
+            instalacao: (
+              <AbaInstalacao
+                rota={rota}
+                vitrine={vitrine}
+                checkouts={rota.targets
+                  .filter(
+                    (t, i, todos) =>
+                      t.storeId &&
+                      t.storeId !== rota.sourceStoreId &&
+                      todos.findIndex((o) => o.storeId === t.storeId) === i
+                  )
+                  .map((t) => ({ id: t.storeId, nome: lojas.get(t.storeId)?.name || "loja de checkout" }))}
+                sinal={sinal}
+                origem={origem}
+                agora={agora}
+              />
+            ),
           }}
         />
       </section>
