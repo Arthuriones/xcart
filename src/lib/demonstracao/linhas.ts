@@ -814,10 +814,12 @@ interface Numeros {
 }
 
 /**
- * Campanha, conjunto e anuncio de HOJE (a tela Campanhas mostra o que esta
- * na tabela, sem filtro de data: um retrato so). Valores em BRL, a moeda que
- * a tela formata. Objeto parado fica PAUSED com zero; o nome continua servindo
- * a tela Pedidos (conjunto e anuncio de pedidos antigos).
+ * Campanha, conjunto e anuncio de HOJE. A tela Campanhas soma o periodo da
+ * barra: os outros dias (sem detalhe) entram pelo gasto por campanha
+ * (ad_spend_daily), e as vendas e o lucro saem dos pedidos -- as colunas de
+ * venda daqui nao sao lidas. Valores em BRL (a tela converte). Objeto parado
+ * fica PAUSED com zero; o nome continua servindo a tela Pedidos (conjunto e
+ * anuncio de pedidos antigos).
  */
 export function granularDeHoje(
   g: GastoDoDia,
@@ -892,7 +894,9 @@ export function granularDeHoje(
       cpi: ic > 0 ? brl(n.gasto / ic) : 0,
       vis_video: visVideo,
       vis_3s: vis3s,
-      retencao_75: base.video ? arred(r.entre(3, 9)) : 0,
+      // CONTAGEM de visualizacoes ate 75% (o contrato da tela Campanhas), nao taxa:
+      // 8-20% das reproducoes. Um sorteio so, no mesmo lugar: o resto da linha nao muda.
+      retencao_75: base.video ? Math.round(visVideo * r.entre(0.08, 0.2)) : 0,
       hook_rate: base.video ? arred(hook * 100) : 0,
       hold_rate: base.video ? arred(r.entre(8, 18)) : 0,
       frequencia: n.impressoes > 0 ? arred(base.retargeting ? r.entre(2.1, 2.8) : r.entre(1.08, 1.6)) : 1,

@@ -37,6 +37,10 @@ export interface InsightMeta {
   adset_name?: string;
   ad_id?: string | number;
   ad_name?: string;
+  /** So nos pedidos da aba Campanhas (CAMPOS_GRANULARES em meta-graph.ts). */
+  frequency?: string | number;
+  video_play_actions?: AcaoMeta[];
+  video_p75_watched_actions?: AcaoMeta[];
 }
 
 export interface ContextoLinhas {

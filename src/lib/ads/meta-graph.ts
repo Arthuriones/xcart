@@ -110,34 +110,42 @@ async function graphGetProxima(url: string, token: string): Promise<RespostaGrap
 /**
  * Pagina uma aresta: segue paging.next quando aponta para a base; senao, o
  * cursor `after` com os mesmos parametros.
+ *
+ * `completo` = false quando sobrou pagina (teto de paginas ou paging.next sem
+ * como seguir): quem apaga "o que nao voltou" precisa saber que nao viu tudo.
  */
 async function paginar(
   caminho: string,
   params: Record<string, string>,
   token: string,
   maxPaginas: number
-): Promise<{ rows: unknown[]; throttle: ThrottleMeta | null }> {
+): Promise<{ rows: unknown[]; throttle: ThrottleMeta | null; completo: boolean }> {
   const rows: unknown[] = [];
   let throttle: ThrottleMeta | null = null;
+  let completo = true;
   let r = await graphGet(caminho, params, token);
   for (let pagina = 1; ; pagina += 1) {
     if (r.throttle) throttle = r.throttle;
     const dados = r.json.data;
     if (Array.isArray(dados)) rows.push(...dados);
-    if (pagina >= maxPaginas) break;
     const paging = (r.json.paging ?? {}) as {
       next?: string;
       cursors?: { after?: string };
     };
+    if (pagina >= maxPaginas) {
+      completo = typeof paging.next !== "string";
+      break;
+    }
     if (typeof paging.next === "string" && paging.next.startsWith(BASE + "/")) {
       r = await graphGetProxima(paging.next, token);
     } else if (typeof paging.next === "string" && paging.cursors?.after) {
       r = await graphGet(caminho, { ...params, after: paging.cursors.after }, token);
     } else {
+      completo = typeof paging.next !== "string";
       break;
     }
   }
-  return { rows, throttle };
+  return { rows, throttle, completo };
 }
 
 const CAMPOS_CONTA_LISTA = "id,account_id,name,currency,timezone_name,account_status";
@@ -215,13 +223,21 @@ export async function buscarConta(
  */
 export type NivelInsightMeta = "account" | "campaign" | "adset" | "ad";
 
+/**
+ * Campos crus da aba Campanhas (ad_insights_granular). O IC e a visualizacao
+ * de 3 s (`video_view`) ja vem em `actions`; reproducao e 75% do video vem em
+ * listas proprias.
+ */
+export const CAMPOS_GRANULARES = "frequency,video_play_actions,video_p75_watched_actions";
+
 export async function buscarInsightsDetalhado(
   contaId: string,
   token: string,
   desde: string,
   ate: string,
-  nivel: NivelInsightMeta
-): Promise<{ rows: InsightMeta[]; throttle: ThrottleMeta | null }> {
+  nivel: NivelInsightMeta,
+  opcoes: { granular?: boolean } = {}
+): Promise<{ rows: InsightMeta[]; throttle: ThrottleMeta | null; completo: boolean }> {
   let fields = "account_currency,date_start,spend,impressions,clicks,actions,action_values";
   if (nivel === "campaign") {
     fields += ",campaign_id,campaign_name";
@@ -230,6 +246,7 @@ export async function buscarInsightsDetalhado(
   } else if (nivel === "ad") {
     fields += ",campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name";
   }
+  if (opcoes.granular) fields += "," + CAMPOS_GRANULARES;
 
   const r = await paginar(
     `act_${contaId.replace(/\D/g, "")}/insights`,
@@ -243,7 +260,55 @@ export async function buscarInsightsDetalhado(
     token,
     20
   );
-  return { rows: r.rows as InsightMeta[], throttle: r.throttle };
+  return { rows: r.rows as InsightMeta[], throttle: r.throttle, completo: r.completo };
+}
+
+/**
+ * Campanhas, conjuntos e anuncios da conta como estao AGORA: status efetivo,
+ * orcamento e a quem pertencem. Tres chamadas (uma por aresta), em paralelo,
+ * com os campos minimos. Sem filtro o Meta devolve tudo que nao esta
+ * arquivado nem apagado -- o que esta ativo ou pausado.
+ */
+export async function buscarEstruturaMeta(
+  contaId: string,
+  token: string
+): Promise<{
+  campanhas: unknown[];
+  conjuntos: unknown[];
+  anuncios: unknown[];
+  completa: { campanhas: boolean; conjuntos: boolean; anuncios: boolean };
+}> {
+  const conta = `act_${contaId.replace(/\D/g, "")}`;
+  const [campanhas, conjuntos, anuncios] = await Promise.all([
+    paginar(
+      `${conta}/campaigns`,
+      { fields: "id,name,effective_status,daily_budget,lifetime_budget", limit: "500" },
+      token,
+      20
+    ),
+    paginar(
+      `${conta}/adsets`,
+      { fields: "id,name,effective_status,daily_budget,lifetime_budget,campaign_id", limit: "500" },
+      token,
+      20
+    ),
+    paginar(
+      `${conta}/ads`,
+      { fields: "id,name,effective_status,adset_id,campaign_id", limit: "500" },
+      token,
+      20
+    ),
+  ]);
+  return {
+    campanhas: campanhas.rows,
+    conjuntos: conjuntos.rows,
+    anuncios: anuncios.rows,
+    completa: {
+      campanhas: campanhas.completo,
+      conjuntos: conjuntos.completo,
+      anuncios: anuncios.completo,
+    },
+  };
 }
 
 export async function buscarInsights(

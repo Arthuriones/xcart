@@ -5,6 +5,7 @@ import {
   MAPA_COLUNAS,
 } from "@/app/(dashboard)/campanhas/colunas-config";
 import type { LinhaCampanha } from "@/app/(dashboard)/campanhas/tipos";
+import { derivar, somarLinhas, somasVazias, type SomasCampanha } from "@/lib/campanhas/metricas";
 
 describe("Dashboard de Campanhas (estilo Cakto / UTMify)", () => {
   it("contém o catálogo completo de métricas", () => {
@@ -44,82 +45,43 @@ describe("Dashboard de Campanhas (estilo Cakto / UTMify)", () => {
     expect(col?.categoria).toBe("financeiro");
   });
 
-  it("calcula métricas de totais agregados corretamente", () => {
-    const linhas: LinhaCampanha[] = [
-      {
-        id: "1",
-        objetoId: "camp_1",
-        nome: "Campanha 1",
+  it("calcula métricas de totais agregados corretamente (somas cruas, não média de razões)", () => {
+    const linha = (p: Partial<SomasCampanha>): LinhaCampanha => {
+      const somas = { ...somasVazias(), ...p };
+      return {
+        id: "x",
+        objetoId: "x",
+        nome: "x",
         status: "ACTIVE",
         plataforma: "meta",
         nivel: "campanha",
-        contaId: "acc_1",
-        contaNome: "Conta Meta 1",
+        contaId: "acc",
+        contaNome: "Conta",
+        campanhaId: "x",
+        campanhaNome: "x",
+        grupoId: null,
+        grupoNome: null,
         tipo: "CBO",
         orcamento: 100,
-        gastos: 200,
-        faturamento: 600,
-        custoProduto: 150,
-        lucro: 250,
-        roas: 3,
-        roi: 0.71,
-        margem: 41.67,
-        cpa: 20,
-        vendas: 10,
-        cliques: 150,
-        impressoes: 5000,
-        cpc: 1.33,
-        cpm: 40,
-        ctr: 3,
-        ic: 25,
-        cpi: 8,
-      },
-      {
-        id: "2",
-        objetoId: "camp_2",
-        nome: "Campanha 2",
-        status: "ACTIVE",
-        plataforma: "google",
-        nivel: "campanha",
-        contaId: "acc_2",
-        contaNome: "Conta Google 1",
-        tipo: "PMAX",
-        orcamento: 150,
-        gastos: 300,
-        faturamento: 900,
-        custoProduto: 200,
-        lucro: 400,
-        roas: 3,
-        roi: 0.8,
-        margem: 44.44,
-        cpa: 30,
-        vendas: 10,
-        cliques: 200,
-        impressoes: 8000,
-        cpc: 1.5,
-        cpm: 37.5,
-        ctr: 2.5,
-        ic: 30,
-        cpi: 10,
-      },
+        cpaDesejado: null,
+        ...somas,
+        ...derivar(somas),
+      };
+    };
+    const linhas = [
+      linha({ gastos: 200, faturamento: 600, custoProduto: 150, lucroPedidos: 450, vendas: 10, cliques: 150, impressoes: 5000 }),
+      linha({ gastos: 300, faturamento: 900, custoProduto: 200, lucroPedidos: 700, vendas: 10, cliques: 200, impressoes: 8000 }),
     ];
 
-    const gastosTotais = linhas.reduce((acc, l) => acc + l.gastos, 0);
-    const faturamentoTotal = linhas.reduce((acc, l) => acc + l.faturamento, 0);
-    const lucroTotal = linhas.reduce((acc, l) => acc + l.lucro, 0);
-    const vendasTotais = linhas.reduce((acc, l) => acc + l.vendas, 0);
-
-    expect(gastosTotais).toBe(500);
-    expect(faturamentoTotal).toBe(1500);
-    expect(lucroTotal).toBe(650);
-    expect(vendasTotais).toBe(20);
-
-    const cpaMedio = gastosTotais / vendasTotais;
-    const roasMedio = faturamentoTotal / gastosTotais;
-    const margemMedia = (lucroTotal / faturamentoTotal) * 100;
-
-    expect(cpaMedio).toBe(25);
-    expect(roasMedio).toBe(3);
-    expect(margemMedia).toBeCloseTo(43.33, 1);
+    const total = { ...somarLinhas(linhas), ...derivar(somarLinhas(linhas)) };
+    expect(total.gastos).toBe(500);
+    expect(total.faturamento).toBe(1500);
+    expect(total.lucro).toBe(650);
+    expect(total.vendas).toBe(20);
+    expect(total.cpa).toBe(25);
+    expect(total.roas).toBe(3);
+    expect(total.margem).toBeCloseTo(43.33, 1);
+    expect(total.cpc).toBeCloseTo(500 / 350, 6);
+    expect(linhas[0].lucro).toBe(250);
   });
 });

@@ -1,15 +1,12 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { Plug } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
-import { getCurrentUser } from "@/lib/supabase/current-user";
-import { filtroResolvido } from "@/lib/filtro-global";
-import { TODAS } from "@/lib/financeiro/tipos";
+import { lerCampanhas, type DadosCampanhas } from "@/lib/leitura/campanhas";
 import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErroLucro } from "../financeiro/erro-lucro";
 import { CampanhasTela } from "./campanhas-tela";
-import type { LinhaCampanha } from "./tipos";
+import { MAPA_COLUNAS } from "./colunas-config";
 
 export const dynamic = "force-dynamic";
 
@@ -18,129 +15,19 @@ export const metadata = {
   description: "Dashboard analítico de campanhas, conjuntos e anúncios de tráfego pago.",
 };
 
-interface ContaLida {
-  id: string;
-  nome: string | null;
-  plataforma: string;
-  external_id: string;
-  store_id: string | null;
-  checkout_id?: string | null;
-}
-
-async function carregarDadosCampanhas(): Promise<{
-  contas: { id: string; nome: string; plataforma: string }[];
-  linhas: LinhaCampanha[];
-  colunasSalvas: string[];
-  erro: string | null;
-}> {
-  const supabase = await createClient();
-  const user = await getCurrentUser();
-
-  if (!user) {
-    return { contas: [], linhas: [], colunasSalvas: [], erro: null };
-  }
-
-  // 1. Contas de anúncio do usuário, no filtro do topo: a da loja (ou do
-  //    checkout) escolhida; com Todas, as das lojas de Todas e as sem loja.
-  //    `*` como no Lucro: checkout_id so existe depois da 069. Erro de banco
-  //    aparece -- nunca vira "nenhuma conta conectada".
-  let filtro: Awaited<ReturnType<typeof filtroResolvido>>;
-  try {
-    filtro = await filtroResolvido();
-  } catch (e) {
-    return { contas: [], linhas: [], colunasSalvas: [], erro: e instanceof Error ? e.message : String(e) };
-  }
-  const { data: contasData, error: erroContas } = await supabase
-    .from("ad_accounts")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("nome", { ascending: true });
-  if (erroContas) {
-    return { contas: [], linhas: [], colunasSalvas: [], erro: `Falha ao ler as contas de anúncio: ${erroContas.message}` };
-  }
-  const lojaSet = new Set(filtro.lojaIds);
-  const checkoutSet = new Set(filtro.checkoutIds);
-  const todas = filtro.filtro.lojaId === TODAS;
-  const contas = ((contasData || []) as ContaLida[])
-    .filter((c) => (c.store_id ? lojaSet.has(c.store_id) : c.checkout_id ? checkoutSet.has(c.checkout_id) : todas))
-    .map((c) => ({
-      id: c.id,
-      nome: c.nome || `Conta ${c.external_id}`,
-      plataforma: c.plataforma,
-    }));
-
-  // 2. Busca preferências de colunas do usuário
-  const { data: prefData } = await supabase
-    .from("user_dashboard_preferences")
-    .select("colunas")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  const colunasSalvas = (prefData?.colunas || []) as string[];
-
-  // 3. Busca insights granulares (so das contas do filtro)
-  const contaIds = contas.map((c) => c.id);
-  const { data: insightsData, error: erroInsights } = contaIds.length
-    ? await supabase
-        .from("ad_insights_granular")
-        .select("*")
-        .eq("user_id", user.id)
-        .in("ad_account_id", contaIds)
-        .order("data", { ascending: false })
-    : { data: [], error: null };
-  if (erroInsights) {
-    return { contas, linhas: [], colunasSalvas, erro: `Falha ao ler as campanhas: ${erroInsights.message}` };
-  }
-
-  // Mapeia para LinhaCampanha
-  const linhas: LinhaCampanha[] = (insightsData || []).map((row) => {
-    const conta = contas.find((c) => c.id === row.ad_account_id);
-    return {
-      id: row.id,
-      objetoId: row.objeto_id,
-      nome: row.objeto_nome,
-      status: row.objeto_status || "ACTIVE",
-      plataforma: row.plataforma as "meta" | "google" | "tiktok",
-      nivel: row.nivel as "conta" | "campanha" | "grupo" | "anuncio",
-      contaId: row.ad_account_id,
-      contaNome: conta?.nome || "Conta de Anúncio",
-      campanhaId: row.campanha_id,
-      campanhaNome: row.campanha_nome,
-      grupoId: row.grupo_id,
-      grupoNome: row.grupo_nome,
-      tipo: row.tipo || "CBO",
-      orcamento: Number(row.orcamento || 0),
-      cpaDesejado: row.cpa_desejado ? Number(row.cpa_desejado) : undefined,
-      gastos: Number(row.gasto || 0),
-      faturamento: Number(row.faturamento || 0),
-      custoProduto: Number(row.custo_produto || 0),
-      lucro: Number(row.lucro || 0),
-      roas: Number(row.roas || 0),
-      roi: Number(row.roi || 0),
-      margem: Number(row.margem || 0),
-      cpa: Number(row.cpa || 0),
-      vendas: Number(row.vendas || 0),
-      cliques: Number(row.cliques || 0),
-      impressoes: Number(row.impressoes || 0),
-      cpc: Number(row.cpc || 0),
-      cpm: Number(row.cpm || 0),
-      ctr: Number(row.ctr || 0),
-      ic: Number(row.ic || 0),
-      cpi: Number(row.cpi || 0),
-      visVideo: Number(row.vis_video || 0),
-      vis3s: Number(row.vis_3s || 0),
-      retencao75: Number(row.retencao_75 || 0),
-      hookRate: Number(row.hook_rate || 0),
-      holdRate: Number(row.hold_rate || 0),
-      frequencia: Number(row.frequencia || 1),
-    };
-  });
-
-  return { contas, linhas, colunasSalvas, erro: null };
-}
-
 export default async function CampanhasPage() {
-  const { contas, linhas, colunasSalvas, erro } = await carregarDadosCampanhas();
+  // Periodo, loja/checkout e moeda sao os da barra do topo (cookie), lidos no
+  // servidor como no Lucro. Erro de banco aparece -- nunca vira tela vazia.
+  let dados: DadosCampanhas | null = null;
+  let erro: string | null = null;
+  try {
+    dados = await lerCampanhas();
+  } catch (e) {
+    console.error("[campanhas]", e);
+    erro = e instanceof Error ? e.message : String(e);
+  }
+  // Coluna salva que saiu do catalogo (o padrao antigo trazia "status" e "nome") nao vira cabecalho cru.
+  const colunasSalvas = (dados?.colunasSalvas ?? []).filter((c) => MAPA_COLUNAS.has(c));
 
   return (
     <div className="flex flex-col gap-6" data-largura="total">
@@ -164,9 +51,9 @@ export default async function CampanhasPage() {
         </div>
       </div>
 
-      {erro ? (
-        <ErroLucro titulo="Não conseguimos abrir as campanhas agora" detalhe={erro} />
-      ) : contas.length === 0 ? (
+      {erro || !dados ? (
+        <ErroLucro titulo="Não conseguimos abrir as campanhas agora" detalhe={erro ?? "Sem resposta do banco."} />
+      ) : dados.contas.length === 0 || !dados.resultado ? (
         <EmptyState
           icone={<Plug className="h-8 w-8 text-t3" />}
           titulo="Nenhuma conta de anúncio conectada"
@@ -181,9 +68,16 @@ export default async function CampanhasPage() {
       ) : (
         <Suspense fallback={<div className="text-t2 text-xs py-8">Carregando painel de campanhas...</div>}>
           <CampanhasTela
-            linhasIniciais={linhas}
-            contas={contas}
+            linhas={dados.resultado.linhas}
+            contas={dados.contas}
             colunasSalvas={colunasSalvas}
+            moeda={dados.moeda}
+            periodo={dados.periodo}
+            atribuicao={dados.resultado.atribuicao}
+            semDetalhe={dados.resultado.semDetalhe}
+            diasNoPeriodo={dados.resultado.diasNoPeriodo}
+            sincronizadoEm={dados.resultado.sincronizadoEm}
+            moedasSemCotacao={dados.resultado.moedasSemCotacao}
           />
         </Suspense>
       )}

@@ -371,6 +371,8 @@ const CONTEXTOS: Record<string, ModoContexto> = {
   // Loja, periodo e moeda da barra, como o Dashboard. Sem "Comparar com": a
   // lista nao compara periodos.
   "/pedidos": { tipo: "completo", semComparar: true },
+  // Campanhas soma o periodo da barra (src/lib/leitura/campanhas.ts) e nao compara.
+  "/campanhas": { tipo: "completo", semComparar: true },
   "/tracking": { tipo: "fixo", texto: "Últimos 7 dias · período fixo desta tela" },
   "/tracking/eventos": { tipo: "loja" },
   "/alertas": { tipo: "loja" },

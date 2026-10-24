@@ -9,7 +9,7 @@ export const TODAS_AS_COLUNAS: ColunaDefinicao[] = [
   {
     id: "tipo",
     rotulo: "Tipo",
-    descricao: "Estratégia de orçamento (ex: CBO, ABO, Search, PMax)",
+    descricao: "Estratégia de orçamento (CBO ou ABO), do detalhe sincronizado",
     categoria: "geral",
     padraoAtiva: true,
     formato: "texto",
@@ -17,7 +17,7 @@ export const TODAS_AS_COLUNAS: ColunaDefinicao[] = [
   {
     id: "orcamento",
     rotulo: "Orçamento",
-    descricao: "Orçamento diário programado no gerenciador",
+    descricao: "Orçamento diário do gerenciador, no nível que tem orçamento (campanha CBO, conjunto ABO)",
     categoria: "financeiro",
     padraoAtiva: true,
     formato: "moeda",
@@ -25,7 +25,7 @@ export const TODAS_AS_COLUNAS: ColunaDefinicao[] = [
   {
     id: "custo_produto",
     rotulo: "Custos de Produto",
-    descricao: "Custo total do fornecedor (COGS) dos itens vendidos",
+    descricao: "Custo do fornecedor (produto + frete) das vendas, como no Lucro",
     categoria: "financeiro",
     padraoAtiva: false,
     formato: "moeda",
@@ -33,7 +33,7 @@ export const TODAS_AS_COLUNAS: ColunaDefinicao[] = [
   {
     id: "cpa_desejado",
     rotulo: "CPA desejado",
-    descricao: "Meta de custo por aquisição estipulada para a campanha",
+    descricao: "Meta de custo por aquisição definida na plataforma, quando ela informa",
     categoria: "conversao",
     padraoAtiva: true,
     formato: "moeda",
@@ -57,7 +57,7 @@ export const TODAS_AS_COLUNAS: ColunaDefinicao[] = [
   {
     id: "cpa",
     rotulo: "CPA",
-    descricao: "Custo por Aquisição (Gasto / Vendas Aprovadas)",
+    descricao: "Custo por aquisição (gasto / vendas pagas)",
     categoria: "conversao",
     padraoAtiva: true,
     formato: "moeda",
@@ -65,7 +65,7 @@ export const TODAS_AS_COLUNAS: ColunaDefinicao[] = [
   {
     id: "vendas_totais",
     rotulo: "Vendas Totais",
-    descricao: "Total de pedidos gerados (aprovados + pendentes)",
+    descricao: "Vendas pagas + pendentes",
     categoria: "conversao",
     padraoAtiva: false,
     formato: "numero",
@@ -73,7 +73,7 @@ export const TODAS_AS_COLUNAS: ColunaDefinicao[] = [
   {
     id: "vendas_pendentes",
     rotulo: "Vendas Pendentes",
-    descricao: "Pedidos gerados com pagamento aguardando aprovação (Boleto/Pix)",
+    descricao: "Pix ou boleto aguardando pagamento, contra entrega em aberto e comissão pendente",
     categoria: "conversao",
     padraoAtiva: false,
     formato: "numero",
@@ -81,7 +81,7 @@ export const TODAS_AS_COLUNAS: ColunaDefinicao[] = [
   {
     id: "vendas",
     rotulo: "Vendas",
-    descricao: "Total de compras pagas e aprovadas",
+    descricao: "Vendas pagas ligadas pela campanha, conjunto e anúncio do pedido (a contagem do Lucro)",
     categoria: "conversao",
     padraoAtiva: true,
     formato: "numero",
@@ -97,7 +97,7 @@ export const TODAS_AS_COLUNAS: ColunaDefinicao[] = [
   {
     id: "faturamento",
     rotulo: "Faturamento",
-    descricao: "Receita bruta gerada pelas vendas aprovadas",
+    descricao: "Receita das vendas pagas (a mesma do Lucro)",
     categoria: "financeiro",
     padraoAtiva: true,
     formato: "moeda",
@@ -105,7 +105,7 @@ export const TODAS_AS_COLUNAS: ColunaDefinicao[] = [
   {
     id: "lucro",
     rotulo: "Lucro",
-    descricao: "Lucro líquido real (Faturamento - Custo de Produto - Gastos de Anúncio)",
+    descricao: "Faturamento − custo de produto − taxas − devoluções − gasto",
     categoria: "financeiro",
     padraoAtiva: true,
     formato: "moeda",
@@ -129,7 +129,7 @@ export const TODAS_AS_COLUNAS: ColunaDefinicao[] = [
   {
     id: "roi",
     rotulo: "ROI",
-    descricao: "Retorno sobre o investimento total (Lucro / (Gastos + Custo Produto))",
+    descricao: "Retorno sobre o investimento (lucro / (gasto + custo de produto))",
     categoria: "financeiro",
     padraoAtiva: true,
     formato: "porcentagem",
@@ -177,7 +177,7 @@ export const TODAS_AS_COLUNAS: ColunaDefinicao[] = [
   {
     id: "ic",
     rotulo: "[IC] - Finalização de compra iniciada",
-    descricao: "Quantidade de checkouts iniciados",
+    descricao: "Checkouts iniciados reportados pela plataforma (dias com detalhe)",
     categoria: "conversao",
     padraoAtiva: false,
     formato: "numero",
@@ -185,7 +185,7 @@ export const TODAS_AS_COLUNAS: ColunaDefinicao[] = [
   {
     id: "cpi",
     rotulo: "[CPI] - Custo por finalização de compra iniciada",
-    descricao: "Gasto dividido pela quantidade de checkouts iniciados",
+    descricao: "Gasto dividido pelos checkouts iniciados (dias com detalhe)",
     categoria: "conversao",
     padraoAtiva: false,
     formato: "moeda",
@@ -193,7 +193,7 @@ export const TODAS_AS_COLUNAS: ColunaDefinicao[] = [
   {
     id: "vis_video",
     rotulo: "[Vis. Vídeo] - Visualizações de Vídeo",
-    descricao: "Total de visualizações de reprodução do vídeo",
+    descricao: "Reproduções do vídeo",
     categoria: "video",
     padraoAtiva: false,
     formato: "numero",
@@ -209,7 +209,7 @@ export const TODAS_AS_COLUNAS: ColunaDefinicao[] = [
   {
     id: "retencao_75",
     rotulo: "[Retenção de Vídeo (75%)]",
-    descricao: "Taxa de retenção até 75% do vídeo",
+    descricao: "Visualizações até 75% do vídeo / reproduções",
     categoria: "video",
     padraoAtiva: false,
     formato: "porcentagem",
@@ -233,7 +233,7 @@ export const TODAS_AS_COLUNAS: ColunaDefinicao[] = [
   {
     id: "frequencia",
     rotulo: "Frequência",
-    descricao: "Média de vezes que cada pessoa viu o anúncio",
+    descricao: "Média de vezes que cada pessoa viu o anúncio (média dos dias, pesada pelas impressões)",
     categoria: "trafego",
     padraoAtiva: false,
     formato: "numero",

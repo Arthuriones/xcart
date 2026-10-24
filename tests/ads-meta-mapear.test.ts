@@ -4,9 +4,12 @@ vi.mock("server-only", () => ({}));
 
 // O sync fala com a Graph por meta-graph; aqui ela e trocada por respostas
 // fixas para testar o que o sync GRAVA e o que ele APAGA.
+// O detalhe da aba Campanhas (ad_insights_granular) tem os testes dele em
+// ads-meta-granular.test.ts; aqui a lista do Meta so precisa existir.
 const graph = vi.hoisted(() => ({
   buscarConta: vi.fn(),
   buscarInsightsDetalhado: vi.fn(),
+  buscarEstruturaMeta: vi.fn(),
 }));
 vi.mock("@/lib/ads/meta-graph", async () => {
   class ErroGraph extends Error {
@@ -22,6 +25,7 @@ vi.mock("@/lib/ads/meta-graph", async () => {
     ErroGraph,
     buscarConta: graph.buscarConta,
     buscarInsightsDetalhado: graph.buscarInsightsDetalhado,
+    buscarEstruturaMeta: graph.buscarEstruturaMeta,
   };
 });
 

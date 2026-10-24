@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { HelpCircle, Layers } from "lucide-react";
-import type { LinhaCampanha, NivelGranularidade, TotaisResumo } from "./tipos";
+import { formatarDinheiro } from "@/lib/financeiro/tipos";
+import { derivar, somarLinhas, type MetricasCampanha, type SomasCampanha } from "@/lib/campanhas/metricas";
+import type { LinhaCampanha, NivelGranularidade } from "./tipos";
 import { MAPA_COLUNAS } from "./colunas-config";
 
 interface TabelaCampanhasProps {
@@ -10,180 +12,164 @@ interface TabelaCampanhasProps {
   nivel: NivelGranularidade;
   colunasAtivas: string[];
   carregando: boolean;
+  /** Moeda do relatorio. */
+  moeda: string;
 }
 
-function formatarMoeda(v: number): string {
-  return (v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
+/** Sem dado (sem base, sem detalhe): "—", nunca 0. */
+const TRACO = <span className="text-t3">—</span>;
 
 function formatarNumero(v: number): string {
-  return (v || 0).toLocaleString("pt-BR");
+  return v.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
 }
 
 function formatarPorcentagem(v: number): string {
-  return `${(v || 0).toFixed(1)}%`;
+  return `${v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 }
+
+/** effective_status do Meta (e o da conta) em palavras. */
+function rotuloStatus(status: string | null): { texto: string; ativa: boolean } {
+  switch ((status ?? "").toUpperCase()) {
+    case "":
+      return { texto: "—", ativa: false };
+    case "ACTIVE":
+      return { texto: "Ativa", ativa: true };
+    case "PAUSED":
+    case "CAMPAIGN_PAUSED":
+    case "ADSET_PAUSED":
+      return { texto: "Pausada", ativa: false };
+    case "ARCHIVED":
+      return { texto: "Arquivada", ativa: false };
+    case "DELETED":
+      return { texto: "Excluída", ativa: false };
+    case "DISAPPROVED":
+      return { texto: "Reprovada", ativa: false };
+    case "PENDING_REVIEW":
+    case "IN_PROCESS":
+      return { texto: "Em análise", ativa: false };
+    case "WITH_ISSUES":
+      return { texto: "Com problema", ativa: false };
+    case "CLOSED":
+      return { texto: "Fechada", ativa: false };
+    default:
+      return { texto: status ?? "—", ativa: false };
+  }
+}
+
+type Valores = SomasCampanha & MetricasCampanha;
 
 export function TabelaCampanhas({
   linhas,
   nivel,
   colunasAtivas,
   carregando,
+  moeda,
 }: TabelaCampanhasProps) {
-  // Cálculo da linha agregada de totais
-  const totais = useMemo<TotaisResumo>(() => {
-    let gastos = 0;
-    let faturamento = 0;
-    let lucro = 0;
-    let vendas = 0;
-    let cliques = 0;
-    let impressoes = 0;
-
-    for (const l of linhas) {
-      gastos += Number(l.gastos || 0);
-      faturamento += Number(l.faturamento || 0);
-      lucro += Number(l.lucro || 0);
-      vendas += Number(l.vendas || 0);
-      cliques += Number(l.cliques || 0);
-      impressoes += Number(l.impressoes || 0);
-    }
-
-    const cpaMedio = vendas > 0 ? gastos / vendas : 0;
-    const roasMedio = gastos > 0 ? faturamento / gastos : 0;
-    const margemMedia = faturamento > 0 ? (lucro / faturamento) * 100 : 0;
-
-    return {
-      contas: new Set(linhas.map((l) => l.contaId)).size,
-      campanhas: linhas.length,
-      grupos: 0,
-      anuncios: 0,
-      gastos,
-      faturamento,
-      lucro,
-      vendas,
-      cliques,
-      impressoes,
-      cpaMedio,
-      roasMedio,
-      margemMedia,
-    };
+  // Linha de total: das somas cruas das linhas visiveis, com a mesma conta das linhas.
+  const totais = useMemo<Valores>(() => {
+    const somas = somarLinhas(linhas);
+    return { ...somas, ...derivar(somas) };
   }, [linhas]);
 
-  function renderValorCelula(linha: LinhaCampanha, colId: string) {
+  const dinheiro = (v: number | null, classe = "text-t2") =>
+    v === null ? TRACO : <span className={classe}>{formatarDinheiro(v, moeda)}</span>;
+  const pct = (v: number | null, classe = "text-t2") =>
+    v === null ? TRACO : <span className={classe}>{formatarPorcentagem(v)}</span>;
+  /** IC e video so existem nos dias com detalhe. */
+  const doDetalhe = (v: Valores, n: number) =>
+    v.detalhe ? <span className="text-t2">{formatarNumero(n)}</span> : TRACO;
+
+  /** As colunas de numero: as mesmas para a linha e para o total. */
+  function renderNumeros(v: Valores, colId: string, total: boolean): ReactNode {
+    const forte = total ? "font-bold" : "font-semibold";
     switch (colId) {
-      case "tipo":
-        return <span className="font-mono text-t2">{linha.tipo || "CBO"}</span>;
-      case "orcamento":
-        return <span className="font-medium text-ink">{formatarMoeda(linha.orcamento)}</span>;
       case "custo_produto":
-        return <span className="text-t2">{formatarMoeda(linha.custoProduto)}</span>;
-      case "cpa_desejado":
-        return <span className="text-t2">{linha.cpaDesejado ? formatarMoeda(linha.cpaDesejado) : "—"}</span>;
+        return dinheiro(v.custoProduto);
       case "cpt":
+        return dinheiro(v.cpt, "font-medium text-ink");
       case "cpp":
+        return dinheiro(v.cpp, "font-medium text-ink");
       case "cpa":
-        return <span className="font-medium text-ink">{formatarMoeda(linha.cpa)}</span>;
+        return dinheiro(v.cpa, "font-medium text-ink");
       case "vendas_totais":
+        return <span className="font-bold text-ink">{formatarNumero(v.vendasTotais)}</span>;
       case "vendas":
-        return <span className="font-bold text-ink">{formatarNumero(linha.vendas)}</span>;
+        return <span className="font-bold text-ink">{formatarNumero(v.vendas)}</span>;
       case "vendas_pendentes":
-        return <span className="text-warn">{formatarNumero(linha.vendasPendentes || 0)}</span>;
+        return <span className={v.vendasPendentes > 0 ? "text-warn" : "text-t2"}>{formatarNumero(v.vendasPendentes)}</span>;
       case "gastos":
-        return <span className="font-semibold text-err">{formatarMoeda(linha.gastos)}</span>;
+        return <span className={`${forte} text-err`}>{formatarDinheiro(v.gastos, moeda)}</span>;
       case "faturamento":
-        return <span className="font-semibold text-ok">{formatarMoeda(linha.faturamento)}</span>;
+        return <span className={`${forte} text-ok`}>{formatarDinheiro(v.faturamento, moeda)}</span>;
       case "lucro":
-        const positivo = linha.lucro >= 0;
         return (
-          <span className={`font-bold ${positivo ? "text-ok" : "text-err"}`}>
-            {formatarMoeda(linha.lucro)}
-          </span>
+          <span className={`font-bold ${v.lucro >= 0 ? "text-ok" : "text-err"}`}>{formatarDinheiro(v.lucro, moeda)}</span>
         );
       case "roas":
-        return (
-          <span
-            className={`font-semibold ${
-              linha.roas >= 2 ? "text-ok" : linha.roas >= 1 ? "text-warn" : "text-err"
-            }`}
-          >
-            {linha.roas.toFixed(2)}x
+        return v.roas === null ? (
+          TRACO
+        ) : (
+          <span className={`font-semibold ${v.roas >= 2 ? "text-ok" : v.roas >= 1 ? "text-warn" : "text-err"}`}>
+            {v.roas.toFixed(2)}x
           </span>
         );
       case "margem":
-        return (
-          <span className={linha.margem >= 0 ? "text-ok" : "text-err"}>
-            {formatarPorcentagem(linha.margem)}
-          </span>
-        );
+        return pct(v.margem, v.margem !== null && v.margem >= 0 ? "text-ok" : "text-err");
       case "roi":
-        return (
-          <span className={linha.roi >= 0 ? "text-ok" : "text-err"}>
-            {formatarPorcentagem(linha.roi)}
-          </span>
-        );
+        return pct(v.roi, v.roi !== null && v.roi >= 0 ? "text-ok" : "text-err");
       case "cpc":
-        return <span className="text-t2">{formatarMoeda(linha.cpc)}</span>;
+        return dinheiro(v.cpc);
       case "impressoes":
-        return <span className="text-t2">{formatarNumero(linha.impressoes)}</span>;
+        return <span className="text-t2">{formatarNumero(v.impressoes)}</span>;
       case "cliques":
-        return <span className="text-t2">{formatarNumero(linha.cliques)}</span>;
+        return <span className="text-t2">{formatarNumero(v.cliques)}</span>;
       case "ctr":
-        return <span className="text-t2">{formatarPorcentagem(linha.ctr)}</span>;
+        return pct(v.ctr);
       case "cpm":
-        return <span className="text-t2">{formatarMoeda(linha.cpm)}</span>;
+        return dinheiro(v.cpm);
       case "ic":
-        return <span className="text-t2">{formatarNumero(linha.ic)}</span>;
+        return doDetalhe(v, v.ic);
       case "cpi":
-        return <span className="text-t2">{formatarMoeda(linha.cpi)}</span>;
+        return dinheiro(v.cpi);
       case "vis_video":
-        return <span className="text-t2">{formatarNumero(linha.visVideo || 0)}</span>;
+        return doDetalhe(v, v.visVideo);
       case "vis_3s":
-        return <span className="text-t2">{formatarNumero(linha.vis3s || 0)}</span>;
+        return doDetalhe(v, v.vis3s);
       case "retencao_75":
-        return <span className="text-t2">{formatarPorcentagem(linha.retencao75 || 0)}</span>;
+        return pct(v.retencao75);
       case "hook_rate":
-        return <span className="text-t2">{formatarPorcentagem(linha.hookRate || 0)}</span>;
+        return pct(v.hookRate);
       case "hold_rate":
-        return <span className="text-t2">{formatarPorcentagem(linha.holdRate || 0)}</span>;
+        return pct(v.holdRate);
       case "frequencia":
-        return <span className="text-t2">{(linha.frequencia || 1).toFixed(2)}</span>;
+        return v.frequencia === null ? TRACO : <span className="text-t2">{v.frequencia.toFixed(2)}</span>;
       default:
-        return <span className="text-t3">—</span>;
+        return TRACO;
     }
   }
 
-  function renderValorTotais(colId: string) {
+  function renderValorCelula(linha: LinhaCampanha, colId: string): ReactNode {
+    switch (colId) {
+      case "tipo":
+        return linha.tipo ? <span className="font-mono text-t2">{linha.tipo}</span> : TRACO;
+      case "orcamento":
+        return dinheiro(linha.orcamento, "font-medium text-ink");
+      case "cpa_desejado":
+        return dinheiro(linha.cpaDesejado);
+      default:
+        return renderNumeros(linha, colId, false);
+    }
+  }
+
+  function renderValorTotais(colId: string): ReactNode {
     switch (colId) {
       case "tipo":
         return <span className="text-t3 font-mono">{linhas.length} itens</span>;
       case "orcamento":
-        return <span className="text-t3">—</span>;
-      case "cpa":
-        return <span className="font-semibold text-ink">{formatarMoeda(totais.cpaMedio)}</span>;
-      case "vendas":
-      case "vendas_totais":
-        return <span className="font-bold text-ink">{formatarNumero(totais.vendas)}</span>;
-      case "gastos":
-        return <span className="font-bold text-err">{formatarMoeda(totais.gastos)}</span>;
-      case "faturamento":
-        return <span className="font-bold text-ok">{formatarMoeda(totais.faturamento)}</span>;
-      case "lucro":
-        const pos = totais.lucro >= 0;
-        return (
-          <span className={`font-bold ${pos ? "text-ok" : "text-err"}`}>
-            {formatarMoeda(totais.lucro)}
-          </span>
-        );
-      case "roas":
-        return <span className="font-bold text-ink">{totais.roasMedio.toFixed(2)}x</span>;
-      case "margem":
-        return <span className="font-semibold text-ink">{formatarPorcentagem(totais.margemMedia)}</span>;
-      case "cliques":
-        return <span className="text-ink">{formatarNumero(totais.cliques)}</span>;
-      case "impressoes":
-        return <span className="text-ink">{formatarNumero(totais.impressoes)}</span>;
+      case "cpa_desejado":
+        return TRACO;
       default:
-        return <span className="text-t3">—</span>;
+        return renderNumeros(totais, colId, true);
     }
   }
 
@@ -260,15 +246,21 @@ export function TabelaCampanhas({
                     </div>
                     <span className="text-sm font-semibold text-ink">Nenhum dado encontrado</span>
                     <p className="text-xs text-t3 text-balance">
-                      Não encontramos nenhuma {nivel} com os filtros selecionados ou as contas ainda não
-                      possuem dados veiculados no período.
+                      {nivel === "conta"
+                        ? "Nenhuma conta"
+                        : nivel === "grupo"
+                          ? "Nenhum conjunto"
+                          : nivel === "anuncio"
+                            ? "Nenhum anúncio"
+                            : "Nenhuma campanha"}{" "}
+                      com os filtros selecionados teve gasto ou venda no período.
                     </p>
                   </div>
                 </td>
               </tr>
             ) : (
               linhas.map((linha) => {
-                const ativa = linha.status === "ACTIVE";
+                const { texto: statusTexto, ativa } = rotuloStatus(linha.status);
                 return (
                   <tr
                     key={linha.id}
@@ -295,7 +287,7 @@ export function TabelaCampanhas({
                             ativa ? "bg-ok" : "bg-t3"
                           }`}
                         />
-                        {ativa ? "Ativa" : "Pausada"}
+                        {statusTexto}
                       </span>
                     </td>
 
@@ -310,7 +302,13 @@ export function TabelaCampanhas({
                             {linha.plataforma}
                           </span>
                           <span>·</span>
-                          <span className="truncate">{linha.contaNome}</span>
+                          <span className="truncate">
+                            {linha.nivel === "anuncio" && linha.grupoNome
+                              ? `${linha.contaNome} · ${linha.grupoNome}`
+                              : linha.nivel === "grupo" && linha.campanhaNome
+                                ? `${linha.contaNome} · ${linha.campanhaNome}`
+                                : linha.contaNome}
+                          </span>
                         </div>
                       </div>
                     </td>
@@ -331,9 +329,12 @@ export function TabelaCampanhas({
 
       {/* Rodapé Informativo */}
       <div className="flex items-center justify-between border-t border-border/80 bg-surface-2 px-4 py-3 text-xs text-t3">
-        <div className="flex items-center gap-1.5 hover:text-t2 transition cursor-pointer">
+        <div
+          className="flex items-center gap-1.5"
+          title="Aparece o que teve gasto ou venda no período da barra do topo, nas contas de anúncio da loja escolhida. Vendas e lucro vêm dos pedidos, ligados pela campanha, conjunto e anúncio de cada um."
+        >
           <HelpCircle className="h-3.5 w-3.5" />
-          <span>Por que as campanhas não estão aparecendo?</span>
+          <span>Gasto da plataforma, vendas dos pedidos</span>
         </div>
         <div>
           Mostrando <span className="font-medium text-ink">{linhas.length}</span> registros

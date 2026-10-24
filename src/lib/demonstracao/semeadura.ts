@@ -229,8 +229,9 @@ export function montar(agoraMs: number, cambio: Cambio, fx: FxRateRow[], selecao
 }
 
 /**
- * Campanhas, conjuntos e anuncios de hoje (a tela Campanhas mostra um retrato
- * so, sem filtro de data). Pede o dia de hoje inteiro na Semeadura.
+ * Campanhas, conjuntos e anuncios de hoje (o detalhe da tela Campanhas; os
+ * outros dias entram la pelo gasto por campanha). Pede o dia de hoje inteiro
+ * na Semeadura.
  */
 export function granularDe(s: Semeadura, brlPorUsd: number): LinhaGranular[] {
   const hoje = s.gastos.find((g) => g.dia === s.hoje);
