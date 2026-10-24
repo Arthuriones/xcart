@@ -25,6 +25,7 @@ import {
 } from "@/lib/financeiro/tipos";
 import { motivoParaIgnorarPedido } from "@/lib/tracking/filtro-pedido";
 import { naJanela, type FonteOrigem, type OrigemDoPedido } from "@/lib/tracking/origem-pedido";
+import { RETENCAO } from "@/lib/tracking/retencao";
 import { FONTES_GOOGLE, FONTES_META, FONTES_TIKTOK, instanteDoFbc, nomesDaUtm } from "@/lib/tracking/utm";
 
 // ============================================================================
@@ -287,12 +288,13 @@ export type StatusFila = "enviado" | "falhou" | "pendente";
 export const JANELA_AGUARDANDO_MS = 15 * 60 * 1000;
 
 /**
- * O purge_tracking (migration 048) apaga o evento 'enviado' com mais de 90
+ * O purge_tracking (migration 079) apaga a Purchase 'enviado' com mais de 90
  * dias. Pedido mais velho que isto sem Purchase na fila nao e "nao chegou":
  * o registro e que acabou. (O 'falhou' sai em 30 dias, mas ai a falta continua
- * sendo "nao chegou" -- ele nao tinha chegado.)
+ * sendo "nao chegou" -- ele nao tinha chegado.) Aos 8 dias o payload vira o
+ * resumo, que guarda o fbc, a URL e a marca de teste que esta tela le.
  */
-export const RETENCAO_EVENTOS_MS = 90 * 24 * 60 * 60 * 1000;
+export const RETENCAO_EVENTOS_MS = RETENCAO.compraDias * 24 * 60 * 60 * 1000;
 
 /** O pedido e anterior ao instante (ISO)? Data torta nao conta como anterior. */
 function antesDe(processadoEm: string, desde: string): boolean {

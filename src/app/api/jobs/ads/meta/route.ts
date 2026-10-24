@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { ErroGraph } from "@/lib/ads/meta-graph";
+import {
+  ERRO_SEM_PERMISSAO,
+  ERRO_TOKEN_RECUSADO,
+  contaPedeTokenNovo,
+  cronPulaConta,
+} from "@/lib/ads/meta-espera";
 import { classificarErroMeta } from "@/lib/ads/meta-mapear";
 import { sincronizarContaMeta } from "@/lib/ads/meta-sync";
 import { lojasDeDemonstracao } from "@/lib/demonstracao";
@@ -21,6 +27,9 @@ export const maxDuration = 300;
 // sobrepostas -- cron atrasado e clique no botao -- nao escrevem a mesma conta
 // ao mesmo tempo. Trava com mais de 10 min e tida como morta (funcao que
 // estourou o tempo nao chega no finally).
+//
+// Conta com o token recusado (190) ou sem ads_read: o cron a pula ate o token
+// mudar, ou 1x por dia (src/lib/ads/meta-espera.ts).
 // ============================================================================
 
 const ORCAMENTO_MS = 240_000;
@@ -50,9 +59,9 @@ function textoDoErro(e: unknown): string {
   if (e instanceof ErroGraph) {
     switch (classificarErroMeta(e.codigo)) {
       case "token":
-        return "Token do Meta recusado (190). Gere outro e cole em Contas de anúncio.";
+        return ERRO_TOKEN_RECUSADO;
       case "permissao":
-        return "Sem permissão de leitura nesta conta (ads_read).";
+        return ERRO_SEM_PERMISSAO;
       case "limite":
         return "Limite de taxa do Meta; tento de novo na próxima rodada.";
       default:
@@ -132,6 +141,26 @@ async function executar(request: NextRequest) {
     else resposta.processadas += daDemonstracao.length;
   }
 
+  // Hora em que o token de cada conta marcada (190/ads_read) foi gravado, numa
+  // leitura so. Falhou: o cron tenta essas contas como antes.
+  const tokenSalvoEm = new Map<string, string | null>();
+  let semHoraDoToken = false;
+  const marcadas = somenteRecentes ? [] : contas.filter((c) => contaPedeTokenNovo(c.ultimo_erro));
+  if (marcadas.length > 0) {
+    const { data: salvos, error: erroSalvos } = await admin
+      .from("ad_account_secrets")
+      .select("ad_account_id, updated_at")
+      .in(
+        "ad_account_id",
+        marcadas.map((c) => c.id)
+      );
+    if (erroSalvos) {
+      semHoraDoToken = true;
+      console.error("[ads/meta] hora do token", erroSalvos.message.slice(0, 300));
+    }
+    for (const s of salvos ?? []) tokenSalvoEm.set(String(s.ad_account_id), (s.updated_at as string | null) ?? null);
+  }
+
   for (let i = 0; i < contas.length; i += 1) {
     const conta = contas[i];
     const rotulo = conta.nome || conta.external_id;
@@ -149,6 +178,12 @@ async function executar(request: NextRequest) {
       conta.ultimo_sync_em &&
       Date.now() - Date.parse(conta.ultimo_sync_em) < RECENTE_MS
     ) {
+      resposta.puladas += 1;
+      continue;
+    }
+
+    // Token recusado sem token novo: nao chama o Meta (ultimo_erro fica).
+    if (!somenteRecentes && !semHoraDoToken && cronPulaConta(conta, tokenSalvoEm.get(conta.id), Date.now())) {
       resposta.puladas += 1;
       continue;
     }

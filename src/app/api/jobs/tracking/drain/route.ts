@@ -87,8 +87,11 @@ async function executar(request: NextRequest) {
     // pageview rende uma linha POR DESTINO, e a linha pesa ~2,3 KB com indice.
     // Cem lojas de porte modesto passam de 10 GB por mes.
     //
-    // Uma vez por hora, nao a cada 10 minutos: sao dois DELETE indexados e
-    // repetir seis vezes por hora nao apaga nada a mais.
+    // Uma vez por hora, nao a cada 10 minutos: repetir seis vezes por hora nao
+    // apaga nada a mais. Desde a 079 ele tambem ARQUIVA: a fila vira o
+    // historico de 12 meses (tracking_historico, uma linha por evento) antes de
+    // qualquer DELETE, e a fila fica curta -- funil 14 dias, compra 90 com o
+    // payload resumido aos 8 (src/lib/tracking/retencao.ts).
     let expurgo: string | null = null;
     let expurgoCheckouts: string | null = null;
     if (new Date().getUTCMinutes() < 10) {

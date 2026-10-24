@@ -8,6 +8,14 @@ import {
   sincronizarLoja,
   type LojaParaSync,
 } from "@/lib/financeiro/shopify-pedidos";
+import {
+  MAX_PAGINAS_SEGUNDA_VOLTA,
+  cronEsperaALoja,
+  haMenosDe,
+  ordenarParaRodizio,
+  paginasDaRodada,
+  prazoDaSegundaVolta,
+} from "@/lib/financeiro/sync-rodada";
 import { ehUuid, type FinSyncStateRow, type SyncResposta } from "@/lib/financeiro/tipos";
 import { comMarcaDeDemonstracao, ehDemonstracao } from "@/lib/demonstracao";
 
@@ -23,14 +31,15 @@ export const maxDuration = 300;
 // A Vercel pode disparar o mesmo cron duas vezes, ou pular um. Por isso a
 // trava e por loja (sincronizando_desde, atomica no UPDATE) e a gravacao e
 // upsert: rodar de novo so regrava a mesma foto.
+//
+// Rodizio, espera de loja negada/fora do ar, teto da carga inicial e a
+// segunda volta dela: regras em src/lib/financeiro/sync-rodada.ts.
 // ============================================================================
 
 /** Abaixo dos 300 s da funcao: sobra para fechar o estado da loja em curso. */
 const ORCAMENTO_MS = 240_000;
 /** Trava mais velha que isso e de execucao que morreu no meio. */
 const TRAVA_VENCE_MS = 10 * 60 * 1000;
-/** Loja sem read_orders: o cron so tenta de novo depois disso. */
-const ESPERA_NEGADO_MS = 6 * 60 * 60 * 1000;
 /** "Atualizar agora" repetido: nao martela a Shopify. */
 const ESPERA_SESSAO_MS = 60 * 1000;
 /** Teto da passada de origem (071) por loja e rodada: o resto fica para a proxima. */
@@ -56,13 +65,9 @@ function mensagemDe(e: unknown): string {
   return bruta.replace(/shp[a-z]{2}_[A-Za-z0-9]+/g, "[token]").slice(0, 300);
 }
 
-function haMenosDe(iso: string | null, ms: number, agora: number): boolean {
-  if (!iso) return false;
-  const t = Date.parse(iso);
-  return Number.isFinite(t) && agora - t < ms;
-}
-
 const COLUNAS_LOJA = "id, user_id, shop_domain, client_id, client_secret, access_token";
+const COLUNAS_RODIZIO = "store_id, ultimo_sync_em, ultimo_erro, ultimo_erro_tipo";
+type EstadoDoRodizio = Pick<FinSyncStateRow, "store_id" | "ultimo_sync_em" | "ultimo_erro" | "ultimo_erro_tipo">;
 
 async function executar(request: NextRequest) {
   const doCron = cronAutorizado(request);
@@ -120,8 +125,31 @@ async function executar(request: NextRequest) {
     else resposta.processadas += demonstracao.length;
   }
 
-  for (const loja of lojas) {
+  // Rodizio: a ordem pela ultima tentativa, lida de uma vez -- a mesma leitura
+  // deixa o cron pular sem consulta a loja que esta esperando. Falhou: fica a
+  // ordem do banco, e a espera sai da leitura de cada loja, como antes.
+  let consultaEstados = admin.from("fin_sync_state").select(COLUNAS_RODIZIO);
+  if (doUsuario) consultaEstados = consultaEstados.eq("user_id", doUsuario);
+  const { data: estadosLidos, error: erroEstados } = await consultaEstados;
+  if (erroEstados) console.error("[fin/pedidos] ordem do rodizio", mensagemDe(erroEstados.message));
+  const lidosAntes = new Map(
+    ((estadosLidos ?? []) as unknown as EstadoDoRodizio[]).map((e) => [String(e.store_id), e])
+  );
+
+  // Segunda volta (so cron): a carga inicial que parou no teto da primeira
+  // volta entra de novo no fim da fila e continua, pela retomada, com a sobra
+  // do orcamento (`prazoDaSegundaVolta`). Nao conta de novo em processadas.
+  const fila = ordenarParaRodizio(lojas, lidosAntes);
+  const primeiraVolta = fila.length;
+  for (let i = 0; i < fila.length; i += 1) {
+    const loja = fila[i];
+    const segundaVolta = i >= primeiraVolta;
     if (Date.now() > limiteEm) {
+      if (!segundaVolta) resposta.puladas += 1;
+      continue;
+    }
+
+    if (doCron && cronEsperaALoja(lidosAntes.get(loja.id), Date.now())) {
       resposta.puladas += 1;
       continue;
     }
@@ -146,13 +174,9 @@ async function executar(request: NextRequest) {
       continue;
     }
 
-    // c) quando nao vale tentar agora
+    // c) quando nao vale tentar agora: negado ou fora do ar (6 h, so o cron)
     const agora = Date.now();
-    if (
-      doCron &&
-      estado?.ultimo_erro_tipo === "negado" &&
-      haMenosDe(estado.ultimo_sync_em, ESPERA_NEGADO_MS, agora)
-    ) {
+    if (doCron && cronEsperaALoja(estado, agora)) {
       resposta.puladas += 1;
       continue;
     }
@@ -174,13 +198,21 @@ async function executar(request: NextRequest) {
       continue;
     }
     if (!travou || travou.length === 0) {
-      resposta.puladas += 1;
+      if (!segundaVolta) resposta.puladas += 1;
       continue;
     }
 
     // e) sincroniza
     try {
-      const r = await sincronizarLoja(admin, loja, estado ?? null, undefined, limiteEm);
+      const r = segundaVolta
+        ? await sincronizarLoja(
+            admin,
+            loja,
+            estado ?? null,
+            MAX_PAGINAS_SEGUNDA_VOLTA,
+            prazoDaSegundaVolta(Date.now(), limiteEm, fila.length - i)
+          )
+        : await sincronizarLoja(admin, loja, estado ?? null, paginasDaRodada(estado, doCron), limiteEm);
 
       // A carga inicial feita INTEIRA nesta rodada (comecou sem cursor, nao
       // retomou nada) ja leu a origem dos 60 dias: a passada de recuperacao
@@ -233,7 +265,8 @@ async function executar(request: NextRequest) {
         .eq("store_id", loja.id);
       if (erroFim) throw new Error(`gravar estado: ${erroFim.message}`);
 
-      resposta.processadas += 1;
+      if (!segundaVolta) resposta.processadas += 1;
+      if (doCron && !segundaVolta && !r.terminou && !estado?.carga_inicial_ok) fila.push(loja);
     } catch (e) {
       const mensagem = mensagemDe(e);
       const fim = new Date().toISOString();

@@ -36,6 +36,7 @@ import { MOTIVO_ESCAPE } from "@/lib/checkout-routes/sensor";
 import { lerUltimoConserto, type UltimoConserto } from "@/lib/checkout-routes/ultimo-conserto";
 import { modeloDaPlataforma } from "@/lib/checkouts-externos/tipos";
 import { comMarcaDeDemonstracao, ehDemonstracao } from "@/lib/demonstracao";
+import { RETENCAO } from "@/lib/tracking/retencao";
 
 // ============================================================================
 // O cron de alertas: le o banco, decide e manda UMA mensagem por usuario.
@@ -364,7 +365,13 @@ export async function coletarCondicoesDetalhado(
       const loja = lojas.get(storeId);
       if (!loja) continue;
       const horas = Number.isFinite(t) ? Math.floor((agora.getTime() - t) / HORA) : null;
-      const ha = horas === null ? "mais de 30 dias" : horas < 48 ? `${horas} h` : `${Math.floor(horas / 24)} dias`;
+      // Sem linha nenhuma: o funil entregue sai da fila aos 14 dias (079).
+      const ha =
+        horas === null
+          ? `mais de ${RETENCAO.funilDias} dias`
+          : horas < 48
+            ? `${horas} h`
+            : `${Math.floor(horas / 24)} dias`;
       condicoes.push({
         user_id: loja.user_id,
         store_id: storeId,

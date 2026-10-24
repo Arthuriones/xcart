@@ -168,6 +168,27 @@ function recusarRedirect(res: Response, host: string): void {
 const ehDaShopify = (host: string) => host.endsWith(".myshopify.com");
 
 /**
+ * Teto de cada pedido do token e do GraphQL (resposta e corpo). Sem ele, uma
+ * loja que nao responde segurava a rodada inteira do cron de pedidos ate a
+ * funcao morrer nos 300 s. Estourou = ShopifyClientError 504: falha comum da
+ * loja, sem a espera de loja fora do ar.
+ */
+export const TIMEOUT_SHOPIFY_MS = 25_000;
+
+function ehTimeout(e: unknown): boolean {
+  const nome = (e as { name?: unknown } | null)?.name;
+  return nome === "TimeoutError" || nome === "AbortError";
+}
+
+function erroDeTimeout(): ShopifyClientError {
+  return new ShopifyClientError(
+    `A Shopify nao respondeu em ${TIMEOUT_SHOPIFY_MS / 1000} s.`,
+    "REQUEST_FAILED",
+    504
+  );
+}
+
+/**
  * `res.json()` sem vazar o corpo: o SyntaxError do JSON.parse cita um trecho
  * do texto, e a mensagem do erro chega a tela pelo /api/shopify/connect.
  */
@@ -175,7 +196,8 @@ const ehDaShopify = (host: string) => host.endsWith(".myshopify.com");
 async function lerJson(res: Response): Promise<any> {
   try {
     return await res.json();
-  } catch {
+  } catch (e) {
+    if (ehTimeout(e)) throw erroDeTimeout();
     throw new ShopifyClientError(
       "Resposta invalida da Shopify.",
       "REQUEST_FAILED",
@@ -203,19 +225,26 @@ async function getAccessToken(creds: ShopifyCredentials): Promise<string> {
     return cached.accessToken;
   }
 
-  const res = await fetch(
-    `https://${normalizedShopDomain}/admin/oauth/access_token`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "client_credentials",
-        client_id: creds.clientId,
-        client_secret: creds.clientSecret,
-      }),
-      redirect: "manual",
-    }
-  );
+  let res: Response;
+  try {
+    res = await fetch(
+      `https://${normalizedShopDomain}/admin/oauth/access_token`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "client_credentials",
+          client_id: creds.clientId,
+          client_secret: creds.clientSecret,
+        }),
+        redirect: "manual",
+        signal: AbortSignal.timeout(TIMEOUT_SHOPIFY_MS),
+      }
+    );
+  } catch (e) {
+    if (ehTimeout(e)) throw erroDeTimeout();
+    throw e;
+  }
   recusarRedirect(res, normalizedShopDomain);
 
   if (!res.ok) {
@@ -236,6 +265,26 @@ async function getAccessToken(creds: ShopifyCredentials): Promise<string> {
         "App nao esta instalado nessa loja. Crie o app no dev.shopify.com, gere o link de Custom Distribution para esta loja e instale antes de conectar.",
         "APP_NOT_INSTALLED",
         401
+      );
+    }
+
+    // 5xx, 429 e o desafio do Cloudflare (`cf-mitigated: challenge`) sao a
+    // Shopify, ou a borda dela, fora AGORA: falha comum, que o cron tenta de
+    // novo na rodada seguinte. Antes caiam nos ramos de baixo (a pagina de erro
+    // e HTML) e viravam "App nao esta instalado" ou "Client ID ... invalidos":
+    // a loja ficava 6 h fora do cron (sync-rodada.ts) e "desinstalada" no
+    // Lucro, em Lojas e no alerta. O 403 sem a marca do Cloudflare segue
+    // credencial invalida.
+    if (
+      isMyShopifyDomain &&
+      (res.status >= 500 ||
+        res.status === 429 ||
+        res.headers.get("cf-mitigated")?.toLowerCase() === "challenge")
+    ) {
+      throw new ShopifyClientError(
+        `Falha ao autenticar na Shopify (status ${res.status}).`,
+        "REQUEST_FAILED",
+        502
       );
     }
 
@@ -348,15 +397,23 @@ export async function shopifyGraphQL(
   // GraphQL THROTTLED). Necessario porque criamos varios produtos em paralelo.
   const MAX_THROTTLE_RETRIES = 4;
   for (let attempt = 0; ; attempt += 1) {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Shopify-Access-Token": accessToken,
-      },
-      body: JSON.stringify({ query, variables }),
-      redirect: "manual",
-    });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": accessToken,
+        },
+        body: JSON.stringify({ query, variables }),
+        redirect: "manual",
+        // Um prazo por tentativa: a espera do 429/THROTTLED fica fora dele.
+        signal: AbortSignal.timeout(TIMEOUT_SHOPIFY_MS),
+      });
+    } catch (e) {
+      if (ehTimeout(e)) throw erroDeTimeout();
+      throw e;
+    }
     recusarRedirect(res, normalizedShopDomain);
 
     if (!res.ok) {

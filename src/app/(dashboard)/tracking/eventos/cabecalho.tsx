@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Dica } from "@/components/ui/dica";
+import { RETENCAO } from "@/lib/tracking/retencao";
 
 /**
  * O cabecalho da tela, igual em todos os estados (carregando, erro, vazio e
@@ -22,7 +23,8 @@ export function DicaEventos() {
   return (
     <Dica rotulo="Por que um evento pode não aparecer aqui" lado="top">
       Só entram eventos que o servidor envia ao Meta e ao TikTok. O Google não aparece aqui: a tag do Google
-      dispara no navegador do comprador, e a conversão é contada no Google Ads.
+      dispara no navegador do comprador, e a conversão é contada no Google Ads. A lista guarda ver produto,
+      carrinho e checkout por {RETENCAO.funilDias} dias, e a compra por {RETENCAO.compraDias}.
     </Dica>
   );
 }
