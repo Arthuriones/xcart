@@ -7,11 +7,16 @@
 // "Checkout" na tela; checkouts_externos no banco. O nome foge de "loja de
 // checkout" (roteamento, src/lib/checkout-routes) e de tracking_checkouts.
 //
-// Dois modelos (072): comissao (Sphere, afiliado) e venda (Cakto e Hubla, o
-// lojista e o produtor). Ver MODELO_PLATAFORMA e src/lib/checkouts-externos/venda.ts.
+// Dois modelos (072): comissao (Sphere, afiliado) e venda (Cakto, Hubla e Eve,
+// o lojista e o produtor). Ver MODELO_PLATAFORMA e src/lib/checkouts-externos/venda.ts.
+//
+// O Eve (076) e o checkout Pix proprio do Arthur: SO a conta dele ve e
+// cadastra. Ele NAO esta em PLATAFORMAS_CHECKOUT (a lista publica: /conectar,
+// tela, POST); a lista da conta sai de src/lib/checkouts-externos/liberadas.ts,
+// so no servidor.
 // ============================================================================
 
-export type IdPlataformaCheckout = "sphere" | "cakto" | "hubla";
+export type IdPlataformaCheckout = "sphere" | "cakto" | "hubla" | "eve";
 
 /**
  * comissao = afiliado (Sphere): a receita e a comissao, com Previsto pela taxa
@@ -20,7 +25,11 @@ export type IdPlataformaCheckout = "sphere" | "cakto" | "hubla";
  */
 export type ModeloCheckout = "comissao" | "venda";
 
-/** O que a tela oferece em "Conectar checkout". Cakto, Hubla e Sphere recebem hoje. */
+/**
+ * O que a tela oferece em "Conectar checkout". Cakto, Hubla e Sphere recebem
+ * hoje. A plataforma restrita a algumas contas (o Eve) fica FORA daqui: a
+ * lista da conta e plataformasDaConta (liberadas.ts, so no servidor).
+ */
 export const PLATAFORMAS_CHECKOUT: {
   id: IdPlataformaCheckout | "yampi" | "cartpanda" | "kiwify";
   nome: string;
@@ -34,6 +43,9 @@ export const PLATAFORMAS_CHECKOUT: {
   { id: "cartpanda", nome: "CartPanda", descricao: "Em breve", ativa: false },
   { id: "kiwify", nome: "Kiwify", descricao: "Em breve", ativa: false },
 ];
+
+/** Uma linha da escolha de plataforma (a publica e a da conta). */
+export type PlataformaDaLista = (typeof PLATAFORMAS_CHECKOUT)[number];
 
 /**
  * `?novo=` na URL de Integracoes > Checkouts abre o "Conectar checkout" ao
@@ -57,6 +69,7 @@ export const NOME_PLATAFORMA: Record<IdPlataformaCheckout, string> = {
   sphere: "Sphere Affiliates",
   cakto: "Cakto",
   hubla: "Hubla",
+  eve: "Eve",
 };
 
 export function nomeDaPlataforma(id: string | null | undefined): string {
@@ -67,6 +80,7 @@ export const MODELO_PLATAFORMA: Record<IdPlataformaCheckout, ModeloCheckout> = {
   sphere: "comissao",
   cakto: "venda",
   hubla: "venda",
+  eve: "venda",
 };
 
 /** Plataforma desconhecida fica no modelo da 069 (comissao): nada muda para ela. */
@@ -74,11 +88,12 @@ export function modeloDaPlataforma(id: string | null | undefined): ModeloCheckou
   return (id && MODELO_PLATAFORMA[id as IdPlataformaCheckout]) || "comissao";
 }
 
-/** A moeda que o cadastro sugere: a Sphere fala em euro, a Cakto e a Hubla em real. */
+/** A moeda que o cadastro sugere: a Sphere fala em euro, a Cakto, a Hubla e o Eve em real. */
 export const MOEDA_PADRAO: Record<IdPlataformaCheckout, string> = {
   sphere: "EUR",
   cakto: "BRL",
   hubla: "BRL",
+  eve: "BRL",
 };
 
 export function moedaPadraoDe(id: string | null | undefined): string {
@@ -147,12 +162,18 @@ export const GATILHOS_HUBLA = [
 ] as const;
 
 /**
+ * Os eventos do contrato v1 do Eve (plataformas/eve.ts). O Eve manda todos
+ * sozinho (Configuracoes > xcart no painel dele): nada a marcar.
+ */
+export const GATILHOS_EVE = ["pix.gerado", "pedido.pago", "pix.expirado", "pedido.cancelado", "pedido.reembolsado"] as const;
+
+/**
  * A plataforma prova a entrega com um secret que o lojista cola no xcart (o
- * adaptador tem `autenticar`): o HMAC da Cakto, o x-hubla-token da Hubla.
- * Aqui para a tela, que nao importa adaptador.
+ * adaptador tem `autenticar`): o HMAC da Cakto e do Eve, o x-hubla-token da
+ * Hubla. Aqui para a tela, que nao importa adaptador.
  */
 export function usaSegredo(id: string | null | undefined): boolean {
-  return id === "cakto" || id === "hubla";
+  return id === "cakto" || id === "hubla" || id === "eve";
 }
 
 /** Como a plataforma chama o que o lojista cola: o token da Hubla, o secret da Cakto. */
@@ -196,12 +217,19 @@ export const ROTULO_EVENTO: Record<string, string> = {
   "invoice.status_updated:chargeback": "Chargeback",
   "invoice.status_updated:disputed": "Disputa aberta",
   "invoice.status_updated:canceled": "Fatura cancelada",
+  "pix.gerado": "Pix gerado",
+  "pedido.pago": "Pedido pago",
+  "pix.expirado": "Pix expirado",
+  "pedido.cancelado": "Pedido cancelado",
+  "pedido.reembolsado": "Reembolso",
 };
 
 export function rotuloDoEvento(evento: string | null | undefined): string {
   const e = String(evento || "");
   // O status_updated da Hubla leva o status no nome (o do sandbox pode ser qualquer um).
   if (!ROTULO_EVENTO[e] && e.startsWith("invoice.status_updated:")) return "Status atualizado";
+  // A trava do Pix gerado do Eve leva a cobranca no nome (plataformas/eve.ts).
+  if (e.startsWith("pix.gerado:")) return ROTULO_EVENTO["pix.gerado"];
   return ROTULO_EVENTO[e] || e || "—";
 }
 
@@ -239,7 +267,8 @@ export function compraQuandoDe(v: unknown): CompraQuando {
 
 /**
  * O xcart manda a compra deste checkout ao Meta e ao TikTok? So no modelo
- * venda (Cakto, Hubla): a Sphere nao manda dado do comprador nem click id.
+ * venda (Cakto, Hubla, Eve): a Sphere nao manda dado do comprador nem click
+ * id. No Eve nada sai por padrao: so com um pixel ligado no checkout.
  */
 export function rastreiaCompra(plataforma: string | null | undefined): boolean {
   return modeloDaPlataforma(plataforma) === "venda";

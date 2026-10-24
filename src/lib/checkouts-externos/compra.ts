@@ -19,6 +19,11 @@ import { PREFIXO_VID, RE_VID, vidDoParametro } from "./plataformas/comum";
 // (`venda.recorrencia`), e IP, user agent e _ttp vem da sessao do pagamento
 // (`rastreio.ip`/`userAgent`/`ttp`) quando a identidade da ponte nao tem.
 //
+// Eve: NADA sai por padrao -- a pagina que usa o Eve (a da panela) ja manda o
+// proprio pixel e a CAPI. So com um pixel ligado no checkout (o mesmo caminho
+// generico), e ai sem IP nem user agent (o Eve nao manda: no lead externo
+// eles sao do servidor da pagina). A cobranca gerada e o "pix.gerado".
+//
 // QUANDO SAI (por checkout, `compra_quando`):
 //   "gerada" (padrao): no PRIMEIRO evento de venda da cobranca -- Pix, boleto,
 //     PicPay ou Open Finance gerado, ou o cartao aprovado direto.
@@ -56,7 +61,11 @@ export const JANELA_COMPRA_MS = 7 * 86_400_000;
 const COBRANCA_GERADA = /^[a-z_]+_gerado$/;
 
 /** O checkout de onde a compra veio, quando o webhook nao traz a URL. */
-const URL_DO_CHECKOUT: Record<string, string> = { cakto: "https://pay.cakto.com.br/", hubla: "https://pay.hub.la/" };
+const URL_DO_CHECKOUT: Record<string, string> = {
+  cakto: "https://pay.cakto.com.br/",
+  hubla: "https://pay.hub.la/",
+  eve: "https://checkouteve.shop/",
+};
 
 // O vid da ponte ("xc.<vid>" no `callback`): o formato mora em comum.ts, que
 // o adaptador da Cakto tambem usa para ler a query do checkoutUrl.

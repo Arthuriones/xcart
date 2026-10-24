@@ -71,7 +71,7 @@ export interface PedidoDeVenda {
   reembolsado_em?: string | null;
   chargeback_em?: string | null;
   reembolso_pedido_em?: string | null;
-  /** O status da plataforma (Hubla: "overdue" = a fatura venceu). */
+  /** O status da plataforma (Hubla "overdue", Eve "expired": a cobranca venceu). */
   status_comissao?: string | null;
 }
 
@@ -111,10 +111,12 @@ export function estadoDaVenda(p: PedidoDeVenda, agoraMs: number): EstadoVenda {
     case "pago":
       return p.reembolso_pedido_em ? "em_risco" : "paga";
     case "expirado": {
-      // A Hubla avisa o vencimento (invoice.expired): o Pix/boleto que nao foi
-      // pago venceu, nao foi recusado. O cartao que falhou segue recusado.
+      // A Hubla ("overdue") e o Eve ("expired") avisam o vencimento: o
+      // Pix/boleto que nao foi pago venceu, nao foi recusado. O cartao que
+      // falhou e o Pix cancelado seguem recusados.
       const metodo = chaveDoMetodo(p.metodo_pagamento);
-      const venceu = String(p.status_comissao || "").toLowerCase() === "overdue" && (metodo === "pix" || metodo === "boleto");
+      const status = String(p.status_comissao || "").toLowerCase();
+      const venceu = (status === "overdue" || status === "expired") && (metodo === "pix" || metodo === "boleto");
       return venceu ? "vencida" : "recusada";
     }
     case "revertido": {

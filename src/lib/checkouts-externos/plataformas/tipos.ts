@@ -7,7 +7,8 @@ import type { IdPlataformaCheckout, ModeloCheckout, SituacaoExterna } from "../t
 // idempotencia, ordem dos eventos, gravacao, Dashboard) e um so.
 //
 // Puro: sem banco, sem rede. Testado em tests/checkout-externo-sphere.test.ts,
-// tests/checkout-externo-cakto.test.ts e tests/checkout-externo-hubla.test.ts.
+// tests/checkout-externo-cakto.test.ts, tests/checkout-externo-hubla.test.ts
+// e tests/checkout-externo-eve.test.ts.
 // ============================================================================
 
 /** A venda propria (modelo "venda": Cakto, Hubla). Ausente na Sphere. */
@@ -157,9 +158,16 @@ export interface PlataformaCheckout {
    * falha nossa segura a resposta ate o timeout dela.
    */
   reenvio: "status" | "timeout";
+  /**
+   * As frases do reenvio no erro da tela, quando nao sao as da Cakto/Hubla
+   * (Eve: a fila de jobs dela). `automatico` completa "A <nome> ..." (so no
+   * reenvio "status"); `manual` completa "se o erro ficar, ...". Ausente = a
+   * frase da Hubla (token no header) ou da Cakto.
+   */
+  reenvioNaTela?: { automatico: string; manual: string };
   /** Os gatilhos a marcar no painel da plataforma. */
   gatilhos: readonly string[];
-  /** O evento que e "venda" no celular: "pedido.criado" (Sphere), "purchase_approved" (Cakto), "invoice.payment_succeeded" (Hubla). */
+  /** O evento que e "venda" no celular: "pedido.criado" (Sphere), "purchase_approved" (Cakto), "invoice.payment_succeeded" (Hubla), "pedido.pago" (Eve). */
   eventoDeVenda: string;
   /**
    * O corpo ja em JSON. `agora` limita as datas aceitas. `headers` = os da

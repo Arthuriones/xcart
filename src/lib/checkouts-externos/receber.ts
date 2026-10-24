@@ -30,8 +30,8 @@ import { compraQuandoDe, nomeDaPlataforma } from "./tipos";
 //     gravado NAO tem o evento (a gravacao falhou e a trava nao saiu), refaz:
 //     senao a retentativa e o Reenviar cairiam em duplicado para sempre.
 //   pedido gravado (trava otimista pela versao) -> 200
-//   falhou ao gravar -> a trava sai e responde 503. A Sphere e a Hubla tentam
-//     de novo com o 503; a Cakto NAO (so timeout e erro de rede): `segurar` pede a
+//   falhou ao gravar -> a trava sai e responde 503. A Sphere, a Hubla e o Eve
+//     tentam de novo com o 503; a Cakto NAO (so timeout e erro de rede): `segurar` pede a
 //     rota para segurar a resposta ate o timeout dela, e o erro fica no
 //     checkout com a instrucao de reenvio (que vale mesmo com a trava presa).
 //
@@ -161,15 +161,29 @@ function resp(status: ResultadoRecebimento["status"], corpo: Record<string, unkn
   return { status, corpo, notificar: null };
 }
 
-/** Onde o lojista manda de novo: o Reenviar da Cakto, o Reprocessar do historico da Hubla. */
-export function comoReenviar(plataforma: Pick<PlataformaCheckout, "autenticacao">): string {
+/**
+ * Onde o lojista manda de novo: o Reenviar da Cakto, o Reprocessar do
+ * historico da Hubla, ou a frase da propria plataforma (Eve: `reenvioNaTela`).
+ */
+export function comoReenviar(plataforma: Pick<PlataformaCheckout, "autenticacao" | "reenvioNaTela">): string {
+  if (plataforma.reenvioNaTela) return plataforma.reenvioNaTela.manual;
   return plataforma.autenticacao === "token_no_header" ? "use Reprocessar no histórico de eventos dela" : "use Reenviar no painel dela";
 }
 
 /**
- * A Hubla reenvia na hora, 5 vezes em ~75 s, e para: banco fora por mais que
- * isso perde o evento. Ela (origem conferida, reenvio por status) marca o
- * erro na tela com o caminho do Reprocessar. A Sphere segue sem marca.
+ * Como a plataforma manda de novo sozinha, para "A <nome> ...": a Cakto pelo
+ * timeout; a Hubla na hora, por ~1 min; o Eve pela fila de jobs dele.
+ */
+export function comoTentaDeNovo(plataforma: Pick<PlataformaCheckout, "reenvio" | "reenvioNaTela">): string {
+  if (plataforma.reenvio === "timeout") return "manda de novo em alguns minutos";
+  return plataforma.reenvioNaTela?.automatico ?? "tenta de novo por cerca de 1 minuto";
+}
+
+/**
+ * A Hubla reenvia na hora, 5 vezes em ~75 s, e para; o Eve, 5 vezes em ~15
+ * min pela fila dele: banco fora por mais que isso perde o evento. As duas
+ * (origem conferida, reenvio por status) marcam o erro na tela com o caminho
+ * de volta. A Sphere segue sem marca.
  */
 export function marcaFalhaSemSegurar(plataforma: Pick<PlataformaCheckout, "autenticar" | "reenvio">): boolean {
   return Boolean(plataforma.autenticar) && plataforma.reenvio === "status";
@@ -347,7 +361,7 @@ export async function receberEvento(
   let pausados = 0;
   let duplicados = 0;
   let falhou = false;
-  /** Hubla: trava recente sem o evento no pedido (ver o ramo `refazendo`). */
+  /** Hubla e Eve: trava recente sem o evento no pedido (ver o ramo `refazendo`). */
   let emAndamento = false;
   for (const ev of eventos) {
     // Pausado: pedido novo nao entra (nem liga afiliado, nem trava o evento).
@@ -383,9 +397,9 @@ export async function receberEvento(
       const recente = Number.isFinite(idade) && idade < TRAVA_EM_ANDAMENTO_MS;
       if (recente && marcaFalhaSemSegurar(plataforma)) {
         // Hubla: as retentativas chegam em ~5, 15 e 35 s, todas dentro da
-        // janela. "Duplicado" ali e 200 e ela para -- se a gravacao e o soltar
-        // falharam juntos, a venda se perdia. Sem o evento no pedido, 503: a
-        // proxima acha o evento (200) ou, ja velha, refaz.
+        // janela; a 1a do Eve em 30 s. "Duplicado" ali e 200 e ela para -- se
+        // a gravacao e o soltar falharam juntos, a venda se perdia. Sem o
+        // evento no pedido, 503: a proxima acha o evento (200) ou, ja velha, refaz.
         if (eventoJaRefletido(await repo.lerPedido(checkout.id, ev.pedidoId), ev, checkout.fuso)) duplicados += 1;
         else emAndamento = true;
         continue;
@@ -450,7 +464,7 @@ export async function receberEvento(
     }
     if (marcaFalhaSemSegurar(plataforma)) {
       await repo.marcarCheckout(checkout.id, {
-        ultimo_erro: `Falha nossa ao gravar um evento. A ${nome} tenta de novo por cerca de 1 minuto; se o erro ficar, ${comoReenviar(plataforma)}.`,
+        ultimo_erro: `Falha nossa ao gravar um evento. A ${nome} ${comoTentaDeNovo(plataforma)}; se o erro ficar, ${comoReenviar(plataforma)}.`.slice(0, 500),
         ultimo_erro_em: agoraIso,
       });
     }

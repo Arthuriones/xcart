@@ -20,10 +20,11 @@ import type { SituacaoExterna } from "./tipos";
 //   5. Qualquer evento cria o pedido com todos os campos: se o pedido.criado
 //      se perdeu, a comissao.aprovada cria o pedido.
 //
-// Venda (Cakto, 072): as datas da venda (vencimento, reembolso, chargeback,
-// reembolso pedido) seguem a regra das datas de etapa -- a primeira que veio
-// fica, venca o evento ou nao. Grupo, oferta, referencia e UTMs sao da
-// cobranca: o primeiro que trouxe fica. Na Sphere sao todas null.
+// Venda (Cakto, 072): as datas da venda (reembolso, chargeback, reembolso
+// pedido) seguem a regra das datas de etapa -- a primeira que veio fica,
+// venca o evento ou nao. O vencimento e o do evento que vence (o Pix gerado
+// de novo traz o prazo novo); o velho so completa. Grupo, oferta, referencia
+// e UTMs sao da cobranca: o primeiro que trouxe fica. Na Sphere sao todas null.
 //
 // Puro: testado em tests/checkout-externo-estado.test.ts e
 // tests/checkout-externo-cakto.test.ts.
@@ -214,7 +215,9 @@ function vendaMesclada(atual: EstadoPedido, novo: EstadoPedido, venceu: boolean)
     comissoes: venceu ? (novo.comissoes ?? atual.comissoes) : (atual.comissoes ?? novo.comissoes),
     grupo: atual.grupo ?? novo.grupo,
     oferta_tipo: atual.oferta_tipo ?? novo.oferta_tipo,
-    vence_em: atual.vence_em ?? novo.vence_em,
+    // O prazo e o do evento que vence (o Pix vencido gerado de novo traz o
+    // prazo novo); o velho so completa.
+    vence_em: venceu ? (novo.vence_em ?? atual.vence_em) : (atual.vence_em ?? novo.vence_em),
     reembolsado_em: primeira(atual.reembolsado_em, novo.reembolsado_em),
     chargeback_em: primeira(atual.chargeback_em, novo.chargeback_em),
     reembolso_pedido_em: primeira(atual.reembolso_pedido_em, novo.reembolso_pedido_em),
@@ -278,7 +281,7 @@ export function aplicarEvento(
   return { pedido, venceu, mudou };
 }
 
-/** As datas de etapa: a primeira vez que cada uma vem fica (ver vendaMesclada). */
+/** As datas de etapa: a primeira vez que cada uma vem fica; o vencimento, o do evento que vence (ver vendaMesclada). */
 const MARCOS = [
   "aprovado_em",
   "pago_em",

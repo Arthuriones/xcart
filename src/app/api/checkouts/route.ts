@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import {
   MAX_CHECKOUTS,
   MOEDAS_COMISSAO,
-  PLATAFORMAS_CHECKOUT,
   fusoValido,
   moedaPadraoDe,
   erroDoSegredo,
@@ -15,6 +14,7 @@ import {
   type CheckoutExternoRow,
 } from "@/lib/checkouts-externos/tipos";
 import { COLUNAS_CHECKOUT } from "@/lib/checkouts-externos/tipos";
+import { plataformasDaConta } from "@/lib/checkouts-externos/liberadas";
 import { json, novoToken, resumoDoCheckout, urlPublica, usuarioDaSessao } from "@/lib/checkouts-externos/servidor";
 
 export const runtime = "nodejs";
@@ -22,9 +22,11 @@ export const runtime = "nodejs";
 // ============================================================================
 // POST /api/checkouts: cadastra um checkout externo e devolve a URL do webhook
 // para o lojista colar na plataforma. A plataforma vem do corpo (so as
-// ativas de PLATAFORMAS_CHECKOUT); a moeda padrao e a dela (Sphere EUR,
-// Cakto BRL). A Cakto aceita o secret do webhook ja aqui (opcional: ele
-// costuma aparecer so depois de criar o webhook la, e a tela pede de novo).
+// ativas da conta: PLATAFORMAS_CHECKOUT e a restrita que ela pode, o Eve so
+// na do Arthur -- liberadas.ts; a de outra conta tem a resposta da
+// desconhecida); a moeda padrao e a dela (Sphere EUR, Cakto BRL). A Cakto
+// aceita o secret do webhook ja aqui (opcional: ele costuma aparecer so
+// depois de criar o webhook la, e a tela pede de novo).
 //
 // Cadastrar checkout NAO passa por conferirLigarRastreamento (nasce sem
 // rastreamento) nem por conferirRoteamento (nunca entra em rota). Ligar o
@@ -59,7 +61,7 @@ export async function POST(request: Request) {
   }
   if (!corpo || typeof corpo !== "object") return json(400, { ok: false, erro: "Corpo inválido." });
 
-  const plataforma = PLATAFORMAS_CHECKOUT.find((p) => p.id === corpo.plataforma && p.ativa);
+  const plataforma = plataformasDaConta(user.id).find((p) => p.id === corpo.plataforma && p.ativa);
   if (!plataforma) return json(400, { ok: false, erro: "Plataforma ainda não disponível." });
   const assina = usaSegredo(plataforma.id);
   const nome = nomeValido(corpo.nome);

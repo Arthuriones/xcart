@@ -1,7 +1,8 @@
 import { NextResponse, after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { plataformaDe } from "@/lib/checkouts-externos/plataformas";
-import { comoReenviar, marcaFalhaSemSegurar, receberEvento, type ResultadoRecebimento } from "@/lib/checkouts-externos/receber";
+import { comoReenviar, comoTentaDeNovo, marcaFalhaSemSegurar, receberEvento, type ResultadoRecebimento } from "@/lib/checkouts-externos/receber";
+import { plataformaLiberada } from "@/lib/checkouts-externos/liberadas";
 import { checkoutDoToken, repositorioSupabase, segredoDaPlataforma } from "@/lib/checkouts-externos/repo-supabase";
 import { notificarPedidoExterno } from "@/lib/checkouts-externos/notificar";
 import { entregarEnvios, rastreioSupabase } from "@/lib/checkouts-externos/rastreio";
@@ -13,15 +14,16 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 // ============================================================================
-// Webhook de checkout externo (Sphere Affiliates, Cakto e Hubla).
+// Webhook de checkout externo (Sphere Affiliates, Cakto, Hubla e Eve).
 //
 // ROTA PUBLICA: quem chama e o servidor da plataforma, sem sessao. O token de
 // 43 caracteres no caminho acha o checkout, um por checkout; so o hash serve
 // de busca e "Trocar URL" na tela mata o antigo na hora. A Sphere nao assina
-// o corpo nem manda header proprio: o token e a senha. A Cakto assina
-// (X-Cakto-Signature, HMAC do corpo CRU com o secret que o lojista colou), e
-// a Hubla manda o token fixo da conta dela (x-hubla-token): o adaptador
-// confere antes de ler.
+// o corpo nem manda header proprio: o token e a senha. A Cakto e o Eve
+// assinam (X-Cakto-Signature, X-Eve-Signature: HMAC do corpo CRU com o
+// secret que o lojista colou), e a Hubla manda o token fixo da conta dela
+// (x-hubla-token): o adaptador confere antes de ler. O Eve so recebe na
+// conta liberada (liberadas.ts): checkout dele em outra conta = 404.
 //
 // O corpo traz VALOR MONETARIO que vai para o lucro. Por isso: teto de
 // tamanho (64 KB; 256 KB na plataforma de varios pedidos por entrega, a V2
@@ -43,7 +45,8 @@ export const maxDuration = 30;
 //      com ele errado -> idem
 // 409  afiliado que ja e de outro checkout do usuario (contaria em dobro)
 // 503  falha nossa. A Sphere tenta de novo (1 retentativa); a Hubla, 5 vezes
-//      em ~75 s, e o erro fica no checkout com o Reprocessar. A Cakto NAO
+//      em ~75 s, e o erro fica no checkout com o Reprocessar; o Eve, 5 vezes
+//      em ~15 min pela fila dele, e o erro fica no checkout. A Cakto NAO
 //      reenvia resposta nao-2xx, so timeout e erro de rede: para ela a rota
 //      SEGURA a resposta ate passar dos 8 s dela, que conta como timeout e
 //      reenvia (5 s, 1 min, 2 min 30 s, 6 min, 30 min). A trava ja foi solta.
@@ -98,7 +101,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   const ck = checkout;
 
   const plataforma = plataformaDe(ck.plataforma);
-  if (!plataforma) return NAO_ENCONTRADO();
+  if (!plataforma || !plataformaLiberada(ck.plataforma, ck.user_id)) return NAO_ENCONTRADO();
   const segurar = plataforma.reenvio === "timeout";
   const limite = plataforma.lerTodos ? MAX_CORPO_VARIOS : MAX_CORPO;
 
@@ -129,12 +132,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   const bytes = Buffer.from(await request.arrayBuffer());
   if (bytes.length > limite) {
     // A Sphere segue como sempre (sem marca). A Cakto nao reenvia o 413, e a
-    // Hubla desiste depois de 5: sem o erro na tela, a venda sumiria sem sinal.
+    // Hubla e o Eve desistem depois de 5: sem o erro na tela, a venda sumiria sem sinal.
     if (!segurar && !plataforma.autenticar) return resposta(413, { ok: false, erro: "corpo grande demais" });
+    const depois = plataforma.reenvioNaTela
+      ? `mandar o evento de novo pela ${plataforma.nome}`
+      : `usar ${plataforma.autenticacao === "token_no_header" ? "Reprocessar" : "Reenviar"} na ${plataforma.nome}`;
     return recusar(
       413,
       "corpo grande demais",
-      `Evento recusado: a entrega passou de ${limite / 1024} KB. Fale com o suporte do xcart antes de usar ${plataforma.autenticacao === "token_no_header" ? "Reprocessar" : "Reenviar"} na ${plataforma.nome}.`,
+      `Evento recusado: a entrega passou de ${limite / 1024} KB. Fale com o suporte do xcart antes de ${depois}.`,
       bytes
     );
   }
@@ -162,9 +168,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     // a retentativa refaz (receber.ts).
     console.error("[checkout/webhook] falha ao receber", e instanceof Error ? e.message : e);
     if (segurar || marcaFalhaSemSegurar(plataforma)) {
-      const quando = segurar ? "manda de novo em alguns minutos" : "tenta de novo por cerca de 1 minuto";
       await repo.marcarCheckout(ck.id, {
-        ultimo_erro: `Falha nossa ao receber um evento. A ${plataforma.nome} ${quando}; se o erro ficar, ${comoReenviar(plataforma)}.`,
+        ultimo_erro: `Falha nossa ao receber um evento. A ${plataforma.nome} ${comoTentaDeNovo(plataforma)}; se o erro ficar, ${comoReenviar(plataforma)}.`.slice(0, 500),
         ultimo_erro_em: agora.toISOString(),
       });
     }

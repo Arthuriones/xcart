@@ -1,6 +1,8 @@
 import { passoDoNovo, plataformaDoNovo } from "@/lib/checkouts-externos/tipos";
+import { plataformasDaConta } from "@/lib/checkouts-externos/liberadas";
 import { PARAM_DE, voltarParaEscolha } from "@/lib/conectar-operacao";
 import { lerCheckoutsDaTela } from "@/lib/leitura/checkouts";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 import { CabecalhoPlataforma } from "../cabecalho-plataforma";
 import { ErroLeitura } from "../erro-leitura";
 import { CheckoutsTela } from "./checkouts-tela";
@@ -17,6 +19,9 @@ export const dynamic = "force-dynamic";
 // ?novo=cakto, ?novo=sphere (ou ?novo=1) abre o "Conectar checkout" ao chegar, ja no passo
 // certo; e a porta do "Conectar operação" (/conectar), que manda &de=conectar
 // para o Voltar devolver a escolha.
+//
+// A escolha de plataforma e a da CONTA (plataformasDaConta): o Eve so na do
+// Arthur. Quem decide e o servidor; a tela recebe a lista pronta, sem os ids.
 // ============================================================================
 
 /** O relogio e lido junto com os dados: "último evento há 5 min" sai igual no HTML e na hidratacao. */
@@ -34,7 +39,8 @@ export default async function CheckoutsPage({
 }: {
   searchParams: Promise<{ [chave: string]: string | string[] | undefined }>;
 }) {
-  const [r, sp] = await Promise.all([carregar(), searchParams]);
+  // getCurrentUser e o mesmo (cache por requisicao) que a leitura usa. Falhou: so a lista publica.
+  const [r, sp, user] = await Promise.all([carregar(), searchParams, getCurrentUser().catch(() => null)]);
   if (!r.ok) {
     return (
       <>
@@ -47,6 +53,7 @@ export default async function CheckoutsPage({
     <CheckoutsTela
       {...r.dados}
       agoraMs={r.agoraMs}
+      plataformas={plataformasDaConta(user?.id)}
       abrirEm={passoDoNovo(sp.novo)}
       plataformaNovo={plataformaDoNovo(sp.novo)}
       voltar={voltarParaEscolha(sp[PARAM_DE])}

@@ -240,7 +240,10 @@ export async function coletarDoCheckout(
   if (!RE_VID.test(vid)) return recusa("visitorId invalido");
 
   const checkout = await repo.checkout(checkoutId);
-  if (!checkout || !rastreiaCompra(checkout.plataforma)) return recusa("checkout desconhecido");
+  // So a plataforma com a ponte (HOST_DO_CHECKOUT): o Eve rastreia a compra, mas nao tem a Fase D.
+  if (!checkout || !rastreiaCompra(checkout.plataforma) || !HOST_DO_CHECKOUT[checkout.plataforma as IdPlataformaCheckout]) {
+    return recusa("checkout desconhecido");
+  }
   if (!checkout.ativo) return recusa("checkout pausado");
   const destinos = (await repo.destinos(checkout.id)).filter((d) => d.ativo && d.conta && d.token);
   if (destinos.length === 0) return recusa("rastreamento do checkout desligado");

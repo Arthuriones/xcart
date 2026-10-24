@@ -38,6 +38,7 @@ import {
   erroDoSegredo,
   type CheckoutResumo,
   type IdPlataformaCheckout,
+  type PlataformaDaLista,
 } from "@/lib/checkouts-externos/tipos";
 import type { EventoDaTela } from "@/lib/leitura/checkouts";
 import { CabecalhoPlataforma } from "../cabecalho-plataforma";
@@ -54,7 +55,11 @@ import { RastreamentoCheckout } from "./rastreamento-checkout";
 // Cakto e Hubla (venda): a Cakto gera o secret quando o webhook e criado la, e
 // a Hubla mostra o token na aba Autenticacao, entao o campo fica no painel da
 // URL (e no Editar, para trocar). Ele vai so para o servidor: a tela so sabe
-// SE ha um salvo (GET /url).
+// SE ha um salvo (GET /url). O Eve (so na conta do Arthur) gera o secret no
+// painel dele, depois de colar a URL.
+//
+// A escolha de plataforma vem pronta do servidor (`plataformas`, a da conta):
+// a tela nao sabe quem pode ver o Eve.
 // ============================================================================
 
 const API = "/api/checkouts";
@@ -131,8 +136,31 @@ const PASSOS_HUBLA = [
   </>,
 ];
 
+const PASSOS_EVE = [
+  <>
+    No painel da Eve, abra <Forte>Configurações › xcart</Forte> e cole a URL acima.
+  </>,
+  <>
+    Clique em <Forte>Gerar secret</Forte>, copie e cole o secret aqui embaixo.
+  </>,
+  <>
+    Clique em <Forte>Enviar teste</Forte> lá ou em Enviar evento de teste aqui. O teste não entra nos números.
+  </>,
+];
+
 function passosDe(plataforma: string) {
-  return plataforma === "cakto" ? PASSOS_CAKTO : plataforma === "hubla" ? PASSOS_HUBLA : PASSOS_SPHERE;
+  return plataforma === "cakto"
+    ? PASSOS_CAKTO
+    : plataforma === "hubla"
+      ? PASSOS_HUBLA
+      : plataforma === "eve"
+        ? PASSOS_EVE
+        : PASSOS_SPHERE;
+}
+
+/** O botao de teste no painel da plataforma. */
+function botaoDeTeste(plataforma: string): string {
+  return plataforma === "hubla" ? "Testar configuração" : plataforma === "eve" ? "Enviar teste" : "Testar";
 }
 
 
@@ -167,7 +195,7 @@ function CampoSegredo({
   const [erro, setErro] = useState<string | null>(null);
   const nome = nomeDaPlataforma(plataforma);
   const qual = nomeDoSegredo(plataforma);
-  const teste = plataforma === "hubla" ? "Testar configuração" : "Testar";
+  const teste = botaoDeTeste(plataforma);
 
   async function salvar() {
     const s = segredoValido(valor);
@@ -389,23 +417,35 @@ const TEXTO_DADOS: Record<IdPlataformaCheckout, string> = {
   sphere: "Comissão por pedido: entra no Dashboard como Recebido e A receber.",
   cakto: "Venda própria: entra no Dashboard com faturamento, taxa e líquido.",
   hubla: "Venda própria: entra no Dashboard com faturamento, taxa e líquido.",
+  eve: "Venda própria no Pix: entra no Dashboard com o faturamento de cada Pix. A taxa do gateway não vem da Eve.",
 };
 
 const EXEMPLO_NOME: Record<IdPlataformaCheckout, string> = {
   sphere: "Ex.: Sphere Itália",
   cakto: "Ex.: Cakto Curso X",
   hubla: "Ex.: Hubla Mentoria X",
+  eve: "Ex.: Eve Panela Mônaco",
+};
+
+/** Onde a plataforma mostra o secret (ou o token): a ajuda do campo no cadastro. */
+const ONDE_SEGREDO: Partial<Record<IdPlataformaCheckout, string>> = {
+  cakto: "A Cakto mostra o secret ao criar o webhook. Dá para colar no próximo passo.",
+  hubla: "A Hubla mostra o token na aba Autenticação do webhook. Dá para colar no próximo passo.",
+  eve: "A Eve gera o secret em Configurações › xcart, depois de colar a URL. Dá para colar no próximo passo.",
 };
 
 function Adicionar({
   aberto,
   aoMudar,
   aoCriar,
+  plataformas,
   passoInicial,
   plataformaInicial,
   voltar,
 }: {
   aberto: boolean;
+  /** A escolha da conta (o servidor decide quem ve o Eve). */
+  plataformas: readonly PlataformaDaLista[];
   aoMudar: (v: boolean) => void;
   aoCriar: () => void;
   /** "dados" quando a URL ja escolheu a plataforma (?novo=cakto). */
@@ -499,7 +539,7 @@ function Adicionar({
 
         {passo === "plataforma" ? (
           <div role="group" aria-label="Plataforma" className="grid gap-2 sm:grid-cols-2">
-            {PLATAFORMAS_CHECKOUT.map((p) => (
+            {plataformas.map((p) => (
               <button
                 key={p.id}
                 type="button"
@@ -563,11 +603,7 @@ function Adicionar({
                   placeholder={`Se já tiver o da ${curto}`}
                   className="font-mono text-dense"
                 />
-                <p className="text-label text-t2">
-                  {plataforma === "hubla"
-                    ? "A Hubla mostra o token na aba Autenticação do webhook. Dá para colar no próximo passo."
-                    : "A Cakto mostra o secret ao criar o webhook. Dá para colar no próximo passo."}
-                </p>
+                <p className="text-label text-t2">{ONDE_SEGREDO[plataforma] ?? ONDE_SEGREDO.cakto}</p>
               </div>
             ) : null}
             {avancado ? (
@@ -835,6 +871,7 @@ export function CheckoutsTela({
   eventos,
   semMigration,
   agoraMs,
+  plataformas = PLATAFORMAS_CHECKOUT,
   abrirEm = null,
   plataformaNovo = null,
   voltar = null,
@@ -844,6 +881,8 @@ export function CheckoutsTela({
   eventos: EventoDaTela[];
   semMigration: boolean;
   agoraMs: number;
+  /** A escolha de plataforma da conta (page.tsx: plataformasDaConta). Ausente = a publica. */
+  plataformas?: readonly PlataformaDaLista[];
   /** ?novo= na URL: abre o "Conectar checkout" ao chegar, neste passo. */
   abrirEm?: "plataforma" | "dados" | null;
   /** ?novo=cakto: a plataforma ja escolhida. */
@@ -1054,6 +1093,7 @@ export function CheckoutsTela({
         aberto={adicionarAberto}
         aoMudar={mudarAdicionar}
         aoCriar={atualizar}
+        plataformas={plataformas}
         passoInicial={abrirEm === "dados" ? "dados" : "plataforma"}
         plataformaInicial={pedidoAberto ? plataformaNovo : null}
         voltar={pedidoAberto ? voltar : null}

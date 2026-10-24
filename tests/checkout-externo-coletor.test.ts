@@ -259,6 +259,7 @@ describe("so checkout ativo, de venda, com pixel ligado", () => {
     ["checkout pausado", { checkout: { ativo: false } }, corpo(), "checkout pausado"],
     ["checkout que nao existe", { checkout: null }, corpo(), "checkout desconhecido"],
     ["a Sphere (comissao) nao rastreia", { checkout: { plataforma: "sphere" } }, corpo(), "checkout desconhecido"],
+    ["o Eve (venda, mas sem a ponte)", { checkout: { plataforma: "eve" } }, corpo(), "checkout desconhecido"],
     ["sem destino", { destinos: [] }, corpo(), "rastreamento do checkout desligado"],
     ["destino desligado", { destinos: [{ ...META, ativo: false }] }, corpo(), "rastreamento do checkout desligado"],
     ["destino sem token", { destinos: [{ ...TIKTOK, token: null }] }, corpo(), "rastreamento do checkout desligado"],
