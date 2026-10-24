@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcularFinanceiro, type EntradaFinanceiro, type LojaFinanceira, type PedidoExternoFin } from "@/lib/financeiro/calculo";
+import { calcularFinanceiro, gastoComImposto, type EntradaFinanceiro, type LojaFinanceira, type PedidoExternoFin } from "@/lib/financeiro/calculo";
 import { contarAmostraExterna } from "@/lib/checkouts-externos/financeiro";
 import { montarPedidosExternos } from "@/lib/checkouts-externos/pedidos";
 import { montarSerieDiaria } from "@/lib/leitura/serie-diaria";
@@ -32,6 +32,12 @@ const CHECKOUT: LojaFinanceira = {
   moeda: "EUR",
   taxaPadraoPct: 70,
 };
+
+/**
+ * As contas de anuncio daqui sao do Meta em BRL: o gasto leva o imposto da
+ * Meta no Brasil. Ele divide o gasto, entao vale antes ou depois do cambio.
+ */
+const comImposto = (v: number) => gastoComImposto(v, "meta", "BRL");
 
 /** 1 USD = 5 BRL = 0,8 EUR (1 EUR = 6,25 BRL). */
 const CAMBIO: FxRateRow[] = [
@@ -176,17 +182,18 @@ describe("checkout externo no calculo", () => {
       entrada({
         externos: EXTERNOS,
         contas: [conta("c1", { checkout_id: CK })],
-        // 250 BRL = 40 EUR
+        // 250 BRL = 40 EUR, mais o imposto
         gastos: [gasto("c1", "2026-09-28", 250)],
       })
     );
     const t = r.atual;
-    expect(t.gasto).toBeCloseTo(40);
-    expect(t.lucro).toBeCloseTo(125 - 40);
-    expect(t.cod.lucroPrevisto).toBeCloseTo(125 + 70 - 40);
-    expect(t.roas).toBeCloseTo(125 / 40);
-    expect(t.cod.roasPrevisto).toBeCloseTo(195 / 40);
-    expect(r.porLoja[0]).toMatchObject({ storeId: CK, receita: 125, gastoMeta: expect.closeTo(40, 6) });
+    const g = comImposto(40);
+    expect(t.gasto).toBeCloseTo(g);
+    expect(t.lucro).toBeCloseTo(125 - g);
+    expect(t.cod.lucroPrevisto).toBeCloseTo(125 + 70 - g);
+    expect(t.roas).toBeCloseTo(125 / g);
+    expect(t.cod.roasPrevisto).toBeCloseTo(195 / g);
+    expect(r.porLoja[0]).toMatchObject({ storeId: CK, receita: 125, gastoMeta: expect.closeTo(g, 6) });
   });
 
   it("converte a comissao pela cotacao do dia (EUR -> BRL)", () => {
@@ -249,7 +256,7 @@ describe("Todas as lojas: loja Shopify + checkout", () => {
     }
     // O total soma os dois: a comissao do checkout (125 EUR = 781,25 BRL) e o gasto dele.
     expect(junto.atual.receita).toBeCloseTo(so.atual.receita + 125 * 6.25);
-    expect(junto.atual.gasto).toBeCloseTo(75);
+    expect(junto.atual.gasto).toBeCloseTo(comImposto(50 + 25));
     expect(junto.lojasContraEntrega).toEqual([CK]);
   });
 
@@ -267,14 +274,14 @@ describe("Todas as lojas: loja Shopify + checkout", () => {
 
   it("sem o checkout no filtro, a conta ligada a ele fica de fora", () => {
     const r = calcularFinanceiro(entrada({ ...base, lojas: [LOJA_SHOPIFY], externos: EXTERNOS }));
-    expect(r.atual.gasto).toBeCloseTo(50);
+    expect(r.atual.gasto).toBeCloseTo(comImposto(50));
     expect(r.atual.receita).toBeCloseTo(200);
   });
 
   it("serie por loja traz o checkout com o lucro dele", () => {
     const serie = montarSerieDiaria(entrada({ ...base, lojas: [LOJA_SHOPIFY, CHECKOUT], externos: EXTERNOS }));
     const ck = serie.porLoja.find((l) => l.storeId === CK)!;
-    expect(ck.lucro.reduce((s, v) => s + v, 0)).toBeCloseTo(125 * 6.25 - 25);
+    expect(ck.lucro.reduce((s, v) => s + v, 0)).toBeCloseTo(125 * 6.25 - comImposto(25));
     const dia = serie.atual.find((d) => d.dia === "2026-09-28")!;
     expect(dia.receita).toBeCloseTo(200 + 125 * 6.25);
   });

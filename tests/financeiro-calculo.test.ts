@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { TAXAS_BRL } from "@/lib/sales/cambio";
 import {
+  IMPOSTO_META_BR,
   LIMITE_AMARELO,
   calcularFinanceiro,
   criarConversor,
+  gastoComImposto,
   semaforoDe,
   type EntradaFinanceiro,
 } from "@/lib/financeiro/calculo";
@@ -456,6 +458,8 @@ describe("pedidos", () => {
 
 describe("gasto e derivados", () => {
   const META = conta({ id: "acc-meta", plataforma: "meta" });
+  // A conta META e em BRL: o gasto leva o imposto da Meta no Brasil.
+  const comImposto = (v: number) => gastoComImposto(v, "meta", "BRL");
 
   it("conta EUR convertida", () => {
     const r = calcularFinanceiro(
@@ -488,7 +492,7 @@ describe("gasto e derivados", () => {
         ],
       })
     );
-    expect(r.atual.gastoMeta).toBe(50);
+    expect(r.atual.gastoMeta).toBe(comImposto(50));
   });
 
   it("google vai para gastoGoogle", () => {
@@ -525,14 +529,16 @@ describe("gasto e derivados", () => {
       })
     );
     const t = r.atual;
+    const g = comImposto(80);
     expect(t.receita).toBe(200);
     expect(t.cmv).toBe(60);
     expect(t.taxas).toBe(20);
-    expect(t.lucro).toBe(40);
-    expect(t.roas).toBe(2.5);
+    expect(t.gasto).toBe(g);
+    expect(t.lucro).toBeCloseTo(200 - 60 - 20 - g, 6);
+    expect(t.roas).toBeCloseTo(200 / g, 6);
     expect(t.roasEquilibrio).toBeCloseTo(200 / 120, 6);
-    expect(t.margem).toBe(0.2);
-    expect(t.cpa).toBe(40);
+    expect(t.margem).toBeCloseTo((200 - 60 - 20 - g) / 200, 6);
+    expect(t.cpa).toBeCloseTo(g / 2, 6);
   });
 
   it("semaforo nos quatro casos", () => {
@@ -579,9 +585,9 @@ describe("gasto e derivados", () => {
       })
     );
     expect(r.atual.receita).toBe(100);
-    expect(r.atual.gasto).toBe(20);
+    expect(r.atual.gasto).toBe(comImposto(20));
     expect(r.anterior.receita).toBe(40);
-    expect(r.anterior.gasto).toBe(15);
+    expect(r.anterior.gasto).toBe(comImposto(15));
   });
 
   it("porDia cobre todos os dias com zeros e marca hoje como parcial", () => {
@@ -603,5 +609,38 @@ describe("gasto e derivados", () => {
         fusoLoja: "America/Sao_Paulo",
       },
     ]);
+  });
+});
+
+describe("imposto da Meta no Brasil", () => {
+  it("gastoComImposto: so a conta do Meta em BRL paga o imposto, calculado por dentro", () => {
+    expect(IMPOSTO_META_BR).toBe(0.1215);
+    expect(gastoComImposto(100, "meta", "BRL")).toBeCloseTo(100 / 0.8785, 9);
+    expect(gastoComImposto(1000, "meta", "BRL")).toBeCloseTo(1138.3, 2);
+    expect(gastoComImposto(100, "meta", "brl")).toBe(gastoComImposto(100, "meta", "BRL"));
+    expect(gastoComImposto(100, "meta", "USD")).toBe(100);
+    expect(gastoComImposto(100, "google", "BRL")).toBe(100);
+    expect(gastoComImposto(100, null, "BRL")).toBe(100);
+    expect(gastoComImposto(100, undefined, "BRL")).toBe(100);
+    expect(gastoComImposto(100, "meta", null)).toBe(100);
+    expect(gastoComImposto(100, "meta", undefined)).toBe(100);
+  });
+
+  it("calcularFinanceiro: Meta BRL e Google BRL no mesmo periodo, so o Meta leva o imposto", () => {
+    const r = calcularFinanceiro(
+      entrada({
+        contas: [
+          conta({ id: "acc-meta", plataforma: "meta" }),
+          conta({ id: "acc-g", plataforma: "google", fonte: "script" }),
+        ],
+        gastos: [
+          gasto({ ad_account_id: "acc-meta", data: "2026-09-29", gasto: 100 }),
+          gasto({ ad_account_id: "acc-g", data: "2026-09-29", gasto: 100, fonte: "script" }),
+        ],
+      })
+    );
+    expect(r.atual.gastoMeta).toBeCloseTo(100 / 0.8785, 9);
+    expect(r.atual.gastoGoogle).toBe(100);
+    expect(r.atual.gasto).toBeCloseTo(100 / 0.8785 + 100, 9);
   });
 });

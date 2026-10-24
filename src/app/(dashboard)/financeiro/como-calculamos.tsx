@@ -30,7 +30,7 @@ const ITENS: { titulo: string; texto: string }[] = [
   {
     titulo: "De onde vêm os números e quando atualizam",
     texto:
-      "Pedidos da Shopify a cada 15 minutos. Gasto do Meta a cada 15 minutos (inclui anúncio apagado ou arquivado); do Google, de hora em hora, pelo script. Câmbio quatro vezes por dia.",
+      "Pedidos da Shopify a cada 15 minutos. Gasto do Meta a cada 15 minutos (inclui anúncio apagado ou arquivado); do Google, de hora em hora, pelo script. Câmbio quatro vezes por dia. Na conta do Meta em reais, o gasto leva o imposto que a Meta cobra na fatura (PIS/Cofins e ISS, 12,15% por dentro: R$ 1.000 no Gerenciador viram R$ 1.138,30); em Integrações o gasto aparece como no Gerenciador, sem ele.",
   },
   {
     titulo: "Câmbio",

@@ -33,7 +33,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { IndicadoresKpiCod, IndicadoresTopoCod, type BaseIndicadores } from "@/app/(dashboard)/financeiro/indicadores";
 import { composicaoCod } from "@/app/(dashboard)/financeiro/lucro-dados";
-import { calcularFinanceiro, type EntradaFinanceiro, type LojaFinanceira, type PedidoExternoFin } from "@/lib/financeiro/calculo";
+import { calcularFinanceiro, gastoComImposto, type EntradaFinanceiro, type LojaFinanceira, type PedidoExternoFin } from "@/lib/financeiro/calculo";
 import { montarPedidosExternos } from "@/lib/checkouts-externos/pedidos";
 import type { PedidoExternoRow } from "@/lib/checkouts-externos/tipos";
 import type { AdAccountRow, AdSpendDailyRow, FxRateRow } from "@/lib/financeiro/tipos";
@@ -1062,10 +1062,12 @@ describe("checkout de venda no Dashboard", () => {
 
   it("lucro e ROAS: liquido menos o anuncio ligado ao checkout", () => {
     const r = calcularFinanceiro(entrada({ contas: [conta("c1", CK_VENDA)], gastos: [gasto("c1", "2026-09-28", 50)] }));
-    expect(r.atual.gasto).toBeCloseTo(50);
-    expect(r.atual.lucro).toBeCloseTo(211.33 - 50);
-    expect(r.atual.roas).toBeCloseTo(264 / 50);
-    expect(r.atual.cpa).toBeCloseTo(50 / 3);
+    // Conta do Meta em BRL: os 50 levam o imposto da Meta no Brasil.
+    const g = gastoComImposto(50, "meta", "BRL");
+    expect(r.atual.gasto).toBeCloseTo(g);
+    expect(r.atual.lucro).toBeCloseTo(211.33 - g);
+    expect(r.atual.roas).toBeCloseTo(264 / g);
+    expect(r.atual.cpa).toBeCloseTo(g / 3);
   });
 
   it("a Sphere ao lado nao muda: os numeros dela sao os mesmos com e sem a Cakto", () => {

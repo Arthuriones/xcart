@@ -1,4 +1,4 @@
-import { criarConversor } from "@/lib/financeiro/calculo";
+import { criarConversor, gastoComImposto } from "@/lib/financeiro/calculo";
 import {
   paraNumero,
   type AdAccountRow,
@@ -111,7 +111,7 @@ export function montarPorCampanha(e: EntradaCampanhas): LinhaCampanha[] {
       linha.semCotacao = true;
       continue;
     }
-    linha.gasto += paraNumero(g.gasto) * fator.valor;
+    linha.gasto += gastoComImposto(paraNumero(g.gasto), conta.plataforma, conta.moeda ?? g.moeda) * fator.valor;
     linha.valorCompras += paraNumero(g.valor_compras) * fator.valor;
   }
 

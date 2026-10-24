@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcularFinanceiro, type EntradaFinanceiro } from "@/lib/financeiro/calculo";
+import { calcularFinanceiro, gastoComImposto, type EntradaFinanceiro } from "@/lib/financeiro/calculo";
 import { montarSerieDiaria } from "@/lib/leitura/serie-diaria";
 import { montarPorProduto } from "@/lib/leitura/por-produto";
 import { montarPorCampanha } from "@/lib/leitura/por-campanha";
@@ -19,6 +19,9 @@ import type {
 const A = "11111111-1111-4111-8111-111111111111";
 const B = "22222222-2222-4222-8222-222222222222";
 const USER = "99999999-9999-4999-8999-999999999999";
+
+// Conta do Meta em BRL paga o imposto da Meta no Brasil por cima do gasto.
+const comImposto = (v: number) => gastoComImposto(v, "meta", "BRL");
 
 const linha = (sku: string, qtd: number, preco: number, extra: Partial<LinhaPedido> = {}): LinhaPedido => ({
   sku,
@@ -170,7 +173,7 @@ describe("montarSerieDiaria", () => {
     const soma = (lista: { receita: number }[]) => lista.reduce((t, d) => t + d.receita, 0);
     expect(soma(s.atual)).toBe(r.atual.receita);
     expect(soma(s.anterior)).toBe(r.anterior.receita);
-    expect(s.atual[0].gastoMeta).toBe(30);
+    expect(s.atual[0].gastoMeta).toBe(comImposto(30));
   });
 
   it("lucro por loja por dia soma o lucro do dia", () => {
@@ -178,7 +181,9 @@ describe("montarSerieDiaria", () => {
     expect(s.porLoja.map((l) => l.storeId)).toEqual([A, B]);
     const a = s.porLoja.find((l) => l.storeId === A)!.lucro;
     const b = s.porLoja.find((l) => l.storeId === B)!.lucro;
-    expect(a).toEqual([70, 0, 0]);
+    expect(a).toHaveLength(3);
+    expect(a[0]).toBeCloseTo(100 - comImposto(30), 9);
+    expect(a.slice(1)).toEqual([0, 0]);
     expect(b).toEqual([0, 0, 200]);
   });
 
@@ -310,14 +315,15 @@ describe("montarPorCampanha", () => {
       nome: "Novo",
       contaNome: "Lumen · Principal",
       plataforma: "meta",
-      gasto: 150,
       impressoes: 1500,
       cliques: 40,
       compras: 3,
       valorCompras: 450,
-      roasPlataforma: 3,
       semCotacao: false,
     });
+    // Conta do Meta em BRL: 100 + 50 com o imposto; o ROAS cai na mesma conta.
+    expect(linhas[0].gasto).toBeCloseTo(comImposto(150), 9);
+    expect(linhas[0].roasPlataforma).toBeCloseTo(450 / comImposto(150), 9);
   });
 
   it("converte pela cotacao do dia e ordena pelo gasto", () => {

@@ -1,4 +1,4 @@
-import { calcularFinanceiro, criarConversor, type EntradaFinanceiro, type PedidoExternoFin, type Totais } from "@/lib/financeiro/calculo";
+import { calcularFinanceiro, criarConversor, gastoComImposto, type EntradaFinanceiro, type PedidoExternoFin, type Totais } from "@/lib/financeiro/calculo";
 import { diasNoIntervalo, paraNumero, type AdAccountRow, type AdSpendDailyRow, type FinOrderRow } from "@/lib/financeiro/tipos";
 import {
   derivar,
@@ -74,6 +74,8 @@ export type GastoDiarioRow = Pick<
 
 export type ContaCampanhas = Pick<AdAccountRow, "id" | "nome" | "plataforma" | "external_id"> & {
   status_externo?: string | null;
+  /** A moeda da CONTA: e ela que diz se o Meta cobra o imposto do Brasil (gastoComImposto). */
+  moeda?: string | null;
 };
 
 export interface IdsDoPedido {
@@ -312,7 +314,7 @@ export function montarCampanhas(e: EntradaCampanhas): ResultadoCampanhas {
     const o = criar(g.nivel as NivelObjeto, conta, objetoId);
     identDoDetalhe(o, g, dia, fator);
 
-    const gasto = fator === null ? 0 : paraNumero(g.gasto) * fator;
+    const gasto = fator === null ? 0 : gastoComImposto(paraNumero(g.gasto), conta.plataforma, conta.moeda ?? g.moeda) * fator;
     const impressoes = paraNumero(g.impressoes);
     const cliques = paraNumero(g.cliques);
     const frequencia = paraNumero(g.frequencia);
@@ -350,7 +352,7 @@ export function montarCampanhas(e: EntradaCampanhas): ResultadoCampanhas {
     anotarSync(g.sincronizado_em);
     const fator = fatorDe(g.moeda, dia);
     const m: Metricas3 = {
-      gasto: fator === null ? 0 : paraNumero(g.gasto) * fator,
+      gasto: fator === null ? 0 : gastoComImposto(paraNumero(g.gasto), conta.plataforma, conta.moeda ?? g.moeda) * fator,
       impressoes: paraNumero(g.impressoes),
       cliques: paraNumero(g.cliques),
     };

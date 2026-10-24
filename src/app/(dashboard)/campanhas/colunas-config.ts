@@ -89,7 +89,7 @@ export const TODAS_AS_COLUNAS: ColunaDefinicao[] = [
   {
     id: "gastos",
     rotulo: "Gastos",
-    descricao: "Valor consumido em anúncios no período",
+    descricao: "Valor consumido em anúncios no período; conta do Meta em reais já com os 12,15% de imposto da fatura",
     categoria: "financeiro",
     padraoAtiva: true,
     formato: "moeda",

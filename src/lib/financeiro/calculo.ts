@@ -307,6 +307,22 @@ export type Conversor = (
 ) => { valor: number; aproximado: boolean } | null;
 
 /**
+ * Imposto da Meta no Brasil (PIS/Cofins 9,25% + ISS 2,9%), cobrado na fatura
+ * da conta em BRL e calculado POR DENTRO: R$ 1.000 no Gerenciador viram
+ * R$ 1.138,30 na fatura. O Insights (o nosso gasto) vem sem ele.
+ */
+export const IMPOSTO_META_BR = 0.1215;
+
+/**
+ * O que a conta paga de verdade: conta do Meta em BRL = gasto / (1 - 12,15%);
+ * o resto, o gasto como veio. Vale no lucro e na aba Campanhas; Integracoes
+ * mostra o gasto do Gerenciador, sem o imposto, para conferir.
+ */
+export function gastoComImposto(gasto: number, plataforma: string | null | undefined, moeda: string | null | undefined): number {
+  return plataforma === "meta" && String(moeda || "").toUpperCase() === "BRL" ? gasto / (1 - IMPOSTO_META_BR) : gasto;
+}
+
+/**
  * Conversor pela cotacao do DIA do valor. Sem cotacao no banco (cron de cambio
  * ainda nao rodou, moeda fora da lista), cai na tabela fixa de
  * src/lib/sales/cambio.ts marcando `aproximado` -- a tela avisa. Sem nenhuma
@@ -916,7 +932,7 @@ export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
     if (!conta || !destino) continue;
     const dia = String(g.data).slice(0, 10);
     if (!dentro(dia, iAtual) && !dentro(dia, iAnterior)) continue;
-    const c = converter(paraNumero(g.gasto), g.moeda, e.moeda, dia);
+    const c = converter(gastoComImposto(paraNumero(g.gasto), conta.plataforma, conta.moeda ?? g.moeda), g.moeda, e.moeda, dia);
     if (!c) {
       moedasSemCotacao.add(String(g.moeda).toUpperCase());
       continue;

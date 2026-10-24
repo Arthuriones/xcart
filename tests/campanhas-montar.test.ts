@@ -515,6 +515,9 @@ describe("loja de demonstracao", () => {
     plataforma: c.plataforma,
     external_id: c.external_id,
     status_externo: c.status_externo,
+    // Como a leitura passa: o imposto da Meta segue a moeda da CONTA (USD na
+    // demonstracao), nao a da linha do granular, que o gerador grava em BRL.
+    moeda: c.moeda,
   }));
   const rodar = (desde: string): ResultadoCampanhas => {
     const fxs: FxRateRow[] = [];

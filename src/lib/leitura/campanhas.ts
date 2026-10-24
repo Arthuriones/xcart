@@ -125,7 +125,7 @@ export async function lerCampanhas(): Promise<DadosCampanhas> {
   const todas = filtro.lojaId === TODAS;
   const contas: ContaCampanhas[] = todasContas
     .filter((c) => (c.store_id ? lojaSet.has(c.store_id) : c.checkout_id ? checkoutSet.has(c.checkout_id) : todas))
-    .map((c) => ({ id: c.id, nome: c.nome, plataforma: c.plataforma, external_id: c.external_id, status_externo: c.status_externo }))
+    .map((c) => ({ id: c.id, nome: c.nome, plataforma: c.plataforma, external_id: c.external_id, status_externo: c.status_externo, moeda: c.moeda }))
     .sort((a, b) => (a.nome || a.external_id).localeCompare(b.nome || b.external_id));
 
   if (contas.length === 0) return { contas: [], resultado: null, colunasSalvas: [], moeda: filtro.moeda, periodo };

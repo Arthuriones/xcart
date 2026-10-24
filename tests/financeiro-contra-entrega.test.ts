@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcularFinanceiro, type EntradaFinanceiro, type Totais } from "@/lib/financeiro/calculo";
+import { calcularFinanceiro, gastoComImposto, type EntradaFinanceiro, type Totais } from "@/lib/financeiro/calculo";
 import { montarPorProduto } from "@/lib/leitura/por-produto";
 import { montarPedidos } from "@/lib/leitura/pedidos";
 import {
@@ -447,6 +447,9 @@ function lojaMista(): FinOrderRow[] {
 }
 
 describe("calculo contra entrega", () => {
+  // A CONTA e do Meta em BRL: os 100 de gasto levam o imposto da Meta no Brasil.
+  const g = gastoComImposto(100, "meta", "BRL");
+
   it("recebido, a receber, previsto (taxa padrao), custos dos enviados e lucro", () => {
     const r = calcularFinanceiro(entrada({ pedidos: lojaMista(), gastos: [gasto(100)] }));
     const t = r.atual;
@@ -455,8 +458,9 @@ describe("calculo contra entrega", () => {
     expect(t.pedidos).toBe(2);
     expect(t.cmv).toBe(200); // B, C, D, E e G: 5 x 40 (A ainda nao saiu, F cancelou)
     expect(t.devolucoes).toBe(10); // E
-    expect(t.lucro).toBe(200 - 200 - 10 - 100);
-    expect(t.roas).toBe(2);
+    expect(t.gasto).toBe(g);
+    expect(t.lucro).toBeCloseTo(200 - 200 - 10 - g, 9);
+    expect(t.roas).toBeCloseTo(200 / g, 9);
     // A receber e previsto.
     expect(t.cod.abertos).toBe(3);
     expect(t.cod.recusados).toBe(1);
@@ -467,10 +471,10 @@ describe("calculo contra entrega", () => {
     expect(t.cod.taxaEntrega).toBeCloseTo(0.7);
     expect(t.cod.custoPrevisto).toBe(240); // + A quando sair
     expect(t.cod.devolucoesPrevistas).toBeCloseTo(10 + 3 + 3); // A e B: 10 x 30%
-    expect(t.cod.lucroPrevisto).toBeCloseTo(440 - 240 - 16 - 100);
-    expect(t.cod.roasPrevisto).toBeCloseTo(4.4);
+    expect(t.cod.lucroPrevisto).toBeCloseTo(440 - 240 - 16 - g);
+    expect(t.cod.roasPrevisto).toBeCloseTo(440 / g);
     expect(t.cod.roasEquilibrioPrevisto).toBeCloseTo(440 / (440 - 240 - 16));
-    expect(t.cod.cpa).toBeCloseTo(100 / 6);
+    expect(t.cod.cpa).toBeCloseTo(g / 6);
     expect(r.lojasContraEntrega).toEqual([LOJA]);
     expect(r.entrega).toMatchObject({ taxa: 0.7, fonte: "padrao", amostra: 0 });
   });
@@ -485,7 +489,7 @@ describe("calculo contra entrega", () => {
     expect(r.entrega).toMatchObject({ taxa: 0.9, fonte: "historico", amostra: 20 });
     // O realizado nao muda com a taxa.
     expect(r.atual.receita).toBe(200);
-    expect(r.atual.lucro).toBe(-110);
+    expect(r.atual.lucro).toBeCloseTo(200 - 200 - 10 - g, 9);
   });
 
   it("taxa de pagamento prevista sobre o que se espera receber", () => {

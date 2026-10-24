@@ -113,7 +113,7 @@ export const METRICAS: Record<IdMetrica, DefinicaoMetrica> = {
     formatoVariacao: "pct",
     tipo: "dinheiro",
     definicao:
-      "Gasto do Meta e do Google nas contas ligadas a cada loja, convertido pela cotação do dia.",
+      "Gasto do Meta e do Google nas contas ligadas a cada loja, convertido pela cotação do dia. Conta do Meta em reais já leva os 12,15% de imposto da fatura (PIS/Cofins e ISS).",
     semDado: "Sem gasto no período",
   },
   custo: {
