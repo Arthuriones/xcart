@@ -7,7 +7,7 @@
 // src/lib/billing/plans.ts e o estado vem do banco. Isto so traduz para a tela.
 // ============================================================================
 
-import { planoPorId } from "@/lib/billing/plans";
+import { nomeNaTela, planoPorId } from "@/lib/billing/plans";
 
 export type TomSelo = "ok" | "warn" | "err" | "info" | "neutral" | "run";
 
@@ -126,7 +126,10 @@ export function precoPorCredito(centavos: number): string {
 export interface PerfilAssinatura {
   /** profiles.plan: "pro" ou "free". */
   plano: string | null;
-  /** profiles.plano: o tier ("loja1", "lojas3", "ilimitado"). null = Pro antigo. */
+  /**
+   * profiles.plano: o tier ("roteamento", "completo", "ilimitado_v2", ou um
+   * anterior: "loja1", "lojas3", "ilimitado"). null = Pro antigo.
+   */
   tier?: string | null;
   /** profiles.subscription_status, como o provedor devolve. */
   status: string | null;
@@ -193,10 +196,16 @@ export function situacaoDoPlano(p: PerfilAssinatura, agora: number): SituacaoPla
   const pixVencido = forma === "pix" && temFim && fimMs < agora;
   const pro = p.plano === "pro" && !pixVencido;
 
-  const nomeDoTier = planoPorId(p.tier)?.nome;
+  // Plano fora da venda (os de 08/10 e o Pro antigo sem tier) aparece como
+  // "plano anterior": quem paga por ele mantem preco e limite.
+  const tier = planoPorId(p.tier);
   const base: SituacaoPlano = {
     pro,
-    titulo: nomeDoTier ? `Plano ${nomeDoTier}` : "Plano Pro",
+    titulo: tier
+      ? `Plano ${nomeNaTela(tier)}`
+      : p.acessoLiberado
+        ? "Plano Pro"
+        : "Plano Pro (plano anterior)",
     selo: { tom: "ok", texto: "Ativa" },
     forma: pro ? forma : null,
     linha: null,

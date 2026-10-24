@@ -15,8 +15,8 @@ import {
   situacaoDoPlano,
   type PerfilAssinatura,
 } from "@/components/billing/regras";
-import { BENEFICIOS_PRO } from "@/components/billing/beneficios";
-import { CREDIT_PACKS } from "@/lib/billing/plans";
+import { recursosDoPlano } from "@/components/billing/beneficios";
+import { CREDIT_PACKS, PLANOS } from "@/lib/billing/plans";
 
 const AGORA = Date.parse("2026-10-03T15:00:00Z");
 const DIA = 86_400_000;
@@ -176,11 +176,15 @@ describe("situacaoDoPlano", () => {
   });
 });
 
-describe("situacaoDoPlano com os 3 planos", () => {
-  it("o título diz o plano; o Pro antigo continua Plano Pro", () => {
-    expect(situacaoDoPlano({ ...CARTAO, tier: "lojas3" }, AGORA).titulo).toBe("Plano 3 Lojas");
-    expect(situacaoDoPlano({ ...PIX, tier: "ilimitado" }, AGORA).titulo).toBe("Plano Ilimitado");
-    expect(situacaoDoPlano({ ...CARTAO, tier: null }, AGORA).titulo).toBe("Plano Pro");
+describe("situacaoDoPlano com os planos", () => {
+  it("o título diz o plano; os de fora da venda aparecem como plano anterior", () => {
+    expect(situacaoDoPlano({ ...CARTAO, tier: "completo" }, AGORA).titulo).toBe("Plano Completo");
+    expect(situacaoDoPlano({ ...PIX, tier: "ilimitado_v2" }, AGORA).titulo).toBe("Plano Ilimitado");
+    expect(situacaoDoPlano({ ...CARTAO, tier: "lojas3" }, AGORA).titulo).toBe("Plano 3 Lojas (plano anterior)");
+    expect(situacaoDoPlano({ ...PIX, tier: "ilimitado" }, AGORA).titulo).toBe("Plano Ilimitado (plano anterior)");
+    expect(situacaoDoPlano({ ...CARTAO, tier: null }, AGORA).titulo).toBe("Plano Pro (plano anterior)");
+    // Pro liberado direto no banco (admin), sem tier: nao e "anterior".
+    expect(situacaoDoPlano({ ...CARTAO, tier: null, acessoLiberado: true }, AGORA).titulo).toBe("Plano Pro");
   });
 
   it("diz como mudar de plano: suporte no cartão, outro plano no próximo Pix", () => {
@@ -278,14 +282,21 @@ describe("formatos", () => {
   });
 });
 
-describe("beneficios: uma lista so", () => {
-  it("comeca por lucro, rastreamento e alertas (decisao 2)", () => {
-    expect(BENEFICIOS_PRO[0]).toMatch(/^Lucro/);
-    expect(BENEFICIOS_PRO[1]).toMatch(/^Rastreamento/);
-    expect(BENEFICIOS_PRO[2]).toMatch(/^Alertas/);
+describe("recursos do plano: uma regra so", () => {
+  const [rota, completo, ilimitado] = PLANOS.map((p) => recursosDoPlano(p.limites));
+  it("o Roteamento nao lista rastreamento, nem rodizio com uma loja de checkout so", () => {
+    expect(rota.join(" ")).not.toMatch(/Rastreamento|Lucro|Campanhas|Checkouts externos/);
+    expect(rota.join(" ")).not.toMatch(/Rodízio|Teto de pedidos/);
+    expect(rota[0]).toMatch(/^Roteamento/);
+  });
+  it("Completo e Ilimitado listam o rodizio e o rastreamento", () => {
+    for (const lista of [completo, ilimitado]) {
+      expect(lista.join(" ")).toMatch(/Rodízio/);
+      expect(lista.join(" ")).toMatch(/Rastreamento/);
+    }
   });
   it("nao promete teste gratis nem preco escrito a mao", () => {
-    for (const b of BENEFICIOS_PRO) {
+    for (const b of [...rota, ...completo, ...ilimitado]) {
       expect(b).not.toMatch(/grátis|gratuit|R\$|\$/i);
     }
   });

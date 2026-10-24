@@ -23,7 +23,8 @@ export function TelaAssinatura({ d }: { d: LeituraAssinatura }) {
           situacao={situacao}
           temDocumento={perfil.temDocumento}
           uso={d.uso}
-          // Pro antigo (sem tier) renova no plano com os mesmos limites.
+          // Plano anterior (fora da venda) renova nele mesmo, pelo mesmo preco;
+          // o Pro antigo (sem tier), no 1 Loja, que tem os mesmos limites.
           planoAtual={ehPlanoId(perfil.tier) ? perfil.tier : PLANO_BASE}
           noBanco={{
             status: perfil.status,

@@ -13,20 +13,43 @@ export const PRO_PRICE_CENTS = 8900; // R$ 89,00
 export const PRO_INCLUDED_CREDITS = 20;
 
 // ============================================================================
-// Os 3 planos (decisao do Arthur, 08/10/2026). Todos sao "pro" para fins de
-// acesso (profiles.plan = 'pro'); o que muda e o limite de lojas, gravado em
-// profiles.plano. Mesmos recursos e mesmos creditos inclusos nos tres.
+// Os planos (decisao do Arthur, 24/10/2026): Roteamento, Completo e
+// Ilimitado. Todos sao "pro" para fins de acesso (profiles.plan = 'pro'); o
+// que muda e o LIMITE, gravado em profiles.plano:
+//   - vitrines e lojas de checkout no roteamento, contadas a parte;
+//   - operacoes (loja Shopify ou checkout externo) com o rastreamento ligado.
+//     0 = o plano nao inclui rastreamento.
+// A trava e so de quantidade (limites.ts). Recurso nenhum fica preso ao plano
+// alem do rastreamento ausente no Roteamento.
+//
+// Os planos de 08/10/2026 (1 Loja, 3 Lojas, Ilimitado de R$ 169,90) sairam da
+// venda, mas quem ja paga por eles MANTEM preco e limite: continuam
+// reconhecidos pelo valor (webhook), pelos limites, no MRR do admin e na troca
+// por Pix (apply_paid_purchase, migration 078). O limite deles era de lojas
+// distintas no roteamento (vitrines + checkouts juntas): `roteamento`.
 //
 // Este e o catalogo UNICO: o checkout cobra daqui, a landing, o paywall e a
 // Assinatura mostram daqui, e a trava de limite (limites.ts) le daqui.
 // ============================================================================
 
-export type PlanoId = "loja1" | "lojas3" | "ilimitado";
+export type PlanoAVendaId = "roteamento" | "completo" | "ilimitado_v2";
+export type PlanoAnteriorId = "loja1" | "lojas3" | "ilimitado";
+export type PlanoId = PlanoAVendaId | PlanoAnteriorId;
 
 export interface LimitesPlano {
-  /** Lojas com o rastreamento ligado. null = sem limite. */
+  /**
+   * Operacoes com o rastreamento ligado: lojas Shopify e checkouts externos,
+   * no mesmo conjunto. 0 = nao incluso. null = sem limite.
+   */
   rastreamento: number | null;
-  /** Lojas distintas no roteamento (vitrines + lojas de checkout). null = sem limite. */
+  /** Vitrines distintas no roteamento. null = sem limite. */
+  vitrines: number | null;
+  /** Lojas de checkout distintas no roteamento. null = sem limite. */
+  checkouts: number | null;
+  /**
+   * Lojas distintas no roteamento, vitrines e checkouts juntas: o teto dos
+   * planos anteriores. null = sem esse teto.
+   */
   roteamento: number | null;
 }
 
@@ -39,41 +62,83 @@ export interface Plano {
   subtitulo: string;
   /** O cartao em evidencia na landing e o marcado de partida na escolha. */
   destaque: boolean;
+  /** Aparece para assinar. Os anteriores so valem para quem ja paga por eles. */
+  aVenda: boolean;
 }
 
 export const PLANOS: readonly Plano[] = [
   {
+    id: "roteamento",
+    nome: "Roteamento",
+    precoCentavos: 19700,
+    limites: { rastreamento: 0, vitrines: 1, checkouts: 1, roteamento: null },
+    selo: null,
+    subtitulo: "Uma vitrine roteando para uma loja de checkout",
+    destaque: false,
+    aVenda: true,
+  },
+  {
+    id: "completo",
+    nome: "Completo",
+    precoCentavos: 49700,
+    limites: { rastreamento: 5, vitrines: 5, checkouts: 5, roteamento: null },
+    selo: "Recomendado",
+    subtitulo: "Roteamento com rodízio e rastreamento",
+    destaque: true,
+    aVenda: true,
+  },
+  {
+    id: "ilimitado_v2",
+    nome: "Ilimitado",
+    precoCentavos: 99700,
+    limites: { rastreamento: null, vitrines: null, checkouts: null, roteamento: null },
+    selo: null,
+    subtitulo: "Vitrines, checkouts e rastreamento sem limite",
+    destaque: false,
+    aVenda: true,
+  },
+];
+
+/** Fora da venda desde 24/10/2026. Mesmos preco e limites de quando foram assinados. */
+export const PLANOS_ANTERIORES: readonly Plano[] = [
+  {
     id: "loja1",
     nome: "1 Loja",
     precoCentavos: 7990,
-    limites: { rastreamento: 1, roteamento: 6 },
+    limites: { rastreamento: 1, vitrines: null, checkouts: null, roteamento: 6 },
     selo: null,
     subtitulo: "Perfeito para começar",
     destaque: false,
+    aVenda: false,
   },
   {
     id: "lojas3",
     nome: "3 Lojas",
     precoCentavos: 11990,
-    limites: { rastreamento: 3, roteamento: 12 },
-    selo: "Custo benefício!",
+    limites: { rastreamento: 3, vitrines: null, checkouts: null, roteamento: 12 },
+    selo: null,
     subtitulo: "Mais lojas para integrar",
-    destaque: true,
+    destaque: false,
+    aVenda: false,
   },
   {
     id: "ilimitado",
     nome: "Ilimitado",
     precoCentavos: 16990,
-    limites: { rastreamento: null, roteamento: null },
-    selo: "Maior desconto!",
+    limites: { rastreamento: null, vitrines: null, checkouts: null, roteamento: null },
+    selo: null,
     subtitulo: "Máxima economia + recursos infinitos",
     destaque: false,
+    aVenda: false,
   },
 ];
 
+const TODOS_OS_PLANOS: readonly Plano[] = [...PLANOS, ...PLANOS_ANTERIORES];
+
 /**
  * Limites de quem nao tem tier gravado: assinante de antes dos planos (Stripe
- * ou Pagou a R$ 89) e conta sem assinatura. Palavra do Arthur: o do 1 Loja.
+ * ou Pagou a R$ 89) e conta sem assinatura. Palavra do Arthur (08/10): o do
+ * 1 Loja -- e continua assim.
  */
 export const PLANO_BASE: PlanoId = "loja1";
 
@@ -85,12 +150,23 @@ export const GARANTIA = {
   longa: `${GARANTIA_DIAS} dias de garantia de satisfação ou seu dinheiro de volta!`,
 } as const;
 
+/** Qualquer plano conhecido, a venda ou anterior (o que pode estar no banco). */
 export function ehPlanoId(v: unknown): v is PlanoId {
-  return v === "loja1" || v === "lojas3" || v === "ilimitado";
+  return TODOS_OS_PLANOS.some((p) => p.id === v);
+}
+
+/** So os planos que se assinam hoje. */
+export function ehPlanoAVenda(v: unknown): v is PlanoAVendaId {
+  return PLANOS.some((p) => p.id === v);
 }
 
 export function planoPorId(id: unknown): Plano | undefined {
-  return PLANOS.find((p) => p.id === id);
+  return TODOS_OS_PLANOS.find((p) => p.id === id);
+}
+
+/** "3 Lojas (plano anterior)" para quem ainda paga um plano fora da venda. */
+export function nomeNaTela(p: Plano): string {
+  return p.aVenda ? p.nome : `${p.nome} (plano anterior)`;
 }
 
 /** O plano de partida da escolha (o em destaque). */
@@ -98,19 +174,42 @@ export function planoEmDestaque(): Plano {
   return PLANOS.find((p) => p.destaque) ?? PLANOS[0];
 }
 
-/** O plano seguinte, com mais lojas. null no ultimo. */
-export function proximoPlano(id: PlanoId): Plano | null {
-  const i = PLANOS.findIndex((p) => p.id === id);
-  return i >= 0 && i < PLANOS.length - 1 ? PLANOS[i + 1] : null;
+/** O que a conta usa (ou usaria depois de uma mudanca), contado. */
+export interface ContagemDeUso {
+  rastreamento: number;
+  vitrines: number;
+  checkouts: number;
+  /** Lojas distintas no roteamento, vitrines e checkouts juntas. */
+  roteamento: number;
+}
+
+/** O uso cabe nestes limites? */
+export function cabeNoPlano(l: LimitesPlano, u: ContagemDeUso): boolean {
+  const cabe = (limite: number | null, n: number) => limite === null || n <= limite;
+  // Sem teto total, N lojas distintas ainda nao cabem em menos que vitrines + checkouts.
+  const total =
+    l.roteamento ?? (l.vitrines !== null && l.checkouts !== null ? l.vitrines + l.checkouts : null);
+  return (
+    cabe(l.rastreamento, u.rastreamento) &&
+    cabe(l.vitrines, u.vitrines) &&
+    cabe(l.checkouts, u.checkouts) &&
+    cabe(total, u.roteamento)
+  );
+}
+
+/** O primeiro plano A VENDA (do mais barato) onde o uso cabe. null se nenhum. */
+export function planoQueCobre(u: ContagemDeUso, atual?: PlanoId | null): Plano | null {
+  return PLANOS.find((p) => p.id !== atual && cabeNoPlano(p.limites, u)) ?? null;
 }
 
 /**
  * O tier de uma cobranca pelo VALOR que a Pagou devolve. E o que o webhook usa
- * para gravar o plano quando a gravacao do subscribe se perdeu. O valor antigo
- * (R$ 89) e os desconhecidos voltam null: o webhook entao nao mexe no plano.
+ * para gravar o plano quando a gravacao do subscribe se perdeu. Reconhece os a
+ * venda e os anteriores (os precos nao se repetem). O valor antigo (R$ 89) e
+ * os desconhecidos voltam null: o webhook entao nao mexe no plano.
  */
 export function planoDoValor(centavos: number | null | undefined): PlanoId | null {
-  return PLANOS.find((p) => p.precoCentavos === centavos)?.id ?? null;
+  return TODOS_OS_PLANOS.find((p) => p.precoCentavos === centavos)?.id ?? null;
 }
 
 /** Quanto a conta paga por mes (centavos), para o MRR do admin. 0 sem Pro. */
@@ -119,16 +218,50 @@ export function precoMensalCentavos(p: { plan?: string | null; plano?: string | 
   return planoPorId(p.plano)?.precoCentavos ?? PRO_PRICE_CENTS;
 }
 
-/** "1 loja com rastreamento", "Rastreamento sem limite de lojas". */
-export function textoLimiteRastreamento(n: number | null): string {
-  if (n === null) return "Rastreamento sem limite de lojas";
-  return n === 1 ? "1 loja com rastreamento" : `${n} lojas com rastreamento`;
+/** "1 vitrine", "até 5 vitrines". */
+export function quantas(n: number, um: string, varios: string): string {
+  return n === 1 ? `1 ${um}` : `até ${n} ${varios}`;
 }
 
-/** "Até 6 lojas no roteamento", "Roteamento sem limite de lojas". */
-export function textoLimiteRoteamento(n: number | null): string {
-  if (n === null) return "Roteamento sem limite de lojas";
-  return n === 1 ? "1 loja no roteamento" : `Até ${n} lojas no roteamento`;
+function comMaiuscula(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+export function comMinuscula(s: string): string {
+  return s.charAt(0).toLowerCase() + s.slice(1);
+}
+
+/** "Sem rastreamento", "Rastreamento em até 5 operações (loja ou checkout)". */
+export function textoLimiteRastreamento(n: number | null): string {
+  if (n === null) return "Rastreamento sem limite de operações";
+  if (n === 0) return "Sem rastreamento";
+  return `Rastreamento em ${quantas(n, "operação", "operações")} (loja ou checkout)`;
+}
+
+/**
+ * "1 vitrine e 1 loja de checkout no roteamento", "Até 6 lojas no roteamento"
+ * (os planos anteriores), "Roteamento sem limite de lojas".
+ */
+export function textoLimiteRoteamento(l: Pick<LimitesPlano, "vitrines" | "checkouts" | "roteamento">): string {
+  if (l.vitrines === null && l.checkouts === null) {
+    if (l.roteamento === null) return "Roteamento sem limite de lojas";
+    return `${comMaiuscula(quantas(l.roteamento, "loja", "lojas"))} no roteamento`;
+  }
+  const vitrines = l.vitrines === null ? "vitrines sem limite" : quantas(l.vitrines, "vitrine", "vitrines");
+  const checkouts =
+    l.checkouts === null
+      ? "lojas de checkout sem limite"
+      : quantas(l.checkouts, "loja de checkout", "lojas de checkout");
+  const total = l.roteamento === null ? "" : `, ${quantas(l.roteamento, "loja", "lojas")} no total`;
+  return `${comMaiuscula(vitrines)} e ${checkouts} no roteamento${total}`;
+}
+
+/** Os limites numa linha: "Sem rastreamento · 1 vitrine e 1 loja de checkout no roteamento". */
+export function resumoDosLimites(l: LimitesPlano): string {
+  if (l.rastreamento === null && l.vitrines === null && l.checkouts === null && l.roteamento === null) {
+    return "Rastreamento e roteamento sem limite";
+  }
+  return `${textoLimiteRastreamento(l.rastreamento)} · ${comMinuscula(textoLimiteRoteamento(l))}`;
 }
 
 // Trial: quantas lojas uma conta nova pode clonar de graca antes de assinar.
@@ -164,12 +297,3 @@ export function formatBRL(cents: number): string {
 // custo de IA (USD, Gemini) na mesma unidade. Nao afeta cobranca nenhuma.
 // Ajuste por env quando o cambio andar demais.
 export const USD_BRL_REPORTING = Number(process.env.USD_BRL_RATE) || 5.4;
-
-/** Os dois limites numa linha: "1 loja com rastreamento · até 6 lojas no roteamento". */
-export function resumoDosLimites(l: LimitesPlano): string {
-  if (l.rastreamento === null && l.roteamento === null) {
-    return "Rastreamento e roteamento sem limite de lojas";
-  }
-  const rota = textoLimiteRoteamento(l.roteamento);
-  return `${textoLimiteRastreamento(l.rastreamento)} · ${rota.charAt(0).toLowerCase()}${rota.slice(1)}`;
-}

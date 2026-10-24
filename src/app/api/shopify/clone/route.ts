@@ -538,7 +538,8 @@ export async function POST(request: NextRequest) {
   // depois gastava a clonagem sem clonar nada.
   if (action === "apply" && conferirRota && sourceStoreId && targetStoreId) {
     const limite = await conferirRoteamento(await createClient(), userId, {
-      adicionar: [sourceStoreId, targetStoreId],
+      vitrine: sourceStoreId,
+      checkout: targetStoreId,
     });
     if (!limite.ok) return NextResponse.json(corpoDoBloqueio(limite), { status: limite.status });
   }

@@ -228,7 +228,9 @@ function TextoDoUso({ uso }: { uso: RastreamentoDoCheckout["uso"] }) {
   const texto =
     uso.limite === null
       ? `Checkout com rastreamento conta como uma loja no plano. Hoje: ${n} ${lojas} com rastreamento, sem limite.`
-      : `Checkout com rastreamento conta como uma loja no plano: ${n} de ${uso.limite} em uso${uso.esteConta ? ", este incluído" : ""}.`;
+      : uso.limite === 0
+        ? "Seu plano não inclui rastreamento. O Completo inclui até 5 lojas ou checkouts."
+        : `Checkout com rastreamento conta como uma loja no plano: ${n} de ${uso.limite} em uso${uso.esteConta ? ", este incluído" : ""}.`;
   return <p className="text-label text-t2">{texto}</p>;
 }
 

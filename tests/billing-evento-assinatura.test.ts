@@ -66,4 +66,13 @@ describe("decidirAviso", () => {
     const semColuna = { pagou_subscription_id: "sub_B", subscription_status: "active" };
     expect(decidirAviso(semColuna, { id: "sub_B", status: "active", amount: 7990 }).plano).toBe("loja1");
   });
+
+  it("reconhece pelo valor os planos de 24/10 e os anteriores, que seguem valendo", () => {
+    const semTier = perfil({ pagou_subscription_id: null, subscription_status: null, plano: null });
+    const tier = (amount: number) => decidirAviso(semTier, { id: "sub_N", status: "active", amount }).plano;
+    expect([19700, 49700, 99700].map(tier)).toEqual(["roteamento", "completo", "ilimitado_v2"]);
+    expect([7990, 11990, 16990].map(tier)).toEqual(["loja1", "lojas3", "ilimitado"]);
+    // O tier novo gravado vale como tier: a mesma assinatura nao regrava.
+    expect(decidirAviso(perfil({ plano: "completo" }), { id: "sub_B", status: "active", amount: 49700 }).plano).toBeNull();
+  });
 });

@@ -1,4 +1,4 @@
-import { ehPlanoId, type PlanoId } from "@/lib/billing/plans";
+import { ehPlanoAVenda, type PlanoAVendaId } from "@/lib/billing/plans";
 
 // ============================================================================
 // O plano escolhido na landing, guardado no navegador ate a pessoa chegar na
@@ -7,13 +7,14 @@ import { ehPlanoId, type PlanoId } from "@/lib/billing/plans";
 // confirmacao por e-mail, que perderia um parametro de URL.
 //
 // So conveniencia: sem armazenamento (aba anonima, bloqueado), a escolha
-// volta ao plano em destaque. Nada de cobranca le daqui.
+// volta ao plano em destaque. Nada de cobranca le daqui. So guarda plano A
+// VENDA: link velho com ?plano=loja1 (plano anterior) abre no em destaque.
 // ============================================================================
 
 const CHAVE = "xcart:plano";
 
 export function guardarPlanoEscolhido(id: unknown): void {
-  if (!ehPlanoId(id)) return;
+  if (!ehPlanoAVenda(id)) return;
   try {
     localStorage.setItem(CHAVE, id);
   } catch {
@@ -21,10 +22,10 @@ export function guardarPlanoEscolhido(id: unknown): void {
   }
 }
 
-export function lerPlanoEscolhido(): PlanoId | null {
+export function lerPlanoEscolhido(): PlanoAVendaId | null {
   try {
     const v = localStorage.getItem(CHAVE);
-    return ehPlanoId(v) ? v : null;
+    return ehPlanoAVenda(v) ? v : null;
   } catch {
     return null;
   }

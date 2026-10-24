@@ -8,6 +8,7 @@ import {
   textoLimiteRoteamento,
   type PlanoId,
 } from "@/lib/billing/plans";
+import { recursosDoPlano } from "@/components/billing/beneficios";
 
 // ============================================================================
 // Os planos como a landing mostra. Preco, limites, creditos e pacotes saem de
@@ -15,8 +16,9 @@ import {
 // a mao aqui, e todo valor passa pelo mesmo formatador (Intl, pt-BR, centavos
 // inclusos).
 //
-// A lista do que todo plano inclui NAO mora aqui: e a mesma de /billing e do
-// paywall, em src/components/billing/beneficios.ts (decisao 2 do redesign).
+// A lista do que cada plano inclui NAO mora aqui: e a mesma de /billing e do
+// paywall, em src/components/billing/beneficios.ts (recursosDoPlano), e sai
+// dos limites do plano -- so o que o xcart tem (decisao de 24/10/2026).
 // ============================================================================
 
 export const CREDITOS_INCLUSOS = PRO_INCLUDED_CREDITS;
@@ -36,28 +38,12 @@ export interface PlanoNaTela {
   id: PlanoId;
   nome: string;
   subtitulo: string;
-  /** "79,90" -- o "R$" vai separado, pequeno. */
+  /** "197,00" -- o "R$" vai separado, pequeno. */
   valor: string;
   selo?: string;
   destaque?: boolean;
   itens: readonly string[];
 }
-
-// Texto de venda do Arthur (08/10/2026). Os limites de loja NAO entram aqui:
-// saem de plans.ts, no topo de cada lista.
-const ITENS_COMUNS = [
-  `${GARANTIA_DO_PLANO.curta}.`,
-  "Métricas de produto 100% assertivas.",
-  "Perfis de Facebook e Google ilimitados.",
-  "Análise de tráfego detalhada.",
-  "Suporte prioritário.",
-] as const;
-
-const ITENS_DO_PLANO: Record<PlanoId, readonly string[]> = {
-  loja1: [],
-  lojas3: ["20% OFF todo mês de assinatura."],
-  ilimitado: ["Desconto insuperável."],
-};
 
 export const PLANOS: readonly PlanoNaTela[] = PLANOS_COBRADOS.map((p) => ({
   id: p.id,
@@ -66,15 +52,16 @@ export const PLANOS: readonly PlanoNaTela[] = PLANOS_COBRADOS.map((p) => ({
   valor: precoEmPartes(p.precoCentavos).valor,
   ...(p.selo ? { selo: p.selo } : {}),
   ...(p.destaque ? { destaque: true } : {}),
+  // Os limites no topo, depois o que o plano inclui e a garantia.
   itens: [
     `${textoLimiteRastreamento(p.limites.rastreamento)}.`,
-    `${textoLimiteRoteamento(p.limites.roteamento)}.`,
-    ...ITENS_DO_PLANO[p.id],
-    ...ITENS_COMUNS,
+    `${textoLimiteRoteamento(p.limites)}.`,
+    ...recursosDoPlano(p.limites).map((r) => `${r}.`),
+    `${GARANTIA_DO_PLANO.curta}.`,
   ],
 }));
 
-/** "R$ 79,90": o plano mais barato. */
+/** "R$ 197,00": o plano mais barato a venda. */
 export const PRECO_A_PARTIR = formatBRL(
   Math.min(...PLANOS_COBRADOS.map((p) => p.precoCentavos))
 );

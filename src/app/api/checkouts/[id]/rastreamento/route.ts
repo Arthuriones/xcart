@@ -227,7 +227,7 @@ async function temTokenSalvo(
 async function conferirLimite(admin: Admin, userId: string, checkoutId: string) {
   const limite = await conferirLigarRastreamento(admin, userId, { checkoutId });
   if (limite.ok) return null;
-  const erro = limite.codigo === "limite_do_plano" ? `${limite.mensagem} Checkout com rastreamento conta como uma loja.` : limite.mensagem;
+  const erro = limite.mensagem;
   return json(limite.status, { ok: false, erro, code: limite.codigo });
 }
 

@@ -57,8 +57,9 @@ export function decidirAviso(perfil: PerfilDoAviso, sub: AvisoDeAssinatura): Dec
   // O tier sai do VALOR cobrado, mas so quando a assinatura e nova para o
   // perfil ou o perfil ainda nao tem tier. Sobre a mesma assinatura com tier
   // gravado, quem manda e o perfil: o suporte pode ter mudado o plano, e o
-  // proximo aviso nao desfaz. Valor fora do catalogo (o R$ 89 antigo) nunca
-  // grava nada.
+  // proximo aviso nao desfaz. O valor reconhece os planos a venda e os
+  // anteriores (o cartao de R$ 119,90 segue 3 Lojas). Valor fora do catalogo
+  // (o R$ 89 antigo) nunca grava nada.
   const tier = planoDoValor(sub.amount);
   const grava = !mesma || !ehPlanoId(perfil.plano);
   return { aplicar: true, plano: grava ? tier : null, motivo: null };

@@ -217,7 +217,8 @@ export async function POST(request: NextRequest) {
   // traz a loja de checkout nova. So casar, sem gravar rota, nao conta.
   if (routeId || createRoute) {
     const limite = await conferirRoteamento(supabase, user.id, {
-      adicionar: [sourceStoreId, targetStoreId],
+      vitrine: sourceStoreId,
+      checkout: targetStoreId,
     });
     if (!limite.ok) return NextResponse.json(corpoDoBloqueio(limite), { status: limite.status });
   }

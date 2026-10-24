@@ -4,7 +4,7 @@ import {
   PLANOS as PLANOS_COBRADOS,
   PRO_INCLUDED_CREDITS,
 } from "@/lib/billing/plans";
-import { BENEFICIOS_PRO } from "@/components/billing/beneficios";
+import { recursosDoPlano } from "@/components/billing/beneficios";
 import { PACOTES, PLANOS, POLITICA_TESTE, PRECO_A_PARTIR } from "@/app/lp/plano";
 import {
   COMPARACAO,
@@ -19,8 +19,9 @@ import {
   ROTEAMENTO,
 } from "@/app/lp/conteudo";
 
-// A landing nao escreve numero a mao: preco, creditos e pacotes saem do
-// arquivo que cobra. E vende primeiro Lucro, Rastreamento e Alertas.
+// A landing nao escreve numero a mao: preco, limites, creditos e pacotes saem
+// do arquivo que cobra, e a lista de cada plano sai dos limites dele (so o que
+// o xcart tem). E vende primeiro Lucro, Rastreamento e Alertas.
 
 const NBSP = / /g;
 const limpo = (s: string) => s.replace(NBSP, " ");
@@ -36,17 +37,38 @@ describe("preço na landing", () => {
       expect(p.valor).toBe(emReais(cobrado.precoCentavos));
       expect(p.selo ?? null).toBe(cobrado.selo);
     }
-    expect(PLANOS.map((p) => p.valor)).toEqual(["79,90", "119,90", "169,90"]);
-    expect(limpo(PRECO_A_PARTIR)).toBe("R$ 79,90");
+    expect(PLANOS.map((p) => [p.id, p.nome, p.valor])).toEqual([
+      ["roteamento", "Roteamento", "197,00"],
+      ["completo", "Completo", "497,00"],
+      ["ilimitado_v2", "Ilimitado", "997,00"],
+    ]);
+    expect(limpo(PRECO_A_PARTIR)).toBe("R$ 197,00");
+    // O em destaque e o Completo; os planos anteriores nao aparecem.
+    expect(PLANOS.filter((p) => p.destaque).map((p) => p.id)).toEqual(["completo"]);
+    expect(PLANOS.map((p) => p.id)).not.toContain("lojas3");
   });
 
-  it("cada cartão abre com os limites reais de loja", () => {
+  it("cada cartão abre com os limites reais", () => {
     expect(PLANOS.map((p) => p.itens.slice(0, 2))).toEqual([
-      ["1 loja com rastreamento.", "Até 6 lojas no roteamento."],
-      ["3 lojas com rastreamento.", "Até 12 lojas no roteamento."],
-      ["Rastreamento sem limite de lojas.", "Roteamento sem limite de lojas."],
+      ["Sem rastreamento.", "1 vitrine e 1 loja de checkout no roteamento."],
+      ["Rastreamento em até 5 operações (loja ou checkout).", "Até 5 vitrines e até 5 lojas de checkout no roteamento."],
+      ["Rastreamento sem limite de operações.", "Roteamento sem limite de lojas."],
     ]);
     for (const p of PLANOS) expect(p.itens.join(" ")).not.toMatch(/loja disponível|lojas disponíveis/);
+  });
+
+  it("depois dos limites, só o que o plano tem, e a garantia no fim", () => {
+    for (const [i, p] of PLANOS.entries()) {
+      const recursos = recursosDoPlano(PLANOS_COBRADOS[i].limites).map((r) => `${r}.`);
+      expect(p.itens.slice(2, -1)).toEqual(recursos);
+      expect(p.itens.at(-1)).toMatch(/dias de garantia\.$/);
+    }
+    // Sem as promessas que o xcart nao entrega.
+    for (const p of PLANOS) {
+      expect(p.itens.join(" ")).not.toMatch(/100% assertivas|Suporte prioritário|20% OFF|insuperável|ilimitados/);
+    }
+    expect(PLANOS[0].itens.join(" ")).not.toMatch(/Meta e ao TikTok/);
+    expect(PLANOS[1].itens.join(" ")).toMatch(/Meta e ao TikTok/);
   });
 
   it("mostra todos os pacotes, na mesma ordem, com centavos", () => {
@@ -59,29 +81,28 @@ describe("preço na landing", () => {
   });
 });
 
-// A landing le a mesma lista de /billing e do paywall (decisao 2).
-describe("lista de benefícios do plano", () => {
-  it("começa por lucro, rastreamento e alertas (decisão 2)", () => {
-    expect(BENEFICIOS_PRO[0]).toMatch(/^Lucro/);
-    expect(BENEFICIOS_PRO[1]).toMatch(/Meta e ao TikTok/);
-    expect(BENEFICIOS_PRO[1]).toMatch(/Google/);
-    expect(BENEFICIOS_PRO[2]).toMatch(/^Alertas/);
+// A landing le a mesma regra de /billing e do paywall (recursosDoPlano).
+describe("o que cada plano inclui", () => {
+  it("o rastreamento diz por onde cada rede recebe (Google pela tag)", () => {
+    const comRastreio = recursosDoPlano(PLANOS_COBRADOS[1].limites);
+    const linha = comRastreio.find((b) => /^Rastreamento/.test(b));
+    expect(linha).toMatch(/Meta e ao TikTok pelo servidor/);
+    expect(linha).toMatch(/Google pela tag/);
   });
 
-  it("cita os créditos inclusos com o número do plano", () => {
-    const comCreditos = BENEFICIOS_PRO.filter((b) => b.includes("créditos"));
-    expect(comCreditos).toHaveLength(1);
-    expect(comCreditos[0].startsWith(`${PRO_INCLUDED_CREDITS} créditos`)).toBe(true);
-  });
-
-  it("deixa o roteamento como módulo, depois de lucro, rastreamento e alertas", () => {
-    expect(BENEFICIOS_PRO.findIndex((b) => /^Roteamento/.test(b))).toBeGreaterThan(2);
+  it("cita os créditos inclusos com o número do plano, uma vez em cada plano", () => {
+    for (const p of PLANOS_COBRADOS) {
+      const comCreditos = recursosDoPlano(p.limites).filter((b) => b.includes("créditos"));
+      expect(comCreditos).toHaveLength(1);
+      expect(comCreditos[0].startsWith(`${PRO_INCLUDED_CREDITS} créditos`)).toBe(true);
+    }
   });
 });
 
 describe("texto da landing", () => {
   const todos = [
-    ...BENEFICIOS_PRO,
+    ...PLANOS_COBRADOS.flatMap((p) => recursosDoPlano(p.limites)),
+    ...PLANOS.flatMap((p) => p.itens),
     ...RECURSOS_PRINCIPAIS.flatMap((r) => [r.titulo, r.resumo, ...r.pontos]),
     ...OUTROS_RECURSOS.flatMap((r) => [r.titulo, r.texto]),
     ...PERGUNTAS.flatMap((p) => [p.pergunta, p.resposta]),

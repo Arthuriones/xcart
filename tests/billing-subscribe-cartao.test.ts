@@ -115,7 +115,7 @@ describe("/api/billing/subscribe devolve a transação da 1ª cobrança", () => 
       buyer: { name: "A", email: "a@b.com" },
     });
 
-    const r = await assinar(req({ cardToken: "pgct_x", plano: "lojas3" }));
+    const r = await assinar(req({ cardToken: "pgct_x", plano: "completo" }));
     expect(r.status).toBe(200);
     const corpo = await r.json();
 
@@ -125,7 +125,7 @@ describe("/api/billing/subscribe devolve a transação da 1ª cobrança", () => 
     expect(corpo.pending).toBe(true);
     expect(corpo).not.toHaveProperty("mensagem");
     // O plano escolhido continua mandando no valor.
-    expect(createSubscription.mock.calls[0][0]).toMatchObject({ amountCents: 11990, plano: "lojas3" });
+    expect(createSubscription.mock.calls[0][0]).toMatchObject({ amountCents: 49700, plano: "completo" });
     expect(estado.updates.at(-1)).toMatchObject({ plan: "free", subscription_status: "incomplete" });
   });
 
@@ -134,7 +134,7 @@ describe("/api/billing/subscribe devolve a transação da 1ª cobrança", () => 
     getSubscription.mockResolvedValue({ id: "sub_1", status: "active", transactions: [{ id: "tx_1" }] });
     getTransaction.mockResolvedValue({ id: "tx_1", status: "captured" });
 
-    const corpo = await (await assinar(req({ cardToken: "pgct_x", plano: "loja1" }))).json();
+    const corpo = await (await assinar(req({ cardToken: "pgct_x", plano: "roteamento" }))).json();
     expect(corpo.transaction).toEqual({ id: "tx_1", status: "captured", next_action: null });
     expect(corpo.pending).toBe(false);
   });
@@ -147,7 +147,7 @@ describe("/api/billing/subscribe devolve a transação da 1ª cobrança", () => 
       transactions: [{ id: "tx_novo" }, { id: "tx_velho" }],
     });
     getTransaction.mockResolvedValue({ id: "tx_novo", status: "pending" });
-    await assinar(req({ cardToken: "pgct_x", plano: "loja1" }));
+    await assinar(req({ cardToken: "pgct_x", plano: "roteamento" }));
     expect(getTransaction).toHaveBeenCalledWith("tx_novo");
   });
 
@@ -155,7 +155,7 @@ describe("/api/billing/subscribe devolve a transação da 1ª cobrança", () => 
     assinaturaCriada("incomplete");
     getSubscription.mockResolvedValue({ id: "sub_1", status: "incomplete", transactions: [] });
 
-    const r = await assinar(req({ cardToken: "pgct_x", plano: "loja1" }));
+    const r = await assinar(req({ cardToken: "pgct_x", plano: "roteamento" }));
     expect(r.status).toBe(200);
     const corpo = await r.json();
     expect(getTransaction).not.toHaveBeenCalled();
@@ -170,7 +170,7 @@ describe("/api/billing/subscribe devolve a transação da 1ª cobrança", () => 
     getSubscription.mockResolvedValue({ id: "sub_1", status: "incomplete", transactions: [{ id: "tx_1" }] });
     getTransaction.mockRejectedValue(new Error("fora do ar"));
 
-    const r = await assinar(req({ cardToken: "pgct_x", plano: "loja1" }));
+    const r = await assinar(req({ cardToken: "pgct_x", plano: "roteamento" }));
     expect(r.status).toBe(200);
     const corpo = await r.json();
     expect(corpo.transaction).toBeNull();
@@ -182,7 +182,7 @@ describe("/api/billing/subscribe devolve a transação da 1ª cobrança", () => 
   it("ativa mas sem conseguir a transação: não vira pendente (active só vem com a cobrança aprovada)", async () => {
     assinaturaCriada("active");
     getSubscription.mockRejectedValue(new Error("fora do ar"));
-    const corpo = await (await assinar(req({ cardToken: "pgct_x", plano: "loja1" }))).json();
+    const corpo = await (await assinar(req({ cardToken: "pgct_x", plano: "roteamento" }))).json();
     expect(corpo.transaction).toBeNull();
     expect(corpo.pending).toBe(false);
     expect(corpo).not.toHaveProperty("mensagem");
@@ -190,7 +190,7 @@ describe("/api/billing/subscribe devolve a transação da 1ª cobrança", () => 
 
   it("Pix automático não busca transação de cartão", async () => {
     assinaturaCriada("incomplete");
-    const corpo = await (await assinar(req({ method: "pix_automatic", plano: "loja1" }))).json();
+    const corpo = await (await assinar(req({ method: "pix_automatic", plano: "roteamento" }))).json();
     expect(getSubscription).not.toHaveBeenCalled();
     expect(getTransaction).not.toHaveBeenCalled();
     expect(corpo.transaction).toBeNull();

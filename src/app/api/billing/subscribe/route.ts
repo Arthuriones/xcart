@@ -12,7 +12,7 @@ import {
   PagouError,
   respostaDoErroPagou,
 } from "@/lib/billing/pagou";
-import { CURRENCY, ehPlanoId, planoDoValor, planoPorId } from "@/lib/billing/plans";
+import { CURRENCY, ehPlanoAVenda, planoDoValor, planoPorId } from "@/lib/billing/plans";
 import { atualizarPerfil } from "@/lib/billing/limites";
 
 export const runtime = "nodejs";
@@ -90,8 +90,10 @@ async function liberarTentativaAnterior(id: string, chave: string): Promise<Next
  * POST -> cria a assinatura de um dos planos na Pagou.
  *
  * Body: { plano, cardToken } para cartao, ou { plano, method: "pix_automatic",
- * billingDay }. `plano` e obrigatorio ('loja1' | 'lojas3' | 'ilimitado'): o
- * valor cobrado sai de plans.ts pelo tier, nunca do corpo.
+ * billingDay }. `plano` e obrigatorio e A VENDA ('roteamento' | 'completo' |
+ * 'ilimitado_v2'): o valor cobrado sai de plans.ts pelo tier, nunca do corpo.
+ * Os planos anteriores nao se assinam de novo -- quem paga por eles no cartao
+ * segue na assinatura que ja existe.
  *
  * Ao contrario do Stripe, nao ha checkout hospedado: o cartao ja vem
  * tokenizado do browser (Payment Element) e a assinatura nasce aqui. Por isso
@@ -110,7 +112,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const plano = ehPlanoId(body.plano) ? planoPorId(body.plano)! : null;
+  const plano = ehPlanoAVenda(body.plano) ? planoPorId(body.plano)! : null;
   if (!plano) {
     return NextResponse.json({ error: "Escolha um plano." }, { status: 400 });
   }

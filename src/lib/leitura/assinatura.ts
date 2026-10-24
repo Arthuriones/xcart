@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/supabase/current-user";
 import { billingEnforced } from "@/lib/billing/credits";
 import {
   acimaDoLimite,
+  contagemDoUso,
   lerUso,
   limitesDoPerfil,
   resumoDoUso,
@@ -42,7 +43,7 @@ export interface CompraDoHistorico {
 /** Limite de lojas do plano e o uso de agora, ja em frase. */
 export interface UsoDoPlano {
   origem: OrigemDoLimite;
-  /** "1/1 lojas com rastreamento · 2/6 no roteamento" */
+  /** "0/5 operações com rastreamento · 1/5 vitrines e 2/5 lojas de checkout no roteamento" */
   resumo: string;
   /** Ja passou de algum limite (o que esta ligado continua). */
   acima: boolean;
@@ -242,7 +243,7 @@ export async function lerAssinatura(opcoes: { completo?: boolean } = {}): Promis
   if (lojas && perfil.data) {
     if (lojas.u) {
       const limites = limitesDoPerfil(perfil.data as LinhaPerfil);
-      const contagem = { rastreamento: lojas.u.rastreamento.size, roteamento: lojas.u.roteamento.size };
+      const contagem = contagemDoUso(lojas.u);
       leitura.uso = {
         origem: limites.origem,
         resumo: resumoDoUso(limites, contagem),

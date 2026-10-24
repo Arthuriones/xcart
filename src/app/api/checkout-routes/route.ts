@@ -114,7 +114,8 @@ export async function POST(request: NextRequest) {
   // Limite de lojas no roteamento do plano: a rota nova pode trazer a vitrine
   // e a loja de checkout para a conta.
   const limite = await conferirRoteamento(supabase, user.id, {
-    adicionar: [sourceStoreId, targetStoreId],
+    vitrine: sourceStoreId,
+    checkout: targetStoreId,
   });
   if (!limite.ok) return NextResponse.json(corpoDoBloqueio(limite), { status: limite.status });
 

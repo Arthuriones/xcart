@@ -2,7 +2,13 @@ import Link from "next/link";
 import { LogoXcart } from "@/components/layout/logo";
 import { buttonVariants } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
-import { GARANTIA_DIAS, PLANOS, PRO_INCLUDED_CREDITS, resumoDosLimites } from "@/lib/billing/plans";
+import {
+  GARANTIA_DIAS,
+  PLANOS,
+  PRO_INCLUDED_CREDITS,
+  comMinuscula,
+  resumoDosLimites,
+} from "@/lib/billing/plans";
 import { APP_HOME } from "@/lib/app-home";
 import { AssinarNoPaywall, BotaoSair } from "./assinar-paywall";
 
@@ -23,9 +29,9 @@ const PERGUNTAS: { p: string; r: string }[] = [
   {
     p: "O que muda entre os planos?",
     r:
-      "Só o número de lojas. " +
-      PLANOS.map((pl) => `${pl.nome}: ${resumoDosLimites(pl.limites).toLowerCase().replace(" · ", " e ")}.`).join(" ") +
-      " Os recursos e os créditos de IA são os mesmos nos três.",
+      "O número de vitrines e de lojas de checkout no roteamento, e o rastreamento. " +
+      PLANOS.map((pl) => `${pl.nome}: ${comMinuscula(resumoDosLimites(pl.limites)).replace(" · ", "; ")}.`).join(" ") +
+      " Os créditos de IA são os mesmos nos três.",
   },
   {
     p: "Quando o acesso libera?",

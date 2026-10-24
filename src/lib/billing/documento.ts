@@ -9,7 +9,7 @@ export function digitos(v: string): string {
 export function cpfValido(cpf: string): boolean {
   // O guard de digitos repetidos nao e detalhe: 11111111111 PASSA no digito
   // verificador.
-  if (cpf.length !== 11 || /^(\d){10}$/.test(cpf)) return false;
+  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
   for (const [ate, pos] of [[9, 10], [10, 11]] as const) {
     let soma = 0;
     for (let i = 0; i < ate; i++) soma += Number(cpf[i]) * (pos - i);
@@ -21,7 +21,7 @@ export function cpfValido(cpf: string): boolean {
 }
 
 export function cnpjValido(cnpj: string): boolean {
-  if (cnpj.length !== 14 || /^(\d){13}$/.test(cnpj)) return false;
+  if (cnpj.length !== 14 || /^(\d)\1{13}$/.test(cnpj)) return false;
   const calc = (base: string) => {
     let peso = base.length - 7;
     let soma = 0;

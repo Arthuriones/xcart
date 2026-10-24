@@ -7,9 +7,9 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import type { CobrancaPix } from "@/components/billing/pix-dialog";
-import { GARANTIA, planoEmDestaque, planoPorId, type PlanoId } from "@/lib/billing/plans";
+import { GARANTIA, ehPlanoAVenda, planoEmDestaque, planoPorId, type PlanoId } from "@/lib/billing/plans";
 import { cpfValido, digitos } from "@/lib/billing/documento";
-import { BENEFICIOS_PRO } from "@/components/billing/beneficios";
+import { recursosDoPlano } from "@/components/billing/beneficios";
 import { CampoCpf } from "@/components/billing/campo-cpf";
 import { Escolha } from "@/components/billing/escolha";
 import { EscolhaDePlano } from "@/components/billing/escolha-plano";
@@ -30,9 +30,10 @@ const PixDialog = dynamic(
 // ============================================================================
 // Assinar um dos planos. Usado na Assinatura e no paywall.
 //
-// Primeiro o plano (1 Loja, 3 Lojas, Ilimitado: o mesmo catalogo da landing),
-// depois a forma de pagamento. Dois caminhos, porque o processador nao tem um
-// so que sirva para todo mundo:
+// Primeiro o plano (Roteamento, Completo, Ilimitado: o mesmo catalogo da
+// landing; na renovacao por Pix, tambem o plano anterior de quem ainda paga
+// por ele, pelo mesmo preco), depois a forma de pagamento. Dois caminhos,
+// porque o processador nao tem um so que sirva para todo mundo:
 //  - Cartao: assinatura de verdade, renova sozinha.
 //  - Pix: cobranca avulsa que libera 30 dias. Nao renova (a recorrencia so
 //    existe no cartao).
@@ -51,7 +52,10 @@ export function AssinarPro({
 }: {
   /** Pagamento confirmado (cartao aceito ou Pix pago). */
   onPronto: () => void;
-  /** O plano marcado de partida (o atual, ao renovar). Sem ele, o em destaque. */
+  /**
+   * O plano marcado de partida (o atual, ao renovar). Sem ele, o em destaque.
+   * Plano anterior (fora da venda) so entra na escolha aqui, na renovacao.
+   */
   planoInicial?: PlanoId | null;
   /** So o Pix: renovar quem ja paga por Pix (os dias se somam). */
   somentePix?: boolean;
@@ -64,7 +68,11 @@ export function AssinarPro({
   // destaque. O da landing so existe no navegador: no servidor e null.
   const daLanding = useSyncExternalStore(semAvisos, lerPlanoEscolhido, () => null);
   const [escolhido, setPlanoId] = useState<PlanoId | null>(null);
-  const planoId = escolhido ?? planoInicial ?? daLanding ?? planoEmDestaque().id;
+  // O plano anterior so se oferece na renovacao por Pix (o servidor confere
+  // que e o da conta); fora dela, a escolha e so entre os a venda.
+  const anterior = somentePix && planoInicial && !ehPlanoAVenda(planoInicial) ? planoInicial : null;
+  const inicial = planoInicial && (anterior || ehPlanoAVenda(planoInicial)) ? planoInicial : null;
+  const planoId = escolhido ?? inicial ?? daLanding ?? planoEmDestaque().id;
   const plano = planoPorId(planoId) ?? planoEmDestaque();
   const [via, setVia] = useState<Via | null>(somentePix ? "pix" : null);
   const [cpf, setCpf] = useState("");
@@ -132,6 +140,7 @@ export function AssinarPro({
         <p className="text-dense font-medium text-ink">Escolha o plano</p>
         <EscolhaDePlano
           valor={planoId}
+          planoAnterior={anterior}
           onValor={(v) => {
             setPlanoId(v);
             setErro(null);
@@ -142,9 +151,9 @@ export function AssinarPro({
 
       {mostrarResumo ? (
         <div className="flex flex-col gap-2 rounded-card border border-border bg-surface-2 p-4">
-          <span className="text-dense font-semibold text-ink">Todos os planos incluem</span>
-          <ul aria-label="O que todos os planos incluem" className="flex flex-col gap-1.5">
-            {BENEFICIOS_PRO.map((item) => (
+          <span className="text-dense font-semibold text-ink">O plano {plano.nome} inclui</span>
+          <ul aria-label={`O que o plano ${plano.nome} inclui`} className="flex flex-col gap-1.5">
+            {recursosDoPlano(plano.limites).map((item) => (
               <li key={item} className="flex items-start gap-2 text-dense text-t1">
                 <Check aria-hidden className="mt-0.5 size-3.5 shrink-0 text-ok" strokeWidth={2} />
                 {item}

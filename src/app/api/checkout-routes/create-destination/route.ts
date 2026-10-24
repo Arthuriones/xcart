@@ -474,7 +474,8 @@ export async function POST(request: NextRequest) {
   // tela usa para estimar creditos) nao grava nada.
   if (!cursor && body.countOnly !== true) {
     const limite = await conferirRoteamento(supabase, userId, {
-      adicionar: [sourceStoreId, targetStoreId],
+      vitrine: sourceStoreId,
+      checkout: targetStoreId,
     });
     if (!limite.ok) return NextResponse.json(corpoDoBloqueio(limite), { status: limite.status });
   }

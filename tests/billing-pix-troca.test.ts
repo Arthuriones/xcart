@@ -1,27 +1,48 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { PLANOS, PRO_PRICE_CENTS } from "@/lib/billing/plans";
+import { PLANOS, PLANOS_ANTERIORES, PRO_PRICE_CENTS } from "@/lib/billing/plans";
 
-// apply_paid_purchase (migration 064) converte os dias que restam pelo PRECO
-// quando o Pix e de outro plano. Sem Pix pago do plano atual, ela usa uma
-// tabela de precos escrita no SQL -- espelho de plans.ts. Este teste le a
-// migration do disco e trava os dois juntos: preco novo em plans.ts sem
-// migration nova faria a troca converter pelo valor velho.
+// apply_paid_purchase converte os dias que restam pelo PRECO quando o Pix e de
+// outro plano. Sem Pix pago do plano atual, ela usa uma tabela de precos
+// escrita no SQL -- espelho de plans.ts. Este teste le do disco a migration
+// que define a funcao por ultimo (078, a dos planos de 24/10) e trava os dois
+// juntos: preco novo em plans.ts sem migration nova faria a troca converter
+// pelo valor velho. As permissoes das rotas continuam na 064.
 
-const sql = readFileSync(join(process.cwd(), "supabase/migrations/064_planos.sql"), "utf8");
-const funcao = sql.slice(
-  sql.indexOf("create or replace function public.apply_paid_purchase"),
-  sql.indexOf("-- create or replace mantem os grants")
+const ler = (nome: string) => readFileSync(join(process.cwd(), "supabase/migrations", nome), "utf8");
+const sql = ler("064_planos.sql");
+const sql078 = ler("078_planos_novos.sql");
+const funcao = sql078.slice(
+  sql078.indexOf("create or replace function public.apply_paid_purchase"),
+  sql078.indexOf("-- create or replace mantem os grants")
 );
+const TODOS = [...PLANOS, ...PLANOS_ANTERIORES];
 
-describe("apply_paid_purchase (064)", () => {
-  it("a tabela de preços do SQL é a de plans.ts", () => {
-    for (const plano of PLANOS) {
+describe("apply_paid_purchase (078)", () => {
+  it("a tabela de preços do SQL é a de plans.ts, com os planos a venda e os anteriores", () => {
+    expect(funcao.length).toBeGreaterThan(100);
+    for (const plano of TODOS) {
       expect(funcao).toMatch(new RegExp(`when '${plano.id}'\\s+then ${plano.precoCentavos}\\b`));
     }
     // O Pro antigo, sem tier.
     expect(funcao).toMatch(new RegExp(`else ${PRO_PRICE_CENTS}\\b`));
+  });
+
+  it("os CHECKs aceitam os ids novos e os anteriores", () => {
+    for (const tabela of ["profiles", "credit_purchases"]) {
+      const check = sql078.match(new RegExp(`add constraint ${tabela}_plano_check\\s+check \\(([^;]*)\\);`));
+      expect(check, tabela).not.toBeNull();
+      for (const plano of TODOS) expect(check![1]).toContain(`'${plano.id}'`);
+    }
+  });
+
+  it("segue só do service_role (SECURITY DEFINER, os dois caminhos revogados)", () => {
+    expect(funcao).toMatch(/security definer/);
+    expect(sql078).toMatch(
+      /revoke all on function public\.apply_paid_purchase\(text\) from public, anon, authenticated;/
+    );
+    expect(sql078).toMatch(/grant execute on function public\.apply_paid_purchase\(text\) to service_role;/);
   });
 
   it("converte o que resta na troca de plano e soma no mesmo plano", () => {
