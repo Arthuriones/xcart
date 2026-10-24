@@ -125,6 +125,12 @@ export interface EventoNormalizado {
   programa: string | null;
   /** O evento de teste (do xcart ou da plataforma): nunca vira pedido. */
   teste: boolean;
+  /**
+   * Envio do historico (o Eve manda os pedidos de antes da conexao): grava o
+   * pedido, mas nao avisa o celular nem manda a compra ao Meta/TikTok -- a
+   * venda e velha e a pagina ja mandou o pixel dela.
+   */
+  semAviso?: boolean;
   venda?: VendaNormalizada;
   rastreio?: RastreioNormalizado;
   comprador?: CompradorNormalizado;

@@ -821,6 +821,19 @@ describe("receberEvento (Eve): origem, idempotencia e ordem", () => {
     });
   });
 
+  it("historico (pedido de antes da conexao): grava igual, sem Venda no celular e sem compra ao Meta", async () => {
+    const m = memoria();
+    const f = fila();
+    const r = await receber(m, aviso("pedido.pago", pedido(), { historico: true }), { rastreio: f.rastreio });
+    expect(r.corpo).toEqual({ ok: true });
+    expect(r.notificar).toBeNull();
+    expect(m.pedidos.get(TOKEN_PEDIDO)?.situacao).toBe("pago");
+    expect(f.linhas).toHaveLength(0);
+    // So o booleano true conta: "true" em texto avisa como venda nova.
+    const outro = "a9b2c3d4e5f60718293a4b5c6d7e8f96";
+    expect((await receber(m, aviso("pedido.pago", pedido({ id: outro }), { historico: "true" }))).notificar).toMatchObject({ tipo: "venda" });
+  });
+
   it("o teste (os dois sinais e o nosso exemplo): 200 teste, nada travado nem gravado", async () => {
     const m = memoria();
     expect((await receber(m, aviso("pedido.pago", pedido(), { teste: true }))).corpo).toEqual({ ok: true, teste: true });

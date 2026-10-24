@@ -85,7 +85,8 @@ export function idDaCompra(plataforma: string, grupo: string): string {
  * vale tambem quando ela chega ja paga (o payload e montado na hora do envio).
  */
 export function ehEventoDeCompra(ev: EventoNormalizado, quando: CompraQuando, eventoDeVenda: string): boolean {
-  if (ev.teste || ev.venda?.recorrencia) return false;
+  // O historico (semAviso) e venda velha: a pagina ja mandou o pixel dela.
+  if (ev.teste || ev.venda?.recorrencia || ev.semAviso) return false;
   const s = ev.receita.situacao;
   if (ev.evento === eventoDeVenda) return s === "pago";
   const gerada = ev.venda?.cobrancaGerada ?? COBRANCA_GERADA.test(ev.evento);

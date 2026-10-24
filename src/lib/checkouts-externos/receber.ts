@@ -451,7 +451,9 @@ export async function receberEvento(
   }
   const comEnvios = entregar.length > 0 ? { entregar } : {};
 
-  // O que entrou avisa (a retentativa dele vai cair em "duplicado").
+  // O que entrou avisa (a retentativa dele vai cair em "duplicado"). O
+  // historico (semAviso) grava calado: a venda e de antes da conexao.
+  avisados = avisados.filter((a) => !a.ev.semAviso);
   const notificar = !checkout.ativo || avisados.length === 0 ? null : venda ? notificacaoDaVenda(checkout, plataforma, avisados) : null;
 
   if (falhou) {

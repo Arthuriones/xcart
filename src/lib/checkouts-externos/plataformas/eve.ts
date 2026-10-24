@@ -46,6 +46,9 @@ import type {
 //   sozinho), reconhecido ANTES das validacoes. Nunca vira pedido.
 // - Sem IP nem user agent: no lead externo eles sao do SERVIDOR da pagina,
 //   nao do comprador. Sem a ponte (Fase D): callback e vid ficam null.
+// - historico: true (opcional) = o Eve mandando os pedidos de antes da
+//   conexao (bin/console xcart:historico). Grava igual, mas sem aviso no
+//   celular e sem compra ao Meta/TikTok (`semAviso`).
 //
 // O Eve REENVIA qualquer nao-2xx pela fila de jobs dele (30 s, 1, 2, 4 e 8
 // min; com o worker no cron): 503 na hora, como a Hubla.
@@ -287,6 +290,7 @@ export function lerTodosEve(corpo: unknown, agora: Date, headers?: Headers): Lei
     conta: null,
     programa: null,
     teste: false,
+    ...(corpo.historico === true ? { semAviso: true } : {}),
     venda,
     rastreio: lerRastreio(ehObjeto(corpo.rastreio) ? corpo.rastreio : {}),
     comprador,
