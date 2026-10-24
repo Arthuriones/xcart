@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { ID_TESTE, VERSAO, assinarEve, autenticarEve, eve, exemploEve, lerTodosEve } from "@/lib/checkouts-externos/plataformas/eve";
+import { ID_TESTE, VERSAO, assinarEve, autenticarEve, eve, exemploEve, lerTodosEve, taxaDoPix } from "@/lib/checkouts-externos/plataformas/eve";
 import { TOLERANCIA_FUTURO_S, TOLERANCIA_PASSADO_S } from "@/lib/checkouts-externos/plataformas/cakto";
 import { plataformaDe } from "@/lib/checkouts-externos/plataformas";
 import type { EventoNormalizado } from "@/lib/checkouts-externos/plataformas";
@@ -155,19 +155,19 @@ function erroDe(c: unknown, headers?: Headers): string {
 // ---------------------------------------------------------------------------
 
 describe("lerTodosEve: o estado inteiro do pedido vira o pedido do xcart", () => {
-  it("pedido pago: valor e receita = total em reais, sem taxa; data do pagamento; o token e a cobranca", () => {
+  it("pedido pago: valor = total em reais, taxa do Pix (9,99% + R$ 0,99) e receita = total - taxa; data do pagamento; o token e a cobranca", () => {
     const ev = lerUm(aviso("pedido.pago"));
     expect(ev).toMatchObject({
       evento: "pedido.pago",
       dataEvento: PAGO,
       pedidoId: TOKEN_PEDIDO,
       pedido: { status: "paid", metodo: "pix", produto: "Panela Mônaco 5 peças", pais: "BR", moeda: "BRL", valor: 97, criadoEm: CRIADO },
-      receita: { valor: 97, moeda: "BRL", situacao: "pago", statusOriginal: "paid" },
+      receita: { valor: 86.32, moeda: "BRL", situacao: "pago", statusOriginal: "paid" },
       conta: null,
       programa: null,
       teste: false,
       venda: {
-        taxa: null,
+        taxa: 10.68,
         comissoes: null,
         referencia: "123",
         grupo: TOKEN_PEDIDO,
@@ -181,6 +181,13 @@ describe("lerTodosEve: o estado inteiro do pedido vira o pedido do xcart", () =>
         recorrencia: false,
       },
     });
+  });
+
+  it("taxa do Pix: 9,99% + R$ 0,99, nunca acima do total", () => {
+    expect(taxaDoPix(97)).toBe(10.68);
+    expect(taxaDoPix(99.9)).toBe(10.97);
+    expect(taxaDoPix(0.5)).toBe(0.5);
+    expect(taxaDoPix(0)).toBe(0);
   });
 
   it("cada status: a situacao e a data da propria etapa", () => {
@@ -699,8 +706,8 @@ describe("receberEvento (Eve): origem, idempotencia e ordem", () => {
       pago_em: PAGO,
       reembolsado_em: devolvido,
       valor: 97,
-      receita: 97,
-      taxa: null,
+      receita: 86.32,
+      taxa: 10.68,
       metodo_pagamento: "pix",
       referencia: "123",
       grupo: TOKEN_PEDIDO,
@@ -749,8 +756,8 @@ describe("receberEvento (Eve): origem, idempotencia e ordem", () => {
     const pix2 = aviso("pix.gerado", aberto({ subtotal_centavos: 24700, total_centavos: 24700, vence_em: z(novo) }));
     const r = await receber(m, pix2, pedindo);
     expect(r.corpo).toEqual({ ok: true });
-    expect(r.notificar).toMatchObject({ tipo: "pendente", valor: 247, comissao: 247, metodo: "pix" });
-    expect(m.pedidos.get(TOKEN_PEDIDO)).toMatchObject({ situacao: "pendente", valor: 247, receita: 247, vence_em: novo, criado_em: CRIADO });
+    expect(r.notificar).toMatchObject({ tipo: "pendente", valor: 247, comissao: 221.33, metodo: "pix" });
+    expect(m.pedidos.get(TOKEN_PEDIDO)).toMatchObject({ situacao: "pendente", valor: 247, receita: 221.33, vence_em: novo, criado_em: CRIADO });
     expect(estadoDaVenda(m.pedidos.get(TOKEN_PEDIDO)!, AGORA.getTime())).toBe("aguardando");
 
     // A retentativa do Pix 2 e duplicado; a do Pix 1, atrasada, nao volta o prazo nem o valor.
@@ -772,7 +779,7 @@ describe("receberEvento (Eve): origem, idempotencia e ordem", () => {
     await receber(m, aviso("pix.gerado", aberto()));
     const r = await receber(m, aviso("pix.gerado", aberto({ total_centavos: 12700 })));
     expect(r.corpo).toEqual({ ok: true });
-    expect(m.pedidos.get(TOKEN_PEDIDO)).toMatchObject({ situacao: "pendente", valor: 127, receita: 127, vence_em: VENCE });
+    expect(m.pedidos.get(TOKEN_PEDIDO)).toMatchObject({ situacao: "pendente", valor: 127, receita: 113.32, vence_em: VENCE });
   });
 
   it("falha nossa: 503 na hora (o Eve reenvia), sem segurar; o erro na tela fala da fila e do caminho de volta", async () => {
@@ -809,7 +816,7 @@ describe("receberEvento (Eve): origem, idempotencia e ordem", () => {
   it("Venda no celular: o pedido pago avisa uma vez, com o numero do painel", async () => {
     const m = memoria();
     const r = await receber(m, aviso("pedido.pago"));
-    expect(r.notificar).toMatchObject({ tipo: "venda", checkout: "Eve Panela", pedido: "#123", produto: "Panela Mônaco 5 peças", valor: 97, comissao: 97, moeda: "BRL" });
+    expect(r.notificar).toMatchObject({ tipo: "venda", checkout: "Eve Panela", pedido: "#123", produto: "Panela Mônaco 5 peças", valor: 97, comissao: 86.32, moeda: "BRL" });
     expect((await receber(m, aviso("pedido.pago"))).notificar).toBeNull();
     // Pix gerado so com o aviso ligado.
     const outro = "c1b2c3d4e5f60718293a4b5c6d7e8f92";

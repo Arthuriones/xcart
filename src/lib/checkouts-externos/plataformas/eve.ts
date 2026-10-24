@@ -37,8 +37,9 @@ import type {
 //   ("pix.gerado:<unix do vence_em>:<centavos>"): o Pix gerado de novo entra.
 // - pedido.id = checkouts.token do Eve: estavel do lead ao reembolso. E a
 //   cobranca (grupo); o numero (orders.number) e a referencia do painel.
-// - Dinheiro em CENTAVOS INTEIROS. valor = receita = total: o Eve nao sabe a
-//   taxa do gateway (taxa e comissoes null).
+// - Dinheiro em CENTAVOS INTEIROS. valor = total; a taxa e a do Pix da
+//   operacao (TAXA_PIX: 9,99% + R$ 0,99 por pedido, so Pix, nunca cartao) e
+//   receita = total - taxa. O Eve nao manda a taxa do gateway; comissoes null.
 // - Status "started" (lead sem Pix) e origem "shopify" o Eve nem manda; se
 //   chegarem, 200 sem gravar: o pedido da loja Shopify ja entra pelo
 //   orders/create, e contaria duas vezes.
@@ -85,6 +86,17 @@ const DIAS_VENCIMENTO = 7;
 
 function redondo(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/**
+ * A taxa do gateway Pix da operacao (as panelas): 9,99% + R$ 0,99 por pedido.
+ * So Pix, em BRL. Mudou o gateway ou o contrato dele: e aqui.
+ */
+export const TAXA_PIX = { percentual: 9.99, fixa: 0.99 } as const;
+
+/** A taxa do Pix sobre o total, nunca acima dele. */
+export function taxaDoPix(total: number): number {
+  return redondo(Math.min(total, (total * TAXA_PIX.percentual) / 100 + TAXA_PIX.fixa));
 }
 
 /**
@@ -236,6 +248,7 @@ export function lerTodosEve(corpo: unknown, agora: Date, headers?: Headers): Lei
   const temMoeda = p.moeda !== undefined && p.moeda !== null && p.moeda !== "";
   const moeda = temMoeda ? lerMoeda(p.moeda) : null;
   if (temMoeda && !moeda) return { ok: false, erro: "pedido.moeda invalida" };
+  const taxa = taxaDoPix(total);
 
   // A trava do Pix gerado e a COBRANCA (prazo e valor), nao so o nome: o Pix
   // vencido gerado de novo no mesmo checkout (prazo novo) ou com o valor
@@ -257,8 +270,8 @@ export function lerTodosEve(corpo: unknown, agora: Date, headers?: Headers): Lei
       : null;
 
   const venda: VendaNormalizada = {
-    // O Eve nao sabe a taxa do gateway: o liquido e o total.
-    taxa: null,
+    // A taxa do Pix da operacao (o Eve nao a manda): o liquido e o total menos ela.
+    taxa,
     comissoes: null,
     referencia: numero,
     // O token do checkout e a cobranca inteira (um pedido por aviso).
@@ -286,7 +299,7 @@ export function lerTodosEve(corpo: unknown, agora: Date, headers?: Headers): Lei
       valor: total,
       criadoEm: criado ?? dataEvento,
     },
-    receita: { valor: total, moeda, situacao, statusOriginal: status },
+    receita: { valor: redondo(total - taxa), moeda, situacao, statusOriginal: status },
     conta: null,
     programa: null,
     teste: false,

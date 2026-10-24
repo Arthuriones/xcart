@@ -159,7 +159,7 @@ describe("POST /api/webhooks/checkout/[token] com o Eve", () => {
     expect(estado.gravados).toHaveLength(1);
     expect(estado.gravados[0]).toMatchObject({
       venda: true,
-      pedido: { situacao: "pago", valor: 97, receita: 97, taxa: null, referencia: "123", grupo: PEDIDO, produto: "Panela Mônaco 5 peças" },
+      pedido: { situacao: "pago", valor: 97, receita: 86.32, taxa: 10.68, referencia: "123", grupo: PEDIDO, produto: "Panela Mônaco 5 peças" },
     });
   });
 
