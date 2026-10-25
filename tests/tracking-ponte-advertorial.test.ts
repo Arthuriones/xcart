@@ -167,6 +167,8 @@ describe("link direto para o checkout leva os click ids como atributo do carrinh
       readyState: "complete",
       documentElement: {},
       getElementsByTagName: () => links,
+      // Pagina sem loader de roteamento nem formulario de compra (VSL, advertorial).
+      querySelector: () => null,
       addEventListener: (tipo: string, fn: (e: unknown) => void) => void ouvintes.push({ tipo, fn }),
     };
     Object.defineProperty(document, "cookie", {

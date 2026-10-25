@@ -81,6 +81,7 @@ function abrir(
   const beacons: Corpo[] = [];
   const timers = new Map<number, () => void>();
   const ouvintes: Record<string, () => void> = {};
+  const doDocumento: { tipo: string; fn: (e: unknown) => void }[] = [];
   let seq = 0;
   let leituras = 0;
   let abortos = 0;
@@ -150,7 +151,7 @@ function abrir(
       src: "https://app.test/xcart-click.js",
       getAttribute: (n: string) => (n === "data-xcart-store" ? "loja-1" : null),
     },
-    addEventListener() {},
+    addEventListener: (tipo: string, fn: (e: unknown) => void) => void doDocumento.push({ tipo, fn }),
     querySelector() {
       return null;
     },
@@ -224,6 +225,15 @@ function abrir(
     /** O tema adicionando um item, pelo fetch que o snippet embrulhou. */
     adicionar: () =>
       (ctx.fetch as typeof fetch)("/cart/add.js", { body: "{}" }),
+    /** Um submit de formulario; `prevenido` = o tema segurou para mandar por AJAX. */
+    enviar: (acao: string, variante: string, prevenido: boolean) => {
+      const form = {
+        getAttribute: (n: string) => (n === "action" ? acao : null),
+        querySelector: (sel: string) => (sel === '[name="id"]' ? { value: variante } : null),
+      };
+      const e = { target: form, defaultPrevented: prevenido };
+      for (const o of doDocumento) if (o.tipo === "submit") o.fn(e);
+    },
   };
 }
 
@@ -526,6 +536,44 @@ describe("uma execucao por pagina", () => {
     // Uma leitura do add (2b), nao duas.
     expect(p.leituras()).toBe(2);
     expect(p.beacons.filter((b) => b.evento === "add_to_cart")).toHaveLength(1);
+  });
+});
+
+// O terceiro caminho do carrinho: tema sem AJAX manda o formulario ao
+// /cart/add pelo navegador, sem fetch nem XHR. So conta o submit que nenhum
+// ouvinte segurou -- o segurado vira fetch/XHR, que ja conta.
+describe("submit nativo do /cart/add (tema sem AJAX)", () => {
+  const adds = (p: ReturnType<typeof abrir>) =>
+    p.beacons.filter((b) => b.evento === "add_to_cart") as (Corpo & { produto?: { variante?: string } })[];
+
+  it("o submit que ninguem segurou vira add_to_cart, com a variante do formulario enviado", async () => {
+    const p = abrir(navegador(), "https://loja.test/collections/todos");
+    await assentar();
+    p.enviar("/cart/add", "4242", false);
+    expect(adds(p)).toHaveLength(0);
+    p.estourarTimers();
+    await assentar();
+    expect(adds(p)).toHaveLength(1);
+    expect(adds(p)[0].produto).toMatchObject({ variante: "4242" });
+  });
+
+  it("o submit que o tema segurou nao conta: o fetch do tema conta, uma vez", async () => {
+    const p = abrir(navegador(), "https://loja.test/collections/todos");
+    await assentar();
+    p.enviar("/cart/add", "4242", true);
+    p.estourarTimers();
+    await p.adicionar();
+    await assentar();
+    expect(adds(p)).toHaveLength(1);
+  });
+
+  it("o formulario do carrinho nao e adicionar", async () => {
+    const p = abrir(navegador(), "https://loja.test/cart");
+    await assentar();
+    p.enviar("/cart", "4242", false);
+    p.estourarTimers();
+    await assentar();
+    expect(adds(p)).toHaveLength(0);
   });
 });
 

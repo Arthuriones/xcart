@@ -75,6 +75,28 @@
  * leva o visitante no `sck` em vez do `callback`. Com `data-xcart-checkout`
  * a pagina rastreia para o checkout mesmo que tenha `data-xcart-store`.
  *
+ * VITRINE DE UMA ROTA (vitrine -> loja de checkout)
+ *
+ * A mesma tag do rastreamento da pagina, colada no tema da VITRINE, com
+ * `data-xcart-shop` = a loja de checkout. O carrinho acontece na vitrine, onde
+ * a loja de checkout nao tem snippet nem pixel: sem isto o Meta da loja de
+ * checkout via InitiateCheckout e Purchase sem nenhum ViewContent ou
+ * AddToCart antes (medido em 25/10 na Stepz Club: 105 carrinhos roteados e 0
+ * AddToCart). Com o loader de roteamento na pagina, a ponte manda tambem:
+ *
+ *   - view_item na pagina de produto (uma vez por produto em 30 min na aba);
+ *   - add_to_cart quando o /cart/add da vitrine da certo -- fetch, XHR ou o
+ *     submit nativo do formulario, com a janela de 8 s do snippet do tema.
+ *
+ * O produto e o da LOJA DE CHECKOUT: a variante da vitrine nao existe no
+ * catalogo dela. A ponte le o mesmo xcart-config.json que o loader usa para
+ * rotear (o destino desta loja: variant_map, depois sku_map) e manda a
+ * variante do checkout; o SKU so quando o sku_map confirma o mesmo par.
+ * Variante sem par vai SEM produto -- nunca com o id da vitrine, que sujaria o
+ * catalogo com ids que nao casam. O id do produto do checkout nao esta no
+ * mapa: template `{product_id}` sai sem content_ids. Valor nunca vai. Com
+ * rodizio, conta para a loja de `data-xcart-shop`, nao para a sorteada.
+ *
  * `data-xcart-destinos` e OBRIGATORIO e nao aceita curinga. Sem lista, este
  * arquivo nao faz nada. O motivo: reescrever "todo link externo" mandaria o
  * gclid junto para o Instagram, para o WhatsApp e para qualquer outro link da
@@ -551,11 +573,299 @@
     }
   }
 
+  // ---- 3b. vitrine de rota: produto e carrinho para a loja de checkout -----
+  //
+  // Ver o cabecalho. So com o loader de roteamento na pagina, numa loja que
+  // NAO e a do rastreamento: na propria loja quem conta e o snippet do tema, e
+  // sem rota o carrinho daqui nao vira carrinho na loja de checkout.
+  var LOADER = COLETOR && SHOP && !CHECKOUT_ID
+    ? document.querySelector('script[src*="/routed-checkout-loader.js"]')
+    : null;
+  var LOJA_DA_PAGINA = String((window.Shopify && window.Shopify.shop) || "").toLowerCase();
+  var NA_VITRINE = !!LOADER && !!LOJA_DA_PAGINA && LOJA_DA_PAGINA !== SHOP;
+
+  /**
+   * O destino desta loja no mapa da rota (o formato do loader, novo ou o
+   * antigo de um destino so). Pelo dominio permanente, e depois pelos
+   * dominios da lista: o destino guarda o dominio de checkout quando a rota
+   * tem um. Nenhum casou = sem mapa: o evento vai sem produto.
+   */
+  function destinoDoMapa(cfg) {
+    var lista = cfg && cfg.targets && cfg.targets.length ? cfg.targets : cfg && cfg.domain ? [cfg] : [];
+    var hosts = [];
+    for (var i = 0; i < lista.length; i++) {
+      hosts.push(
+        String((lista[i] && lista[i].domain) || "")
+          .trim()
+          .toLowerCase()
+          .replace(/^https?:\/\//, "")
+          .replace(/^www\./, "")
+      );
+    }
+    for (var j = 0; j < lista.length; j++) if (hosts[j] === SHOP) return lista[j];
+    for (var k = 0; k < lista.length; k++) if (hosts[k] && DESTINOS.indexOf(hosts[k]) !== -1) return lista[k];
+    return null;
+  }
+
+  // null = ainda nao lido; false = sem mapa.
+  var mapa = null;
+  var esperandoMapa = [];
+
+  function esvaziarFila(destino) {
+    var fila = esperandoMapa;
+    esperandoMapa = [];
+    for (var i = 0; i < fila.length; i++) fila[i](destino);
+  }
+
+  function soltarMapa(destino) {
+    if (mapa !== null) return;
+    mapa = destino || false;
+    esvaziarFila(mapa);
+  }
+
+  /**
+   * O mesmo xcart-config.json do loader. O loader acabou de buscar a mesma
+   * URL, entao isto sai do cache do navegador. Um mapa que nao chega nao
+   * segura o evento: 4 s, ou a pagina saindo, e ele vai sem produto.
+   */
+  function lerMapa() {
+    var embutido = LOADER.getAttribute("data-config");
+    if (embutido) {
+      try {
+        soltarMapa(destinoDoMapa(JSON.parse(embutido)));
+      } catch (e) {
+        soltarMapa(false);
+      }
+      return;
+    }
+    var url = LOADER.getAttribute("data-config-url");
+    if (!url) return soltarMapa(false);
+    setTimeout(function () {
+      soltarMapa(false);
+    }, 4000);
+    try {
+      fetch(url, { cache: "force-cache" })
+        .then(function (r) {
+          return r.ok ? r.json() : null;
+        })
+        .then(
+          function (cfg) {
+            soltarMapa(destinoDoMapa(cfg));
+          },
+          function () {
+            soltarMapa(false);
+          }
+        );
+    } catch (e) {
+      soltarMapa(false);
+    }
+  }
+
+  var lendoMapa = false;
+
+  function comMapa(fn) {
+    if (mapa !== null) return fn(mapa);
+    esperandoMapa.push(fn);
+    if (!lendoMapa) {
+      lendoMapa = true;
+      lerMapa();
+    }
+  }
+
+  function idNumerico(v) {
+    var s = String(v === null || v === undefined ? "" : v);
+    if (s.indexOf("gid://") !== -1) s = s.split("/").pop() || "";
+    return /^\d+$/.test(s) ? s : null;
+  }
+
+  /** A variante da vitrine vira a do checkout pelo par da rota; sem par, null. */
+  function produtoNoCheckout(destino, item) {
+    if (!destino || !item) return null;
+    var vm = destino.variantMap || {};
+    var sm = destino.skuMap || {};
+    var sku = item.sku ? String(item.sku).trim() : "";
+    var peloSku = sku ? idNumerico(sm[sku.toLowerCase()]) : null;
+    var variante =
+      idNumerico(vm["gid://shopify/ProductVariant/" + item.variante]) || idNumerico(vm[item.variante]) || peloSku;
+    if (!variante) return null;
+    // O par por SKU garante o mesmo SKU nas duas lojas; o do variant_map nao
+    // (o par antigo fica quando o SKU da vitrine muda).
+    return peloSku === variante ? { variante: variante, sku: sku } : { variante: variante };
+  }
+
+  function itemValido(variante, sku) {
+    var v = idNumerico(variante);
+    return v ? { variante: v, sku: sku ? String(sku) : null } : null;
+  }
+
+  /**
+   * A variante em tela. A ordem do snippet do tema (produtoAtual): o
+   * formulario, o ?variant=, o primeiro formulario de compra e a primeira
+   * variante do ShopifyAnalytics; o SKU sai do ShopifyAnalytics.
+   */
+  function produtoDaPagina(form) {
+    var variante = null;
+    var campo = form && form.querySelector ? form.querySelector('[name="id"]') : null;
+    if (campo && campo.value) variante = campo.value;
+    if (!variante) {
+      try {
+        variante = new URLSearchParams(location.search).get("variant");
+      } catch (e) {
+        variante = null;
+      }
+    }
+    if (!variante) {
+      var f = document.querySelector('form[action*="/cart/add"]');
+      var c = f && f.querySelector('[name="id"]');
+      if (c && c.value) variante = c.value;
+    }
+    var meta = window.ShopifyAnalytics && window.ShopifyAnalytics.meta ? window.ShopifyAnalytics.meta.product : null;
+    var variantes = (meta && meta.variants) || [];
+    if (!variante && variantes[0]) variante = variantes[0].id;
+    var sku = null;
+    for (var i = 0; i < variantes.length; i++) {
+      if (String(variantes[i].id) === String(variante)) {
+        sku = variantes[i].sku || null;
+        break;
+      }
+    }
+    return itemValido(variante, sku);
+  }
+
+  /** O item que o /cart/add devolveu: acerta tambem a compra rapida da colecao. */
+  function itemDoAdd(dados) {
+    var item = dados && dados.items && dados.items.length ? dados.items[0] : dados;
+    if (!item || typeof item !== "object") return null;
+    return itemValido(item.variant_id || item.id, item.sku);
+  }
+
+  function mandarDaVitrine(evento, item) {
+    comMapa(function (destino) {
+      entregar(corpoDoEvento(evento, produtoNoCheckout(destino, item)));
+    });
+  }
+
+  function verProdutoNaVitrine() {
+    var meta = window.ShopifyAnalytics && window.ShopifyAnalytics.meta ? window.ShopifyAnalytics.meta.product : null;
+    if (!meta && location.pathname.indexOf("/products/") === -1) return;
+    if (repetido("view_item:" + location.pathname)) return;
+    mandarDaVitrine("view_item", produtoDaPagina(null));
+  }
+
+  // A janela do snippet do tema (JANELA_MS de xcart-click.js): o tema que faz
+  // duas chamadas ao /cart/add por clique (brinde do "leve 4 pague 3", 3 a 4 s
+  // depois) conta um carrinho, nao dois.
+  var JANELA_CARRINHO_MS = 8000;
+  var ultimoCarrinho = 0;
+
+  function adicionou(item) {
+    var agora = Date.now();
+    if (agora - ultimoCarrinho < JANELA_CARRINHO_MS) return;
+    ultimoCarrinho = agora;
+    mandarDaVitrine("add_to_cart", item || produtoDaPagina(null));
+  }
+
+  // So `/cart/add` conta, como no snippet: change/update/clear nao sao carrinho novo.
+  function ehAdicionar(url) {
+    return !!url && String(url).indexOf("/cart/add") !== -1;
+  }
+
+  // Os tres caminhos do snippet do tema. O wrapper do fetch e do XHR vale para
+  // o tema e para o "Comprar agora" do loader (que adiciona antes de rotear).
+  // So depois de o servidor confirmar: adicionar que falhou nao e evento.
+  function observarCarrinhoDaVitrine() {
+    if (window.__xcartPonteCarrinho) return;
+    window.__xcartPonteCarrinho = true;
+
+    if (typeof window.fetch === "function") {
+      var original = window.fetch;
+      window.fetch = function (entrada) {
+        var url = null;
+        try {
+          url = typeof entrada === "string" ? entrada : entrada && (entrada.url || entrada.href);
+        } catch (e) {
+          url = null;
+        }
+        var promessa = original.apply(this, arguments);
+        if (ehAdicionar(url)) {
+          // Le de uma COPIA, antes do tema: este `then` foi registrado primeiro.
+          promessa
+            .then(function (r) {
+              if (!r || !r.ok) return;
+              var copia = null;
+              try {
+                var tipo = String((r.headers && r.headers.get("content-type")) || "");
+                if (tipo.indexOf("json") !== -1 && typeof r.clone === "function") copia = r.clone();
+              } catch (e) {
+                copia = null;
+              }
+              if (!copia) return adicionou(null);
+              return copia.json().then(itemDoAdd, function () {
+                return null;
+              }).then(adicionou);
+            })
+            .catch(function () {});
+        }
+        return promessa;
+      };
+    }
+
+    if (window.XMLHttpRequest && XMLHttpRequest.prototype) {
+      var abrir = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function (metodo, url) {
+        if (ehAdicionar(url)) {
+          this.addEventListener("load", function () {
+            if (this.status < 200 || this.status >= 300) return;
+            var item = null;
+            try {
+              item = itemDoAdd(this.responseType === "json" ? this.response : JSON.parse(this.responseText));
+            } catch (e) {
+              item = null;
+            }
+            adicionou(item);
+          });
+        }
+        return abrir.apply(this, arguments);
+      };
+    }
+
+    // Tema sem AJAX: o formulario vai ao /cart/add pelo navegador. Conferido
+    // DEPOIS de todos os ouvintes: o tema que segura o submit (preventDefault)
+    // adiciona por fetch/XHR, e esse ja conta acima. sendBeacon sobrevive a
+    // navegacao.
+    document.addEventListener("submit", function (e) {
+      var f = e.target;
+      if (!f || !f.getAttribute || !ehAdicionar(f.getAttribute("action"))) return;
+      setTimeout(function () {
+        if (!e.defaultPrevented) adicionou(produtoDaPagina(f));
+      }, 0);
+    });
+
+    // Evento esperando o mapa quando a pagina sai: vai sem produto.
+    if (window.addEventListener) {
+      window.addEventListener("pagehide", function () {
+        esvaziarFila(false);
+      });
+    }
+  }
+
+  // AGORA, nao no DOMContentLoaded: o tema chama o fetch na hora do clique.
+  if (NA_VITRINE) {
+    observarCarrinhoDaVitrine();
+    // Pagina de produto: o mapa ja vem para o view_item e para o carrinho.
+    var naPaginaDeProduto =
+      (window.ShopifyAnalytics && window.ShopifyAnalytics.meta && window.ShopifyAnalytics.meta.product) ||
+      location.pathname.indexOf("/products/") !== -1;
+    if (naPaginaDeProduto) comMapa(function () {});
+  }
+
   function rastrear() {
     if (!COLETOR) return;
     if (!repetido("page_view")) entregar(corpoDoEvento("page_view", null));
     // Pagina de checkout externo: nao ha produto da Shopify para o ViewContent.
     if (CHECKOUT_ID) return;
+    // Vitrine de rota: o produto e o da pagina, no catalogo do checkout (3b).
+    if (NA_VITRINE) return verProdutoNaVitrine();
     var variante = varianteDaPagina();
     if (variante && !repetido("view_item")) {
       entregar(corpoDoEvento("view_item", { variante: variante }));

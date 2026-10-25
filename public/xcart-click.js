@@ -961,7 +961,9 @@
    */
   var COM_PRODUTO = { view_item: 1, add_to_cart: 1 };
 
-  function mandar(evento) {
+  // `form`: o formulario enviado (submit nativo, 3.2), que vence o resto em
+  // produtoAtual.
+  function mandar(evento, form) {
     if (!COLETOR || !LOJA) return;
     if (repetido(evento)) return;
 
@@ -969,7 +971,7 @@
     // da leitura do carrinho (2a). O primeiro evento da pagina sairia, senao,
     // com o _xc_vid recem-inventado e sem o gclid que o carrinho guardava.
     var instante = Date.now();
-    var produto = COM_PRODUTO[evento] ? produtoAtual() : null;
+    var produto = COM_PRODUTO[evento] ? produtoAtual(form) : null;
     var pagina = location.href.slice(0, 500);
     quandoPronto(function () {
       // Instante no id: protege contra reenvio da MESMA acao (o nosso retry, o
@@ -1172,9 +1174,15 @@
 
   // ---- 3.2 adicionar ao carrinho ------------------------------------------
   //
-  // Tres caminhos, porque cada tema usa um. So `/cart/add` conta: o
+  // Tres caminhos, porque cada tema usa um: fetch, XHR e o submit nativo do
+  // formulario (observarSubmitDoAdicionar). So `/cart/add` conta: o
   // `/cart/update.js` que este arquivo faz la em cima passaria por aqui se o
   // teste fosse por "/cart/".
+  //
+  // O `product_added_to_cart` do Web Pixel fica de fora de proposito: seria um
+  // segundo AddToCart da mesma acao, com outro event_id (o pixel roda em
+  // sandbox e nao ve a janela daqui), e na rota vitrine -> checkout ele nem
+  // roda -- o carrinho e da vitrine, onde quem mede e a ponte.
   function ehAdicionar(url) {
     if (!url) return false;
     var texto = String(url);
@@ -1254,6 +1262,23 @@
   function adicionou() {
     mandar("add_to_cart");
     conferirCarrinho();
+  }
+
+  // Tema sem AJAX: o formulario vai ao /cart/add pelo proprio navegador, e
+  // nenhum fetch/XHR passa por aqui. Conferido DEPOIS de todos os ouvintes
+  // (setTimeout): o tema que segura o submit (preventDefault) adiciona por
+  // fetch/XHR, e la ja conta, confirmado pelo servidor. Este nao tem como
+  // esperar a confirmacao -- a resposta e a proxima pagina, que le o carrinho
+  // de novo (2a) -- e sai por sendBeacon antes da navegacao. O produto e o do
+  // formulario enviado, nao o primeiro da pagina.
+  function observarSubmitDoAdicionar() {
+    document.addEventListener("submit", function (e) {
+      var f = e.target;
+      if (!f || !f.getAttribute || !ehAdicionar(f.getAttribute("action"))) return;
+      setTimeout(function () {
+        if (!e.defaultPrevented) mandar("add_to_cart", f);
+      }, 0);
+    });
   }
 
   // ---- 3.3 iniciar checkout ----------------------------------------------
@@ -1832,6 +1857,7 @@
   if (COLETOR && LOJA) {
     ligarGoogle();
     observarCheckout();
+    observarSubmitDoAdicionar();
     esperarClienteDaShopify();
 
     // Este espera: le ShopifyAnalytics.meta, que a Shopify preenche mais tarde.

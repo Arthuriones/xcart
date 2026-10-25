@@ -502,7 +502,14 @@
     return saida;
   }
 
-  /** O que o tema nao alcanca. Nome da Shopify -> nome do nosso catalogo. */
+  /**
+   * O que o tema nao alcanca. Nome da Shopify -> nome do nosso catalogo.
+   *
+   * `product_added_to_cart` NAO entra: o snippet do tema ja conta o carrinho
+   * (fetch, XHR e submit nativo), e daqui sairia um segundo AddToCart da mesma
+   * acao com outro event_id. Na rota vitrine -> checkout este pixel nem roda
+   * onde o carrinho acontece: quem mede la e a ponte (xcart-bridge.js).
+   */
   var EVENTOS = [
     ["checkout_started", "begin_checkout"],
     ["payment_info_submitted", "payment_info"],
