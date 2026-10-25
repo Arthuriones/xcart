@@ -4,6 +4,7 @@ import {
   PLANOS as PLANOS_COBRADOS,
   PRO_INCLUDED_CREDITS,
   formatBRL,
+  quantas,
   textoLimiteRastreamento,
   textoLimiteRoteamento,
   type LimitesPlano,
@@ -97,30 +98,37 @@ const RECURSOS_COM_RASTREAMENTO = [
 ] as const;
 
 /**
- * Os tres recursos curtos do cartao:
+ * Os tres recursos curtos do cartao, so o que o plano traz a mais que o
+ * cartao anterior:
  *  - sem rastreamento: o que o roteamento entrega;
- *  - rastreamento com limite: o que o rastreamento traz;
- *  - rastreamento sem limite: "Tudo do <plano anterior da lista>" e o que
- *    some de teto. Vitrines e checkouts so viram "sem teto" se forem mesmo
- *    sem limite; senao vai o limite real do roteamento.
+ *  - o primeiro com rastreamento (primeiro da lista, ou o anterior sem ele):
+ *    o que o rastreamento traz;
+ *  - os seguintes: "Tudo do <plano anterior da lista>", o rastreamento deste
+ *    e o roteamento deste. O rodizio aparece no plano que o traz (o anterior
+ *    tinha uma loja de checkout so); vitrines e checkouts so viram "sem teto"
+ *    se forem mesmo sem limite; senao vai o limite real do roteamento.
  * `lista` e a ordem dos cartoes (padrao: os planos a venda).
  */
 export function recursosDoCartao(
   plano: Pick<Plano, "id" | "limites">,
-  lista: readonly Pick<Plano, "id" | "nome">[] = PLANOS_COBRADOS
+  lista: readonly Pick<Plano, "id" | "nome" | "limites">[] = PLANOS_COBRADOS
 ): string[] {
   const l = plano.limites;
   if (l.rastreamento === 0) return [...RECURSOS_SEM_RASTREAMENTO];
-  if (l.rastreamento !== null) return [...RECURSOS_COM_RASTREAMENTO];
   const i = lista.findIndex((p) => p.id === plano.id);
   const anterior = i > 0 ? lista[i - 1] : undefined;
-  // Primeiro da lista: nao ha "tudo do" a citar, e a lista com rastreamento vale.
-  if (!anterior) return [...RECURSOS_COM_RASTREAMENTO];
-  return [
-    `Tudo do ${anterior.nome}`,
-    textoLimiteRastreamento(null),
-    l.vitrines === null && l.checkouts === null ? "Vitrines e checkouts sem teto" : textoLimiteRoteamento(l),
-  ];
+  if (!anterior || anterior.limites.rastreamento === 0) return [...RECURSOS_COM_RASTREAMENTO];
+  const rastreamento =
+    l.rastreamento === null
+      ? textoLimiteRastreamento(null)
+      : `Rastreamento em ${quantas(l.rastreamento, "operação", "operações")}`;
+  const roteamento =
+    l.vitrines === null && l.checkouts === null
+      ? "Vitrines e checkouts sem teto"
+      : anterior.limites.checkouts === 1 && l.checkouts !== 1
+        ? `Rodízio entre ${l.checkouts === null ? "lojas de checkout sem limite" : quantas(l.checkouts, "loja de checkout", "lojas de checkout")}`
+        : textoLimiteRoteamento(l);
+  return [`Tudo do ${anterior.nome}`, rastreamento, roteamento];
 }
 
 export interface PlanoNaTela {

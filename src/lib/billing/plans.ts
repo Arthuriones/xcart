@@ -18,9 +18,9 @@ export const PRO_INCLUDED_CREDITS = 20;
 // que muda e o LIMITE, gravado em profiles.plano:
 //   - vitrines e lojas de checkout no roteamento, contadas a parte;
 //   - operacoes (loja Shopify ou checkout externo) com o rastreamento ligado.
-//     0 = o plano nao inclui rastreamento.
-// A trava e so de quantidade (limites.ts). Recurso nenhum fica preso ao plano
-// alem do rastreamento ausente no Roteamento.
+//     0 = o plano nao inclui rastreamento (nenhum a venda hoje: desde
+//     25/10/2026 o Roteamento rastreia 1 operacao).
+// A trava e so de quantidade (limites.ts). Recurso nenhum fica preso ao plano.
 //
 // Os planos de 08/10/2026 (1 Loja, 3 Lojas, Ilimitado de R$ 169,90) sairam da
 // venda, mas quem ja paga por eles MANTEM preco e limite: continuam
@@ -71,7 +71,7 @@ export const PLANOS: readonly Plano[] = [
     id: "roteamento",
     nome: "Roteamento",
     precoCentavos: 19700,
-    limites: { rastreamento: 0, vitrines: 1, checkouts: 1, roteamento: null },
+    limites: { rastreamento: 1, vitrines: 1, checkouts: 1, roteamento: null },
     selo: null,
     subtitulo: "Uma vitrine roteando para uma loja de checkout",
     destaque: false,
@@ -256,7 +256,7 @@ export function textoLimiteRoteamento(l: Pick<LimitesPlano, "vitrines" | "checko
   return `${comMaiuscula(vitrines)} e ${checkouts} no roteamento${total}`;
 }
 
-/** Os limites numa linha: "Sem rastreamento · 1 vitrine e 1 loja de checkout no roteamento". */
+/** Os limites numa linha: "Rastreamento em 1 operação (loja ou checkout) · 1 vitrine e 1 loja de checkout no roteamento". */
 export function resumoDosLimites(l: LimitesPlano): string {
   if (l.rastreamento === null && l.vitrines === null && l.checkouts === null && l.roteamento === null) {
     return "Rastreamento e roteamento sem limite";

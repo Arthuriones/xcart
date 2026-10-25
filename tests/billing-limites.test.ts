@@ -35,7 +35,7 @@ import {
 } from "@/lib/billing/plans";
 
 // Os planos (decisao de 24/10/2026):
-//   Roteamento   R$ 197 -> 1 vitrine + 1 loja de checkout, SEM rastreamento
+//   Roteamento   R$ 197 -> 1 vitrine + 1 loja de checkout, rastreamento em 1 operacao (25/10)
 //   Completo     R$ 497 -> ate 5 vitrines + 5 lojas de checkout, rastreamento em 5 operacoes
 //   Ilimitado    R$ 997 -> sem limite
 // Os anteriores (08/10/2026) sairam da venda e mantem preco e limite:
@@ -61,7 +61,7 @@ describe("o catálogo de planos", () => {
     expect(
       PLANOS.map((p) => [p.id, p.nome, p.precoCentavos, p.limites.rastreamento, p.limites.vitrines, p.limites.checkouts, p.limites.roteamento])
     ).toEqual([
-      ["roteamento", "Roteamento", 19700, 0, 1, 1, null],
+      ["roteamento", "Roteamento", 19700, 1, 1, 1, null],
       ["completo", "Completo", 49700, 5, 5, 5, null],
       ["ilimitado_v2", "Ilimitado", 99700, null, null, null, null],
     ]);
@@ -122,13 +122,16 @@ describe("o catálogo de planos", () => {
     expect(textoLimiteRoteamento(completo)).toBe("Até 5 vitrines e até 5 lojas de checkout no roteamento");
     expect(textoLimiteRoteamento(ilimitado)).toBe("Roteamento sem limite de lojas");
     expect(textoLimiteRoteamento(PLANOS_ANTERIORES[0].limites)).toBe("Até 6 lojas no roteamento");
-    expect(resumoDosLimites(rota)).toBe("Sem rastreamento · 1 vitrine e 1 loja de checkout no roteamento");
+    expect(resumoDosLimites(rota)).toBe(
+      "Rastreamento em 1 operação (loja ou checkout) · 1 vitrine e 1 loja de checkout no roteamento"
+    );
     expect(resumoDosLimites(ilimitado)).toBe("Rastreamento e roteamento sem limite");
   });
 
   it("o plano que cobre um uso é o mais barato à venda onde tudo cabe", () => {
     expect(planoQueCobre(usoDe({ vitrines: 1, checkouts: 1, roteamento: 2 }))?.id).toBe("roteamento");
-    expect(planoQueCobre(usoDe({ rastreamento: 1, vitrines: 1, checkouts: 1, roteamento: 2 }))?.id).toBe("completo");
+    expect(planoQueCobre(usoDe({ rastreamento: 1, vitrines: 1, checkouts: 1, roteamento: 2 }))?.id).toBe("roteamento");
+    expect(planoQueCobre(usoDe({ rastreamento: 2, vitrines: 1, checkouts: 1, roteamento: 2 }))?.id).toBe("completo");
     expect(planoQueCobre(usoDe({ vitrines: 2, checkouts: 1, roteamento: 3 }))?.id).toBe("completo");
     expect(planoQueCobre(usoDe({ vitrines: 6, checkouts: 1, roteamento: 7 }))?.id).toBe("ilimitado_v2");
     expect(planoQueCobre(usoDe({ rastreamento: 6 }))?.id).toBe("ilimitado_v2");
@@ -149,7 +152,7 @@ describe("limitesDoPerfil", () => {
     expect(limitesDoPerfil({ plan: "pro", plano: "roteamento" })).toEqual({
       origem: "plano",
       plano: "roteamento",
-      rastreamento: 0,
+      rastreamento: 1,
       vitrines: 1,
       checkouts: 1,
       roteamento: null,
@@ -289,7 +292,7 @@ describe("passaDoLimite (grandfather)", () => {
     expect(passaDoLimite(de("a", "b", "c", "d"), de("a", "b", "c", "d"), 1)).toBe(false);
     expect(passaDoLimite(de("a", "b", "c", "d"), de("a", "b", "c"), 1)).toBe(false);
     expect(passaDoLimite(de("a", "b", "c", "d"), de("a", "b", "c", "d", "e"), 1)).toBe(true);
-    // E no plano sem rastreamento: a que ja estava ligada segue.
+    // E num limite 0 (plano sem rastreamento): a que ja estava ligada segue.
     expect(passaDoLimite(de("a"), de("a"), 0)).toBe(false);
   });
 
@@ -303,9 +306,16 @@ describe("passaDoLimite (grandfather)", () => {
 });
 
 describe("mensagens", () => {
-  it("o Roteamento não inclui rastreamento e aponta o Completo", () => {
+  it("o Roteamento rastreia 1 operação e aponta o Completo", () => {
     expect(mensagemDeLimite("rastreamento", limitesDoPerfil({ plan: "pro", plano: "roteamento" }))).toBe(
-      "O plano Roteamento não inclui rastreamento. O Completo inclui até 5 operações. Mude em Assinatura."
+      "Seu plano cobre 1 operação com rastreamento (loja ou checkout). Para ligar mais, mude para o Completo em Assinatura."
+    );
+  });
+
+  it("limite 0 de rastreamento diz que não inclui e aponta o primeiro plano que inclui", () => {
+    const zero = { origem: "plano" as const, plano: null, rastreamento: 0, vitrines: 1, checkouts: 1, roteamento: null };
+    expect(mensagemDeLimite("rastreamento", zero)).toBe(
+      "Seu plano não inclui rastreamento. O Roteamento inclui 1 operação. Mude em Assinatura."
     );
   });
 
@@ -355,8 +365,11 @@ describe("mensagens", () => {
 
   it("resumo do uso na tela de Assinatura", () => {
     const [rota, completo, ilimitado] = PLANOS.map((p) => p.limites);
-    expect(resumoDoUso(rota, usoDe({ vitrines: 1, checkouts: 1, roteamento: 2 }))).toBe(
-      "Rastreamento não incluso · 1/1 vitrine e 1/1 loja de checkout no roteamento"
+    expect(resumoDoUso(rota, usoDe({ rastreamento: 1, vitrines: 1, checkouts: 1, roteamento: 2 }))).toBe(
+      "1/1 operação com rastreamento · 1/1 vitrine e 1/1 loja de checkout no roteamento"
+    );
+    expect(resumoDoUso({ ...rota, rastreamento: 0 }, usoDe({ vitrines: 1 }))).toBe(
+      "Rastreamento não incluso · 1/1 vitrine e 0/1 loja de checkout no roteamento"
     );
     expect(resumoDoUso(completo, usoDe({ rastreamento: 2, vitrines: 1, checkouts: 3, roteamento: 4 }))).toBe(
       "2/5 operações com rastreamento · 1/5 vitrines e 3/5 lojas de checkout no roteamento"
@@ -370,7 +383,8 @@ describe("mensagens", () => {
     );
     expect(acimaDoLimite(loja1, usoDe({ rastreamento: 2 }))).toBe(true);
     expect(acimaDoLimite(loja1, usoDe({ rastreamento: 1, roteamento: 6 }))).toBe(false);
-    expect(acimaDoLimite(rota, usoDe({ rastreamento: 1 }))).toBe(true);
+    expect(acimaDoLimite(rota, usoDe({ rastreamento: 1 }))).toBe(false);
+    expect(acimaDoLimite(rota, usoDe({ rastreamento: 2 }))).toBe(true);
     expect(acimaDoLimite(rota, usoDe({ vitrines: 2 }))).toBe(true);
     expect(acimaDoLimite(completo, usoDe({ rastreamento: 5, vitrines: 5, checkouts: 5, roteamento: 10 }))).toBe(false);
   });
@@ -498,23 +512,25 @@ describe("conferirLigarRastreamento", () => {
     expect(await conferirLigarRastreamento(db, "alice", "a2")).toEqual({ ok: true });
   });
 
-  it("Roteamento recusa o rastreamento, em loja e em checkout, com a frase clara", async () => {
+  it("Roteamento liga o rastreamento em 1 operação, loja ou checkout", async () => {
     const { db } = bancoFalso(conta({ plan: "pro", plano: "roteamento" }, { tracking_configs: [] }));
     for (const alvo of ["a1", { checkoutId: "ck1" }]) {
+      expect(await conferirLigarRastreamento(db, "alice", alvo)).toEqual({ ok: true });
+    }
+  });
+
+  it("Roteamento com uma operação ligada barra a segunda, em loja e em checkout", async () => {
+    const { db } = bancoFalso(conta({ plan: "pro", plano: "roteamento" }));
+    expect(await conferirLigarRastreamento(db, "alice", "a1")).toEqual({ ok: true });
+    for (const alvo of ["a2", { checkoutId: "ck1" }]) {
       const r = await conferirLigarRastreamento(db, "alice", alvo);
       expect(r).toMatchObject({ ok: false, status: 403, codigo: "limite_do_plano" });
       if (!r.ok) {
         expect(r.mensagem).toBe(
-          "O plano Roteamento não inclui rastreamento. O Completo inclui até 5 operações. Mude em Assinatura."
+          "Seu plano cobre 1 operação com rastreamento (loja ou checkout). Para ligar mais, mude para o Completo em Assinatura."
         );
       }
     }
-  });
-
-  it("Roteamento: a loja que já estava ligada (plano mudou para baixo) segue, mas não liga outra", async () => {
-    const { db } = bancoFalso(conta({ plan: "pro", plano: "roteamento" }));
-    expect(await conferirLigarRastreamento(db, "alice", "a1")).toEqual({ ok: true });
-    expect(await conferirLigarRastreamento(db, "alice", "a2")).toMatchObject({ ok: false, status: 403 });
   });
 
   it("Completo: até 5 operações, lojas e checkouts juntos; a sexta é recusada", async () => {

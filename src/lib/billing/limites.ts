@@ -19,7 +19,7 @@ import {
 // O que conta:
 //  - rastreamento: lojas do usuario com tracking_configs.enabled = true, mais
 //    os checkouts externos com rastreamento ligado (abaixo). Limite 0 = o plano
-//    nao inclui rastreamento (o Roteamento).
+//    nao inclui rastreamento (nenhum a venda hoje).
 //  - vitrines: as vitrines distintas das rotas do usuario (source_store_id);
 //  - lojas de checkout: as distintas entre os destinos de cada rota
 //    (routed_checkout_targets). Rota sem nenhuma linha de destino conta a loja

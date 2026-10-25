@@ -284,10 +284,14 @@ describe("formatos", () => {
 
 describe("recursos do plano: uma regra so", () => {
   const [rota, completo, ilimitado] = PLANOS.map((p) => recursosDoPlano(p.limites));
-  it("o Roteamento nao lista rastreamento, nem rodizio com uma loja de checkout so", () => {
-    expect(rota.join(" ")).not.toMatch(/Rastreamento|Lucro|Campanhas|Checkouts externos/);
+  it("o Roteamento lista o rastreamento (1 operacao), mas nao o rodizio com uma loja de checkout so", () => {
+    expect(rota.join(" ")).toMatch(/Rastreamento/);
     expect(rota.join(" ")).not.toMatch(/Rodízio|Teto de pedidos/);
     expect(rota[0]).toMatch(/^Roteamento/);
+  });
+  it("limite 0 de rastreamento nao lista o rastreamento nem o que vive dele", () => {
+    const sem = recursosDoPlano({ rastreamento: 0, checkouts: 1 });
+    expect(sem.join(" ")).not.toMatch(/Rastreamento|Lucro|Campanhas|Checkouts externos/);
   });
   it("Completo e Ilimitado listam o rodizio e o rastreamento", () => {
     for (const lista of [completo, ilimitado]) {
