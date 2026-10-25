@@ -1,51 +1,32 @@
-import type { ReactNode } from "react";
-import {
-  CalendarClock,
-  CircleDollarSign,
-  HandCoins,
-  Hourglass,
-  Megaphone,
-  Package,
-  Percent,
-  Receipt,
-  ShoppingBasket,
-  Target,
-  Ticket,
-  TrendingUp,
-  Truck,
-  Undo2,
-  UserPlus,
-  Landmark,
-  Wallet,
-  type LucideIcon,
-} from "lucide-react";
-import clsx from "clsx";
-import { Delta } from "@/components/ui/delta";
-import { Dica } from "@/components/ui/dica";
+import type { TomStatus } from "@/components/ui/status-badge";
 import { calcularVariacao, type BomQuando, type FormatoVariacao } from "@/components/ui/variacao";
-import type { ResumoEntrega, Totais } from "@/lib/financeiro/calculo";
+import { semaforoDe, type ResumoEntrega, type Totais } from "@/lib/financeiro/calculo";
 import { AMOSTRA_MINIMA, DIAS_SEM_RETORNO } from "@/lib/financeiro/contra-entrega";
 import {
   METRICAS,
+  SEMAFORO,
   dinheiro,
   formatarMetrica,
   inteiro,
   porcento,
-  valorComSinal,
   vezes,
   type ComposicaoCod,
   type IdMetrica,
+  type IdSerie,
 } from "./lucro-dados";
 
 // ============================================================================
-// Os cartoes do Dashboard (mockup "design novo/2.0/Dashboard.dc.html"):
-//   - IndicadoresTopo: Lucro em destaque (verde/vermelho), Faturamento, Custos
-//     totais, Taxas e Margem.
-//   - IndicadoresKpi: Anuncios, CPA, ROAS real, ROAS de equilibrio, Custo de
-//     produto, Pedidos (com o selo de cobertura de custo) e Ticket medio.
-//   - IndicadoresTopoCod / IndicadoresKpiCod: a loja em "Contra entrega"
-//     (Lucro previsto, Recebido, A receber, Previsto, Taxa de entrega...).
-// Server components: a variacao contra o periodo anterior sai pronta daqui.
+// Os numeros do Dashboard (mockup "design novo/Dashboard.dc.html"), prontos
+// para a tela: o do destaque e os da faixa de KPIs.
+//   - Loja online: Lucro estimado no destaque; Faturamento, Gasto em anuncios,
+//     ROAS real (com o de equilibrio), Margem, Pedidos (com a cobertura de
+//     custo), Ticket medio, CPA, Custos totais, Custo de produto e Taxas.
+//   - Contra entrega: Lucro previsto no destaque; Recebido, A receber,
+//     Previsto, Lucro realizado, Taxa de entrega, Gasto, ROAS previsto e o de
+//     equilibrio, Pedidos, CPA e produto + devolucoes (ou, so com checkout de
+//     comissao, Perdido e Valor dos pedidos).
+// Puro e sem JSX: o servidor monta, o painel (client) so desenha. A variacao
+// contra o periodo anterior sai pronta daqui.
 // ============================================================================
 
 export interface BaseIndicadores {
@@ -54,15 +35,15 @@ export interface BaseIndicadores {
   anterior: Totais;
   /** false = sem comparacao (escolha do usuario ou periodo anterior sem movimento). */
   compara: boolean;
-  /** Avisos que so explicam um numero, na Dica do cartao afetado. */
+  /** Avisos que so explicam um numero, na Dica do indicador afetado. */
   dicas: Partial<Record<IdMetrica, string[]>>;
-  /** Taxa de entrega do filtro: so os cartoes de contra entrega usam. */
+  /** Taxa de entrega do filtro: so os indicadores de contra entrega usam. */
   entrega?: ResumoEntrega;
   /**
-   * Cartoes de contra entrega: o que o filtro soma (composicaoCod). So
-   * checkout: "Taxa de aprovação" e Perdido no lugar de custo de produto e
-   * devoluções. Loja + checkout: os textos somam a comissao, e a taxa diz se
-   * e de aprovacao, de entrega ou a media das duas. Ausente = so loja.
+   * Contra entrega: o que o filtro soma (composicaoCod). So checkout: "Taxa
+   * de aprovação" e Perdido no lugar de custo de produto e devoluções. Loja +
+   * checkout: os textos somam a comissao, e a taxa diz se e de aprovacao, de
+   * entrega ou a media das duas. Ausente = so loja.
    */
   composicao?: ComposicaoCod;
   /**
@@ -71,135 +52,122 @@ export interface BaseIndicadores {
    */
   venda?: "so" | "junto";
   /**
-   * Nenhuma loja Shopify no filtro (so checkouts). Nos cartoes de contra
-   * entrega, a venda (Cakto) junto da comissao conta como "ambos" na
-   * composicao, mas produto, frete e devolucao sao de loja: entram os
-   * cartoes do checkout de comissao.
+   * Nenhuma loja Shopify no filtro (so checkouts). Em contra entrega, a venda
+   * (Cakto) junto da comissao conta como "ambos" na composicao, mas produto,
+   * frete e devolucao sao de loja: entram os do checkout de comissao.
    */
   semLoja?: boolean;
 }
 
-const SO_LOJAS: ComposicaoCod = { origem: "lojas", taxa: "entrega" };
+type Tipo = "dinheiro" | "vezes" | "numero" | "pct";
 
-interface Cartao {
+export interface Indicador {
   id: string;
   rotulo: string;
-  icone: LucideIcon;
   valor: number | null;
+  /** Sempre o valor exato, com centavos: o lojista confere com a Shopify. */
   texto: string;
+  /** undefined = sem comparacao; null = sem base (anterior zero ou sem valor). */
   variacao?: number | null;
   bom: BomQuando;
   formato?: FormatoVariacao;
+  /** O valor do periodo anterior: cheio (destaque) e compacto (faixa). null = sem valor. */
+  anterior?: { cheio: string; compacto: string } | null;
   definicao: string;
+  /** Avisos que explicam o numero (custo padrao, cambio, fuso). */
   notas?: string[];
-  selo?: { texto: string; tom: "ok" | "warn" };
+  /** Linha no lugar do "vs." anterior: Meta e Google, ROAS de equilibrio. */
+  sub?: string;
+  /** O que o numero junta ou deixa de fora ("+ 2 reenvios", "Previsto R$ ..."). */
   detalhe?: string;
-  classe?: string;
+  /** Destaque: o semaforo. Faixa: a cobertura de custo dos Pedidos. */
+  selo?: { texto: string; tom: TomStatus };
+  /** A serie diaria que desenha o indicador. Sem ela, a celula nao troca o grafico. */
+  serie?: IdSerie;
+  /** Quando a linha nao e o proprio numero (Lucro previsto desenha o realizado). */
+  rotuloSerie?: string;
 }
 
-function variacaoDe(b: BaseIndicadores, atual: number | null, anterior: number | null, formato: FormatoVariacao = "pct") {
-  if (!b.compara) return undefined;
-  if (formato === "pp") return atual !== null && anterior !== null ? atual - anterior : null;
-  return calcularVariacao(atual, anterior);
+export interface Indicadores {
+  /** O numero em destaque: Lucro estimado, ou Lucro previsto em contra entrega. */
+  principal: Indicador;
+  /** A faixa de KPIs, na ordem da tela. */
+  celulas: Indicador[];
 }
 
-/** Cartao de uma metrica do catalogo (lucro-dados), com variacao e dica. */
-function daMetrica(b: BaseIndicadores, id: IdMetrica, icone: LucideIcon, valor: (t: Totais) => number | null, extra?: Partial<Cartao>): Cartao {
+const SO_LOJAS: ComposicaoCod = { origem: "lojas", taxa: "entrega" };
+
+function formatar(v: number | null, tipo: Tipo, moeda: string, compacto = false): string {
+  if (tipo === "dinheiro") return dinheiro(v, moeda, compacto);
+  if (tipo === "vezes") return vezes(v);
+  if (tipo === "pct") return porcento(v);
+  return inteiro(v);
+}
+
+/**
+ * Variacao e valor anterior. Ticket e CPA ficam cheios na faixa (sao valores
+ * pequenos); o resto do dinheiro sai compacto ("R$ 190,1 mil").
+ */
+function comparar(
+  b: BaseIndicadores,
+  atual: number | null,
+  anterior: number | null,
+  tipo: Tipo,
+  formato: FormatoVariacao = "pct",
+  compactar = tipo === "dinheiro"
+): Pick<Indicador, "variacao" | "anterior"> {
+  if (!b.compara) return {};
+  const variacao =
+    formato === "pp"
+      ? atual !== null && anterior !== null
+        ? atual - anterior
+        : null
+      : calcularVariacao(atual, anterior);
+  return {
+    variacao,
+    anterior:
+      anterior === null || !Number.isFinite(anterior)
+        ? null
+        : { cheio: formatar(anterior, tipo, b.moeda), compacto: formatar(anterior, tipo, b.moeda, compactar) },
+  };
+}
+
+/** Indicador de uma metrica do catalogo (lucro-dados), com variacao, dica e serie. */
+function daMetrica(
+  b: BaseIndicadores,
+  id: IdMetrica,
+  valor: (t: Totais) => number | null,
+  extra?: Partial<Indicador>
+): Indicador {
   const d = METRICAS[id];
   const v = valor(b.atual);
   return {
     id,
     rotulo: d.rotulo,
-    icone,
     valor: v,
     texto: v === null ? "—" : formatarMetrica(id, v, b.moeda),
-    variacao: variacaoDe(b, v, valor(b.anterior), d.formatoVariacao),
+    ...comparar(b, v, valor(b.anterior), d.tipo, d.formatoVariacao, d.tipo === "dinheiro" && id !== "ticket" && id !== "cpa"),
     bom: d.bom,
     formato: d.formatoVariacao,
     definicao: v === null ? `${d.definicao} ${d.semDado}.` : d.definicao,
     notas: b.dicas[id],
+    serie: id,
     ...extra,
   };
 }
 
-function CartaoKpi({ c, destaque }: { c: Cartao; destaque?: "ok" | "err" }) {
-  const Icone = c.icone;
-  const { texto, negativo } = valorComSinal(c.texto, c.valor);
-  return (
-    <div
-      className={clsx(
-        "flex min-h-24 items-center gap-3 rounded-overlay border p-4",
-        destaque === "ok" && "border-transparent bg-ok text-surface",
-        destaque === "err" && "border-transparent bg-err text-surface",
-        !destaque && "border-border bg-surface text-ink",
-        c.classe
-      )}
-    >
-      <span
-        aria-hidden
-        className={clsx(
-          // Some onde o cartao fica estreito (celular; 4-5 colunas antes do xl):
-          // o valor exato, com centavos, precisa da largura.
-          "hidden size-9 shrink-0 place-items-center rounded-full sm:grid lg:hidden xl:grid",
-          destaque ? "bg-white/20 text-surface" : "bg-info-bg text-info"
-        )}
-      >
-        <Icone className="size-5" strokeWidth={2} />
-      </span>
-      <span className="flex min-w-0 flex-col gap-0.5">
-        <span className={clsx("flex items-center gap-1 text-dense", destaque ? "opacity-90" : "text-t1")}>
-          {c.rotulo}
-          <Dica rotulo={`O que é ${c.rotulo}`} className={destaque ? "text-surface/80 hover:text-ink" : undefined}>
-            <span className="flex flex-col gap-1.5">
-              <span>{c.definicao}</span>
-              {c.notas?.map((n) => (
-                <span key={n} className="font-semibold">
-                  {n}
-                </span>
-              ))}
-            </span>
-          </Dica>
-        </span>
-        <span
-          className={clsx(
-            "num whitespace-nowrap text-[clamp(16px,1.4vw,20px)] leading-7 font-bold tracking-[-0.01em]",
-            negativo && !destaque && "text-err"
-          )}
-        >
-          {texto}
-        </span>
-        {c.variacao !== undefined && (
-          <Delta
-            valor={c.variacao}
-            bom={c.bom}
-            formato={c.formato}
-            className={clsx("text-label", destaque && "text-surface")}
-          />
-        )}
-        {c.detalhe && <span className={clsx("text-label", destaque ? "opacity-90" : "text-t2")}>{c.detalhe}</span>}
-        {c.selo && (
-          <span
-            className={clsx(
-              "mt-1 self-start whitespace-nowrap rounded-control border px-1.5 text-label font-medium",
-              destaque
-                ? "border-white/40 text-surface"
-                : c.selo.tom === "ok"
-                  ? "border-ok-border text-ok"
-                  : "border-warn-border text-warn"
-            )}
-          >
-            {c.selo.texto}
-          </span>
-        )}
-      </span>
-    </div>
-  );
-}
-
 const custosDe = (t: Totais) => t.cmv + t.taxas + t.gasto;
 
+const DEFINICAO_EQUILIBRIO =
+  "O ROAS em que o lucro fica em zero: faturamento dividido pelo que sobra depois de produto, frete e taxa. Abaixo dele, cada anúncio dá prejuízo.";
+
+/** Meta e Google, compactos: o valor exato de cada um esta na composicao. */
+function metaEGoogle(b: BaseIndicadores): string {
+  return `Meta ${dinheiro(b.atual.gastoMeta, b.moeda, true)} · Google ${dinheiro(b.atual.gastoGoogle, b.moeda, true)}`;
+}
+
 /** O Faturamento com a venda da Cakto: o que ainda esta em Pix ou boleto aparece embaixo. */
-function extraFaturamento(b: BaseIndicadores): Partial<Cartao> | undefined {
+function extraFaturamento(b: BaseIndicadores): Partial<Indicador> | undefined {
   if (!b.venda) return undefined;
   const v = b.atual.venda;
   return {
@@ -212,7 +180,7 @@ function extraFaturamento(b: BaseIndicadores): Partial<Cartao> | undefined {
 }
 
 /** As Taxas com a venda da Cakto: a taxa da plataforma e as comissoes de afiliado e coprodutor. */
-function extraTaxas(b: BaseIndicadores): Partial<Cartao> | undefined {
+function extraTaxas(b: BaseIndicadores): Partial<Indicador> | undefined {
   if (!b.venda) return undefined;
   const v = b.atual.venda;
   return {
@@ -224,46 +192,8 @@ function extraTaxas(b: BaseIndicadores): Partial<Cartao> | undefined {
   };
 }
 
-export function IndicadoresTopo(b: BaseIndicadores) {
-  const lucro = daMetrica(b, "lucro", CircleDollarSign, (t) => t.lucro);
-  const custos = custosDe(b.atual);
-  const cartoes: Cartao[] = [
-    daMetrica(b, "receita", CircleDollarSign, (t) => t.receita, extraFaturamento(b)),
-    {
-      id: "custos",
-      rotulo: "Custos totais",
-      icone: ShoppingBasket,
-      valor: custos,
-      texto: dinheiro(custos, b.moeda),
-      variacao: variacaoDe(b, custos, custosDe(b.anterior)),
-      bom: "neutro",
-      definicao: "Produto mais frete do fornecedor, taxas de pagamento e gasto em anúncios do período.",
-    },
-    {
-      id: "taxas",
-      rotulo: "Taxas",
-      icone: Landmark,
-      valor: b.atual.taxas,
-      texto: dinheiro(b.atual.taxas, b.moeda),
-      variacao: variacaoDe(b, b.atual.taxas, b.anterior.taxas),
-      bom: "neutro",
-      definicao: "Taxa de pagamento dos pedidos: o percentual mais o valor fixo configurados em Custos e taxas.",
-      ...extraTaxas(b),
-    },
-    daMetrica(b, "margem", Percent, (t) => t.margem),
-  ];
-  return (
-    <section aria-label="Resumo do período" className="grid grid-cols-2 gap-3.5 lg:grid-cols-5">
-      <CartaoKpi c={{ ...lucro, classe: "col-span-2 lg:col-span-1" }} destaque={b.atual.lucro < 0 ? "err" : "ok"} />
-      {cartoes.map((c) => (
-        <CartaoKpi key={c.id} c={c} />
-      ))}
-    </section>
-  );
-}
-
-/** Selo de cobertura de custo no cartao de Pedidos. null = sem venda. */
-function seloCobertura(cobertura: number | null): Cartao["selo"] {
+/** Selo de cobertura de custo nos Pedidos. null = sem venda. */
+function seloCobertura(cobertura: number | null): Indicador["selo"] {
   if (cobertura === null) return undefined;
   if (cobertura >= 0.9995) return { texto: "Todos com custo", tom: "ok" };
   return { texto: `${porcento(1 - cobertura)} das vendas sem custo`, tom: "warn" };
@@ -280,76 +210,80 @@ function detalheVendas(t: Totais): string | undefined {
   return partes.length ? partes.join(" · ") : undefined;
 }
 
-export function IndicadoresKpi(b: BaseIndicadores) {
+function indicadoresOnline(b: BaseIndicadores): Indicadores {
   const t = b.atual;
-  const cartoes: Cartao[] = [
-    daMetrica(b, "gasto", Megaphone, (x) => x.gasto, {
-      rotulo: "Anúncios",
-      detalhe: `Meta ${dinheiro(t.gastoMeta, b.moeda)} · Google ${dinheiro(t.gastoGoogle, b.moeda)}`,
-    }),
-    daMetrica(b, "cpa", UserPlus, (x) => x.cpa),
-    daMetrica(b, "roas", TrendingUp, (x) => x.roas),
-    {
-      id: "equilibrio",
-      rotulo: "ROAS de equilíbrio",
-      icone: Target,
-      valor: t.roasEquilibrio,
-      texto: vezes(t.roasEquilibrio),
-      bom: "neutro",
-      definicao:
-        "O ROAS em que o lucro fica em zero: faturamento dividido pelo que sobra depois de produto, frete e taxa. Abaixo dele, cada anúncio dá prejuízo.",
-    },
-    daMetrica(b, "custo", Package, (x) => x.cmv),
-    daMetrica(b, "pedidos", Receipt, (x) => x.pedidos, {
-      detalhe:
-        (b.venda ? detalheVendas(t) : undefined) ??
-        (t.reenvios > 0 ? `+ ${inteiro(t.reenvios)} ${t.reenvios === 1 ? "reenvio" : "reenvios"}` : undefined),
-      selo: seloCobertura(t.coberturaCusto),
-      ...(b.venda
-        ? {
-            definicao:
-              "Pedidos pagos. No checkout conta a cobrança: order bump e upsell entram no pedido principal. Reembolso e chargeback saem.",
-          }
-        : {}),
-    }),
-    // Ultimo da grade de 4: fecha a 2a linha em vez de deixar um buraco.
-    daMetrica(b, "ticket", Ticket, (x) => x.ticket, { classe: "lg:col-span-2" }),
-  ];
-  return (
-    <section aria-label="Indicadores do período" className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
-      {cartoes.map((c) => (
-        <CartaoKpi key={c.id} c={c} />
-      ))}
-    </section>
-  );
+  const custos = custosDe(t);
+  return {
+    principal: daMetrica(b, "lucro", (x) => x.lucro, { selo: SEMAFORO[semaforoDe(t)] }),
+    celulas: [
+      daMetrica(b, "receita", (x) => x.receita, extraFaturamento(b)),
+      daMetrica(b, "gasto", (x) => x.gasto, { sub: metaEGoogle(b) }),
+      daMetrica(b, "roas", (x) => x.roas, {
+        sub: `equilíbrio ${vezes(t.roasEquilibrio)}`,
+        definicao: `${METRICAS.roas.definicao} ROAS de equilíbrio: ${DEFINICAO_EQUILIBRIO.charAt(0).toLowerCase()}${DEFINICAO_EQUILIBRIO.slice(1)}`,
+      }),
+      daMetrica(b, "margem", (x) => x.margem),
+      daMetrica(b, "pedidos", (x) => x.pedidos, {
+        detalhe:
+          (b.venda ? detalheVendas(t) : undefined) ??
+          (t.reenvios > 0 ? `+ ${inteiro(t.reenvios)} ${t.reenvios === 1 ? "reenvio" : "reenvios"}` : undefined),
+        selo: seloCobertura(t.coberturaCusto),
+        ...(b.venda
+          ? {
+              definicao:
+                "Pedidos pagos. No checkout conta a cobrança: order bump e upsell entram no pedido principal. Reembolso e chargeback saem.",
+            }
+          : {}),
+      }),
+      daMetrica(b, "ticket", (x) => x.ticket),
+      daMetrica(b, "cpa", (x) => x.cpa),
+      {
+        id: "custos",
+        rotulo: "Custos totais",
+        valor: custos,
+        texto: dinheiro(custos, b.moeda),
+        ...comparar(b, custos, custosDe(b.anterior), "dinheiro"),
+        bom: "neutro",
+        definicao: "Produto mais frete do fornecedor, taxas de pagamento e gasto em anúncios do período.",
+        serie: "custos",
+      },
+      daMetrica(b, "custo", (x) => x.cmv),
+      {
+        id: "taxas",
+        rotulo: "Taxas",
+        valor: t.taxas,
+        texto: dinheiro(t.taxas, b.moeda),
+        ...comparar(b, t.taxas, b.anterior.taxas, "dinheiro"),
+        bom: "neutro",
+        definicao: "Taxa de pagamento dos pedidos: o percentual mais o valor fixo configurados em Custos e taxas.",
+        serie: "taxas",
+        ...extraTaxas(b),
+      },
+    ],
+  };
 }
 
 // ---------------------------------------------------------------------------
-// Contra entrega: o mesmo visual, com Recebido, A receber e Previsto.
-// O realizado e o de sempre (receita = Recebido, lucro = Lucro realizado).
+// Contra entrega: Recebido, A receber e Previsto. O realizado e o de sempre
+// (receita = Recebido, lucro = Lucro realizado).
 // ---------------------------------------------------------------------------
-
-type Formato = "dinheiro" | "vezes" | "numero";
 
 function cartaoCod(
   b: BaseIndicadores,
   id: string,
   rotulo: string,
-  icone: LucideIcon,
   valor: (t: Totais) => number | null,
-  formato: Formato,
+  tipo: Exclude<Tipo, "pct">,
   definicao: string,
-  extra?: Partial<Cartao>
-): Cartao {
+  extra?: Partial<Indicador>
+): Indicador {
   const v = valor(b.atual);
-  const texto = formato === "dinheiro" ? dinheiro(v, b.moeda) : formato === "vezes" ? vezes(v) : inteiro(v);
   return {
     id,
     rotulo,
-    icone,
     valor: v,
-    texto,
-    variacao: variacaoDe(b, v, valor(b.anterior)),
+    texto: formatar(v, tipo, b.moeda),
+    ...comparar(b, v, valor(b.anterior), tipo, "pct", tipo === "dinheiro" && id !== "cpaCod"),
     bom: "subir",
     definicao,
     ...extra,
@@ -377,113 +311,9 @@ function detalheDaTaxa(taxa: number | null, de: ComposicaoCod["taxa"]): string |
   return `Com ${porcento(taxa)} de ${de === "aprovacao" ? "aprovação" : "entrega"}`;
 }
 
-export function IndicadoresTopoCod(b: BaseIndicadores) {
-  const t = b.atual;
-  const taxa = taxaUsada(b);
-  const { origem, taxa: taxaDe } = b.composicao ?? SO_LOJAS;
-  const soCheckout = origem === "checkouts";
-  // Venda e comissao, sem loja: nada de produto, frete ou devolucao.
-  const soCheckouts = !soCheckout && b.semLoja === true;
-  // Cobertura do previsto: conta o custo dos que ainda vao ser enviados. No
-  // Lucro previsto so o aviso; o "Todos com custo" fica no cartao Pedidos.
-  const cobertura = seloCobertura(t.cod.coberturaCusto);
-  const lucro = cartaoCod(
-    b,
-    "lucroPrevisto",
-    "Lucro previsto",
-    CircleDollarSign,
-    (x) => x.cod.lucroPrevisto,
-    "dinheiro",
-    soCheckout
-      ? "Previsto menos o gasto em anúncios ligado ao checkout."
-      : soCheckouts
-        ? "Previsto menos as taxas da venda e o gasto em anúncios ligado aos checkouts."
-        : "Previsto menos produto, frete, taxas, devoluções esperadas e anúncios.",
-    { notas: b.dicas.lucro, selo: cobertura?.tom === "warn" && !soCheckouts ? cobertura : undefined }
-  );
-  const cartoes: Cartao[] = [
-    cartaoCod(
-      b,
-      "recebido",
-      "Recebido",
-      HandCoins,
-      (x) => x.receita,
-      "dinheiro",
-      soCheckout
-        ? "Comissão aprovada ou paga: a que já é sua."
-        : origem === "ambos"
-          ? "Pedidos pagos e comissão aprovada ou paga."
-          : "Pedidos pagos: os online e os contra entrega marcados como pagos na Shopify.",
-      {
-        detalhe: soCheckout
-          ? `${inteiro(t.externo.aprovados)} ${t.externo.aprovados === 1 ? "aprovada" : "aprovadas"} · ${inteiro(t.externo.pagos)} ${t.externo.pagos === 1 ? "paga" : "pagas"}`
-          : origem === "ambos"
-            ? `${inteiro(t.pedidos)} ${t.pedidos === 1 ? "pago ou aprovado" : "pagos ou aprovados"}`
-            : `${inteiro(t.pedidos)} ${t.pedidos === 1 ? "pago" : "pagos"}`,
-      }
-    ),
-    cartaoCod(
-      b,
-      "aReceber",
-      "A receber",
-      Hourglass,
-      (x) => x.cod.aReceber,
-      "dinheiro",
-      // Loja online + checkout: so o checkout tem o que receber.
-      taxaDe === "aprovacao"
-        ? "Comissão pendente: pedidos ainda sem aprovação."
-        : taxaDe === "misto"
-          ? "Contra entrega ainda sem pagamento e comissão pendente."
-          : "Contra entrega ainda sem pagamento: aguardando envio, em trânsito ou entregue.",
-      {
-        bom: "neutro",
-        detalhe:
-          taxaDe === "aprovacao"
-            ? `${inteiro(t.cod.abertos)} ${t.cod.abertos === 1 ? "pendente" : "pendentes"}`
-            : `${inteiro(t.cod.abertos)} em aberto`,
-      }
-    ),
-    cartaoCod(
-      b,
-      "previsto",
-      "Previsto",
-      CalendarClock,
-      (x) => x.cod.previsto,
-      "dinheiro",
-      taxaDe === "aprovacao"
-        ? "Recebido, mais a comissão pendente vezes a taxa de aprovação."
-        : taxaDe === "misto"
-          ? "Recebido, mais os entregues a receber, mais o que ainda vai ser entregue ou aprovado vezes a taxa de cada loja e checkout."
-          : "Recebido, mais os entregues a receber, mais o que ainda vai ser entregue vezes a taxa de entrega.",
-      { detalhe: detalheDaTaxa(taxa, taxaDe) }
-    ),
-    cartaoCod(
-      b,
-      "lucroRealizado",
-      "Lucro realizado",
-      Wallet,
-      (x) => x.lucro,
-      "dinheiro",
-      soCheckout
-        ? "Recebido menos o gasto em anúncios ligado ao checkout."
-        : soCheckouts
-          ? "Recebido menos as taxas da venda e o gasto em anúncios ligado aos checkouts."
-          : "Recebido menos produto e frete do que já foi enviado, taxas, devoluções e anúncios."
-    ),
-  ];
-  return (
-    <section aria-label="Resumo do período" className="grid grid-cols-2 gap-3.5 lg:grid-cols-5">
-      <CartaoKpi c={{ ...lucro, classe: "col-span-2 lg:col-span-1" }} destaque={t.cod.lucroPrevisto < 0 ? "err" : "ok"} />
-      {cartoes.map((c) => (
-        <CartaoKpi key={c.id} c={c} />
-      ))}
-    </section>
-  );
-}
-
-/** O cartao da taxa do Previsto: de entrega (loja), de aprovacao (checkout) ou a media das duas. */
-function cartaoTaxa(b: BaseIndicadores, taxa: number | null, de: ComposicaoCod["taxa"]): Cartao {
-  const base = { icone: Truck, valor: taxa, texto: porcento(taxa), bom: "neutro" as const, detalhe: origemDaTaxa(b.entrega, de) };
+/** A taxa do Previsto: de entrega (loja), de aprovacao (checkout) ou a media das duas. */
+function cartaoTaxa(b: BaseIndicadores, taxa: number | null, de: ComposicaoCod["taxa"]): Indicador {
+  const base = { valor: taxa, texto: porcento(taxa), bom: "neutro" as const, detalhe: origemDaTaxa(b.entrega, de) };
   if (de === "aprovacao") {
     return {
       ...base,
@@ -508,27 +338,119 @@ function cartaoTaxa(b: BaseIndicadores, taxa: number | null, de: ComposicaoCod["
   };
 }
 
-export function IndicadoresKpiCod(b: BaseIndicadores) {
+function indicadoresCod(b: BaseIndicadores): Indicadores {
   const t = b.atual;
   const taxa = taxaUsada(b);
   const { origem, taxa: taxaDe } = b.composicao ?? SO_LOJAS;
   const ck = origem === "checkouts";
-  // Venda e comissao, sem loja: os cartoes do checkout de comissao no lugar
-  // de custo e devolucoes (que sao de loja e ficariam zerados).
+  // Venda e comissao, sem loja: nada de produto, frete ou devolucao (sao de
+  // loja e ficariam zerados); entram os do checkout de comissao.
   const soCheckouts = !ck && b.semLoja === true;
-  const cartoes: Cartao[] = [
+
+  const principal = cartaoCod(
+    b,
+    "lucroPrevisto",
+    "Lucro previsto",
+    (x) => x.cod.lucroPrevisto,
+    "dinheiro",
+    ck
+      ? "Previsto menos o gasto em anúncios ligado ao checkout."
+      : soCheckouts
+        ? "Previsto menos as taxas da venda e o gasto em anúncios ligado aos checkouts."
+        : "Previsto menos produto, frete, taxas, devoluções esperadas e anúncios.",
+    {
+      notas: b.dicas.lucro,
+      // O semaforo de sempre (semaforoDe), com os numeros do previsto: e o
+      // numero que esta no destaque.
+      selo: SEMAFORO[
+        semaforoDe({
+          gasto: t.gasto,
+          lucro: t.cod.lucroPrevisto,
+          roas: t.cod.roasPrevisto,
+          roasEquilibrio: t.cod.roasEquilibrioPrevisto,
+        })
+      ],
+      // Nao ha previsto por dia: a linha e a do lucro realizado, e a legenda diz.
+      serie: "lucro",
+      rotuloSerie: "Lucro realizado",
+    }
+  );
+
+  const celulas: Indicador[] = [
+    cartaoCod(
+      b,
+      "recebido",
+      "Recebido",
+      (x) => x.receita,
+      "dinheiro",
+      ck
+        ? "Comissão aprovada ou paga: a que já é sua."
+        : origem === "ambos"
+          ? "Pedidos pagos e comissão aprovada ou paga."
+          : "Pedidos pagos: os online e os contra entrega marcados como pagos na Shopify.",
+      {
+        detalhe: ck
+          ? `${inteiro(t.externo.aprovados)} ${t.externo.aprovados === 1 ? "aprovada" : "aprovadas"} · ${inteiro(t.externo.pagos)} ${t.externo.pagos === 1 ? "paga" : "pagas"}`
+          : origem === "ambos"
+            ? `${inteiro(t.pedidos)} ${t.pedidos === 1 ? "pago ou aprovado" : "pagos ou aprovados"}`
+            : `${inteiro(t.pedidos)} ${t.pedidos === 1 ? "pago" : "pagos"}`,
+        serie: "receita",
+      }
+    ),
+    cartaoCod(
+      b,
+      "aReceber",
+      "A receber",
+      (x) => x.cod.aReceber,
+      "dinheiro",
+      // Loja online + checkout: so o checkout tem o que receber.
+      taxaDe === "aprovacao"
+        ? "Comissão pendente: pedidos ainda sem aprovação."
+        : taxaDe === "misto"
+          ? "Contra entrega ainda sem pagamento e comissão pendente."
+          : "Contra entrega ainda sem pagamento: aguardando envio, em trânsito ou entregue.",
+      {
+        bom: "neutro",
+        detalhe:
+          taxaDe === "aprovacao"
+            ? `${inteiro(t.cod.abertos)} ${t.cod.abertos === 1 ? "pendente" : "pendentes"}`
+            : `${inteiro(t.cod.abertos)} em aberto`,
+      }
+    ),
+    cartaoCod(
+      b,
+      "previsto",
+      "Previsto",
+      (x) => x.cod.previsto,
+      "dinheiro",
+      taxaDe === "aprovacao"
+        ? "Recebido, mais a comissão pendente vezes a taxa de aprovação."
+        : taxaDe === "misto"
+          ? "Recebido, mais os entregues a receber, mais o que ainda vai ser entregue ou aprovado vezes a taxa de cada loja e checkout."
+          : "Recebido, mais os entregues a receber, mais o que ainda vai ser entregue vezes a taxa de entrega.",
+      { detalhe: detalheDaTaxa(taxa, taxaDe) }
+    ),
+    cartaoCod(
+      b,
+      "lucroRealizado",
+      "Lucro realizado",
+      (x) => x.lucro,
+      "dinheiro",
+      ck
+        ? "Recebido menos o gasto em anúncios ligado ao checkout."
+        : soCheckouts
+          ? "Recebido menos as taxas da venda e o gasto em anúncios ligado aos checkouts."
+          : "Recebido menos produto e frete do que já foi enviado, taxas, devoluções e anúncios.",
+      { serie: "lucro" }
+    ),
     cartaoTaxa(b, taxa, taxaDe),
-    daMetrica(b, "gasto", Megaphone, (x) => x.gasto, {
-      rotulo: "Anúncios",
-      detalhe: `Meta ${dinheiro(t.gastoMeta, b.moeda)} · Google ${dinheiro(t.gastoGoogle, b.moeda)}`,
-    }),
-    cartaoCod(b, "roasPrevisto", "ROAS previsto", TrendingUp, (x) => x.cod.roasPrevisto, "vezes", "Previsto dividido pelo gasto em anúncios.", {
+    daMetrica(b, "gasto", (x) => x.gasto, { sub: metaEGoogle(b) }),
+    cartaoCod(b, "roasPrevisto", "ROAS previsto", (x) => x.cod.roasPrevisto, "vezes", "Previsto dividido pelo gasto em anúncios.", {
       detalhe: `Realizado ${vezes(t.roas)}`,
     }),
     {
       id: "equilibrio",
       rotulo: "ROAS de equilíbrio",
-      icone: Target,
       valor: t.cod.roasEquilibrioPrevisto,
       texto: vezes(t.cod.roasEquilibrioPrevisto),
       bom: "neutro",
@@ -539,7 +461,6 @@ export function IndicadoresKpiCod(b: BaseIndicadores) {
       b,
       "pedidosCod",
       "Pedidos",
-      Receipt,
       (x) => x.cod.gerados,
       "numero",
       ck
@@ -558,16 +479,16 @@ export function IndicadoresKpiCod(b: BaseIndicadores) {
               detalhe: `${inteiro(t.pedidos)} pagos ou aprovados · ${inteiro(t.cod.abertos)} em aberto · ${inteiro(t.cod.recusados)} recusados ou perdidos`,
             }
           : origem === "ambos"
-          ? {
-              detalhe: `${inteiro(t.pedidos)} pagos ou aprovados · ${inteiro(t.cod.abertos)} em aberto · ${inteiro(t.cod.recusados)} recusados ou perdidos`,
-              selo: seloCobertura(t.cod.coberturaCusto),
-            }
-          : {
-              detalhe: `${inteiro(t.pedidos)} ${t.pedidos === 1 ? "pago" : "pagos"} · ${inteiro(t.cod.abertos)} em aberto · ${inteiro(t.cod.recusados)} ${t.cod.recusados === 1 ? "recusado" : "recusados"}`,
-              selo: seloCobertura(t.cod.coberturaCusto),
-            }
+            ? {
+                detalhe: `${inteiro(t.pedidos)} pagos ou aprovados · ${inteiro(t.cod.abertos)} em aberto · ${inteiro(t.cod.recusados)} recusados ou perdidos`,
+                selo: seloCobertura(t.cod.coberturaCusto),
+              }
+            : {
+                detalhe: `${inteiro(t.pedidos)} ${t.pedidos === 1 ? "pago" : "pagos"} · ${inteiro(t.cod.abertos)} em aberto · ${inteiro(t.cod.recusados)} ${t.cod.recusados === 1 ? "recusado" : "recusados"}`,
+                selo: seloCobertura(t.cod.coberturaCusto),
+              }
     ),
-    cartaoCod(b, "cpaCod", "CPA", UserPlus, (x) => x.cod.cpa, "dinheiro", "Gasto em anúncios dividido pelos pedidos gerados. Quanto menor, melhor.", {
+    cartaoCod(b, "cpaCod", "CPA", (x) => x.cod.cpa, "dinheiro", "Gasto em anúncios dividido pelos pedidos gerados. Quanto menor, melhor.", {
       bom: "descer",
     }),
     ...(ck || soCheckouts
@@ -576,7 +497,6 @@ export function IndicadoresKpiCod(b: BaseIndicadores) {
             b,
             "perdido",
             "Perdido",
-            Undo2,
             (x) => x.externo.perdido,
             "dinheiro",
             ck
@@ -591,7 +511,6 @@ export function IndicadoresKpiCod(b: BaseIndicadores) {
             b,
             "valorPedidos",
             "Valor dos pedidos",
-            Package,
             (x) => x.externo.valorPedidos,
             "dinheiro",
             ck
@@ -601,7 +520,7 @@ export function IndicadoresKpiCod(b: BaseIndicadores) {
           ),
         ]
       : [
-          daMetrica(b, "custo", Package, (x) => x.cmv, {
+          daMetrica(b, "custo", (x) => x.cmv, {
             definicao: "Produto mais frete do fornecedor do que já foi enviado, pelo custo cadastrado em Custos.",
             detalhe: `Previsto ${dinheiro(t.cod.custoPrevisto, b.moeda)}`,
           }),
@@ -609,44 +528,18 @@ export function IndicadoresKpiCod(b: BaseIndicadores) {
             b,
             "devolucoes",
             "Devoluções",
-            Undo2,
             (x) => x.devolucoes,
             "dinheiro",
             "Custo por devolução (Custos e taxas) vezes os recusados que foram enviados.",
-            { bom: "descer", detalhe: `Previsto ${dinheiro(t.cod.devolucoesPrevistas, b.moeda)}` }
+            { bom: "descer", detalhe: `Previsto ${dinheiro(t.cod.devolucoesPrevistas, b.moeda)}`, serie: "devolucoes" }
           ),
         ]),
   ];
-  return (
-    <section aria-label="Indicadores do período" className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
-      {cartoes.map((c) => (
-        <CartaoKpi key={c.id} c={c} />
-      ))}
-    </section>
-  );
+
+  return { principal, celulas };
 }
 
-/** "Último dado recebido há 12 min · Sem base de comparação em 04/08–02/09". */
-export function LinhaAtualizado({
-  atualizado,
-  semBase,
-  rotuloAnterior,
-}: {
-  atualizado: { texto: string; iso: string } | null;
-  semBase: boolean;
-  rotuloAnterior: string;
-}): ReactNode {
-  if (!atualizado && !semBase) return null;
-  return (
-    <p className="flex items-center gap-1.5 text-label text-t2">
-      {atualizado && <span aria-hidden className="size-1.5 rounded-full bg-ok" />}
-      {atualizado && (
-        <span>
-          Último dado recebido <time dateTime={atualizado.iso}>{atualizado.texto}</time>
-        </span>
-      )}
-      {atualizado && semBase && " · "}
-      {semBase && <span>Sem base de comparação em {rotuloAnterior}</span>}
-    </p>
-  );
+/** Os indicadores da tela: os de contra entrega quando o filtro tem COD (ou checkout de comissao). */
+export function montarIndicadores(b: BaseIndicadores, contraEntrega: boolean): Indicadores {
+  return contraEntrega ? indicadoresCod(b) : indicadoresOnline(b);
 }

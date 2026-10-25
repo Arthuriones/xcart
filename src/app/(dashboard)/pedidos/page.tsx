@@ -40,7 +40,7 @@ function AbasOrigem({ atual }: { atual: Origem }) {
   return (
     <nav
       aria-label="Origem dos pedidos"
-      className="flex gap-0.5 rounded-card border border-border bg-surface-2 p-0.75"
+      className="flex gap-0.5 rounded-card border border-border bg-surface-2 p-0.5"
     >
       {abas.map((a) => (
         <Link
@@ -49,8 +49,8 @@ function AbasOrigem({ atual }: { atual: Origem }) {
           aria-current={a.id === atual ? "page" : undefined}
           className={
             a.id === atual
-              ? "flex h-7 items-center rounded-control bg-surface px-2.5 text-label font-semibold text-ink shadow-[0_0_0_1px_var(--border)]"
-              : "flex h-7 items-center rounded-control px-2.5 text-label text-t2 hover:text-ink"
+              ? "flex h-6.5 items-center rounded-control bg-surface px-2.5 text-label font-semibold text-ink shadow-[0_0_0_1px_var(--border)]"
+              : "flex h-6.5 items-center rounded-control px-2.5 text-label text-t2 hover:text-ink"
           }
         >
           {a.rotulo}
@@ -170,7 +170,7 @@ function EsqueletoPedidos() {
   return (
     <div aria-busy="true" data-largura="total" className="flex flex-col gap-3.5">
       <span className="sr-only">Carregando os pedidos</span>
-      <div className="hidden h-9 md:block" />
+      <div className="hidden h-ctl-md md:block" />
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         {Array.from({ length: 4 }, (_, i) => (
           <div key={i} className="flex min-h-20 items-center gap-3.5 rounded-overlay border border-border bg-surface p-4.5">
@@ -184,8 +184,8 @@ function EsqueletoPedidos() {
       </div>
       <div className="rounded-overlay border border-border bg-surface">
         <div className="flex gap-2 border-b border-border-subtle px-4 py-3.5">
-          <Skeleton className="h-9 w-60" />
-          <Skeleton className="h-9 flex-1" />
+          <Skeleton className="h-ctl-md w-60" />
+          <Skeleton className="h-ctl-md flex-1" />
         </div>
         <div className="flex flex-col px-4 py-2">
           {Array.from({ length: 8 }, (_, i) => (

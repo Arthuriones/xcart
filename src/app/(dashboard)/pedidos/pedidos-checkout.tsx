@@ -267,7 +267,6 @@ export function PedidosCheckout({
     <div data-largura="total" className="flex flex-col gap-3.5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <span className="flex flex-wrap items-center gap-4">
-          <h1 className="hidden text-page font-semibold text-ink md:block">Pedidos</h1>
           {abas}
         </span>
         <Button variant="secondary" onClick={exportar} disabled={!lista.length}>
@@ -319,7 +318,7 @@ export function PedidosCheckout({
           <div
             role="group"
             aria-label="Filtrar"
-            className="flex max-w-full gap-0.5 overflow-x-auto rounded-card border border-border bg-surface-2 p-0.75 [scrollbar-width:none]"
+            className="flex max-w-full gap-0.5 overflow-x-auto rounded-card border border-border bg-surface-2 p-0.5 [scrollbar-width:none]"
           >
             {filtros.map((f) => {
               const on = filtro === f.id;
@@ -333,7 +332,7 @@ export function PedidosCheckout({
                     setPagina(0);
                   }}
                   className={cn(
-                    "h-7 whitespace-nowrap rounded-control px-2.5 text-label focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus",
+                    "h-6.5 whitespace-nowrap rounded-control px-2.5 text-label focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus",
                     on ? "bg-surface font-semibold text-ink shadow-[0_0_0_1px_var(--border)]" : "text-t2 hover:text-ink"
                   )}
                 >

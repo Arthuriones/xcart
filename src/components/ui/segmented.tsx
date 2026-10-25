@@ -18,7 +18,7 @@ type SegmentedProps<V extends string> = {
   valor: V
   onValorChange: (valor: V) => void
   opcoes: ReadonlyArray<OpcaoSegmented<V>>
-  /** sm = 28 (padrao, em cabecalho de bloco) · md = 36. */
+  /** sm = 28 (padrao, em cabecalho de bloco) · md = 32, a altura de Input e Button (h-ctl-md). */
   tamanho?: "sm" | "md"
   className?: string
 }
@@ -87,7 +87,7 @@ function Segmented<V extends string>({
             onKeyDown={(e) => aoTeclar(e, i)}
             className={cn(
               "inline-flex items-center justify-center rounded-sm px-3 whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus",
-              tamanho === "md" ? "h-8 text-dense" : "h-6 text-label",
+              tamanho === "md" ? "h-7 text-dense" : "h-6 text-label",
               marcado
                 ? "bg-surface font-semibold text-ink ring-1 ring-border"
                 : "text-t2 hover:text-ink",

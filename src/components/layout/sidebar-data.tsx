@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { contarAlertasAbertos } from "@/lib/leitura/notificacoes";
 import { lerFotoGuia, lerGuiaDaConta } from "@/lib/leitura/guia-configuracao";
 import { COOKIE_GUIA_DISPENSADO } from "@/lib/leitura/guia-passos";
+import { lerComPlano, limitesDoPerfil, type PerfilParaLimites } from "@/lib/billing/limites";
+import { nomeNaTela, planoPorId } from "@/lib/billing/plans";
 import { COOKIE_MENU } from "./contexto";
 import { Sidebar, type DadosMenu } from "./sidebar";
 
@@ -25,11 +27,11 @@ export async function SidebarData() {
   // /setup.
   const jar = await cookies();
   const dispensado = jar.get(COOKIE_GUIA_DISPENSADO)?.value === "1";
-  const [user, guiaDaConta, foto, creditos, alertas, rotas] = await Promise.all([
+  const [user, guiaDaConta, foto, perfil, alertas, rotas] = await Promise.all([
     getCurrentUser(),
     dispensado ? null : lerGuiaDaConta().catch(() => null),
     dispensado ? null : lerFotoGuia().catch(() => null),
-    lerCreditos(),
+    lerPerfil().catch(() => PERFIL_VAZIO),
     contarAlertasAbertos().catch(() => 0),
     dispensado ? contarRotas() : null,
   ]);
@@ -43,7 +45,8 @@ export async function SidebarData() {
       dados={{
         nome: meta.full_name || meta.name || user?.email || "",
         email: user?.email || "",
-        creditos,
+        plano: perfil.plano,
+        creditos: perfil.creditos,
         alertas,
         temRota,
         guia: cartaoDoGuia(guiaDaConta),
@@ -71,17 +74,40 @@ function cartaoDoGuia(conta: Awaited<ReturnType<typeof lerGuiaDaConta>> | null):
   };
 }
 
-/** Saldo de creditos pela sessao; falha vira 0 (contador vazio). */
-async function lerCreditos(): Promise<number> {
+const PERFIL_VAZIO = { creditos: 0, plano: null };
+
+// As colunas que limitesDoPerfil le para saber se a assinatura ainda vale.
+const COLUNAS_ACESSO = "is_admin, access_granted, plan, payment_provider, pagou_subscription_id, current_period_end";
+
+/**
+ * Saldo de creditos e o nome do plano ("Plano Completo"), numa leitura so do
+ * perfil pela sessao. Falha vira contador vazio e plano null -- o menu mostra
+ * o e-mail no lugar do plano. O nome so sai com o tier VALENDO (a mesma regra
+ * dos limites): `profiles.plano` nao e limpo quando a assinatura cai para free
+ * (cancelou, cartao recusado, Pix vencido), entao le-lo sozinho mostrava um
+ * plano que a conta nao tem mais. Sem tier (Pro antigo, acesso liberado, sem
+ * assinatura) tambem e null: nenhum nome de plano inventado.
+ */
+async function lerPerfil(): Promise<{ creditos: number; plano: string | null }> {
   const user = await getCurrentUser();
-  if (!user) return 0;
+  if (!user) return PERFIL_VAZIO;
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("ai_credits")
-    .eq("id", user.id)
-    .maybeSingle();
-  return error ? 0 : Number(data?.ai_credits ?? 0);
+  // Sem a coluna plano (064 pendente), le sem ela: a conta cai no legado.
+  const { data, error } = await lerComPlano((plano) =>
+    supabase
+      .from("profiles")
+      .select(`ai_credits, ${COLUNAS_ACESSO}${plano}`)
+      .eq("id", user.id)
+      .maybeSingle()
+  );
+  if (error || !data) return PERFIL_VAZIO;
+  const perfil = data as PerfilParaLimites & { ai_credits?: number | null };
+  const limites = limitesDoPerfil(perfil);
+  const plano = limites.origem === "plano" ? planoPorId(limites.plano) : null;
+  return {
+    creditos: Number(perfil.ai_credits ?? 0),
+    plano: plano ? `Plano ${nomeNaTela(plano)}` : null,
+  };
 }
 
 /** Quantas rotas de checkout o usuario tem; null quando a leitura falha. */
@@ -96,14 +122,16 @@ async function contarRotas(): Promise<number | null> {
   return error ? null : (count ?? 0);
 }
 
-/** O menu enquanto os numeros nao chegaram: mesma largura, sem pulo. */
+/**
+ * O menu enquanto os numeros nao chegaram: mesma largura (inclusive a regra
+ * dos 1100 px do sidebar.tsx), sobre o mesmo fundo, sem pulo.
+ */
 export function SidebarSkeleton({ recolhido }: { recolhido: boolean }) {
   return (
     <aside
       aria-hidden
       className={
-        "sticky top-0 hidden h-dvh shrink-0 border-r border-border bg-surface md:block " +
-        (recolhido ? "w-15" : "w-58")
+        "sticky top-0 hidden h-dvh shrink-0 md:block " + (recolhido ? "w-15" : "w-15 min-[1100px]:w-60")
       }
     />
   );

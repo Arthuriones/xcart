@@ -34,7 +34,6 @@ export default async function CampanhasPage() {
       {/* Cabeçalho da Tela */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-overlay font-bold text-ink tracking-tight">Campanhas</h1>
           <p className="text-dense text-t2">
             Métricas de performance de tráfego pago por conta, campanha, conjunto e criativo.
           </p>

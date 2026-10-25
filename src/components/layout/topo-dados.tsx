@@ -4,7 +4,7 @@ import { filtroResolvido, lerCheckoutsDoUsuario, lerComparacao } from "@/lib/fil
 import { contarAlertasAbertos } from "@/lib/leitura/notificacoes";
 import { PERIODOS, diaNoFuso, fusoDoFiltro, intervaloDoPeriodo } from "@/lib/financeiro/tipos";
 import type { DadosContexto, LojaContexto } from "./seletor-global";
-import { TopNav } from "./top-nav";
+import { TopNav, TopoCarregando } from "./top-nav";
 
 /**
  * Busca no servidor o que o topo precisa: lojas, filtro gravado em cookie,
@@ -77,12 +77,10 @@ async function lerContexto(): Promise<DadosContexto> {
   return { lojas: lojasContexto, filtro, comparacao, fuso, intervalos, hoje };
 }
 
-/** O topo enquanto os dados nao chegaram: mesma altura, sem pulo. */
+/**
+ * O topo enquanto os dados nao chegaram: mesma altura e o mesmo h1 (o titulo
+ * sai do caminho, no navegador), sem pulo. Ver TopoCarregando.
+ */
 export function TopoEsqueleto() {
-  return (
-    <>
-      <div aria-hidden className="sticky top-0 z-30 hidden h-15 border-b border-border bg-surface md:block" />
-      <div aria-hidden className="sticky top-0 z-30 h-14 border-b border-border bg-surface md:hidden" />
-    </>
-  );
+  return <TopoCarregando />;
 }

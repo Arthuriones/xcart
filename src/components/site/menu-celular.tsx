@@ -1,114 +1,88 @@
 "use client";
 
-import { useRef, useState, type MouseEvent } from "react";
-import { Menu } from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { cn } from "@/components/ui/cn";
-import {
-  Sheet,
-  SheetBody,
-  SheetContent,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
-import { SECOES_LANDING, URL_CRIAR_CONTA, URL_ENTRAR } from "./links";
+import { useEffect, useRef, useState } from "react";
+import { Menu, X } from "lucide-react";
+import { SECOES_LANDING, URL_ENTRAR } from "./links";
 
 /**
  * Menu do site no celular (abaixo de md o menu do topo some).
  *
- * As secoes sao ancoras da landing. Com o painel aberto a pagina fica travada
- * (a rolagem e do painel), entao o salto nao pode ser o do navegador: o clique
- * guarda o destino, fecha o painel e, quando a animacao de saida termina, rola
- * ate a secao e leva o foco para o titulo dela -- quem usa teclado continua
- * lendo dali, e nao do botao de menu la em cima.
+ * E uma lista que abre logo abaixo do topo (design novo), nao um painel
+ * lateral: a pagina continua rolando, entao a ancora da secao salta como
+ * qualquer link -- o navegador rola e leva o ponto de partida do teclado para
+ * a secao. O clique so fecha a lista. Esc fecha e devolve o foco ao botao;
+ * tocar fora fecha.
+ *
+ * A lista e absoluta em relacao ao topo (sticky, logo e o bloco que a
+ * contem): cobre o comeco da pagina em vez de empurra-la.
  *
  * `base` e o caminho da landing: "" na propria landing, "/" nas paginas
  * legais (ali a secao fica em outra pagina, e o link navega normalmente).
  */
 export function MenuCelular({ base = "" }: { base?: string }) {
   const [aberto, setAberto] = useState(false);
-  const alvo = useRef<string | null>(null);
+  const botao = useRef<HTMLButtonElement>(null);
+  const lista = useRef<HTMLElement>(null);
 
-  function irPara(e: MouseEvent<HTMLAnchorElement>, id: string) {
-    if (base) return; // outra pagina: o link segue normal
-    e.preventDefault();
-    alvo.current = id;
-    setAberto(false);
-  }
+  useEffect(() => {
+    if (!aberto) return;
+    function aoTeclar(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      setAberto(false);
+      botao.current?.focus();
+    }
+    function aoTocar(e: PointerEvent) {
+      const alvo = e.target as Node;
+      if (lista.current?.contains(alvo) || botao.current?.contains(alvo)) return;
+      setAberto(false);
+    }
+    document.addEventListener("keydown", aoTeclar);
+    document.addEventListener("pointerdown", aoTocar);
+    return () => {
+      document.removeEventListener("keydown", aoTeclar);
+      document.removeEventListener("pointerdown", aoTocar);
+    };
+  }, [aberto]);
 
-  function mudar(abrir: boolean) {
-    // O destino vale ate o menu abrir de novo: o painel le o finalFocus
-    // depois do fim da animacao, e limpar antes devolvia o foco ao botao.
-    if (abrir) alvo.current = null;
-    setAberto(abrir);
-  }
-
-  function aoTerminar(abrindo: boolean) {
-    const id = alvo.current;
-    if (abrindo || !id) return;
-    // Depois do painel soltar a rolagem e o foco.
-    window.setTimeout(() => {
-      const secao = document.getElementById(id);
-      if (!secao) return;
-      secao.scrollIntoView({ block: "start" });
-      window.history.replaceState(null, "", `#${id}`);
-      const titulo = secao.querySelector<HTMLElement>("h2") ?? secao;
-      if (!titulo.hasAttribute("tabindex")) titulo.setAttribute("tabindex", "-1");
-      titulo.focus({ preventScroll: true });
-    }, 0);
-  }
+  const Icone = aberto ? X : Menu;
+  const link =
+    "flex min-h-ctl-lg items-center rounded-control px-2 text-[15px] font-medium text-ink hover:bg-hover hover:text-ink";
 
   return (
-    <Sheet open={aberto} onOpenChange={mudar} onOpenChangeComplete={aoTerminar}>
-      <SheetTrigger
-        render={<Button variant="ghost" size="icon-lg" className="md:hidden" aria-label="Abrir menu" />}
+    <>
+      <button
+        ref={botao}
+        type="button"
+        onClick={() => setAberto((a) => !a)}
+        aria-expanded={aberto}
+        aria-controls="menu-celular"
+        aria-label={aberto ? "Fechar menu" : "Abrir menu"}
+        className="grid size-ctl-lg place-items-center rounded-control text-t1 hover:text-ink md:hidden"
       >
-        <Menu aria-hidden />
-      </SheetTrigger>
-      <SheetContent
-        side="right"
-        size="sm"
-        // Com destino escolhido, o foco vai para a secao (aoTerminar), nao volta ao botao.
-        finalFocus={() => !alvo.current}
+        <Icone aria-hidden className="size-5" strokeWidth={1.75} />
+      </button>
+      <nav
+        ref={lista}
+        id="menu-celular"
+        aria-label="Seções do site"
+        hidden={!aberto}
+        className="absolute inset-x-0 top-full border-y border-border bg-surface px-4 pt-2 pb-4 md:hidden"
       >
-        <SheetHeader>
-          <SheetTitle>Menu</SheetTitle>
-        </SheetHeader>
-        <SheetBody className="p-2">
-          <nav aria-label="Seções da página">
-            <ul className="flex flex-col">
-              {SECOES_LANDING.map((s) => (
-                <li key={s.id}>
-                  <a
-                    href={`${base}#${s.id}`}
-                    onClick={(e) => irPara(e, s.id)}
-                    className="flex h-ctl-lg items-center rounded-control px-3 text-body font-medium text-ink hover:bg-hover hover:text-ink"
-                  >
-                    {s.rotulo}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </nav>
-        </SheetBody>
-        {/* Coluna invertida em toda largura: Criar conta em cima, Entrar embaixo. */}
-        <SheetFooter className="sm:flex-col-reverse sm:justify-start">
-          <a
-            href={URL_ENTRAR}
-            className={cn(buttonVariants({ variant: "secondary", size: "lg" }), "w-full")}
-          >
-            Entrar
-          </a>
-          <a
-            href={URL_CRIAR_CONTA}
-            className={cn(buttonVariants({ variant: "primary", size: "lg" }), "w-full")}
-          >
-            Criar conta
-          </a>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        <ul>
+          {SECOES_LANDING.map((s) => (
+            <li key={s.id}>
+              <a href={`${base}#${s.id}`} onClick={() => setAberto(false)} className={link}>
+                {s.rotulo}
+              </a>
+            </li>
+          ))}
+          <li>
+            <a href={URL_ENTRAR} className={link}>
+              Entrar
+            </a>
+          </li>
+        </ul>
+      </nav>
+    </>
   );
 }

@@ -4,10 +4,9 @@ import { useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ChevronRight, Download, Search, TriangleAlert } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronRight, ChevronsUpDown, Download, Search, TriangleAlert } from "lucide-react";
 import clsx from "clsx";
 import { Button } from "@/components/ui/button";
-import { DataTable, type ColunaTabela } from "@/components/ui/data-table";
 import { Dica } from "@/components/ui/dica";
 import {
   DropdownMenu,
@@ -20,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { StatusBadge, type TomStatus } from "@/components/ui/status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { caminhoSparkline } from "@/components/ui/grafico";
+import { alternarCriterio, ordenarLinhas, type CriterioOrdem, type DirecaoOrdem } from "@/components/ui/tabela";
 import { diaCurto, gravarCookie } from "@/components/layout/contexto";
 import { COOKIE_LOJA, TODAS, type Intervalo } from "@/lib/financeiro/tipos";
 // So tipos: o calculo e as leituras nao entram no bundle do navegador.
@@ -36,14 +35,16 @@ import {
   nomeDaLoja,
   porcento,
   temMovimento,
+  trilhaSparkline,
   vezes,
   type ValorCsv,
 } from "./lucro-dados";
 
 // ============================================================================
-// "Detalhar por": Loja · Dia · Produto · Campanha. Cada aba e uma DataTable
-// (ordena, vira cartao no celular) com busca e o CSV da tabela visivel, gerado
-// aqui no navegador (#19). Explicacao de coluna fica na Dica do titulo.
+// "Detalhar por": Loja · Dia · Produto · Campanha (mockup "design novo/
+// Dashboard.dc.html"). Cada aba e uma tabela que ordena pelo titulo da
+// coluna, com busca, contagem e o CSV da tabela visivel, gerado aqui no
+// navegador (#19). No celular (< 760px) a tabela vira cartoes.
 // ============================================================================
 
 export type Aba = "loja" | "dia" | "produto" | "campanha";
@@ -55,8 +56,36 @@ const SITUACAO: Record<Situacao, { tom: TomStatus; texto: string }> = {
   "sem-acesso": { tom: "neutral", texto: "Sem acesso" },
 };
 
+/** Cor da barra de margem: a do selo da loja. */
+const BARRA_TOM: Record<TomStatus, string> = {
+  ok: "bg-ok",
+  warn: "bg-warn",
+  err: "bg-err",
+  info: "bg-info",
+  neutral: "bg-neutral",
+  run: "bg-run",
+};
+
+/** A margem que enche a barra: 40% ou mais e barra cheia. */
+const MARGEM_CHEIA = 0.4;
+
 /** Coluna da tabela + como ela sai no CSV (numero cru, sem "R$"). */
-type Coluna<T> = ColunaTabela<T> & { csv: (l: T) => ValorCsv; tituloCsv?: string };
+type Coluna<T> = {
+  chave: string;
+  titulo: ReactNode;
+  tituloCsv?: string;
+  /** Numero sempre a direita, tabular. */
+  alinhar?: "direita";
+  /** Padrao: ordenavel. */
+  ordenavel?: boolean;
+  /** Direcao do primeiro clique. Padrao: desc para numero, asc para texto. */
+  direcaoInicial?: DirecaoOrdem;
+  celula: (l: T) => ReactNode;
+  csv: (l: T) => ValorCsv;
+  /** No cartao do celular: fora dele, como selo no canto ou como linha sob o titulo. */
+  cartao?: "fora" | "selo" | "sub";
+  className?: string;
+};
 
 export interface LojaDetalhe {
   linha: LinhaLoja;
@@ -67,13 +96,14 @@ export interface LojaDetalhe {
 }
 
 function Sparkline({ valores, negativo }: { valores: number[]; negativo: boolean }) {
-  if (valores.length < 2) return <span className="text-t3">—</span>;
+  const d = trilhaSparkline(valores, 80, 24);
+  if (!d) return <span className="text-t3">—</span>;
   return (
-    <svg viewBox="0 0 80 24" width={80} height={24} aria-hidden className="inline-block align-middle">
+    <svg viewBox="0 0 80 24" width={80} height={24} aria-hidden className="inline-block overflow-visible align-middle">
       <path
-        d={caminhoSparkline(valores, 80, 24, 2)}
+        d={d}
         fill="none"
-        className={negativo ? "stroke-err" : "stroke-t1"}
+        className={negativo ? "stroke-err" : "stroke-t2"}
         strokeWidth={1.5}
         strokeLinejoin="round"
         strokeLinecap="round"
@@ -84,7 +114,7 @@ function Sparkline({ valores, negativo }: { valores: number[]; negativo: boolean
 
 function Etiqueta({ children }: { children: ReactNode }) {
   return (
-    <span className="ml-1.5 rounded-sm border border-border px-1 text-label font-normal text-t2">{children}</span>
+    <span className="ml-1.5 rounded-sm border border-border px-1.5 text-label font-normal text-t2">{children}</span>
   );
 }
 
@@ -108,12 +138,17 @@ function ErroSecao({ detalhe }: { detalhe: string | null }) {
     <div role="alert" className="flex min-h-70 flex-col items-center justify-center gap-2.5 px-4 py-8 text-center">
       <TriangleAlert aria-hidden className="size-6 text-err" strokeWidth={1.75} />
       <p className="text-section text-ink">Não conseguimos carregar o detalhamento</p>
-      <p className="max-w-110 text-dense text-t1">Os indicadores acima estão certos.</p>
-      <Button pending={tentando} onClick={() => startTransition(() => router.refresh())} className="min-w-35">
+      <p className="max-w-110 text-dense text-t2">Os indicadores acima estão certos.</p>
+      <Button
+        variant="secondary"
+        pending={tentando}
+        onClick={() => startTransition(() => router.refresh())}
+        className="min-w-35"
+      >
         {tentando ? "Tentando…" : "Tentar de novo"}
       </Button>
       {detalhe && (
-        <details className="text-label text-t2">
+        <details className="text-label text-t3">
           <summary className="cursor-pointer">Ver detalhes</summary>
           <p className="mt-1.5 max-w-110 break-words font-mono">{detalhe}</p>
         </details>
@@ -124,18 +159,196 @@ function ErroSecao({ detalhe }: { detalhe: string | null }) {
 
 function linkLoja(nome: string, dominio: string, onEscolher: () => void) {
   return (
-    <span className="flex min-w-0 flex-col">
+    <span className="flex min-w-0 flex-col items-start">
       <button
         type="button"
         onClick={onEscolher}
         aria-label={`Ver só ${nome} em todas as telas`}
-        className="group/loja inline-flex max-w-60 items-center gap-1 truncate rounded-sm text-left font-semibold text-ink hover:underline hover:underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        className="group/loja inline-flex max-w-60 items-center gap-1 truncate rounded-sm text-left text-dense font-semibold text-ink hover:underline hover:underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
       >
         <span className="truncate">{nome}</span>
-        <ChevronRight aria-hidden className="size-3.5 shrink-0 text-t3 group-hover/loja:text-ink" />
+        <ChevronRight aria-hidden className="size-3.5 shrink-0 text-t4 group-hover/loja:text-ink" strokeWidth={2} />
       </button>
-      <span className="truncate font-mono text-label font-normal text-t2">{dominio}</span>
+      <span className="max-w-60 truncate font-mono text-label font-normal text-t3">{dominio}</span>
     </span>
+  );
+}
+
+/** Margem com a barra na celula: largura = margem / 40%, cor do selo. */
+function MargemComBarra({ margem, tom, negativo }: { margem: number | null; tom: TomStatus; negativo: boolean }) {
+  const cheio = Math.max(0, Math.min(1, (margem ?? 0) / MARGEM_CHEIA)) * 100;
+  return (
+    <span className="inline-flex items-center justify-end gap-2">
+      <span aria-hidden className="relative h-1 w-11 overflow-hidden rounded-xs bg-track">
+        <span className={clsx("absolute inset-y-0 left-0 rounded-xs", BARRA_TOM[tom])} style={{ width: `${cheio}%` }} />
+      </span>
+      <span className={negativo ? "text-err" : undefined}>{porcento(margem)}</span>
+    </span>
+  );
+}
+
+/**
+ * A tabela de uma aba: cabecalho em surface-2, linhas de 44px, numero a
+ * direita e tabular, total no pe, ordenar pelo titulo (aria-sort). Abaixo de
+ * 760px vira cartoes: a primeira coluna e o titulo.
+ */
+function Tabela<T extends Record<string, unknown>>({
+  legenda,
+  colunas,
+  linhas,
+  ordemInicial = [],
+  rodape,
+}: {
+  legenda: string;
+  colunas: Coluna<T>[];
+  linhas: T[];
+  ordemInicial?: CriterioOrdem[];
+  rodape?: Partial<Record<string, ReactNode>>;
+}) {
+  const [criterios, setCriterios] = useState<CriterioOrdem[]>(ordemInicial);
+  const ordenadas = ordenarLinhas(linhas, criterios, (l, chave) => l[chave]);
+  const [primeira, ...demais] = colunas;
+  const selo = demais.find((c) => c.cartao === "selo");
+  const sub = demais.find((c) => c.cartao === "sub");
+  const campos = demais.filter((c) => !c.cartao);
+  const ativa = criterios[0];
+
+  function ordenar(c: Coluna<T>) {
+    const inicial = c.direcaoInicial ?? (c.alinhar === "direita" ? "desc" : "asc");
+    setCriterios((atual) => alternarCriterio(atual, c.chave, false, inicial));
+  }
+
+  return (
+    <>
+      <div
+        role="region"
+        aria-label={legenda}
+        tabIndex={0}
+        className="hidden overflow-x-auto border-t border-border focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus min-[760px]:block"
+      >
+        <table className="w-full border-separate border-spacing-0 text-dense">
+          <caption className="sr-only">{legenda}. Clique no título de uma coluna para ordenar.</caption>
+          <thead>
+            <tr>
+              {colunas.map((c, i) => {
+                const ordenavel = c.ordenavel !== false;
+                const on = ordenavel && ativa?.chave === c.chave;
+                const direita = c.alinhar === "direita";
+                const Icone = on ? (ativa.direcao === "desc" ? ArrowDown : ArrowUp) : ChevronsUpDown;
+                return (
+                  <th
+                    key={c.chave}
+                    scope="col"
+                    aria-sort={on ? (ativa.direcao === "desc" ? "descending" : "ascending") : undefined}
+                    className={clsx(
+                      "h-9 border-b border-border bg-surface-2 px-3 text-label font-medium whitespace-nowrap",
+                      direita ? "text-right" : "text-left",
+                      on ? "text-ink" : "text-t2",
+                      i === 0 && "sticky left-0 z-[2]",
+                      c.className
+                    )}
+                  >
+                    {ordenavel ? (
+                      <button
+                        type="button"
+                        onClick={() => ordenar(c)}
+                        className={clsx(
+                          "inline-flex items-center gap-1 rounded-sm py-1 text-left font-medium hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
+                          direita && "flex-row-reverse text-right"
+                        )}
+                      >
+                        {c.titulo}
+                        <Icone aria-hidden className={clsx("size-3 shrink-0", !on && "opacity-40")} strokeWidth={2} />
+                      </button>
+                    ) : (
+                      c.titulo
+                    )}
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {ordenadas.map((l, li) => (
+              <tr key={String(l.id ?? li)} className="group/linha">
+                {colunas.map((c, i) => {
+                  const Celula = i === 0 ? "th" : "td";
+                  return (
+                    <Celula
+                      key={c.chave}
+                      scope={i === 0 ? "row" : undefined}
+                      className={clsx(
+                        "h-11 border-b border-border-subtle bg-surface px-3 font-normal whitespace-nowrap text-ink group-hover/linha:bg-surface-2",
+                        c.alinhar === "direita" ? "num text-right" : "text-left",
+                        i === 0 && "sticky left-0 z-[1]",
+                        c.className
+                      )}
+                    >
+                      {c.celula(l)}
+                    </Celula>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+          {rodape && (
+            <tfoot>
+              <tr>
+                {colunas.map((c, i) => (
+                  <td
+                    key={c.chave}
+                    className={clsx(
+                      "h-11 border-t border-border bg-surface-2 px-3 font-semibold whitespace-nowrap text-ink",
+                      c.alinhar === "direita" ? "num text-right" : "text-left",
+                      i === 0 && "sticky left-0 z-[1]"
+                    )}
+                  >
+                    {rodape[c.chave] ?? null}
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+
+      <ul aria-label={legenda} className="flex flex-col gap-2 px-3 pb-3 min-[760px]:hidden">
+        {ordenadas.map((l, li) => (
+          <li key={String(l.id ?? li)} className="rounded-card border border-border bg-surface p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex min-w-0 flex-col text-body font-semibold text-ink">
+                {primeira.celula(l)}
+                {sub && <span className="text-label font-normal text-t3">{sub.celula(l)}</span>}
+              </div>
+              {selo && <span className="shrink-0">{selo.celula(l)}</span>}
+            </div>
+            <dl className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-2">
+              {campos.map((c) => (
+                <div key={c.chave} className="flex min-w-0 flex-col">
+                  <dt className="text-label text-t3">{c.tituloCsv ?? c.titulo}</dt>
+                  <dd className={clsx("min-w-0 text-body text-ink", c.alinhar === "direita" && "num")}>{c.celula(l)}</dd>
+                </div>
+              ))}
+            </dl>
+          </li>
+        ))}
+        {rodape && (
+          <li className="rounded-card border border-border bg-surface-2 p-3">
+            <div className="text-body font-semibold text-ink">{rodape[primeira.chave] ?? "Total"}</div>
+            <dl className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-2">
+              {campos
+                .filter((c) => rodape[c.chave] != null)
+                .map((c) => (
+                  <div key={c.chave} className="flex flex-col">
+                    <dt className="text-label text-t3">{c.tituloCsv ?? c.titulo}</dt>
+                    <dd className="num text-body font-semibold text-ink">{rodape[c.chave]}</dd>
+                  </div>
+                ))}
+            </dl>
+          </li>
+        )}
+      </ul>
+    </>
   );
 }
 
@@ -208,6 +421,9 @@ export function DetalharPor({
     });
   }
 
+  const corLucro = (v: number | null) => (v !== null && v < 0 ? "text-err" : undefined);
+  const din = (v: number | null) => dinheiro(v, moeda);
+
   // --- Loja -------------------------------------------------------------------
   type LinhaLojaT = {
     id: string;
@@ -247,7 +463,6 @@ export function DetalharPor({
       lpp: l.pedidos > 0 ? l.lucro / l.pedidos : null,
       tendencia: lucroPorDia,
     }));
-  const corLucro = (v: number | null) => (v !== null && v < 0 ? "text-err" : undefined);
   const colunasLoja: Coluna<LinhaLojaT>[] = [
     {
       chave: "nome",
@@ -270,32 +485,35 @@ export function DetalharPor({
       ),
       tituloCsv: "Situação",
       ordenavel: false,
+      cartao: "selo",
       celula: (l) => <StatusBadge tom={SITUACAO[l.situacao].tom} texto={SITUACAO[l.situacao].texto} />,
       csv: (l) => SITUACAO[l.situacao].texto,
     },
     { chave: "pedidos", titulo: "Pedidos", alinhar: "direita", celula: (l) => inteiro(l.pedidos), csv: (l) => l.pedidos },
-    { chave: "receita", titulo: "Faturamento", alinhar: "direita", celula: (l) => dinheiro(l.receita, moeda), csv: (l) => l.receita },
-    { chave: "gasto", titulo: "Gasto", alinhar: "direita", celula: (l) => dinheiro(l.gasto, moeda), csv: (l) => l.gasto },
+    { chave: "receita", titulo: "Faturamento", alinhar: "direita", celula: (l) => din(l.receita), csv: (l) => l.receita },
+    { chave: "gasto", titulo: "Gasto", alinhar: "direita", celula: (l) => din(l.gasto), csv: (l) => l.gasto },
     { chave: "roas", titulo: "ROAS real", alinhar: "direita", celula: (l) => vezes(l.roas), csv: (l) => l.roas },
     {
       chave: "eq",
       titulo: "ROAS de equilíbrio",
       alinhar: "direita",
-      celula: (l) => <span className="text-t1">{vezes(l.eq)}</span>,
+      celula: (l) => <span className="text-t2">{vezes(l.eq)}</span>,
       csv: (l) => l.eq,
     },
     {
       chave: "lucro",
       titulo: "Lucro estimado",
       alinhar: "direita",
-      celula: (l) => <span className={clsx("font-semibold", corLucro(l.lucro))}>{dinheiro(l.lucro, moeda)}</span>,
+      celula: (l) => <span className={clsx("font-semibold", corLucro(l.lucro))}>{din(l.lucro)}</span>,
       csv: (l) => l.lucro,
     },
     {
       chave: "margem",
       titulo: "Margem",
       alinhar: "direita",
-      celula: (l) => <span className={corLucro(l.lucro)}>{porcento(l.margem)}</span>,
+      celula: (l) => (
+        <MargemComBarra margem={l.margem} tom={SITUACAO[l.situacao].tom} negativo={l.margem !== null && l.margem < 0} />
+      ),
       csv: (l) => (l.margem === null ? null : l.margem * 100),
       tituloCsv: "Margem (%)",
     },
@@ -303,7 +521,7 @@ export function DetalharPor({
       chave: "lpp",
       titulo: "Lucro por pedido",
       alinhar: "direita",
-      celula: (l) => <span className={corLucro(l.lpp)}>{dinheiro(l.lpp, moeda)}</span>,
+      celula: (l) => <span className={corLucro(l.lpp)}>{din(l.lpp)}</span>,
       csv: (l) => l.lpp,
     },
     {
@@ -311,7 +529,7 @@ export function DetalharPor({
       titulo: "Tendência",
       alinhar: "direita",
       ordenavel: false,
-      ocultarNoCartao: true,
+      cartao: "fora",
       celula: (l) => (l.tendencia ? <Sparkline valores={l.tendencia} negativo={l.lucro < 0} /> : <span className="text-t3">—</span>),
       csv: () => null,
     },
@@ -320,17 +538,17 @@ export function DetalharPor({
     nome: (
       <span className="flex flex-col">
         <span>Todas as lojas</span>
-        <span className="text-label font-normal text-t2">{linhasLoja.length} na tabela · somadas</span>
+        <span className="text-label font-normal text-t3">{linhasLoja.length} na tabela · somadas</span>
       </span>
     ),
     pedidos: inteiro(total.pedidos),
-    receita: dinheiro(total.receita, moeda),
-    gasto: dinheiro(total.gasto, moeda),
+    receita: din(total.receita),
+    gasto: din(total.gasto),
     roas: vezes(total.roas),
     eq: vezes(total.roasEquilibrio),
-    lucro: <span className={corLucro(total.lucro)}>{dinheiro(total.lucro, moeda)}</span>,
+    lucro: <span className={corLucro(total.lucro)}>{din(total.lucro)}</span>,
     margem: porcento(total.margem),
-    lpp: dinheiro(total.pedidos > 0 ? total.lucro / total.pedidos : null, moeda),
+    lpp: din(total.pedidos > 0 ? total.lucro / total.pedidos : null),
   };
 
   // --- Dia --------------------------------------------------------------------
@@ -362,21 +580,27 @@ export function DetalharPor({
     lucro: d.lucro,
     roas: d.roas,
   }));
-  const din = (v: number | null) => dinheiro(v, moeda);
   const colunasDia: Coluna<LinhaDiaT>[] = [
     {
       chave: "dia",
       titulo: "Dia",
       direcaoInicial: "desc",
       celula: (l) => (
-        <span className="num">
+        <span className="num font-medium">
           {diaCurto(l.dia)}
           {l.parcial && <Etiqueta>hoje · parcial</Etiqueta>}
         </span>
       ),
       csv: (l) => l.dia,
     },
-    { chave: "semana", titulo: "Dia da semana", ordenavel: false, celula: (l) => <span className="text-t1">{l.semana}</span>, csv: (l) => l.semana },
+    {
+      chave: "semana",
+      titulo: "Dia da semana",
+      ordenavel: false,
+      cartao: "sub",
+      celula: (l) => <span className="text-t2">{l.semana}</span>,
+      csv: (l) => l.semana,
+    },
     { chave: "pedidos", titulo: "Pedidos", alinhar: "direita", celula: (l) => inteiro(l.pedidos), csv: (l) => l.pedidos },
     { chave: "receita", titulo: "Faturamento", alinhar: "direita", celula: (l) => din(l.receita), csv: (l) => l.receita },
     { chave: "cmv", titulo: "Produtos + frete", alinhar: "direita", celula: (l) => <span className="text-t1">{din(l.cmv)}</span>, csv: (l) => l.cmv },
@@ -438,7 +662,7 @@ export function DetalharPor({
           ) : (
             <span className="font-medium text-t1">Item sem SKU</span>
           )}
-          {l.lojas > 1 && <span className="text-label font-normal text-t2">vendido em {l.lojas} lojas</span>}
+          {l.lojas > 1 && <span className="text-label font-normal text-t3">vendido em {l.lojas} lojas</span>}
         </span>
       ),
       csv: (l) => l.sku || "(sem SKU)",
@@ -515,7 +739,7 @@ export function DetalharPor({
       celula: (l) => (
         <span className="flex max-w-72 flex-col">
           <span className="truncate font-medium text-ink">{l.nome}</span>
-          <span className="truncate text-label font-normal text-t2">
+          <span className="truncate text-label font-normal text-t3">
             {l.conta}
             {l.semCotacao ? " · parte do gasto sem cotação" : ""}
           </span>
@@ -526,7 +750,12 @@ export function DetalharPor({
     {
       chave: "plataforma",
       titulo: "Plataforma",
-      celula: (l) => <StatusBadge tom={l.plataforma === "Meta" ? "info" : "neutral"}>{l.plataforma}</StatusBadge>,
+      cartao: "selo",
+      celula: (l) => (
+        <StatusBadge tom={l.plataforma === "Meta" ? "info" : "neutral"} ponto={false}>
+          {l.plataforma}
+        </StatusBadge>
+      ),
       csv: (l) => l.plataforma,
     },
     { chave: "gasto", titulo: "Gasto", alinhar: "direita", celula: (l) => din(l.gasto), csv: (l) => l.gasto },
@@ -534,7 +763,13 @@ export function DetalharPor({
     { chave: "cliques", titulo: "Cliques", alinhar: "direita", celula: (l) => inteiro(l.cliques), csv: (l) => l.cliques },
     { chave: "compras", titulo: "Compras (plataforma)", alinhar: "direita", celula: (l) => inteiro(l.compras), csv: (l) => l.compras },
     { chave: "valor", titulo: "Valor (plataforma)", alinhar: "direita", celula: (l) => din(l.valor), csv: (l) => l.valor },
-    { chave: "roasPlataforma", titulo: "ROAS da plataforma", alinhar: "direita", celula: (l) => vezes(l.roasPlataforma), csv: (l) => l.roasPlataforma },
+    {
+      chave: "roasPlataforma",
+      titulo: "ROAS da plataforma",
+      alinhar: "direita",
+      celula: (l) => <span className="text-t1">{vezes(l.roasPlataforma)}</span>,
+      csv: (l) => l.roasPlataforma,
+    },
     {
       chave: "roasLoja",
       titulo: "ROAS real da loja",
@@ -554,7 +789,14 @@ export function DetalharPor({
     { gasto: 0, impressoes: 0, cliques: 0, compras: 0, valor: 0 }
   );
   const rodapeCampanha = {
-    nome: "Todas as campanhas",
+    nome: (
+      <span className="flex flex-col">
+        <span>Todas as campanhas</span>
+        <span className="text-label font-normal text-t3">
+          {linhasCampanha.length} com gasto no período
+        </span>
+      </span>
+    ),
     gasto: din(somaCampanhas.gasto),
     impressoes: inteiro(somaCampanhas.impressoes),
     cliques: inteiro(somaCampanhas.cliques),
@@ -626,86 +868,87 @@ export function DetalharPor({
     produto: "Buscar SKU",
     campanha: "Buscar campanha",
   };
+  const NOME: Record<Aba, [string, string]> = {
+    loja: ["loja", "lojas"],
+    dia: ["dia", "dias"],
+    produto: ["SKU", "SKUs"],
+    campanha: ["campanha", "campanhas"],
+  };
 
-  const barra = (
-    <div className="flex flex-wrap items-center gap-2 px-4 py-3">
-      <div className="relative min-w-48 max-w-72 flex-1">
-        <Search aria-hidden className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-t3" strokeWidth={1.75} />
-        <Input
-          type="search"
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          aria-label={ROTULO_BUSCA[abaAtual]}
-          placeholder={ROTULO_BUSCA[abaAtual]}
-          className="h-ctl-sm pl-8 text-dense"
-        />
-      </div>
-      {abaAtual === "loja" && (
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            className={clsx(
-              "inline-flex h-ctl-sm items-center gap-1.5 rounded-full border px-3 text-dense focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
-              situacoes.length
-                ? "border-info-border bg-info-bg text-info"
-                : "border-dashed border-control-border text-t1 hover:text-ink"
-            )}
-          >
-            {situacoes.length ? `Situação: ${situacoes.map((s) => SITUACAO[s].texto).join(", ")}` : "+ Situação"}
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-56">
-            {(Object.keys(SITUACAO) as Situacao[]).map((s) => (
-              <DropdownMenuCheckboxItem
-                key={s}
-                checked={situacoes.includes(s)}
-                closeOnClick={false}
-                onCheckedChange={(marcado) =>
-                  setSituacoes((atual) => (marcado ? [...atual, s] : atual.filter((x) => x !== s)))
-                }
-              >
-                <StatusBadge tom={SITUACAO[s].tom} texto={SITUACAO[s].texto} />
-              </DropdownMenuCheckboxItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
-      {filtroAtivo && (
-        <Button variant="link" size="sm" onClick={limparFiltros}>
-          Limpar filtros
+  function barra(mostradas: number, todas: number) {
+    const [um, varios] = NOME[abaAtual];
+    return (
+      <div className="flex flex-wrap items-center gap-2 px-4 py-3">
+        <div className="relative min-w-45 max-w-70 flex-1">
+          <Search
+            aria-hidden
+            className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-t3"
+            strokeWidth={1.75}
+          />
+          <Input
+            type="search"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            aria-label={ROTULO_BUSCA[abaAtual]}
+            placeholder={ROTULO_BUSCA[abaAtual]}
+            className="h-ctl-md pl-8 text-dense"
+          />
+        </div>
+        {abaAtual === "loja" && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className={clsx(
+                "inline-flex h-ctl-md items-center gap-1.5 rounded-full border px-3 text-dense whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
+                situacoes.length
+                  ? "border-info-border bg-info-bg text-info"
+                  : "border-dashed border-control-border text-t1 hover:text-ink"
+              )}
+            >
+              {situacoes.length ? `Situação: ${situacoes.map((s) => SITUACAO[s].texto).join(", ")}` : "+ Situação"}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56">
+              {(Object.keys(SITUACAO) as Situacao[]).map((s) => (
+                <DropdownMenuCheckboxItem
+                  key={s}
+                  checked={situacoes.includes(s)}
+                  closeOnClick={false}
+                  onCheckedChange={(marcado) =>
+                    setSituacoes((atual) => (marcado ? [...atual, s] : atual.filter((x) => x !== s)))
+                  }
+                >
+                  <StatusBadge tom={SITUACAO[s].tom} texto={SITUACAO[s].texto} />
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+        {filtroAtivo && (
+          <Button variant="link" size="sm" onClick={limparFiltros}>
+            Limpar filtros
+          </Button>
+        )}
+        {abaAtual === "produto" && (
+          <Segmented
+            rotulo="Ordem"
+            valor={ordemProduto}
+            onValorChange={setOrdemProduto}
+            opcoes={[
+              { valor: "mais", rotulo: "Mais lucrativos" },
+              { valor: "menos", rotulo: "Menos lucrativos" },
+            ]}
+          />
+        )}
+        <span className="flex-1" />
+        <span className="whitespace-nowrap text-label text-t3">
+          {filtroAtivo ? `${mostradas} de ${todas} ${varios}` : `${todas} ${todas === 1 ? um : varios}`}
+        </span>
+        <Button variant="secondary" size="md" onClick={exportar} aria-label="Exportar esta tabela em CSV" className="px-2.5">
+          <Download aria-hidden className="size-3.5" />
+          CSV
         </Button>
-      )}
-      {abaAtual === "produto" && (
-        <Segmented
-          rotulo="Ordem"
-          valor={ordemProduto}
-          onValorChange={setOrdemProduto}
-          opcoes={[
-            { valor: "mais", rotulo: "Mais lucrativos" },
-            { valor: "menos", rotulo: "Menos lucrativos" },
-          ]}
-        />
-      )}
-      {abaAtual === "produto" && (
-        <span className="text-label text-t2">
-          <ComDica titulo="Antes do anúncio" rotulo="Por que antes do anúncio">
-            O gasto do Meta e do Google não é por produto: aqui sai só produto, frete e taxa. A receita do pedido é
-            dividida entre os itens pelo preço de cada um.
-          </ComDica>
-        </span>
-      )}
-      {abaAtual === "campanha" && (
-        <span className="text-label text-t2">
-          <ComDica titulo="Compras da plataforma" rotulo="De onde vêm as compras">
-            Compras e valor que a própria plataforma reporta. O ROAS real da loja usa os pedidos da Shopify.
-          </ComDica>
-        </span>
-      )}
-      <span className="flex-1" />
-      <Button variant="secondary" size="sm" onClick={exportar} aria-label="Exportar esta tabela em CSV">
-        <Download aria-hidden />
-        CSV
-      </Button>
-    </div>
-  );
+      </div>
+    );
+  }
 
   const semLinhaComFiltro = (
     <EmptyState
@@ -729,8 +972,8 @@ export function DetalharPor({
     />
   );
 
-  function rodape(texto: ReactNode) {
-    return <p className="border-t border-border-subtle px-4 py-2.5 text-label text-t2">{texto}</p>;
+  function nota(texto: ReactNode) {
+    return <p className="border-t border-border-subtle px-4 py-2.5 text-label text-t3 text-pretty">{texto}</p>;
   }
 
   function tabela<T extends Record<string, unknown>>(opcoes: {
@@ -738,7 +981,7 @@ export function DetalharPor({
     colunas: Coluna<T>[];
     todas: T[];
     linhas: T[];
-    ordem?: { chave: string; direcao: "asc" | "desc" }[];
+    ordem?: CriterioOrdem[];
     rodapeTabela?: Partial<Record<string, ReactNode>>;
     chave?: string;
     vazio: ReactNode;
@@ -748,7 +991,7 @@ export function DetalharPor({
     if (opcoes.linhas.length === 0) {
       return (
         <>
-          {barra}
+          {barra(0, opcoes.todas.length)}
           {semLinhaComFiltro}
         </>
       );
@@ -763,17 +1006,15 @@ export function DetalharPor({
     );
     return (
       <>
-        {barra}
-        <div className="border-t border-border">
-          <DataTable
-            key={opcoes.chave}
-            legenda={opcoes.legenda}
-            colunas={colunas}
-            linhas={opcoes.linhas}
-            ordenacaoInicial={opcoes.ordem}
-            rodape={filtroAtivo ? undefined : opcoes.rodapeTabela}
-          />
-        </div>
+        {barra(opcoes.linhas.length, opcoes.todas.length)}
+        <Tabela
+          key={opcoes.chave}
+          legenda={opcoes.legenda}
+          colunas={colunas}
+          linhas={opcoes.linhas}
+          ordemInicial={opcoes.ordem}
+          rodape={filtroAtivo ? undefined : opcoes.rodapeTabela}
+        />
       </>
     );
   }
@@ -797,9 +1038,13 @@ export function DetalharPor({
               aria-expanded={semAcessoAberto}
               aria-controls="lojas-sem-acesso"
               onClick={() => setSemAcessoAberto((a) => !a)}
-              className="flex min-h-ctl-lg w-full items-center gap-2.5 bg-surface-2 px-4 text-left text-dense text-t1 hover:text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus"
+              className="flex min-h-ctl-lg w-full items-center gap-2.5 rounded-b-card bg-surface-2 px-4 text-left text-dense text-t1 hover:text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus"
             >
-              <ChevronRight aria-hidden className={clsx("size-3.5 shrink-0 transition-transform", semAcessoAberto && "rotate-90")} />
+              <ChevronRight
+                aria-hidden
+                className={clsx("size-3.5 shrink-0 transition-transform duration-150", semAcessoAberto && "rotate-90")}
+                strokeWidth={2}
+              />
               <span>
                 <strong className="font-semibold text-ink">
                   {lojasForaDaTabela.length} {lojasForaDaTabela.length === 1 ? "loja sem acesso" : "lojas sem acesso"}
@@ -812,11 +1057,11 @@ export function DetalharPor({
                 {lojasForaDaTabela.map(({ linha: l }) => (
                   <li
                     key={l.storeId}
-                    className="flex flex-wrap items-center gap-3 border-t border-border-subtle py-2.5 pl-10 pr-4"
+                    className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border-subtle py-2.5 pr-4 pl-10"
                   >
-                    <span className="flex min-w-44 flex-1 flex-col">
+                    <span className="flex min-w-45 flex-1 flex-col">
                       <span className="text-dense text-ink">{nomeDaLoja(l)}</span>
-                      <span className="font-mono text-label text-t2">{l.dominio}</span>
+                      <span className="font-mono text-label text-t3">{l.dominio}</span>
                     </span>
                     <StatusBadge tom="neutral">Sem acesso aos pedidos</StatusBadge>
                     <Link
@@ -833,18 +1078,18 @@ export function DetalharPor({
         )}
       </>
     ),
-    dia: () => (
-      <>
-        {tabela({
-          legenda: "Lucro dia a dia",
-          colunas: colunasDia,
-          todas: movimento ? linhasDia : [],
-          linhas: filtradas.dia,
-          rodapeTabela: rodapeDia,
-          vazio: semPedido,
-        })}
-      </>
-    ),
+    dia: () =>
+      tabela({
+        legenda: "Lucro dia a dia",
+        colunas: colunasDia,
+        todas: movimento ? linhasDia : [],
+        linhas: filtradas.dia,
+        // A ordem em que a aba abre (do dia mais novo), com a seta e o
+        // aria-sort no "Dia": o primeiro clique inverte, nao repete.
+        ordem: [{ chave: "dia", direcao: "desc" }],
+        rodapeTabela: rodapeDia,
+        vazio: semPedido,
+      }),
     produto: () =>
       produtos === null ? (
         <ErroSecao detalhe={erroExtras} />
@@ -859,8 +1104,12 @@ export function DetalharPor({
             chave: ordemProduto,
             vazio: semPedido,
           })}
+          {linhasProduto.length > 0 &&
+            nota(
+              "Antes do anúncio: o gasto do Meta e do Google não é por produto, então aqui sai só produto, frete e taxa. A receita do pedido é dividida entre os itens pelo preço de cada um."
+            )}
           {produtos.receitaSemItem > 0 &&
-            rodape(`${dinheiro(produtos.receitaSemItem, moeda)} de pedidos sem item (só frete ou ajuste) ficam de fora.`)}
+            nota(`${dinheiro(produtos.receitaSemItem, moeda)} de pedidos sem item (só frete ou ajuste) ficam de fora.`)}
         </>
       ),
     campanha: () =>
@@ -884,6 +1133,8 @@ export function DetalharPor({
               />
             ),
           })}
+          {linhasCampanha.length > 0 &&
+            nota("Compras e valor são os que a própria plataforma reporta. O ROAS real da loja usa os pedidos da Shopify.")}
         </>
       ),
   };
@@ -902,13 +1153,17 @@ export function DetalharPor({
       className={clsx("min-w-0 rounded-card border border-border bg-surface transition-opacity", trocando && "opacity-60")}
     >
       <Tabs value={abaAtual} onValueChange={(v) => trocarAba(v as Aba)} className="gap-0">
-        <div className="flex flex-wrap items-end gap-x-4 border-b border-border px-4 pt-1">
-          <h2 id="detalhar-t" className="py-3 text-dense font-semibold text-t1">
+        <div className="flex flex-wrap items-end gap-x-5 border-b border-border px-4">
+          <h2 id="detalhar-t" className="py-3.5 text-section text-ink">
             Detalhar por
           </h2>
-          <TabsList variant="line" aria-labelledby="detalhar-t" className="max-w-full overflow-x-auto border-b-0 [scrollbar-width:none]">
+          <TabsList
+            variant="line"
+            aria-labelledby="detalhar-t"
+            className="max-w-full gap-4.5 overflow-x-auto border-b-0 [scrollbar-width:none]"
+          >
             {ABAS.map((a) => (
-              <TabsTrigger key={a.id} value={a.id} className="h-11 px-1">
+              <TabsTrigger key={a.id} value={a.id} className="h-[47px]! px-0.5">
                 {a.rotulo}
               </TabsTrigger>
             ))}

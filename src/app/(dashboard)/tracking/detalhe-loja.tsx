@@ -227,13 +227,13 @@ export function DetalheLoja({
           Rastreamento
         </button>
         <ChevronRight aria-hidden className="size-3 shrink-0 text-t3" />
-        <h1
+        <h2
           ref={titulo}
           tabIndex={-1}
           className="truncate text-dense font-normal text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
         >
           {loja.nome}
-        </h1>
+        </h2>
       </nav>
 
       <div className="grid overflow-hidden rounded-card border border-border md:grid-cols-3">

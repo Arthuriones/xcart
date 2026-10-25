@@ -1,7 +1,7 @@
 import type { BomQuando, FormatoVariacao } from "@/components/ui/variacao";
 import type { CorSerie, SerieGrafico } from "@/components/ui/line-chart";
 import type { TomStatus } from "@/components/ui/status-badge";
-import { MESES, diaCurto } from "@/components/layout/contexto";
+import { MESES, MESES_LONGOS, diaCurto } from "@/components/layout/contexto";
 import {
   FUSO_RELATORIO_PADRAO,
   ROTAS,
@@ -12,7 +12,7 @@ import {
 } from "@/lib/financeiro/tipos";
 import { RE_DESINSTALADO, estadoConexao } from "@/lib/leitura/lojas-estado";
 // So tipos: o calculo e as leituras nao entram no bundle do navegador.
-import type { Avisos, Semaforo } from "@/lib/financeiro/calculo";
+import type { Avisos, Semaforo, Totais } from "@/lib/financeiro/calculo";
 import type { ResumoContas } from "@/lib/financeiro/queries";
 import type { PontoDia } from "@/lib/leitura/serie-diaria";
 
@@ -414,6 +414,373 @@ export function montarGrafico(opcoes: {
 }
 
 // ---------------------------------------------------------------------------
+// Destaque: grafico de linha, sparkline da faixa de KPIs e composicao
+// (mockup "design novo/Dashboard.dc.html": MET, grafico, kpis e cascata)
+// ---------------------------------------------------------------------------
+
+/** O que o grafico do destaque desenha: as metricas e tres somas dos cartoes. */
+export type IdSerie = IdMetrica | "custos" | "taxas" | "devolucoes";
+
+/**
+ * Valor de uma serie num dia (ou grupo de dias). "Custos totais" e a mesma
+ * soma do cartao: produto + frete, taxas e anuncio.
+ */
+export function valorDaSerie(s: Soma, id: IdSerie): number | null {
+  if (id === "custos") return s.cmv + s.taxas + s.gastoMeta + s.gastoGoogle;
+  if (id === "taxas") return s.taxas;
+  if (id === "devolucoes") return s.devolucoes ?? 0;
+  return derivar(s)[id];
+}
+
+/** Token de cor da serie: 1 lucro, 2 faturamento, 3 gasto (globals.css). */
+export const COR_SERIE: Record<IdSerie, "chart-1" | "chart-2" | "chart-3"> = {
+  lucro: "chart-1",
+  roas: "chart-1",
+  margem: "chart-1",
+  receita: "chart-2",
+  pedidos: "chart-2",
+  ticket: "chart-2",
+  gasto: "chart-3",
+  cpa: "chart-3",
+  custos: "chart-3",
+  custo: "chart-3",
+  taxas: "chart-3",
+  devolucoes: "chart-3",
+};
+
+export function tipoDaSerie(id: IdSerie): DefinicaoMetrica["tipo"] {
+  return id === "custos" || id === "taxas" || id === "devolucoes" ? "dinheiro" : METRICAS[id].tipo;
+}
+
+const fmtTickCompacto = new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 });
+const fmtTickPct = new Intl.NumberFormat("pt-BR", { style: "percent", maximumFractionDigits: 0 });
+const fmtTickVezes = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
+
+/** Casas decimais de um numero ja limpo (0,25 -> 2), ate 3. */
+function casasDecimais(x: number): number {
+  const s = String(limpo(Math.abs(x)));
+  if (s.includes("e")) return 3;
+  const ponto = s.indexOf(".");
+  return ponto < 0 ? 0 : Math.min(3, s.length - ponto - 1);
+}
+
+const fmtTickPorCasas = new Map<string, Intl.NumberFormat>();
+
+function fmtTick(tipo: DefinicaoMetrica["tipo"], casas: number): Intl.NumberFormat {
+  const chave = `${tipo}:${casas}`;
+  let f = fmtTickPorCasas.get(chave);
+  if (!f) {
+    f = new Intl.NumberFormat(
+      "pt-BR",
+      tipo === "pct"
+        ? { style: "percent", maximumFractionDigits: casas }
+        : tipo === "vezes"
+          ? { maximumFractionDigits: casas }
+          : { notation: "compact", maximumFractionDigits: casas }
+    );
+    fmtTickPorCasas.set(chave, f);
+  }
+  return f;
+}
+
+/**
+ * Rotulo do eixo Y: "3 mil", "20%", "1,5×". Sem moeda: o titulo ja diz.
+ * Com o `passo` da escala, o rotulo leva as casas que o passo pede: com passo
+ * de 2,5% a linha de 7,5% sai "7,5%", nunca "8%" (e 1.250 sai "1,25 mil").
+ */
+export function rotuloTick(v: number, tipo: DefinicaoMetrica["tipo"], passo?: number): string {
+  let t: string;
+  if (passo === undefined) {
+    t = tipo === "pct" ? fmtTickPct.format(v) : tipo === "vezes" ? `${fmtTickVezes.format(v)}×` : fmtTickCompacto.format(v);
+  } else if (tipo === "pct") {
+    t = fmtTick(tipo, casasDecimais(passo * 100)).format(v);
+  } else if (tipo === "vezes") {
+    t = `${fmtTick(tipo, Math.max(1, casasDecimais(passo))).format(v)}×`;
+  } else {
+    // O compacto divide por mil, milhao...: as casas sao as do passo nessa unidade.
+    const abs = Math.abs(v);
+    const unidade = abs >= 1000 ? 1000 ** Math.floor(Math.log10(abs) / 3) : 1;
+    t = fmtTick(tipo, Math.max(1, casasDecimais(passo / unidade))).format(v);
+  }
+  return t.replace("-", "−");
+}
+
+const DIA_SEMANA_CURTO = ["dom.", "seg.", "ter.", "qua.", "qui.", "sex.", "sáb."];
+
+export interface SerieLinha {
+  /** Rotulo de cada ponto no eixo X ("25/09", "set"). */
+  rotulos: string[];
+  /** Titulo do ponto no tooltip ("qua. 24/10 · hoje, parcial"). */
+  titulos: string[];
+  /** As somas de cada ponto do periodo atual. null = sem dado. */
+  atual: (Soma | null)[];
+  /** O periodo anterior alinhado por posicao. null = sem a linha tracejada. */
+  anterior: (Soma | null)[] | null;
+  /** O ultimo ponto tem o dia de hoje (parcial): o trecho final sai pontilhado. */
+  parcialUltimo: boolean;
+}
+
+/**
+ * Os pontos do grafico de linha. O anterior e alinhado por posicao com o
+ * atual, com o comeco sem movimento em branco (semInicioVazio); por mes nao
+ * compara -- os meses dos dois periodos nao tem o mesmo tamanho.
+ */
+export function montarSerieLinha(opcoes: {
+  atual: PontoDia[];
+  anterior: PontoDia[] | null;
+  gran: Granularidade;
+}): SerieLinha {
+  const { atual, gran } = opcoes;
+  const dias = atual.map((p) => p.dia);
+  const grupos = agrupar(atual, dias, gran);
+  const ant =
+    opcoes.anterior && gran !== "mes" ? agrupar(semInicioVazio(opcoes.anterior), dias, gran) : null;
+
+  const titulos: string[] =
+    gran === "dia"
+      ? atual.map(
+          (p) =>
+            `${DIA_SEMANA_CURTO[new Date(`${p.dia}T12:00:00Z`).getUTCDay()] ?? ""} ${diaCurto(p.dia)}${p.parcial ? " · hoje, parcial" : ""}`
+        )
+      : gran === "semana"
+        ? grupos.map((g, i) => {
+            const bloco = dias.slice(i * 7, i * 7 + 7);
+            return `Semana ${diaCurto(bloco[0])}–${diaCurto(bloco[bloco.length - 1])}${g.parcial ? " · parcial" : ""}`;
+          })
+        : [...new Set(dias.map((d) => d.slice(0, 7)))].map((chave, i) => {
+            const nome = MESES_LONGOS[Number(chave.slice(5, 7)) - 1] ?? chave;
+            return `${nome.charAt(0).toUpperCase()}${nome.slice(1)} de ${chave.slice(0, 4)}${grupos[i]?.parcial ? " · parcial" : ""}`;
+          });
+
+  return {
+    rotulos: grupos.map((g) => g.rotulo),
+    titulos,
+    atual: grupos.map((g) => g.soma),
+    anterior: ant && ant.some((g) => g.soma !== null) ? ant.map((g) => g.soma) : null,
+    parcialUltimo: grupos.length > 1 && grupos[grupos.length - 1].parcial,
+  };
+}
+
+/** Os valores de uma serie nos pontos (null onde nao ha dado ou base). */
+export function valoresDaSerie(somas: (Soma | null)[], id: IdSerie): (number | null)[] {
+  return somas.map((s) => (s ? valorDaSerie(s, id) : null));
+}
+
+function finito(v: number | null | undefined): v is number {
+  return typeof v === "number" && Number.isFinite(v);
+}
+
+/** Tira o ruido de ponto flutuante (0,30000000000000004). */
+function limpo(n: number): number {
+  return Number(n.toPrecision(12));
+}
+
+/** O SVG do grafico: viewBox 1000 x 240, esticado com preserveAspectRatio none. */
+export const LARGURA_LINHA = 1000;
+export const ALTURA_LINHA = 240;
+
+export interface EscalaLinha {
+  min: number;
+  max: number;
+  passo: number;
+  ticks: number[];
+}
+
+/**
+ * Eixo Y do grafico de linha: o zero sempre dentro, um passo "redondo"
+ * (1, 2, 2,5, 5 ou 10 x 10^n) para uns 4 intervalos, e 4% de folga em cima
+ * para a linha nao encostar no topo.
+ */
+export function escalaLinha(valores: (number | null | undefined)[]): EscalaLinha {
+  const v = valores.filter(finito);
+  const mn = Math.min(0, ...v);
+  let mx = Math.max(0, ...v);
+  if (mx === mn) mx = mn + 1;
+  const bruto = (mx - mn) / 4;
+  const ordem = 10 ** Math.floor(Math.log10(bruto));
+  const passo = limpo(([1, 2, 2.5, 5, 10].find((p) => p * ordem >= bruto) ?? 10) * ordem);
+  const iMin = Math.floor(mn / passo);
+  const iMax = Math.max(1, Math.ceil((mx * 1.04) / passo));
+  const min = limpo(iMin * passo);
+  const max = limpo(iMax * passo);
+  // Cada tick sai do indice inteiro (i x passo), nunca de min + k x passo: com
+  // passo decimal (margem 0,05) a soma deixava o zero em 2,8e-17 e a linha do
+  // zero perdia o destaque justo quando ha prejuizo.
+  const ticks: number[] = [];
+  for (let i = iMin; i <= iMax; i++) ticks.push(i === 0 ? 0 : limpo(i * passo));
+  return { min, max, passo, ticks };
+}
+
+/** X do ponto i de n no viewBox (um ponto so fica no meio). */
+export function xDoPonto(i: number, n: number): number {
+  return n <= 1 ? LARGURA_LINHA / 2 : (i / (n - 1)) * LARGURA_LINHA;
+}
+
+/** Y do valor no viewBox (0 em cima). */
+export function yDoValor(v: number, e: Pick<EscalaLinha, "min" | "max">): number {
+  return ALTURA_LINHA - ((v - e.min) / (e.max - e.min)) * ALTURA_LINHA;
+}
+
+const c1 = (n: number) => n.toFixed(1);
+
+/**
+ * Caminho de uma serie nos primeiros `ate` pontos de um eixo de `n`. null
+ * quebra a linha (buraco, nunca zero); ponto isolado vira um traco minimo,
+ * que o stroke-linecap redondo mostra como um ponto.
+ */
+export function caminhoLinha(
+  valores: (number | null)[],
+  n: number,
+  e: Pick<EscalaLinha, "min" | "max">,
+  ate = valores.length
+): string {
+  let d = "";
+  let noTrecho = 0;
+  for (let i = 0; i < Math.min(ate, valores.length); i++) {
+    const v = valores[i];
+    if (!finito(v)) {
+      if (noTrecho === 1) d += "l0.01 0 ";
+      noTrecho = 0;
+      continue;
+    }
+    d += `${noTrecho ? "L" : "M"}${c1(xDoPonto(i, n))} ${c1(yDoValor(v, e))} `;
+    noTrecho++;
+  }
+  if (noTrecho === 1) d += "l0.01 0";
+  return d.trim();
+}
+
+export interface TracadoLinha {
+  /** A linha cheia (sem o ultimo trecho quando o ultimo ponto e parcial). */
+  linha: string;
+  /** O ultimo trecho, pontilhado: hoje ainda vai mudar. */
+  parcial: string;
+  /** A area embaixo da linha, ate o zero. */
+  area: string;
+  /** O ultimo ponto com dado (o anel). */
+  fim: { x: number; y: number } | null;
+}
+
+/** O desenho do periodo atual: linha, trecho parcial, area e ponto final. */
+export function tracarLinha(
+  valores: (number | null)[],
+  e: Pick<EscalaLinha, "min" | "max">,
+  parcialUltimo: boolean
+): TracadoLinha {
+  const n = valores.length;
+  const separa = parcialUltimo && n > 1;
+  const linha = caminhoLinha(valores, n, e, separa ? n - 1 : n);
+  const penultimo = valores[n - 2];
+  const ultimo = valores[n - 1];
+  const parcial =
+    separa && finito(penultimo) && finito(ultimo)
+      ? `M${c1(xDoPonto(n - 2, n))} ${c1(yDoValor(penultimo, e))} L${c1(xDoPonto(n - 1, n))} ${c1(yDoValor(ultimo, e))}`
+      : "";
+  const pontos = valores.flatMap((v, i) => (finito(v) ? [{ x: xDoPonto(i, n), y: yDoValor(v, e) }] : []));
+  const base = yDoValor(Math.max(e.min, Math.min(0, e.max)), e);
+  const area =
+    pontos.length > 1
+      ? `M${c1(pontos[0].x)} ${c1(base)} ${pontos.map((p) => `L${c1(p.x)} ${c1(p.y)}`).join(" ")} L${c1(pontos[pontos.length - 1].x)} ${c1(base)} Z`
+      : "";
+  return { linha, parcial, area, fim: pontos.length ? pontos[pontos.length - 1] : null };
+}
+
+/**
+ * Sparkline da faixa de KPIs e da aba Loja: so a forma (escala pelo minimo e
+ * maximo da propria serie), com buraco onde falta dado. Menos de 2 pontos com
+ * dado: nada a desenhar.
+ */
+export function trilhaSparkline(valores: (number | null)[], largura: number, altura: number): string {
+  const v = valores.filter(finito);
+  if (v.length < 2) return "";
+  const a = Math.min(...v);
+  const faixa = Math.max(...v) - a || 1;
+  const n = valores.length;
+  let d = "";
+  let noTrecho = false;
+  valores.forEach((y, i) => {
+    if (!finito(y)) {
+      noTrecho = false;
+      return;
+    }
+    d += `${noTrecho ? "L" : "M"}${c1((i / (n - 1)) * largura)} ${c1(altura - 2 - ((y - a) / faixa) * (altura - 4))} `;
+    noTrecho = true;
+  });
+  return d.trim();
+}
+
+/**
+ * Quantas colunas a celula i (de n) ocupa numa grade de `colunas`: a ultima
+ * linha divide a largura entre as celulas dela, sem deixar buraco na faixa.
+ */
+export function vaoDaCelula(i: number, n: number, colunas: number): number {
+  const resto = n % colunas;
+  if (resto === 0 || i < n - resto) return 1;
+  const base = Math.floor(colunas / resto);
+  return i === n - 1 ? colunas - base * (resto - 1) : base;
+}
+
+export type TomCascata = "faturamento" | "produto" | "taxas" | "meta" | "google" | "devolucoes" | "lucro" | "prejuizo";
+
+export interface LinhaCascata {
+  sinal: "" | "−" | "=";
+  rotulo: string;
+  valor: number;
+  /** Fracao do faturamento. null = sem faturamento. */
+  pct: number | null;
+  /** Barra flutuante, em % da largura: de onde comeca e quanto ocupa. */
+  esq: number;
+  larg: number;
+  tom: TomCascata;
+}
+
+/**
+ * "Composição do lucro": o faturamento inteiro e cada custo como uma barra
+ * que desce de onde o anterior parou, ate o lucro. A escala vai do menor
+ * entre zero e o lucro (prejuizo cabe a esquerda do zero) ate o faturamento.
+ * Os numeros sao os do calculo; aqui so a geometria.
+ */
+export function montarCascata(
+  t: Pick<Totais, "receita" | "cmv" | "taxas" | "gastoMeta" | "gastoGoogle" | "devolucoes" | "lucro" | "margem">,
+  opcoes: { rotuloReceita: string; rotuloTaxas: string; rotuloLucro: string; devolucoes: boolean }
+): LinhaCascata[] {
+  const R = t.receita;
+  const lo = Math.min(0, t.lucro);
+  const hi = Math.max(0, R);
+  const span = hi - lo || 1;
+  const pos = (a: number, b: number) => {
+    const esq = Math.min(100, Math.max(0, ((Math.min(a, b) - lo) / span) * 100));
+    const larg = Math.min(100 - esq, Math.max(0.4, (Math.abs(b - a) / span) * 100));
+    return { esq: limpo(esq), larg: limpo(larg) };
+  };
+  const pct = (v: number) => (R > 0 ? v / R : null);
+  const linhas: LinhaCascata[] = [
+    { sinal: "", rotulo: opcoes.rotuloReceita, valor: R, pct: R > 0 ? 1 : null, ...pos(0, R), tom: "faturamento" },
+  ];
+  const custos: [string, number, TomCascata][] = [
+    ["Produto + frete", t.cmv, "produto"],
+    [opcoes.rotuloTaxas, t.taxas, "taxas"],
+    ["Meta Ads", t.gastoMeta, "meta"],
+    ["Google Ads", t.gastoGoogle, "google"],
+  ];
+  if (opcoes.devolucoes) custos.push(["Devoluções", t.devolucoes, "devolucoes"]);
+  let acumulado = R;
+  for (const [rotulo, v, tom] of custos) {
+    linhas.push({ sinal: "−", rotulo, valor: v, pct: pct(v), ...pos(acumulado - v, acumulado), tom });
+    acumulado -= v;
+  }
+  linhas.push({
+    sinal: "=",
+    rotulo: opcoes.rotuloLucro,
+    valor: t.lucro,
+    pct: t.margem,
+    ...pos(0, t.lucro),
+    tom: t.lucro < 0 ? "prejuizo" : "lucro",
+  });
+  return linhas;
+}
+
+// ---------------------------------------------------------------------------
 // Semaforo das lojas
 // ---------------------------------------------------------------------------
 
@@ -529,7 +896,7 @@ export function situacaoDasLojas(
 const ORDEM_TOM: Record<TomPendencia, number> = { err: 0, warn: 1, info: 2 };
 
 /** Custos e taxas ja filtrado nos SKUs sem custo (a tela le ?situacao=). */
-const CUSTOS_SEM_CUSTO = `${ROTAS.custos}?situacao=semCusto`;
+export const CUSTOS_SEM_CUSTO = `${ROTAS.custos}?situacao=semCusto`;
 
 /** Onde liga conta de anuncio a loja (Meta primeiro; o Google fica ao lado). */
 const CONECTAR_CONTAS = "/integracoes/meta";

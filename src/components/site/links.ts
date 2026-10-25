@@ -35,3 +35,19 @@ export const DOCUMENTOS_LEGAIS: { id: DocumentoLegal; href: string; rotulo: stri
   { id: "terms", href: "/terms", rotulo: "Termos de uso" },
   { id: "data-deletion", href: "/data-deletion", rotulo: "Exclusão de dados" },
 ];
+
+/**
+ * Largura e margem do topo e do rodape, que a landing e as paginas legais
+ * dividem. Cada uma segue o texto da propria pagina, senao a logo sai do
+ * alinhamento dele (8px no celular, 24px acima de 1200px):
+ *  - "landing": a do design novo, 1200px com 24px nas bordas;
+ *  - "legal": a de src/components/legal/legal-page.tsx (max-w-6xl, 16px no
+ *    celular e 24px a partir de sm). E o padrao, porque e la que o topo e o
+ *    rodape sao chamados sem dizer a caixa.
+ */
+export const CAIXA_DO_SITE = {
+  landing: "max-w-300 px-6",
+  legal: "max-w-6xl px-4 sm:px-6",
+} as const;
+
+export type CaixaDoSite = keyof typeof CAIXA_DO_SITE;

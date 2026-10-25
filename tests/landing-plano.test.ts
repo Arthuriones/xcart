@@ -20,8 +20,9 @@ import {
 } from "@/app/lp/conteudo";
 
 // A landing nao escreve numero a mao: preco, limites, creditos e pacotes saem
-// do arquivo que cobra, e a lista de cada plano sai dos limites dele (so o que
-// o xcart tem). E vende primeiro Lucro, Rastreamento e Alertas.
+// do arquivo que cobra. O cartao curto de cada plano (especificacoes e os tres
+// recursos) e travado em lp-planos.test.ts. E vende primeiro Lucro,
+// Rastreamento e Alertas.
 
 const NBSP = / /g;
 const limpo = (s: string) => s.replace(NBSP, " ");
@@ -48,29 +49,6 @@ describe("preço na landing", () => {
     expect(PLANOS.map((p) => p.id)).not.toContain("lojas3");
   });
 
-  it("cada cartão abre com os limites reais", () => {
-    expect(PLANOS.map((p) => p.itens.slice(0, 2))).toEqual([
-      ["Sem rastreamento.", "1 vitrine e 1 loja de checkout no roteamento."],
-      ["Rastreamento em até 5 operações (loja ou checkout).", "Até 5 vitrines e até 5 lojas de checkout no roteamento."],
-      ["Rastreamento sem limite de operações.", "Roteamento sem limite de lojas."],
-    ]);
-    for (const p of PLANOS) expect(p.itens.join(" ")).not.toMatch(/loja disponível|lojas disponíveis/);
-  });
-
-  it("depois dos limites, só o que o plano tem, e a garantia no fim", () => {
-    for (const [i, p] of PLANOS.entries()) {
-      const recursos = recursosDoPlano(PLANOS_COBRADOS[i].limites).map((r) => `${r}.`);
-      expect(p.itens.slice(2, -1)).toEqual(recursos);
-      expect(p.itens.at(-1)).toMatch(/dias de garantia\.$/);
-    }
-    // Sem as promessas que o xcart nao entrega.
-    for (const p of PLANOS) {
-      expect(p.itens.join(" ")).not.toMatch(/100% assertivas|Suporte prioritário|20% OFF|insuperável|ilimitados/);
-    }
-    expect(PLANOS[0].itens.join(" ")).not.toMatch(/Meta e ao TikTok/);
-    expect(PLANOS[1].itens.join(" ")).toMatch(/Meta e ao TikTok/);
-  });
-
   it("mostra todos os pacotes, na mesma ordem, com centavos", () => {
     expect(PACOTES.map((p) => p.id)).toEqual(CREDIT_PACKS.map((p) => p.id));
     for (const [i, p] of PACOTES.entries()) {
@@ -81,7 +59,8 @@ describe("preço na landing", () => {
   });
 });
 
-// A landing le a mesma regra de /billing e do paywall (recursosDoPlano).
+// A lista completa de /billing e do paywall (recursosDoPlano). A landing mostra
+// so o cartao curto, que sai dos mesmos limites.
 describe("o que cada plano inclui", () => {
   it("o rastreamento diz por onde cada rede recebe (Google pela tag)", () => {
     const comRastreio = recursosDoPlano(PLANOS_COBRADOS[1].limites);
@@ -102,7 +81,7 @@ describe("o que cada plano inclui", () => {
 describe("texto da landing", () => {
   const todos = [
     ...PLANOS_COBRADOS.flatMap((p) => recursosDoPlano(p.limites)),
-    ...PLANOS.flatMap((p) => p.itens),
+    ...PLANOS.flatMap((p) => [...p.especificacoes.map((e) => e.valor), ...p.recursos]),
     ...RECURSOS_PRINCIPAIS.flatMap((r) => [r.titulo, r.resumo, ...r.pontos]),
     ...OUTROS_RECURSOS.flatMap((r) => [r.titulo, r.texto]),
     ...PERGUNTAS.flatMap((p) => [p.pergunta, p.resposta]),

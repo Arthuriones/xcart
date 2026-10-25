@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <title>xcart · Landing (atual, recriação)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Public+Sans:wght@400;500;600;700&amp;display=swap">
+  <style>html,body{margin:0}body{-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:var(--brand,#b04a2f);text-decoration:none}a:hover{color:var(--ink,#1a1a1a)}summary::-webkit-details-marker{display:none}</style>
+</helmet>
+<div style="--bg:#f7f6f5; --surface:#ffffff; --surface-2:#fbfbfa; --track:#ecebe8; --border:#e4e2df; --border-subtle:#efeeec; --border-strong:#cfccc8; --control-border:#8c8a86; --ink:#1a1a1a; --t1:#3f3e3c; --t2:#575553; --t3:#6e6c69; --t4:#8c8a86; --solid:#1a1a1a; --on-solid:#ffffff; --brand:#b04a2f; --ok:#276b43; --ok-bg:#eaf3ee; --ok-border:#bcd9c7; --warn:#875c12; --warn-bg:#fbf3e2; --warn-border:#e8d3a6; --err:#b3261e; --err-bg:#fceceb; --err-border:#ecc5c2; --run:#2c5d8f; --run-bg:#ebf1f7; --run-border:#c3d4e6; --neutral-bg:#f1f0ee; --neutral-border:#dcdad6; --chart-1:#1a1a1a; --chart-2:#3b6fa8; --chart-3:#c0661f; --chart-grid:#ecebe8; min-height:100vh; background:var(--bg); color:var(--ink); font-family:'Public Sans', system-ui, sans-serif; font-size:13px; line-height:1.45;">
+
+  <div style="padding:10px 24px; display:flex; gap:10px; font-size:12px; color:#575553; background:#e9e8e5;"><span style="font-family:'IBM Plex Mono', monospace; font-weight:500; color:#1a1a1a;">ANTES</span><span>Recriação fiel de src/app/lp/page.tsx (tema claro).</span></div>
+
+  <header style="position:sticky; top:0; z-index:40; border-bottom:1px solid var(--border); background:rgba(255,255,255,.92); backdrop-filter:blur(12px) saturate(1.5);">
+    <div style="max-width:1152px; margin:0 auto; height:64px; display:flex; align-items:center; gap:8px; padding:0 24px;">
+      <a href="#" style="margin-right:16px; display:flex; align-items:center; height:44px;"><img src="assets/logo-cropped.png" alt="xcart" style="height:22px; width:auto; display:block;"></a>
+      <nav aria-label="Seções do site" style="display:{{ navDesk }};"><ul style="display:flex; gap:4px; list-style:none; margin:0; padding:0;"><sc-for list="{{ secoes }}" as="s" hint-placeholder-count="4"><li><a href="#" style="display:flex; align-items:center; height:36px; padding:0 12px; border-radius:6px; font-size:13px; font-weight:500; color:var(--t1);">{{ s }}</a></li></sc-for></ul></nav>
+      <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+        <a href="#" style="display:{{ navDesk }}; align-items:center; height:36px; padding:0 16px; border-radius:6px; font-size:13px; font-weight:500; color:var(--ink);">Entrar</a>
+        <a href="#" style="display:inline-flex; align-items:center; height:36px; padding:0 16px; border-radius:6px; background:var(--solid); color:var(--on-solid); font-size:13px; font-weight:500;">Criar conta</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section style="padding:96px 24px;">
+      <div style="max-width:1152px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 460px), 1fr)); align-items:center; gap:64px;">
+        <div style="display:flex; flex-direction:column; align-items:flex-start; gap:24px;">
+          <p style="margin:0; display:inline-flex; align-items:center; gap:8px; height:28px; padding:0 12px; border:1px solid var(--border); border-radius:999px; background:var(--surface); font-size:12px; font-weight:500; color:var(--t1);"><span style="width:6px; height:6px; border-radius:50%; background:var(--ok);"></span>Para quem opera lojas Shopify</p>
+          <h1 style="margin:0; font-size:clamp(40px, 6vw, 66px); line-height:1.02; font-weight:600; letter-spacing:-0.035em; text-wrap:balance;">Quanto cada loja lucrou hoje. <span style="color:var(--t3);">Já descontado o anúncio.</span></h1>
+          <p style="margin:0; max-width:46ch; font-size:18px; line-height:1.625; color:var(--t1); text-wrap:pretty;">O xcart cruza os pedidos da Shopify com o gasto do Meta e do Google, entrega cada compra ao Meta, ao TikTok e ao Google e avisa no Telegram quando algo quebra.</p>
+          <div style="display:flex; flex-wrap:wrap; gap:8px; width:100%; max-width:420px;">
+            <a href="#" style="flex:1 1 160px; display:inline-flex; align-items:center; justify-content:center; height:44px; padding:0 20px; border-radius:6px; background:var(--solid); color:var(--on-solid); font-size:14px; font-weight:600;">Criar conta</a>
+            <a href="#" style="flex:1 1 160px; display:inline-flex; align-items:center; justify-content:center; height:44px; padding:0 20px; border-radius:6px; border:1px solid var(--border-strong); background:var(--surface); color:var(--ink); font-size:14px; font-weight:600;">Ver o preço</a>
+          </div>
+          <p style="margin:0; display:flex; flex-wrap:wrap; gap:6px 14px; font-size:13px; color:var(--t2);"><span style="font-weight:600; color:var(--ink);">A partir de R$ 197,00 por mês</span><span>7 dias de garantia</span><span>Cancele quando quiser</span></p>
+        </div>
+        <figure style="margin:0; display:flex; flex-direction:column; gap:8px; min-width:0;">
+          <div style="border-radius:12px; background:var(--track); padding:20px;">
+            <div style="overflow:hidden; border-radius:8px; border:1px solid var(--border-strong); background:var(--bg);">
+              <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid var(--border); background:var(--surface);"><span style="margin-right:4px; font-size:13px; font-weight:600;">Lucro</span><sc-for list="{{ chipsLucro }}" as="c" hint-placeholder-count="3"><span style="display:inline-flex; align-items:center; height:24px; padding:0 8px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); font-size:12px; color:var(--t1);">{{ c }}</span></sc-for></div>
+              <div style="display:flex; flex-direction:column; gap:8px; padding:12px;">
+                <div style="display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:8px;">
+                  <sc-for list="{{ kpisPrevia }}" as="k" hint-placeholder-count="4"><div style="display:flex; flex-direction:column; gap:8px; padding:12px; border-radius:8px; border:1px solid var(--border); background:var(--surface);"><span style="font-size:12px; color:var(--t2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ k.t }}</span><span style="display:block; height:20px; width:75%; border-radius:999px; background:var(--border-strong);"></span><sc-if value="{{ k.selo }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex; align-items:center; gap:6px; width:fit-content; height:22px; padding:0 8px; border-radius:999px; border:1px solid var(--ok-border); background:var(--ok-bg); color:var(--ok); font-size:12px; font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:var(--ok);"></span>Lucro</span></sc-if><sc-if value="{{ k.barra }}" hint-placeholder-val="{{ true }}"><span style="display:block; margin-top:6px; height:8px; width:50%; border-radius:999px; background:var(--track);"></span></sc-if></div></sc-for>
+                </div>
+                <div style="padding:12px; border-radius:8px; border:1px solid var(--border); background:var(--surface);">
+                  <div style="display:flex; justify-content:space-between; font-size:12px;"><span style="font-weight:500; color:var(--t1);">Lucro por dia</span><span style="display:flex; gap:12px; color:var(--t2);"><span style="display:flex; align-items:center; gap:6px;"><span style="width:16px; height:2px; border-radius:2px; background:var(--chart-1);"></span>Período</span><span style="display:flex; align-items:center; gap:6px;"><span style="width:16px; border-top:2px dashed var(--control-border);"></span>Anterior</span></span></div>
+                  <svg viewBox="0 0 320 96" preserveAspectRatio="none" style="display:block; margin-top:12px; width:100%; height:96px;"><path d="M0 24H320 M0 48H320 M0 72H320" style="stroke:var(--chart-grid); stroke-width:1; vector-effect:non-scaling-stroke;"></path><path d="M0,84 C40,80 70,70 110,72 S170,62 210,60 S280,52 320,48" style="fill:none; stroke:var(--control-border); stroke-width:1.5; stroke-dasharray:5 5; vector-effect:non-scaling-stroke;"></path><path d="M0,78 C30,72 50,60 80,62 S130,40 160,44 S220,30 250,26 S300,18 320,14" style="fill:none; stroke:var(--chart-1); stroke-width:2; stroke-linecap:round; vector-effect:non-scaling-stroke;"></path></svg>
+                </div>
+                <div style="border-radius:8px; border:1px solid var(--border); background:var(--surface);">
+                  <div style="display:grid; grid-template-columns:1fr auto 4rem; gap:12px; padding:8px 12px; border-bottom:1px solid var(--border-subtle); font-size:12px; color:var(--t2);"><span>Loja</span><span>Situação</span><span style="text-align:right;">Lucro</span></div>
+                  <sc-for list="{{ lojasPrevia }}" as="l" hint-placeholder-count="3"><div style="display:grid; grid-template-columns:1fr auto 4rem; align-items:center; gap:12px; padding:10px 12px; border-top:{{ l.borda }};"><span style="display:block; height:10px; width:{{ l.w }}; border-radius:999px; background:var(--border-strong);"></span><span style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:999px; border:1px solid {{ l.bd }}; background:{{ l.bg }}; color:{{ l.cor }}; font-size:12px; font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:{{ l.cor }};"></span>{{ l.t }}</span><span style="display:block; margin-left:auto; height:8px; width:48px; border-radius:999px; background:var(--track);"></span></div></sc-for>
+                </div>
+              </div>
+            </div>
+          </div>
+          <figcaption style="font-size:12px; color:var(--t2);">Ilustração da tela Lucro. Na sua conta, os números vêm dos pedidos e do gasto das suas lojas.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section style="border-top:1px solid var(--border); padding:20px 24px;"><div style="max-width:1152px; margin:0 auto; display:flex; flex-wrap:wrap; align-items:center; gap:12px 28px;"><p style="margin:0; font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--t2);">Conecta com</p><ul style="display:flex; flex-wrap:wrap; gap:8px 28px; list-style:none; margin:0; padding:0; font-size:16px; font-weight:600; letter-spacing:-0.01em; color:var(--t1);"><sc-for list="{{ conecta }}" as="c" hint-placeholder-count="6"><li>{{ c }}</li></sc-for></ul></div></section>
+
+    <section style="padding:112px 24px; border-top:1px solid var(--border); border-bottom:1px solid var(--border); background:var(--surface);">
+      <div style="max-width:1152px; margin:0 auto;">
+        <div style="max-width:720px; display:flex; flex-direction:column; gap:14px;"><p style="margin:0; font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--t2);">Por que o xcart existe</p><h2 style="margin:0; font-size:clamp(30px, 4vw, 46px); line-height:1.08; font-weight:600; letter-spacing:-0.025em; text-wrap:balance;">Cada painel mostra um pedaço da conta</h2><p style="margin:0; font-size:17px; line-height:1.625; color:var(--t1); text-wrap:pretty;">A Shopify sabe o que vendeu. O Meta e o Google sabem o que gastaram. Nenhum deles junta as duas pontas com o custo do produto, e o pixel do navegador ainda deixa compras pelo caminho.</p></div>
+        <ul style="list-style:none; margin:56px 0 0; padding:0; display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); border-top:1px solid var(--ink);"><sc-for list="{{ problemas }}" as="p" hint-placeholder-count="3"><li style="display:flex; flex-direction:column; gap:10px; padding:24px 24px 8px 0;"><p style="margin:0; font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--t2);">{{ p.origem }}</p><h3 style="margin:0; font-size:20px; line-height:1.375; font-weight:600; letter-spacing:-0.01em;">{{ p.titulo }}</h3><p style="margin:0; font-size:15px; line-height:1.625; color:var(--t1);">{{ p.texto }}</p></li></sc-for></ul>
+        <p style="margin:56px 0 0; max-width:38ch; font-size:clamp(20px, 2.4vw, 26px); line-height:1.35; font-weight:500; letter-spacing:-0.015em; text-wrap:balance;">O xcart junta as três pontas numa tela e entrega cada compra: pelo servidor no Meta e no TikTok, pela tag no Google.</p>
+      </div>
+    </section>
+
+    <section style="padding:112px 24px;">
+      <div style="max-width:1152px; margin:0 auto;">
+        <div style="max-width:720px; display:flex; flex-direction:column; gap:14px;"><p style="margin:0; font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--t2);">Dinheiro e rastreamento no centro</p><h2 style="margin:0; font-size:clamp(30px, 4vw, 46px); line-height:1.08; font-weight:600; letter-spacing:-0.025em;">As três telas que você abre todo dia</h2><p style="margin:0; font-size:17px; line-height:1.625; color:var(--t1);">Lucro, Rastreamento e Alertas. O resto do xcart existe para elas ficarem certas.</p></div>
+        <div style="margin-top:72px; display:flex; flex-direction:column; gap:104px;">
+          <sc-for list="{{ recursos }}" as="r" hint-placeholder-count="3">
+            <article style="display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 420px), 1fr)); align-items:center; gap:64px;">
+              <div style="display:flex; flex-direction:column; gap:16px; order:{{ r.ordem }};">
+                <p style="margin:0; display:inline-flex; align-items:center; gap:10px; font-size:13px; font-weight:500; color:var(--t2);"><span style="font-family:'IBM Plex Mono', monospace; color:var(--ink);">{{ r.n }}</span><span style="width:24px; height:1px; background:var(--border-strong);"></span>{{ r.tela }}</p>
+                <h3 style="margin:0; font-size:clamp(24px, 2.8vw, 32px); line-height:1.15; font-weight:600; letter-spacing:-0.02em; text-wrap:balance;">{{ r.titulo }}</h3>
+                <p style="margin:0; font-size:16px; line-height:1.65; color:var(--t1);">{{ r.resumo }}</p>
+                <ul style="list-style:none; margin:4px 0 0; padding:0; display:flex; flex-direction:column; gap:10px;"><sc-for list="{{ r.pontos }}" as="p" hint-placeholder-count="4"><li style="display:flex; gap:10px; font-size:15px; line-height:1.5; color:var(--t1);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#276b43" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none; margin-top:3px;"><path d="M20 6 9 17l-5-5"></path></svg>{{ p }}</li></sc-for></ul>
+              </div>
+              <figure style="margin:0; display:flex; flex-direction:column; gap:8px; min-width:0;">
+                <div style="border-radius:12px; background:var(--track); padding:20px;"><div style="overflow:hidden; border-radius:8px; border:1px solid var(--border-strong); background:var(--bg);"><div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid var(--border); background:var(--surface);"><span style="margin-right:4px; font-size:13px; font-weight:600;">{{ r.janela }}</span><sc-for list="{{ r.chips }}" as="c" hint-placeholder-count="2"><span style="display:inline-flex; align-items:center; height:24px; padding:0 8px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); font-size:12px; color:var(--t1);">{{ c }}</span></sc-for></div>
+                  <div style="padding:12px; display:flex; flex-direction:column; gap:8px;">
+                    <sc-for list="{{ r.linhas }}" as="l" hint-placeholder-count="5"><div style="display:{{ l.disp }}; align-items:center; gap:12px; padding:{{ l.pad }}; border-radius:8px; border:1px solid var(--border); background:var(--surface);"><span style="flex:1; min-width:0; font-size:{{ l.fs }}; font-weight:{{ l.peso }}; color:{{ l.cor }};">{{ l.t }}</span><sc-if value="{{ l.temBarra }}" hint-placeholder-val="{{ false }}"><span style="position:relative; flex:2; height:12px; border-radius:999px; background:var(--track);"><span style="position:absolute; top:0; bottom:0; left:{{ l.esq }}; width:{{ l.larg }}; border-radius:999px; background:{{ l.barra }};"></span></span></sc-if><sc-if value="{{ l.temTag }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex; align-items:center; height:22px; padding:0 6px; border-radius:6px; border:1px solid var(--border); font-size:12px; color:var(--t1);">{{ l.tag }}</span></sc-if><sc-if value="{{ l.temSelo }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex; align-items:center; justify-content:center; gap:6px; min-width:84px; height:22px; padding:0 8px; border-radius:999px; border:1px solid {{ l.sbd }}; background:{{ l.sbg }}; color:{{ l.scor }}; font-size:12px; font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:{{ l.scor }};"></span>{{ l.selo }}</span></sc-if></div></sc-for>
+                  </div></div></div>
+                <figcaption style="font-size:12px; color:var(--t2);">{{ r.legenda }}</figcaption>
+              </figure>
+            </article>
+          </sc-for>
+        </div>
+        <div style="margin-top:112px; padding-top:40px; border-top:1px solid var(--border);">
+          <div style="display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:8px 24px;"><h3 style="margin:0; font-size:22px; line-height:28px; font-weight:600;">Também no xcart</h3><p style="margin:0; font-size:14px; color:var(--t2);">Incluído no plano.</p></div>
+          <ul style="list-style:none; margin:24px 0 0; padding:0; display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:12px;"><sc-for list="{{ outros }}" as="o" hint-placeholder-count="6"><li style="display:flex; flex-direction:column; gap:10px; padding:20px; border-radius:8px; border:1px solid var(--border); background:var(--surface);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#575553" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="{{ o.icone }}"></path></svg><span style="font-size:15px; font-weight:600;">{{ o.titulo }}</span><p style="margin:0; font-size:13px; line-height:1.5; color:var(--t2);">{{ o.texto }}</p></li></sc-for></ul>
+        </div>
+      </div>
+    </section>
+
+    <section style="padding:0 24px 112px;">
+      <div style="max-width:1152px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 440px), 1fr)); align-items:start; gap:64px;">
+        <div style="display:flex; flex-direction:column; gap:14px;"><p style="margin:0; font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--t2);">Mais que um painel</p><h2 style="margin:0; font-size:clamp(30px, 4vw, 46px); line-height:1.08; font-weight:600; letter-spacing:-0.025em;">Mostrar o lucro é o começo</h2><p style="margin:0; font-size:17px; line-height:1.625; color:var(--t1);">Um painel diz quanto você ganhou. O xcart também garante que a compra chegou à plataforma de anúncio e avisa quando alguma coisa para.</p></div>
+        <div style="overflow:hidden; border-radius:12px; border:1px solid var(--border); background:var(--surface);"><table style="width:100%; border-collapse:collapse; font-size:14px;"><thead><tr style="border-bottom:1px solid var(--border); background:var(--surface-2); font-size:12px; color:var(--t2);"><th style="padding:14px 20px; text-align:left;"></th><th style="width:96px; padding:14px 4px; font-weight:500;">Painel de lucro</th><th style="width:96px; padding:14px 4px; font-weight:600; color:var(--ink);">xcart</th></tr></thead><tbody><sc-for list="{{ comparacao }}" as="c" hint-placeholder-count="6"><tr style="border-top:1px solid var(--border-subtle);"><th scope="row" style="padding:14px 20px; text-align:left; font-weight:400; line-height:1.45;">{{ c.item }}</th><td style="text-align:center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{ c.cor }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ c.icone }}"></path></svg></td><td style="text-align:center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#276b43" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></td></tr></sc-for></tbody></table></div>
+      </div>
+    </section>
+
+    <section style="padding:112px 24px; border-top:1px solid var(--border); border-bottom:1px solid var(--border); background:var(--surface);">
+      <div style="max-width:1152px; margin:0 auto;">
+        <div style="max-width:720px; display:flex; flex-direction:column; gap:14px;"><p style="margin:0; font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--t2);">Como começar</p><h2 style="margin:0; font-size:clamp(30px, 4vw, 46px); line-height:1.08; font-weight:600; letter-spacing:-0.025em;">Quatro passos até o primeiro lucro na tela</h2><p style="margin:0; font-size:17px; line-height:1.625; color:var(--t1);">O app guia cada um e mostra o que copiar e onde colar.</p></div>
+        <ol style="list-style:none; margin:56px 0 0; padding:0; display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:32px;"><sc-for list="{{ passos }}" as="p" hint-placeholder-count="4"><li style="display:flex; flex-direction:column; gap:10px; padding-top:20px; border-top:2px solid var(--ink);"><span style="font-family:'IBM Plex Mono', monospace; font-size:13px; font-weight:500;">Passo {{ p.n }}</span><span style="font-size:18px; line-height:1.375; font-weight:600; letter-spacing:-0.01em;">{{ p.titulo }}</span><p style="margin:0; font-size:14px; line-height:1.625; color:var(--t2);">{{ p.texto }}</p></li></sc-for></ol>
+      </div>
+    </section>
+
+    <section style="--bg:#0f0f0f; --surface:#171717; --surface-2:#1c1c1c; --border:#2c2c2b; --border-strong:#3d3d3b; --ink:#f1f0ee; --t1:#d4d2ce; --t2:#b3b1ad; --t3:#96948f; --solid:#f1f0ee; --on-solid:#141414; padding:112px 24px; border-top:1px solid var(--border); background:var(--surface); color:var(--ink);">
+      <div style="max-width:1152px; margin:0 auto;">
+        <div style="max-width:720px; display:flex; flex-direction:column; gap:14px;"><p style="margin:0; display:inline-flex; align-items:center; width:fit-content; height:26px; padding:0 10px; border:1px solid var(--border-strong); border-radius:999px; font-size:12px; font-weight:500; color:var(--t1);">Módulo opcional</p><h2 style="margin:0; font-size:clamp(30px, 4vw, 46px); line-height:1.08; font-weight:600; letter-spacing:-0.025em;">Roteamento, para quem usa vitrine</h2><p style="margin:0; font-size:17px; line-height:1.625; color:var(--t1);">Quem anuncia direto na loja que cobra não precisa dele. Lucro, rastreamento e alertas funcionam sem vitrine.</p></div>
+        <div style="margin-top:56px; display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 420px), 1fr)); align-items:center; gap:64px;">
+          <ul style="list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:14px;"><sc-for list="{{ roteamento }}" as="p" hint-placeholder-count="5"><li style="display:flex; gap:10px; font-size:15px; line-height:1.5; color:var(--t1);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5cbf85" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none; margin-top:3px;"><path d="M20 6 9 17l-5-5"></path></svg>{{ p }}</li></sc-for></ul>
+          <figure style="margin:0; display:flex; flex-direction:column; gap:8px;"><div style="display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:20px; border-radius:12px; border:1px solid var(--border-strong); background:var(--bg);"><div style="flex:1; min-width:140px; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2);"><div style="font-size:13px; font-weight:600;">Vitrine</div><div style="font-size:12px; color:var(--t2);">Recebe o tráfego do anúncio</div></div><span style="color:var(--t2);">→</span><div style="flex:1; min-width:140px; padding:10px 12px; border-radius:8px; background:var(--solid); color:var(--on-solid);"><div style="font-size:13px; font-weight:600;">xcart</div><div style="font-size:12px;">Casa o carrinho pelo SKU</div></div><span style="color:var(--t2);">→</span><div style="flex:1; min-width:140px; display:flex; flex-direction:column; gap:8px;"><div style="padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2);"><div style="font-size:13px; font-weight:600;">Loja de checkout</div><div style="font-size:12px; color:var(--t2);">Cobra o pedido</div></div><div style="padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2);"><div style="font-size:13px; font-weight:600;">Outra loja de checkout</div><div style="font-size:12px; color:var(--t2);">Divide o tráfego</div></div></div></div><figcaption style="font-size:12px; color:var(--t2);">A vitrine recebe o tráfego; o carrinho vai, pelo SKU, para uma das lojas de checkout.</figcaption></figure>
+        </div>
+      </div>
+    </section>
+
+    <section style="padding:112px 24px;">
+      <div style="max-width:1152px; margin:0 auto;">
+        <div style="max-width:720px; display:flex; flex-direction:column; gap:14px;"><p style="margin:0; font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--t2);">Preço</p><h2 style="margin:0; font-size:clamp(30px, 4vw, 46px); line-height:1.08; font-weight:600; letter-spacing:-0.025em;">Escolha seu plano</h2><p style="margin:0; font-size:17px; line-height:1.625; color:var(--t1);">7 dias de garantia de satisfação ou seu dinheiro de volta!</p></div>
+        <ul style="list-style:none; margin:56px 0 0; padding:0; display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:16px;">
+          <sc-for list="{{ planos }}" as="p" hint-placeholder-count="3">
+            <li style="{{ p.tema }}">
+              <div style="display:flex; flex-direction:column; gap:4px;"><div style="display:flex; align-items:center; justify-content:space-between; gap:8px;"><h3 style="margin:0; font-size:18px; font-weight:600;">{{ p.nome }}</h3><sc-if value="{{ p.temSelo }}" hint-placeholder-val="{{ false }}"><span style="height:22px; padding:0 8px; border-radius:999px; border:1px solid #3d3d3b; background:#232322; font-size:12px; line-height:20px; font-weight:500; color:#b3b1ad;">{{ p.selo }}</span></sc-if></div><p style="margin:0; font-size:13px; color:var(--t2);">{{ p.sub }}</p></div>
+              <p style="margin:0; display:flex; align-items:baseline; gap:6px;"><span style="font-size:16px; font-weight:600; color:var(--t2);">R$</span><span style="font-size:clamp(40px, 4.5vw, 48px); line-height:1; font-weight:600; letter-spacing:-0.03em; font-variant-numeric:tabular-nums;">{{ p.valor }}</span><span style="font-size:15px; color:var(--t2);">/ mês</span></p>
+              <a href="#" style="display:inline-flex; align-items:center; justify-content:center; height:44px; border-radius:6px; font-size:14px; font-weight:600; background:{{ p.btnBg }}; color:{{ p.btnCor }}; border:1px solid {{ p.btnBorda }};">Escolher plano</a>
+              <ul style="list-style:none; margin:0; padding:20px 0 0; border-top:1px solid var(--border); display:flex; flex-direction:column; gap:10px;"><sc-for list="{{ p.itens }}" as="i" hint-placeholder-count="10"><li style="display:flex; gap:10px; font-size:15px; line-height:1.5; color:var(--t1);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{ p.check }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none; margin-top:3px;"><path d="M20 6 9 17l-5-5"></path></svg>{{ i }}</li></sc-for></ul>
+            </li>
+          </sc-for>
+        </ul>
+        <div style="margin-top:16px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px 32px; padding:20px 32px; border-radius:12px; border:1px solid var(--border); background:var(--surface);"><div style="max-width:52ch; display:flex; flex-direction:column; gap:4px;"><h3 style="margin:0; font-size:15px; font-weight:600;">Créditos extras</h3><p style="margin:0; font-size:13px; line-height:1.5; color:var(--t2);">Cada crédito refaz com IA a foto de um produto, sem a marca. Compra avulsa por Pix, dentro do app, na tela de assinatura; os créditos somam ao saldo.</p></div><ul style="list-style:none; margin:0; padding:0; display:flex; flex-wrap:wrap; gap:8px 24px; font-size:14px;"><sc-for list="{{ pacotes }}" as="k" hint-placeholder-count="3"><li><span style="color:var(--t2);">{{ k.r }}</span> <strong style="font-weight:600;">{{ k.p }}</strong></li></sc-for></ul></div>
+      </div>
+    </section>
+
+    <section style="padding:112px 24px; border-top:1px solid var(--border); background:var(--surface);">
+      <div style="max-width:1152px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 440px), 1fr)); align-items:start; gap:64px;">
+        <div style="display:flex; flex-direction:column; gap:14px;"><p style="margin:0; font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--t2);">Perguntas</p><h2 style="margin:0; font-size:clamp(30px, 4vw, 46px); line-height:1.08; font-weight:600; letter-spacing:-0.025em;">Perguntas frequentes</h2><p style="margin:0; font-size:17px; line-height:1.625; color:var(--t1);">O que mais perguntam antes de conectar a primeira loja.</p></div>
+        <div style="border-top:1px solid var(--border);"><sc-for list="{{ perguntas }}" as="q" hint-placeholder-count="9"><details open="{{ q.aberta }}" style="border-bottom:1px solid var(--border);"><summary style="display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:60px; padding:16px 0; list-style:none; cursor:pointer; font-size:16px; font-weight:600;"><span>{{ q.p }}</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#575553" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;"><path d="M5 12h14 M12 5v14"></path></svg></summary><p style="margin:0; padding:0 40px 20px 0; font-size:15px; line-height:1.65; color:var(--t1);">{{ q.r }}</p></details></sc-for></div>
+      </div>
+    </section>
+
+    <section style="--surface:#171717; --border:#2c2c2b; --ink:#f1f0ee; --t2:#b3b1ad; --solid:#f1f0ee; --on-solid:#141414; padding:128px 24px; border-top:1px solid var(--border); background:var(--surface); color:var(--ink); text-align:center;">
+      <div style="max-width:1152px; margin:0 auto; display:flex; flex-direction:column; align-items:center; gap:20px;"><h2 style="margin:0; max-width:16ch; font-size:clamp(34px, 5vw, 58px); line-height:1.04; font-weight:600; letter-spacing:-0.03em;">Comece pelo lucro de hoje</h2><p style="margin:0; max-width:48ch; font-size:17px; line-height:1.625; color:var(--t2);">Conecte uma loja Shopify e veja quanto ela lucrou, com o anúncio já descontado.</p><a href="#" style="margin-top:8px; display:inline-flex; align-items:center; height:44px; padding:0 28px; border-radius:6px; background:var(--solid); color:var(--on-solid); font-size:14px; font-weight:600;">Criar conta</a><p style="margin:0; display:flex; flex-wrap:wrap; justify-content:center; gap:6px 14px; font-size:13px; color:var(--t2);"><span style="font-weight:600; color:var(--ink);">A partir de R$ 197,00 por mês</span><span>7 dias de garantia</span><span>Cancele quando quiser</span></p></div>
+    </section>
+  </main>
+
+  <footer style="--bg:#0f0f0f; --border:#2c2c2b; --ink:#f1f0ee; --t1:#d4d2ce; --t3:#96948f; --track:#2a2a29; border-top:1px solid var(--border); background:var(--bg); color:var(--ink);">
+    <div style="max-width:1152px; margin:0 auto; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:24px; padding:32px 24px;">
+      <div style="display:flex; flex-direction:column; gap:8px;"><img src="assets/logo-dark.png" alt="xcart" style="height:20px; width:auto; display:block;"><p style="margin:0; font-size:12px; color:var(--t3);">© 2026 xcart</p></div>
+      <nav aria-label="Documentos e acesso"><ul style="display:flex; flex-wrap:wrap; gap:4px; list-style:none; margin:0; padding:0;"><sc-for list="{{ legais }}" as="l" hint-placeholder-count="4"><li><a href="#" style="display:flex; align-items:center; height:36px; padding:0 8px; font-size:13px; color:var(--t1);">{{ l }}</a></li></sc-for></ul></nav>
+      <div role="radiogroup" aria-label="Tema" style="display:flex; gap:2px; width:240px; padding:2px; border-radius:6px; background:var(--track);"><span style="flex:1; height:28px; display:grid; place-items:center; border-radius:6px; background:#171717; box-shadow:0 0 0 1px #2c2c2b; font-size:12px; font-weight:500;">Claro</span><span style="flex:1; height:28px; display:grid; place-items:center; font-size:12px; font-weight:500; color:#b3b1ad;">Escuro</span><span style="flex:1; height:28px; display:grid; place-items:center; font-size:12px; font-weight:500; color:#b3b1ad;">Sistema</span></div>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { vw: 1440 };
+  componentDidMount() {
+    this._r = () => { const w = document.documentElement.clientWidth || window.innerWidth; if (w && w !== this.state.vw) this.setState({ vw: w }); };
+    this._r(); window.addEventListener('resize', this._r);
+    if (window.ResizeObserver) { this._ro = new ResizeObserver(this._r); this._ro.observe(document.documentElement); }
+    requestAnimationFrame(this._r); setTimeout(this._r, 250);
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this._r); if (this._ro) this._ro.disconnect(); }
+  renderVals() {
+    const OK = ['Lucro', 'var(--ok)', 'var(--ok-bg)', 'var(--ok-border)'], WARN = ['No limite', 'var(--warn)', 'var(--warn-bg)', 'var(--warn-border)'], ERR = ['Prejuízo', 'var(--err)', 'var(--err-bg)', 'var(--err-border)'];
+    const selo = (s, extra) => ({ temSelo: true, selo: s[0], scor: s[1], sbg: s[2], sbd: s[3], ...extra });
+    const base = { disp: 'flex', pad: '10px 12px', fs: '13px', peso: 500, cor: 'var(--ink)', temBarra: false, temTag: false, temSelo: false };
+    const comp = [['Faturamento', '0', '100%', 'var(--chart-2)'], ['Produto', '64%', '36%', 'var(--control-border)'], ['Frete do fornecedor', '54%', '10%', 'var(--control-border)'], ['Taxa de pagamento', '49%', '5%', 'var(--control-border)'], ['Anúncio', '24%', '25%', 'var(--chart-3)'], ['Lucro estimado', '0', '24%', 'var(--chart-1)']]
+      .map(([t, esq, larg, barra]) => ({ ...base, t, esq, larg, barra, temBarra: true, fs: '12px', peso: t === 'Lucro estimado' ? 600 : 400, cor: t === 'Lucro estimado' ? 'var(--ink)' : 'var(--t1)' }));
+    const SEL = { ok: ['Enviado', 'var(--ok)', 'var(--ok-bg)', 'var(--ok-border)'], run: ['Na fila', 'var(--run)', 'var(--run-bg)', 'var(--run-border)'], err: ['Falhou', 'var(--err)', 'var(--err-bg)', 'var(--err-border)'] };
+    const ev = [['Compra', 'Meta', 'ok'], ['Compra', 'TikTok', 'ok'], ['Iniciar checkout', 'Meta', 'ok'], ['Adicionar ao carrinho', 'TikTok', 'run'], ['Ver produto', 'Meta', 'err']].map(([t, tag, s]) => ({ ...base, t, tag, temTag: true, ...selo(SEL[s]) }));
+    const al = [{ ...base, t: 'Gastou sem vender hoje', ...selo(['Crítico', 'var(--err)', 'var(--err-bg)', 'var(--err-border)']) }, { ...base, t: 'Compra não chegou na plataforma', ...selo(['Aviso', 'var(--warn)', 'var(--warn-bg)', 'var(--warn-border)']) }, { ...base, t: 'Os dois avisos também foram para o Telegram.', fs: '12px', peso: 400, cor: 'var(--t2)' }];
+    const I = { calc: 'M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z M8 6h8 M16 14v4 M16 10h.01 M12 10h.01 M8 10h.01 M12 14h.01 M8 14h.01 M12 18h.01 M8 18h.01', plug: 'M12 22v-5 M15 8V2 M17 8a1 1 0 0 1 1 1v4a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1z M9 8V2', down: 'M12 15V3 M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5', loja: 'M15 21v-5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5 M17.774 10.31a1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.451 0 1.12 1.12 0 0 0-1.548 0 2.5 2.5 0 0 1-3.452 0 1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.77-3.248l2.889-4.184A2 2 0 0 1 7 2h10a2 2 0 0 1 1.653.873l2.895 4.192a2.5 2.5 0 0 1-3.774 3.244 M4 10.95V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8.05', cel: 'M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z M12 18h.01', rota: 'M6 19a3 3 0 1 0 0-.01 M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15 M18 5a3 3 0 1 0 0-.01' };
+    const BASE = ['Roteamento da vitrine para a loja de checkout pelo SKU.', 'País e moeda do checkout escolhidos em cada loja de checkout.', 'Cupom do carrinho da vitrine levado ao checkout.', 'Conserto automático do mapa de produtos entre as lojas.', 'Diagnóstico da rota.'];
+    const RODIZIO = ['Rodízio entre lojas de checkout: o mesmo checkout para cada comprador ou sorteio a cada checkout.', 'Teto de pedidos por dia em cada loja de checkout.'];
+    const RAST = ['Rastreamento: as compras chegam ao Meta e ao TikTok pelo servidor, e ao Google pela tag.', 'Lucro por loja, já descontados produto, frete, taxas e anúncio.', 'Aba Campanhas: venda e lucro por campanha, conjunto e anúncio do Meta.', 'Checkouts externos (Cakto, Hubla e Sphere) no mesmo painel.'];
+    const FIM = ['20 créditos de IA por mês (1 crédito = 1 imagem neutralizada).', '7 dias de garantia.'];
+    const claro = 'display:flex; flex-direction:column; gap:20px; padding:32px; border-radius:12px; border:1px solid var(--border); background:var(--surface);';
+    const escuro = '--surface:#171717; --border:#2c2c2b; --ink:#f1f0ee; --t1:#d4d2ce; --t2:#b3b1ad; display:flex; flex-direction:column; gap:20px; padding:32px; border-radius:12px; border:1px solid #3d3d3b; background:#171717; color:#f1f0ee;';
+    const estilo = s => Object.fromEntries(s.split(';').map(x => x.trim()).filter(Boolean).map(x => { const i = x.indexOf(':'); const k = x.slice(0, i).trim(); return [k.startsWith('--') ? k : k.replace(/-([a-z])/g, (_, c) => c.toUpperCase()), x.slice(i + 1).trim()]; }));
+    const planos = [
+      { nome: 'Roteamento', sub: 'Uma vitrine roteando para uma loja de checkout', valor: '197,00', itens: ['Sem rastreamento.', '1 vitrine e 1 loja de checkout no roteamento.', BASE[0], ...BASE.slice(1), ...FIM] },
+      { nome: 'Completo', sub: 'Roteamento com rodízio e rastreamento', valor: '497,00', selo: 'Recomendado', destaque: true, itens: ['Rastreamento em até 5 operações (loja ou checkout).', 'Até 5 vitrines e até 5 lojas de checkout no roteamento.', BASE[0], ...RODIZIO, ...BASE.slice(1), ...RAST, ...FIM] },
+      { nome: 'Ilimitado', sub: 'Vitrines, checkouts e rastreamento sem limite', valor: '997,00', itens: ['Rastreamento sem limite de operações.', 'Vitrines sem limite e lojas de checkout sem limite no roteamento.', BASE[0], ...RODIZIO, ...BASE.slice(1), ...RAST, ...FIM] },
+    ].map(p => ({ ...p, temSelo: !!p.selo, tema: estilo(p.destaque ? escuro : claro), btnBg: p.destaque ? '#f1f0ee' : 'var(--surface)', btnCor: p.destaque ? '#141414' : 'var(--ink)', btnBorda: p.destaque ? 'transparent' : 'var(--border-strong)', check: p.destaque ? '#5cbf85' : '#276b43' }));
+    return {
+      navDesk: this.state.vw >= 768 ? 'flex' : 'none',
+      secoes: ['Recursos', 'Como começar', 'Preço', 'Perguntas'],
+      chipsLucro: ['Todas as lojas', 'Hoje · parcial', 'BRL'],
+      kpisPrevia: ['Lucro estimado', 'Faturamento', 'Gasto em anúncio', 'ROAS real'].map((t, i) => ({ t, selo: i === 0, barra: i !== 0 })),
+      lojasPrevia: [['6rem', OK], ['5rem', WARN], ['7rem', ERR]].map(([w, s], i) => ({ w, t: s[0], cor: s[1], bg: s[2], bd: s[3], borda: i ? '1px solid var(--border-subtle)' : '0' })),
+      conecta: ['Shopify', 'Meta Ads', 'Google Ads', 'TikTok Ads', 'Telegram', 'Claude'],
+      problemas: [
+        { origem: 'Shopify', titulo: 'Mostra quanto entrou', texto: 'Não desconta produto, frete do fornecedor, taxa de pagamento nem anúncio.' },
+        { origem: 'Meta e Google', titulo: 'Mostram o ROAS da plataforma', texto: 'Sem o custo do produto ao lado, não dá para saber se a campanha se paga.' },
+        { origem: 'Navegador', titulo: 'Perde compras no caminho', texto: 'Quando o pixel depende do navegador do comprador, nem toda compra chega à plataforma que otimiza seus anúncios.' },
+      ],
+      recursos: [
+        { n: '01', tela: 'Lucro', ordem: 0, titulo: 'Lucro por loja, todo dia', resumo: 'O xcart lê os pedidos da Shopify, cruza com o gasto do Meta e do Google e mostra quanto cada loja lucrou hoje, ontem e no mês.', pontos: ['Já descontados produto, frete do fornecedor, taxa de pagamento e anúncio.', 'ROAS real ao lado do ROAS de equilíbrio, para saber se a campanha se paga.', 'Lucro estimado, não contábil: a tela diz de onde vem cada número.', 'Pedidos atualizados a cada 15 minutos.'], janela: 'Composição do lucro', chips: ['Todas as lojas', 'Este mês'], linhas: comp, legenda: 'Ilustração da composição do lucro: do faturamento sai cada custo até sobrar o lucro.' },
+        { n: '02', tela: 'Rastreamento', ordem: 2, titulo: 'Cada compra chega ao Meta, ao TikTok e ao Google', resumo: 'No Meta e no TikTok, a compra sai do nosso servidor assim que a Shopify cria o pedido, sem depender do navegador do comprador. No Google, vai pela tag do Google, no navegador e no pixel do checkout.', pontos: ['Ver produto, carrinho e checkout também vão para as três plataformas.', 'A tela Rastreamento mostra, loja por loja, o que está chegando e o que consertar.', 'Os Eventos ao vivo listam cada envio do servidor, com o motivo quando algo falha.'], janela: 'Eventos ao vivo', chips: ['Todas as lojas'], linhas: ev, legenda: 'Ilustração dos Eventos ao vivo: cada envio do servidor ao Meta e ao TikTok, com o estado de cada um.' },
+        { n: '03', tela: 'Alertas', ordem: 0, titulo: 'O aviso chega antes do prejuízo', resumo: 'Quando algo quebra, o Telegram avisa com a loja e o problema. Na tela Alertas, cada aviso leva direto à tela que resolve.', pontos: ['Gastou com anúncio e não vendeu hoje.', 'Compra que não chegou ao Meta ou ao TikTok.', 'Pedidos ou gasto de anúncio sem atualizar.', 'App desinstalado com o rastreamento ligado.'], janela: 'Alertas', chips: [], linhas: al, legenda: 'Ilustração da tela Alertas: o que quebrou, em qual loja e o atalho para resolver.' },
+      ],
+      outros: [
+        { icone: I.calc, titulo: 'Custos e taxas', texto: 'Custo de produto e frete por SKU, taxa de cada forma de pagamento e importação por planilha.' },
+        { icone: I.plug, titulo: 'Contas de anúncio', texto: 'O gasto do Meta e do Google entra por dia, por conta e por campanha.' },
+        { icone: I.down, titulo: 'Importar com IA', texto: 'Produtos de Shopify, Shoplazza, WooCommerce, AliExpress e outros sites, traduzidos para o idioma da loja.' },
+        { icone: I.loja, titulo: 'Todas as lojas num lugar', texto: 'A saúde da conexão de cada loja Shopify, com as lojas paradas separadas das ativas.' },
+        { icone: I.cel, titulo: 'Venda no celular', texto: 'Uma notificação a cada venda, por webhook: Pushcut, ntfy ou Discord.' },
+        { icone: I.rota, titulo: 'Roteamento', texto: 'Para quem usa vitrine: o carrinho vai para a loja que cobra, com rodízio entre várias.' },
+      ],
+      comparacao: [['Lucro por loja, com anúncio descontado', true], ['Compras enviadas ao Meta, ao TikTok e ao Google', false], ['Cada envio do servidor listado, com o motivo quando falha', false], ['Alerta no Telegram quando o anúncio gasta sem vender', false], ['Importação de produtos com IA e tradução', false], ['Roteamento entre vitrine e lojas de checkout', false]].map(([item, s]) => ({ item, icone: s ? 'M20 6 9 17l-5-5' : 'M5 12h14', cor: s ? '#276b43' : '#8c8a86' })),
+      passos: [['Conecte suas lojas Shopify', 'Os pedidos dos últimos 60 dias entram na primeira sincronização. Daí em diante, a cada 15 minutos.'], ['Ligue o Meta e o Google', 'As contas de anúncio trazem o gasto. O rastreamento entrega as compras ao Meta, ao TikTok e ao Google.'], ['Informe custos e taxas', 'Custo do produto, frete e taxa de pagamento. Sem custo cadastrado, a tela avisa que o lucro está inflado.'], ['Acompanhe lucro e alertas', 'Abra o Lucro para ver o dia e ligue o Telegram para receber os alertas.']].map(([titulo, texto], i) => ({ n: i + 1, titulo, texto })),
+      roteamento: ['A vitrine recebe o tráfego do anúncio. No checkout, o carrinho vai para a loja que cobra, casado pelo SKU.', 'Rodízio entre várias lojas de checkout: se uma conta de pagamento cair, as outras continuam vendendo.', 'O sorteio só acontece entre lojas que cobrem o carrinho inteiro. Nenhum item fica para trás.', 'A loja de checkout recebe o catálogo com texto e fotos sem marca, refeitos por IA.', 'O xcart confere as rotas sozinho e conserta o SKU que ficou sem par.'],
+      planos,
+      pacotes: [['50 créditos', 'R$ 25,00'], ['200 créditos', 'R$ 75,00'], ['500 créditos', 'R$ 150,00']].map(([r, p]) => ({ r, p })),
+      perguntas: [
+        ['Preciso usar vitrine?', 'Não. Você pode anunciar direto na loja que cobra e usar lucro, rastreamento e alertas. O roteamento é um módulo para quem usa vitrine.'],
+        ['O lucro mostrado é exato?', 'É uma estimativa, não um número contábil. Ele desconta custo do produto, frete do fornecedor, taxa de pagamento e gasto em anúncio. Os pedidos entram a cada 15 minutos.'],
+        ['Desde quando aparecem os pedidos?', 'A Shopify libera os pedidos dos últimos 60 dias. O histórico de cada loja começa aí, e o período sem dado aparece marcado, nunca como zero.'],
+        ['Como as compras chegam ao Meta, ao TikTok e ao Google?', 'No Meta e no TikTok, a compra sai do nosso servidor quando a Shopify cria o pedido. No Google, vai pela tag do Google, no pixel do checkout. Ver produto, carrinho e checkout vêm de um código que o xcart instala no tema da loja.'],
+        ['O rastreamento funciona com roteamento?', 'Ver produto, carrinho e checkout, sim. A compra nasce na loja de checkout e chega à plataforma sem a ligação com o anúncio. Para medir o anúncio, anuncie direto na loja que cobra.'],
+        ['Tem teste grátis?', 'Não há período de teste grátis. A assinatura é mensal e você cancela quando quiser, na tela de assinatura do app.'],
+        ['Como eu pago?', 'Cartão de crédito, que renova sozinho todo mês, ou Pix, que libera 30 dias e não renova. Os créditos extras são pagos por Pix.'],
+        ['O que é um crédito de IA?', 'Cada crédito refaz com IA a foto de um produto, sem a marca. Tradução e texto não gastam crédito. Os créditos comprados à parte somam ao saldo; na renovação do cartão, o saldo volta para 20.'],
+        ['Posso cancelar?', 'Sim, na tela de assinatura do app. O acesso continua até o fim do período já pago.'],
+      ].map(([p, r], i) => ({ p, r, aberta: i === 0 })),
+      legais: ['Privacidade', 'Termos de uso', 'Exclusão de dados', 'Entrar'],
+    };
+  }
+}
+</script>
+</body>
+</html>

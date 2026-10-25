@@ -65,15 +65,6 @@ async function carregar() {
   };
 }
 
-function Titulo() {
-  // No celular o titulo ja esta no topo da casca.
-  return (
-    <h1 className="mx-auto mb-5 hidden max-w-205 text-page font-semibold text-ink md:block">
-      Rastreamento
-    </h1>
-  );
-}
-
 async function Conteudo() {
   let dados: Awaited<ReturnType<typeof carregar>>;
   try {
@@ -82,30 +73,22 @@ async function Conteudo() {
     console.error("[tracking] falha ao ler a tela", e);
     const detalhe = e instanceof Error ? e.message.slice(0, 300) : "";
     return (
-      <>
-        <Titulo />
-        <Callout tom="err" titulo="Não deu para ler o rastreamento agora" acao={<TentarDeNovo />}>
-          As compras continuam saindo normalmente.
-          {detalhe && (
-            <details className="mt-1.5 text-label text-t1">
-              <summary className="w-fit cursor-pointer rounded-sm hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
-                Ver detalhes
-              </summary>
-              <p className="mt-1 [overflow-wrap:anywhere]">{detalhe}</p>
-            </details>
-          )}
-        </Callout>
-      </>
+      <Callout tom="err" titulo="Não deu para ler o rastreamento agora" acao={<TentarDeNovo />}>
+        As compras continuam saindo normalmente.
+        {detalhe && (
+          <details className="mt-1.5 text-label text-t1">
+            <summary className="w-fit cursor-pointer rounded-sm hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+              Ver detalhes
+            </summary>
+            <p className="mt-1 [overflow-wrap:anywhere]">{detalhe}</p>
+          </details>
+        )}
+      </Callout>
     );
   }
 
   if ("checkout" in dados && typeof dados.checkout === "string") {
-    return (
-      <>
-        <Titulo />
-        <SoLojasShopify checkout={dados.checkout} />
-      </>
-    );
+    return <SoLojasShopify checkout={dados.checkout} />;
   }
 
   return (
@@ -130,7 +113,6 @@ function Esqueleto() {
       aria-label="Carregando o rastreamento"
       className="mx-auto flex w-full max-w-205 flex-col gap-5"
     >
-      <h1 className="hidden text-page font-semibold text-ink md:block">Rastreamento</h1>
       <Skeleton className="h-ctl-md w-full rounded-card" />
       {[0, 1, 2, 3].map((i) => (
         <div

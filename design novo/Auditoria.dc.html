@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <title>xcart · Auditoria e plano do redesign</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Public+Sans:wght@400;500;600;700&amp;display=swap">
+  <style>html,body{margin:0}body{-webkit-font-smoothing:antialiased;background:#f7f6f5}*{box-sizing:border-box}a{color:#b04a2f;text-decoration:none}a:hover{color:#1a1a1a;text-decoration:underline;text-underline-offset:2px}code{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:1px 5px;border-radius:4px;background:#ecebe8;color:#3f3e3c;white-space:nowrap}</style>
+</helmet>
+<div style="min-height:100vh; background:#f7f6f5; color:#1a1a1a; font-family:'Public Sans', system-ui, sans-serif; font-size:14px; line-height:1.6; padding:48px 20px 80px;">
+  <article style="max-width:880px; margin:0 auto; display:flex; flex-direction:column; gap:40px;">
+
+    <header style="display:flex; flex-direction:column; gap:12px;">
+      <p style="margin:0; font-family:'IBM Plex Mono', monospace; font-size:12px; color:#6e6c69;">xcart · redesign · 24/10/2026</p>
+      <h1 style="margin:0; font-size:clamp(28px, 4vw, 40px); line-height:1.1; font-weight:600; letter-spacing:-0.03em;">Auditoria e plano: casca, Dashboard e landing</h1>
+      <p style="margin:0; max-width:62ch; font-size:16px; color:#3f3e3c; text-wrap:pretty;">Lido do código atual (Next 16, Tailwind v4, shadcn sobre Base UI). A base visual continua a do <code>globals.css</code>: Public Sans, IBM Plex Mono, neutros quentes, preto sólido no primário e terracota só em link e foco. O trabalho é de execução, hierarquia e acabamento.</p>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:8px; margin-top:8px;">
+        <a href="Lucro atual.dc.html" style="display:flex; flex-direction:column; padding:12px 14px; border:1px solid #e4e2df; border-radius:8px; background:#fff; color:#1a1a1a;"><span style="font-size:12px; color:#6e6c69;">Antes</span><span style="font-weight:600;">Dashboard atual</span></a>
+        <a href="Dashboard.dc.html" style="display:flex; flex-direction:column; padding:12px 14px; border:1px solid #1a1a1a; border-radius:8px; background:#fff; color:#1a1a1a;"><span style="font-size:12px; color:#6e6c69;">Depois</span><span style="font-weight:600;">Dashboard + casca</span></a>
+        <a href="Landing atual.dc.html" style="display:flex; flex-direction:column; padding:12px 14px; border:1px solid #e4e2df; border-radius:8px; background:#fff; color:#1a1a1a;"><span style="font-size:12px; color:#6e6c69;">Antes</span><span style="font-weight:600;">Landing atual</span></a>
+        <a href="Landing.dc.html" style="display:flex; flex-direction:column; padding:12px 14px; border:1px solid #1a1a1a; border-radius:8px; background:#fff; color:#1a1a1a;"><span style="font-size:12px; color:#6e6c69;">Depois</span><span style="font-weight:600;">Landing</span></a>
+      </div>
+    </header>
+
+    <section style="display:flex; flex-direction:column; gap:14px;">
+      <h2 style="margin:0; font-size:20px; line-height:1.3; font-weight:600; letter-spacing:-0.015em;">1. Problemas no Dashboard e na casca</h2>
+      <ol style="margin:0; padding:0 0 0 20px; display:flex; flex-direction:column; gap:10px; color:#3f3e3c;">
+        <li><strong style="color:#1a1a1a;">Doze cartões com o mesmo peso.</strong> O lucro só se destaca pelo fundo verde chapado; Pedidos, Ticket e CPA ficam no mesmo nível de Taxas. <code>financeiro/indicadores.tsx</code></li>
+        <li><strong style="color:#1a1a1a;">Ícone decorativo em círculo azul em todo cartão.</strong> O azul de informação vira enfeite e disputa com os tons de status. <code>indicadores.tsx</code> <code>cascata.tsx</code></li>
+        <li><strong style="color:#1a1a1a;">Valores fora da escala de tokens.</strong> <code>text-[clamp(16px,1.4vw,20px)]</code>, <code>text-[22px]</code>, <code>p-[18px]</code>, <code>size-[76px]</code>, <code>rounded-[3px]</code>. Cartão comum usa o raio de overlay (12px) e as seções de baixo usam 8px.</li>
+        <li><strong style="color:#1a1a1a;">Gráfico sem comparação.</strong> Barras empilhadas em quatro cores, sem o período anterior. O lucro sai em <code>--ok</code>, apesar de o token <code>--chart-1</code> ser o do lucro. <code>grafico-faturamento.tsx</code></li>
+        <li><strong style="color:#1a1a1a;">“Por loja” com anéis de margem</strong> (um gauge, que o brief veta) e repetido pela aba Loja logo abaixo. <code>por-loja.tsx</code></li>
+        <li><strong style="color:#1a1a1a;">Dois estilos de seleção lado a lado:</strong> tipo de gráfico em azul sólido, Agrupar por em trilho cinza.</li>
+        <li><strong style="color:#1a1a1a;">Topo pesado:</strong> sete controles com borda forte; “Atualizado às” só aparece no tooltip. <code>top-nav.tsx</code> <code>seletor-global.tsx</code></li>
+        <li><strong style="color:#1a1a1a;">Variação sem o valor anterior e sem sparkline,</strong> que o brief pede no KPI.</li>
+        <li><strong style="color:#1a1a1a;">Logo PNG com fundo branco opaco.</strong> Só funciona sobre branco. Gerei uma versão transparente (<code>assets/logo-claro.png</code>) para o fundo quente do menu.</li>
+      </ol>
+    </section>
+
+    <section style="display:flex; flex-direction:column; gap:14px;">
+      <h2 style="margin:0; font-size:20px; line-height:1.3; font-weight:600; letter-spacing:-0.015em;">2. Problemas na landing</h2>
+      <ol style="margin:0; padding:0 0 0 20px; display:flex; flex-direction:column; gap:10px; color:#3f3e3c;">
+        <li><strong style="color:#1a1a1a;">As ilustrações parecem tela carregando.</strong> As barras cinza ficam no lugar dos números, dentro de uma moldura cinza pesada. <code>lp/ilustracoes.tsx</code></li>
+        <li><strong style="color:#1a1a1a;">O preço é uma parede de checks.</strong> Cada cartão tem até 15 itens, e 10 deles se repetem nos três planos. A diferença entre os planos some. <code>lp/plano.ts</code> <code>billing/beneficios.ts</code></li>
+        <li><strong style="color:#1a1a1a;">Quatro faixas escuras</strong> (roteamento, plano em destaque, chamada final e rodapé) pesam o fim da página.</li>
+        <li><strong style="color:#1a1a1a;">Ritmo repetitivo:</strong> toda seção abre com sobretítulo mono, h2 e parágrafo.</li>
+      </ol>
+      <div role="note" style="display:flex; gap:10px; padding:12px 14px; border:1px solid #e8d3a6; border-radius:8px; background:#fbf3e2; color:#1a1a1a;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#875c12" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none; margin-top:3px;"><path d="M21.73 18l-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3 M12 9v4 M12 17h.01"></path></svg><p style="margin:0; text-wrap:pretty;"><strong style="font-weight:600;">Decisão para você (não mudei o texto):</strong> o hero vende lucro, rastreamento e alertas “a partir de R$ 197,00 por mês”, mas o plano de R$ 197 não inclui rastreamento nem o lucro por loja. Isso só entra no Completo e no Ilimitado.</p></div>
+    </section>
+
+    <section style="display:flex; flex-direction:column; gap:14px;">
+      <h2 style="margin:0; font-size:20px; line-height:1.3; font-weight:600; letter-spacing:-0.015em;">3. O que o redesign muda</h2>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:12px;">
+        <div style="padding:16px; border:1px solid #e4e2df; border-radius:8px; background:#fff;"><h3 style="margin:0 0 8px; font-size:15px; font-weight:600;">Casca</h3><ul style="margin:0; padding-left:18px; color:#3f3e3c; display:flex; flex-direction:column; gap:6px;"><li>Menu sobre o fundo quente; o conteúdo fica num painel com borda e sem sombra.</li><li>A busca ⌘K mora no topo do menu, e o item ativo é uma superfície com borda.</li><li>O título da tela e o contexto (loja, período, comparação, moeda) ficam numa barra só, com “Atualizado às 14:32” visível.</li><li>No celular: barra de baixo com “Mais”, contexto num painel e Aplicar.</li></ul></div>
+        <div style="padding:16px; border:1px solid #e4e2df; border-radius:8px; background:#fff;"><h3 style="margin:0 0 8px; font-size:15px; font-weight:600;">Dashboard</h3><ul style="margin:0; padding-left:18px; color:#3f3e3c; display:flex; flex-direction:column; gap:6px;"><li>Um número em destaque: lucro em 40px, com selo, variação e valor anterior.</li><li>Gráfico de linha com o período anterior tracejado e “hoje, parcial” pontilhado. Clicar num KPI troca a métrica.</li><li>A composição do lucro vira uma cascata, e os oito KPIs ficam numa faixa só, com sparkline.</li><li>Os anéis saem; a aba Loja ganha uma barra de margem na célula.</li></ul></div>
+        <div style="padding:16px; border:1px solid #e4e2df; border-radius:8px; background:#fff;"><h3 style="margin:0 0 8px; font-size:15px; font-weight:600;">Landing</h3><ul style="margin:0; padding-left:18px; color:#3f3e3c; display:flex; flex-direction:column; gap:6px;"><li>Hero centralizado e prévia do Dashboard novo com os valores escondidos (R$ ••••). Nenhum número inventado.</li><li>Preço com três cartões curtos e uma tabela única: “O que cada plano inclui”.</li><li>Só a chamada final e o rodapé ficam escuros.</li><li>Textos mantidos como estão no <code>conteudo.ts</code>.</li></ul></div>
+      </div>
+      <p style="margin:0; color:#3f3e3c; text-wrap:pretty;"><strong style="color:#1a1a1a;">Estados e honestidade do dado</strong> (use os Tweaks do Dashboard): carregando com a geometria da tela, vazio, erro sem zerar número, loja sem acesso e filtro sem resultado. “Hoje” compara com ontem até a mesma hora. O calendário desabilita os dias sem histórico, e “Mês passado” avisa que a base anterior está incompleta.</p>
+    </section>
+
+    <section style="display:flex; flex-direction:column; gap:14px;">
+      <h2 style="margin:0; font-size:20px; line-height:1.3; font-weight:600; letter-spacing:-0.015em;">4. Ajustes de tokens propostos</h2>
+      <div style="border:1px solid #e4e2df; border-radius:8px; background:#fff; overflow-x:auto;">
+        <table style="width:100%; min-width:560px; border-collapse:collapse; font-size:13px;">
+          <thead><tr style="background:#fbfbfa; border-bottom:1px solid #e4e2df; text-align:left; color:#575553;"><th style="padding:10px 14px; font-weight:500;">Token</th><th style="padding:10px 14px; font-weight:500;">Hoje</th><th style="padding:10px 14px; font-weight:500;">Proposta</th></tr></thead>
+          <tbody>
+            <tr style="border-top:1px solid #efeeec;"><td style="padding:10px 14px;"><code>--spacing-ctl-md</code></td><td style="padding:10px 14px;">36px</td><td style="padding:10px 14px;">32px. Continuam 3 alturas: 28, 32 e 44 (toque).</td></tr>
+            <tr style="border-top:1px solid #efeeec;"><td style="padding:10px 14px;"><code>--text-kpi</code> / <code>--text-page</code></td><td style="padding:10px 14px;">26 / 22</td><td style="padding:10px 14px;">Novo display de 40, só para o número em destaque; KPI em 22; título da tela em 15/600 na barra. Continuam 7 tamanhos: 40, 22, 18, 15, 14, 13 e 12.</td></tr>
+            <tr style="border-top:1px solid #efeeec;"><td style="padding:10px 14px;">Raios</td><td style="padding:10px 14px;">12 em cartão</td><td style="padding:10px 14px;">Cartão 8, controle 6, overlay e painel 12.</td></tr>
+            <tr style="border-top:1px solid #efeeec;"><td style="padding:10px 14px;">Cor do gráfico</td><td style="padding:10px 14px;">lucro em <code>--ok</code></td><td style="padding:10px 14px;">Lucro em <code>--chart-1</code>, faturamento em <code>--chart-2</code> e gasto em <code>--chart-3</code>, como o <code>globals.css</code> já documenta. Nenhuma cor nova.</td></tr>
+            <tr style="border-top:1px solid #efeeec;"><td style="padding:10px 14px;">Azul <code>--info</code></td><td style="padding:10px 14px;">ícone e seleção</td><td style="padding:10px 14px;">Só para filtro ativo e estado.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section style="display:flex; flex-direction:column; gap:14px;">
+      <h2 style="margin:0; font-size:20px; line-height:1.3; font-weight:600; letter-spacing:-0.015em;">5. Plano de implementação (depois da sua aprovação)</h2>
+      <ol style="margin:0; padding:0 0 0 20px; display:flex; flex-direction:column; gap:10px; color:#3f3e3c;">
+        <li><strong style="color:#1a1a1a;">Tokens:</strong> <code>globals.css</code>, mais a troca dos valores arbitrários pelos tokens.</li>
+        <li><strong style="color:#1a1a1a;">Casca:</strong> <code>sidebar.tsx</code>, <code>top-nav.tsx</code> (com o PageHeader na barra), <code>(dashboard)/layout.tsx</code> (painel com borda e rolagem interna).</li>
+        <li><strong style="color:#1a1a1a;">Dashboard:</strong> <code>indicadores.tsx</code>, <code>grafico-faturamento.tsx</code> (vira linha com comparação), <code>cascata.tsx</code> e <code>detalhar-por.tsx</code>; <code>por-loja.tsx</code> sai. O <code>calculo.ts</code> não muda.</li>
+        <li><strong style="color:#1a1a1a;">Landing:</strong> <code>lp/page.tsx</code> e <code>lp/ilustracoes.tsx</code>; a tabela de planos sai de <code>recursosDoPlano</code>.</li>
+        <li><strong style="color:#1a1a1a;">Verificação:</strong> <code>npm run typecheck</code>, <code>npm test</code>, <code>npm run lint</code>, axe nas telas e teste em 375px. Tudo numa branch <code>redesign/premium</code>, sem merge no <code>main</code>.</li>
+      </ol>
+      <p style="margin:0; padding:12px 14px; border:1px solid #c3d4e6; border-radius:8px; background:#ebf1f7; color:#1a1a1a; text-wrap:pretty;"><strong style="font-weight:600;">Dependem de leitura nova (precisam de aprovação):</strong> a série diária do período anterior, para a linha tracejada e as sparklines (item 1 do brief); o gráfico por hora em Hoje e Ontem; e “ontem até a mesma hora”. Sem essas leituras, a tela mostra só o período atual e omite a comparação, sem inventar número.</p>
+    </section>
+  </article>
+</div>
+</x-dc>
+</body>
+</html>

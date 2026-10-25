@@ -68,7 +68,7 @@ export default async function DetalheLojaPage({
       <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="flex min-w-0 flex-col gap-2">
           {/* Visivel tambem no celular: o topo de la mostra "Lojas", nao o nome. */}
-          <h1 className="text-page font-semibold break-words text-ink">{base.nome}</h1>
+          <h2 className="text-page font-semibold break-words text-ink">{base.nome}</h2>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-label text-t1">
             <StatusBadge {...SELO_CONEXAO[base.conexao.chave]} />
             <span className="font-mono">{base.dominio}</span>

@@ -536,8 +536,8 @@ export function Assistente({ dados, escopoInicial }: { dados: DadosImportar; esc
 
   return (
     <div className="grid gap-4 lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start lg:gap-6">
-      {/* Abaixo do topo da casca (h-15, tambem sticky). */}
-      <div className="lg:sticky lg:top-21">
+      {/* Abaixo da barra do topo (h-14, sticky dentro do painel que rola). */}
+      <div className="lg:sticky lg:top-20">
         <Trilha
           passo={passo}
           escopo={escopo}

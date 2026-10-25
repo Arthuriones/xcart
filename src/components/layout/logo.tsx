@@ -3,7 +3,7 @@ import Image from "next/image";
 /**
  * A logo do xcart.
  *
- * Nenhum arquivo serve para os dois temas: logo-cropped tem o texto escuro
+ * Nenhum arquivo serve para os dois temas: logo-claro tem o texto escuro
  * (some no fundo escuro) e a versao de texto branco some no claro. Em vez de
  * escolher em JavaScript -- que precisaria saber o tema antes de pintar e
  * piscaria na primeira renderizacao --, as duas vao para o HTML e o CSS
@@ -12,6 +12,8 @@ import Image from "next/image";
  * logo-dark.png e o logo.png original com a borda transparente cortada. Sem
  * esse corte os dois arquivos tinham proporcoes diferentes (5,03 contra 2,60)
  * e a logo aparecia visivelmente menor no tema escuro, com a mesma altura.
+ * logo-claro.png e o logo-cropped.png com o fundo branco transparente: o
+ * menu fica sobre o fundo quente (--bg), e o branco opaco virava um retangulo.
  */
 export function LogoXcart({
   altura = 20,
@@ -34,7 +36,7 @@ export function LogoXcart({
     <span className={className}>
       <Image
         {...comum}
-        src="/logo-cropped.png"
+        src="/logo-claro.png"
         width={891}
         height={177}
         className="block dark:hidden"

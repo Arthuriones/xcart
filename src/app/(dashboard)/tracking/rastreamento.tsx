@@ -51,7 +51,7 @@ export interface RastreamentoProps {
 function irPara(loja: string | null) {
   const q = loja ? `?loja=${encodeURIComponent(loja)}` : "";
   window.history.pushState(null, "", `${window.location.pathname}${q}`);
-  window.scrollTo({ top: 0 });
+  document.getElementById("painel")?.scrollTo({ top: 0 }); window.scrollTo({ top: 0 }); // desktop rola o painel; celular, a janela
 }
 
 export function Rastreamento({

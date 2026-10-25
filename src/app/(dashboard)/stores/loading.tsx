@@ -5,8 +5,9 @@ import { EsqueletoLista } from "./estados-lista";
 export default function CarregandoLojas() {
   return (
     <div className="flex flex-col gap-6">
-      <div className="hidden flex-col gap-2 md:flex" aria-hidden>
-        <Skeleton className="h-5.5 w-28" />
+      {/* O titulo fica na barra do topo; aqui so o botao de conectar. */}
+      <div className="hidden justify-end md:flex" aria-hidden>
+        <Skeleton className="h-ctl-md w-44 rounded-control" />
       </div>
       <EsqueletoLista />
     </div>

@@ -56,12 +56,13 @@ function rotuloSino(n: number | null) {
   return n === 1 ? "Notificações, 1 alerta aberto" : `Notificações, ${n} alertas abertos`;
 }
 
-function Selo({ n, className }: { n: number; className?: string }) {
+function Selo({ n, pequeno, className }: { n: number; pequeno?: boolean; className?: string }) {
   return (
     <span
       aria-hidden
       className={clsx(
-        "num absolute h-4.5 min-w-4.5 rounded-full bg-err px-1 text-center text-label font-semibold leading-4.5 text-surface",
+        "num absolute rounded-full bg-err px-1 text-center text-label font-semibold text-surface",
+        pequeno ? "h-4 min-w-4 leading-4" : "h-4.5 min-w-4.5 leading-4.5",
         className
       )}
     >
@@ -100,15 +101,19 @@ export function Sino({ total }: { total: number | null }) {
       aberto={aberto}
       aoMudar={(a) => (a ? ler() : fechar())}
       alinhar="end"
-      className="w-100"
+      className="w-95"
       gatilho={
         <button
           type="button"
           aria-label={rotuloSino(n)}
-          className="relative grid size-ctl-md place-items-center rounded-control border border-border-strong bg-surface text-t1 hover:border-control-border hover:text-ink"
+          className={clsx(
+            "relative grid size-ctl-md shrink-0 place-items-center rounded-control text-t2 hover:bg-hover hover:text-ink",
+            aberto && "bg-hover text-ink"
+          )}
         >
           <Bell className="size-4" strokeWidth={1.75} aria-hidden />
-          {!!n && <Selo n={n} className="-right-1.5 -top-1.5" />}
+          {/* O anel da cor do topo separa o selo do sino. */}
+          {!!n && <Selo n={n} pequeno className="right-0.5 top-0.5 ring-2 ring-surface" />}
         </button>
       }
     >

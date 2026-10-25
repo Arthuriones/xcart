@@ -98,10 +98,12 @@ export function Folha({
     <Dialog.Root open={aberto} onOpenChange={aoMudar}>
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-50 bg-scrim" />
+        {/* No desktop (o contexto compacto do topo abre aqui) a folha nao
+            ocupa a largura toda: 480px, centrada. */}
         <Dialog.Popup
           className={clsx(
             CAIXA,
-            "fixed inset-x-0 bottom-0 z-50 flex max-h-[88dvh] flex-col rounded-b-none border-x-0 border-b-0 animate-xc-up"
+            "fixed inset-x-0 bottom-0 z-50 flex max-h-[88dvh] flex-col rounded-b-none border-x-0 border-b-0 animate-xc-up md:right-auto md:left-1/2 md:w-120 md:-translate-x-1/2 md:border-x"
           )}
         >
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border py-2 pl-4 pr-2">
@@ -114,7 +116,7 @@ export function Folha({
             <Fechar rotulo={rotuloFechar} />
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
-          {rodape && <div className="shrink-0 border-t border-border p-3">{rodape}</div>}
+          {rodape && <div className="shrink-0 border-t border-border px-4 pb-4 pt-3">{rodape}</div>}
         </Dialog.Popup>
       </Dialog.Portal>
     </Dialog.Root>

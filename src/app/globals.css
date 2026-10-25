@@ -133,11 +133,17 @@
 
 /* Escalas fechadas: valores literais. */
 @theme {
-  /* 7 tamanhos de fonte, nenhum abaixo de 12px. Os de titulo ja trazem o
-     peso 600; "font-*" na mesma classe continua vencendo. */
-  --text-kpi: 26px;
-  --text-kpi--line-height: 32px;
-  --text-kpi--letter-spacing: -0.01em;
+  /* 7 tamanhos de fonte (40, 22, 18, 15, 14, 13 e 12), nenhum abaixo de
+     12px. Os de titulo ja trazem o peso 600; "font-*" na mesma classe
+     continua vencendo. O display e so o numero em destaque da tela (um por
+     tela); KPI e titulo de pagina dividem os 22px. */
+  --text-display: 40px;
+  --text-display--line-height: 44px;
+  --text-display--letter-spacing: -0.03em;
+  --text-display--font-weight: 600;
+  --text-kpi: 22px;
+  --text-kpi--line-height: 28px;
+  --text-kpi--letter-spacing: -0.015em;
   --text-kpi--font-weight: 600;
   --text-page: 22px;
   --text-page--line-height: 28px;
@@ -172,7 +178,7 @@
   /* 3 alturas de controle: h-ctl-sm (tabela), h-ctl-md (padrao),
      h-ctl-lg (alvo de toque no celular). Tambem servem a size-* e w-*. */
   --spacing-ctl-sm: 28px;
-  --spacing-ctl-md: 36px;
+  --spacing-ctl-md: 32px;
   --spacing-ctl-lg: 44px;
 
   --ease-xc: cubic-bezier(0.2, 0, 0, 1);

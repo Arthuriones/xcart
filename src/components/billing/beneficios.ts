@@ -1,8 +1,9 @@
 import { PRO_INCLUDED_CREDITS, type LimitesPlano } from "@/lib/billing/plans";
 
 /**
- * O que cada plano inclui: UMA regra, para a Assinatura, o paywall e o cartao
- * de preco da landing (/lp).
+ * O que cada plano inclui: UMA regra, para a Assinatura e o paywall. O cartao
+ * de preco da landing (/lp) mostra uma versao curta, que sai dos mesmos
+ * limites em src/app/lp/plano.ts (especificacoesDoPlano, recursosDoCartao).
  *
  * So o que o xcart tem hoje (decisao do Arthur, 24/10/2026: "So o que
  * existe"), e so o que vale para AQUELE plano -- a lista sai dos limites, nao

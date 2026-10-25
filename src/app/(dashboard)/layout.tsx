@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { SidebarData, SidebarSkeleton } from "@/components/layout/sidebar-data";
 import { TopoDados, TopoEsqueleto } from "@/components/layout/topo-dados";
 import { COOKIE_MENU } from "@/components/layout/contexto";
+import { Painel } from "@/components/layout/painel";
 import { Toaster } from "@/components/ui/sonner";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { userHasAccess } from "@/lib/billing/access";
@@ -12,12 +13,15 @@ import { textos } from "@/lib/textos";
 export const dynamic = "force-dynamic";
 
 /**
- * A casca do painel: menu lateral (barra de baixo no celular), topo com a
- * barra de contexto, busca e sino, e o conteudo centralizado.
+ * A casca do painel: menu lateral sobre o fundo quente (barra de baixo no
+ * celular) e, ao lado, o conteudo num painel com borda. A barra do topo
+ * (titulo da tela, contexto, "Atualizado as" e sino) mora dentro do painel.
+ *
+ * No desktop o painel rola por dentro (painel.tsx) e a janela fica parada; no
+ * celular a pagina rola na janela, com o topo e a barra de baixo fixos.
  *
  * Menu e topo leem banco dentro de <Suspense>: a tela aparece sem esperar
- * por eles. A pagina rola na janela (nao num painel interno), entao o menu e
- * o topo sao sticky.
+ * por eles.
  */
 export default async function DashboardLayout({
   children,
@@ -44,15 +48,17 @@ export default async function DashboardLayout({
       <Suspense fallback={<SidebarSkeleton recolhido={recolhido} />}>
         <SidebarData />
       </Suspense>
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Suspense fallback={<TopoEsqueleto />}>
-          <TopoDados />
-        </Suspense>
-        <main id="conteudo" tabIndex={-1} className="flex-1 pb-16 outline-none md:pb-0">
-          <div className="mx-auto w-full max-w-320 has-[[data-largura=total]]:max-w-none px-4 pb-8 pt-4 md:px-8 md:pb-12 md:pt-6">
-            {children}
-          </div>
-        </main>
+      <div className="flex min-w-0 flex-1 flex-col md:p-2 md:pl-0">
+        <Painel>
+          <Suspense fallback={<TopoEsqueleto />}>
+            <TopoDados />
+          </Suspense>
+          <main id="conteudo" tabIndex={-1} className="flex-1 pb-16 outline-none md:pb-0">
+            <div className="mx-auto w-full max-w-330 px-4 pb-6 pt-4 has-[[data-largura=total]]:max-w-none md:px-6 md:pb-8 md:pt-6">
+              {children}
+            </div>
+          </main>
+        </Painel>
       </div>
       <Toaster />
     </div>

@@ -1,6 +1,6 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "xcart-dev", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 3000 }
+    { "name": "xcart-dev", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev", "--", "--webpack"], "port": 3000 }
   ]
 }

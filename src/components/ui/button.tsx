@@ -5,7 +5,7 @@ import { cn } from "@/components/ui/cn"
 import { Spinner } from "@/components/ui/spinner"
 
 /*
- * Um botao so, 3 alturas (28 / 36 / 44) e estas variantes:
+ * Um botao so, 3 alturas (28 / 32 / 44) e estas variantes:
  *   primary  -- preto solido, a acao principal do bloco (uma por bloco)
  *   secondary-- contorno, acao comum
  *   ghost    -- sem contorno, acao terciaria e botao de icone

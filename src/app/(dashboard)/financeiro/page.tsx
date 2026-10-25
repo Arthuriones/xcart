@@ -1,9 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { Store } from "lucide-react";
-import { PageHeader } from "@/components/layout/page-header";
 import { buttonVariants } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
 import { ROTA_CONECTAR_OPERACAO, ROTULO_CONECTAR_OPERACAO } from "@/lib/conectar-operacao";
 import { filtroResolvido, lerComparacao, lerFiltroGlobal } from "@/lib/filtro-global";
 import { TODAS } from "@/lib/financeiro/tipos";
@@ -60,7 +58,7 @@ async function Conteudo() {
   if (principal.status === "rejected") {
     console.error("[lucro] calculo", principal.reason);
     // Erro de banco aparece; nunca vira zero. Zero diria "nao vendeu".
-    return <ErroLucro detalhe={mensagem(principal.reason)} />;
+    return <ErroLucro titulo="Não conseguimos carregar o Dashboard" detalhe={mensagem(principal.reason)} />;
   }
   const dados = principal.value;
   if (dados.vazio) return <SemLojas />;
@@ -129,19 +127,24 @@ async function Conteudo() {
   );
 }
 
+/** O vazio do mockup: borda tracejada, o icone de loja e um CTA so. */
 function SemLojas() {
   return (
-    <EmptyState
-      icone={<Store />}
-      titulo="Conecte uma loja ou um checkout"
-      descricao="Cruzamos os pedidos (ou as comissões) com o gasto do Meta e do Google."
-      acao={
-        <Link href={ROTA_CONECTAR_OPERACAO} className={buttonVariants({})}>
-          {ROTULO_CONECTAR_OPERACAO}
-        </Link>
-      }
-      className="min-h-80"
-    />
+    <div className="flex min-h-105 flex-col items-center justify-center gap-3 rounded-card border border-dashed border-border-strong px-4 py-12 text-center">
+      <span
+        aria-hidden
+        className="grid size-10 place-items-center rounded-card border border-border text-t2"
+      >
+        <Store className="size-5" strokeWidth={1.75} />
+      </span>
+      <h2 className="mt-1 text-overlay text-ink">Conecte uma loja ou um checkout</h2>
+      <p className="max-w-[46ch] text-body text-t2 text-pretty">
+        Cruzamos os pedidos (ou as comissões) com o gasto do Meta e do Google.
+      </p>
+      <Link href={ROTA_CONECTAR_OPERACAO} className={`mt-1.5 ${buttonVariants({})}`}>
+        {ROTULO_CONECTAR_OPERACAO}
+      </Link>
+    </div>
   );
 }
 
@@ -150,16 +153,10 @@ export default async function FinanceiroPage() {
   // periodo, moeda ou comparacao mostra o esqueleto de novo em vez de deixar o
   // numero velho na tela.
   const [filtro, comparacao] = await Promise.all([lerFiltroGlobal(), lerComparacao()]);
+  // Sem PageHeader: o titulo da tela fica na barra do topo da casca.
   return (
-    <>
-      {/* Sem descricao, no celular o cabecalho fica vazio (o titulo ja esta no
-          topo da casca): escondido, nao deixa um vao antes das pendencias. */}
-      <div className="hidden md:block">
-        <PageHeader title="Dashboard" />
-      </div>
-      <Suspense key={JSON.stringify({ filtro, comparacao })} fallback={<EsqueletoLucro />}>
-        <Conteudo />
-      </Suspense>
-    </>
+    <Suspense key={JSON.stringify({ filtro, comparacao })} fallback={<EsqueletoLucro />}>
+      <Conteudo />
+    </Suspense>
   );
 }

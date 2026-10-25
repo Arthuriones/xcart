@@ -198,7 +198,7 @@ export function TelaVisao({
       {problemas.length > 0 ? (
         <Section
           id="requer-atencao"
-          className="scroll-mt-32"
+          className="scroll-mt-32 md:scroll-mt-4"
           titulo="Requer atenção"
           descricao="Do mais grave para o informativo. Cada item leva ao lugar que resolve."
           espaco="nenhum"

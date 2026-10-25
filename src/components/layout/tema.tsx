@@ -49,9 +49,11 @@ export function SeletorTema({ grande = false }: { grande?: boolean }) {
             aria-checked={on}
             onClick={() => setTheme(o.id)}
             className={clsx(
-              "flex-1 rounded-control font-medium",
-              grande ? "h-10 text-dense" : "h-ctl-sm text-label",
-              on ? "bg-surface text-ink ring-1 ring-border" : "text-t2 hover:text-ink"
+              // O segmentado da casca: trilho bg-track, a opcao marcada em
+              // superficie com anel (o mesmo da moeda, em seletor-global.tsx).
+              "flex-1 rounded-sm",
+              grande ? "h-10 text-dense" : "h-6.5 text-label",
+              on ? "bg-surface font-semibold text-ink ring-1 ring-border" : "text-t2 hover:text-ink"
             )}
           >
             {o.rotulo}

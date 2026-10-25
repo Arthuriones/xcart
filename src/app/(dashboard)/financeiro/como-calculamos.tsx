@@ -3,7 +3,8 @@ import { ChevronRight } from "lucide-react";
 // ============================================================================
 // "Como calculamos": as regras do numero, em linguagem de lojista. Server
 // component; cada item e um <details> fechado (abre por toque, teclado e
-// leitor de tela sem JavaScript).
+// leitor de tela sem JavaScript). O `name` em comum faz o acordeao do mockup:
+// abrir um fecha o outro.
 // ============================================================================
 
 const ITENS: { titulo: string; texto: string }[] = [
@@ -83,22 +84,22 @@ export function ComoCalculamos({
     <section
       id="como-calculamos"
       aria-labelledby="como-calculamos-t"
-      className="scroll-mt-32 rounded-card border border-border bg-surface"
+      className="scroll-mt-32 md:scroll-mt-4 rounded-card border border-border bg-surface"
     >
-      <h2 id="como-calculamos-t" className="border-b border-border-subtle px-4 py-3.5 text-section text-ink">
+      <h2 id="como-calculamos-t" className="border-b border-border-subtle px-5 py-3.5 text-section text-ink">
         Como calculamos
       </h2>
       {itens.map((item) => (
-        <details key={item.titulo} className="group border-b border-border-subtle last:border-b-0">
-          <summary className="flex min-h-ctl-lg cursor-pointer list-none items-center gap-2.5 px-4 text-dense font-medium text-ink hover:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus [&::-webkit-details-marker]:hidden">
+        <details key={item.titulo} name="como-calculamos" className="group border-b border-border-subtle last:border-b-0">
+          <summary className="flex min-h-ctl-lg cursor-pointer list-none items-center gap-2.5 px-5 text-dense font-medium text-ink hover:bg-surface-2 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus [&::-webkit-details-marker]:hidden">
             <ChevronRight
               aria-hidden
-              className="size-3.5 shrink-0 text-t2 transition-transform group-open:rotate-90"
-              strokeWidth={1.75}
+              className="size-3.5 shrink-0 text-t3 transition-transform duration-150 group-open:rotate-90"
+              strokeWidth={2}
             />
             <h3>{item.titulo}</h3>
           </summary>
-          <p className="max-w-190 pb-3.5 pl-10 pr-4 text-dense text-t1 text-pretty">{item.texto}</p>
+          <p className="max-w-190 pr-5 pb-4 pl-11 text-dense leading-5 text-t1 text-pretty">{item.texto}</p>
         </details>
       ))}
     </section>

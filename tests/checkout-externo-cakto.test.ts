@@ -29,9 +29,7 @@ import { vendaDoPedidoExterno } from "@/lib/checkouts-externos/notificar";
 import { mensagemDaVenda } from "@/lib/alertas/venda-webhook";
 import { estadoDaVenda, pendenteVencida } from "@/lib/checkouts-externos/venda";
 import { CAMPOS_VENDA } from "@/lib/checkouts-externos/estado";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { IndicadoresKpiCod, IndicadoresTopoCod, type BaseIndicadores } from "@/app/(dashboard)/financeiro/indicadores";
+import { montarIndicadores, type BaseIndicadores } from "@/app/(dashboard)/financeiro/indicadores";
 import { composicaoCod } from "@/app/(dashboard)/financeiro/lucro-dados";
 import { calcularFinanceiro, gastoComImposto, type EntradaFinanceiro, type LojaFinanceira, type PedidoExternoFin } from "@/lib/financeiro/calculo";
 import { montarPedidosExternos } from "@/lib/checkouts-externos/pedidos";
@@ -1092,7 +1090,7 @@ describe("cartoes de contra entrega com Sphere e Cakto, sem loja Shopify", () =>
     { checkout_id: CK_SPHERE, situacao: "expirado", moeda: "EUR", valor: 89.9, receita: 40, moeda_receita: null, dia_local: "2026-09-28" },
   ];
 
-  function cartoes(lojaIds: string[], semLoja: boolean): string {
+  function cartoes(lojaIds: string[], semLoja: boolean) {
     const r = calcularFinanceiro(entrada({ lojas: [SPHERE_LOJA, CAKTO_LOJA], externos: [...sphereSo, ...VENDAS] }));
     // Como a tela monta (financeiro-screen.tsx): a venda junto das lojas, a comissao a parte.
     const base: BaseIndicadores = {
@@ -1105,25 +1103,28 @@ describe("cartoes de contra entrega com Sphere e Cakto, sem loja Shopify", () =>
       venda: "junto",
       semLoja,
     };
-    return renderToStaticMarkup(createElement(IndicadoresKpiCod, base)) + renderToStaticMarkup(createElement(IndicadoresTopoCod, base));
+    const { principal, celulas } = montarIndicadores(base, true);
+    return {
+      rotulos: [principal, ...celulas].map((c) => c.rotulo),
+      detalhes: [principal, ...celulas].map((c) => c.detalhe),
+    };
   }
 
-  // A definicao de cada cartao abre num popover (fora do HTML estatico): aqui
-  // so o que aparece -- os rotulos e o detalhe.
-  it("os cartoes do checkout de comissao (Perdido, Valor dos pedidos), nao os de produto e devolucao", () => {
-    const html = cartoes([], true);
-    expect(html).toContain(">Perdido<");
-    expect(html).toContain(">Valor dos pedidos<");
-    expect(html).not.toContain(">Devoluções<");
-    expect(html).not.toContain(">Custo de produto<");
-    expect(html).toContain("Não entra no lucro");
+  // O que a faixa de KPIs mostra: os rotulos e o detalhe de cada numero.
+  it("os indicadores do checkout de comissao (Perdido, Valor dos pedidos), nao os de produto e devolucao", () => {
+    const { rotulos, detalhes } = cartoes([], true);
+    expect(rotulos).toContain("Perdido");
+    expect(rotulos).toContain("Valor dos pedidos");
+    expect(rotulos).not.toContain("Devoluções");
+    expect(rotulos).not.toContain("Custo de produto");
+    expect(detalhes).toContain("Não entra no lucro");
   });
 
   it("com loja Shopify no filtro, nada muda: produto e devolucoes", () => {
-    const html = cartoes(["44444444-4444-4444-8444-444444444444"], false);
-    expect(html).toContain(">Devoluções<");
-    expect(html).toContain(">Custo de produto<");
-    expect(html).not.toContain(">Valor dos pedidos<");
+    const { rotulos } = cartoes(["44444444-4444-4444-8444-444444444444"], false);
+    expect(rotulos).toContain("Devoluções");
+    expect(rotulos).toContain("Custo de produto");
+    expect(rotulos).not.toContain("Valor dos pedidos");
   });
 });
 

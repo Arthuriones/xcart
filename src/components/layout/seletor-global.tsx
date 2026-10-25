@@ -158,10 +158,12 @@ export type Contexto = ReturnType<typeof useContexto>;
 // Pecas
 // ---------------------------------------------------------------------------
 
-// Sem cor de fundo nem de texto aqui: quem usa escolhe. clsx nao resolve
-// conflito (bg-surface + bg-info-bg ficariam os dois, e vence a ordem do CSS).
-const GATILHO =
-  "flex h-ctl-md items-center gap-2 rounded-control border px-3 text-dense hover:border-control-border";
+// Sem cor de fundo, de texto nem de borda aqui: quem usa escolhe. clsx nao
+// resolve conflito (bg-surface + bg-info-bg ficariam os dois, e vence a ordem
+// do CSS).
+const GATILHO = "flex h-ctl-md items-center gap-2 rounded-control border px-2.5 text-dense";
+/** O gatilho comum (fora o da loja filtrada): borda leve, que firma no hover. */
+const GATILHO_NEUTRO = "border-border bg-surface hover:border-border-strong";
 
 function nomeDaLoja(lojas: LojaContexto[], id: string): string | null {
   const loja = lojas.find((l) => l.id === id);
@@ -374,7 +376,7 @@ function Radio({
       onClick={onEscolher}
       className={clsx(
         "flex w-full items-center gap-2.5 rounded-control px-2 text-left hover:bg-hover",
-        grande ? "min-h-ctl-lg" : "min-h-ctl-md"
+        grande ? "min-h-ctl-lg" : "min-h-9"
       )}
     >
       <span
@@ -389,6 +391,66 @@ function Radio({
   );
 }
 
+/**
+ * O segmentado da casca, um estilo so: trilho bg-track e a opcao marcada em
+ * superficie com anel. Moeda, comparacao (folha do celular) e tema
+ * (tema.tsx) usam o mesmo desenho.
+ */
+function Segmentado<T extends string>({
+  rotulo,
+  rotuloId,
+  opcoes,
+  valor,
+  grande,
+  onEscolher,
+}: {
+  rotulo?: string;
+  /** id do rotulo visivel, no lugar de `rotulo`. */
+  rotuloId?: string;
+  opcoes: { id: T; texto: string }[];
+  valor: T;
+  grande?: boolean;
+  onEscolher: (v: T) => void;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={rotulo}
+      aria-labelledby={rotuloId}
+      className={clsx(
+        "flex shrink-0 items-center gap-0.5 rounded-control bg-track p-0.5",
+        grande ? "w-full" : "h-ctl-md"
+      )}
+    >
+      {opcoes.map((o) => {
+        const on = o.id === valor;
+        return (
+          <button
+            key={o.id}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onEscolher(o.id)}
+            className={clsx(
+              "rounded-sm",
+              grande ? "h-10 flex-1 px-2.5 text-dense" : "h-full px-2.25 text-label",
+              on ? "bg-surface font-semibold text-ink ring-1 ring-border" : "text-t2 hover:text-ink"
+            )}
+          >
+            {o.texto}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const OPCOES_MOEDA = MOEDAS_RELATORIO.map((m) => ({ id: m, texto: m }));
+const OPCOES_COMPARACAO = (["anterior", "nenhum"] as Comparacao[]).map((c) => ({
+  id: c,
+  texto: ROTULO_COMPARACAO[c],
+}));
+
 function Moedas({
   valor,
   grande,
@@ -399,31 +461,13 @@ function Moedas({
   onEscolher: (m: MoedaRelatorio) => void;
 }) {
   return (
-    <div
-      role="radiogroup"
-      aria-label="Moeda do relatório"
-      className={clsx("flex items-center gap-0.5 rounded-control bg-track p-0.5", grande ? "w-full" : "h-ctl-md")}
-    >
-      {MOEDAS_RELATORIO.map((m) => {
-        const on = m === valor;
-        return (
-          <button
-            key={m}
-            type="button"
-            role="radio"
-            aria-checked={on}
-            onClick={() => onEscolher(m)}
-            className={clsx(
-              "rounded-control px-2.5",
-              grande ? "h-10 flex-1 text-dense" : "h-full text-label",
-              on ? "bg-surface font-semibold text-ink ring-1 ring-border" : "text-t2 hover:text-ink"
-            )}
-          >
-            {m}
-          </button>
-        );
-      })}
-    </div>
+    <Segmentado
+      rotulo="Moeda do relatório"
+      opcoes={OPCOES_MOEDA}
+      valor={valor}
+      grande={grande}
+      onEscolher={onEscolher}
+    />
   );
 }
 
@@ -472,28 +516,30 @@ export function BarraContexto({
       role="group"
       aria-label="Contexto dos números: vale para todas as telas"
       aria-busy={ctx.pendente}
-      className={clsx("flex min-w-0 items-center gap-2", ctx.pendente && "opacity-70")}
+      className={clsx("flex min-w-0 items-center gap-1.5", ctx.pendente && "opacity-70")}
     >
       <div className="flex min-w-0 items-center">
         <Pop
           rotulo="Escolher loja"
           {...pop("loja")}
-          className="w-85"
+          className="w-80"
           gatilho={
             <button
               type="button"
               className={clsx(
                 GATILHO,
-                "min-w-0 max-w-70 text-ink",
-                // Filtrada, o gatilho e o "x" formam uma pilula so: o lado
-                // direito dele e a divisoria do "x".
-                filtrada ? "rounded-r-none border-r-0 border-info-border bg-info-bg" : "border-border-strong bg-surface"
+                "min-w-0 max-w-55 text-ink",
+                // Filtrada (azul de filtro ativo), o gatilho e o "x" formam
+                // uma pilula so: o lado direito dele e a divisoria do "x".
+                filtrada
+                  ? "rounded-r-none border-r-0 border-info-border bg-info-bg hover:border-info"
+                  : GATILHO_NEUTRO
               )}
             >
               {filtrada && prefixoDa(dados.lojas, v.lojaId) === "Checkout" ? (
                 <CreditCard className="size-4 shrink-0 text-info" strokeWidth={1.75} aria-hidden />
               ) : (
-                <Store className={clsx("size-4 shrink-0", filtrada ? "text-info" : "text-t2")} strokeWidth={1.75} aria-hidden />
+                <Store className={clsx("size-4 shrink-0", filtrada ? "text-info" : "text-t3")} strokeWidth={1.75} aria-hidden />
               )}
               <span className="truncate">
                 {filtrada ? (
@@ -505,7 +551,7 @@ export function BarraContexto({
                   "Todas as lojas"
                 )}
               </span>
-              <ChevronDown className="size-3.5 shrink-0 text-t3" strokeWidth={1.75} aria-hidden />
+              <ChevronDown className="size-3.5 shrink-0 text-t4" strokeWidth={1.75} aria-hidden />
             </button>
           }
         >
@@ -544,6 +590,7 @@ export function BarraContexto({
                 setBusca("");
               }}
             />
+            <p className="px-2 pb-1.5 pt-1 text-label text-t3">A escolha vale para todas as telas.</p>
           </div>
         </Pop>
         {filtrada && (
@@ -552,7 +599,7 @@ export function BarraContexto({
             onClick={() => ctx.gravar({ lojaId: TODAS })}
             aria-label="Voltar para todas as lojas"
             title="Ver todas as lojas"
-            className="grid h-ctl-md w-8 shrink-0 place-items-center rounded-control rounded-l-none border border-info-border bg-info-bg text-info/80 transition-colors hover:bg-info-border/50 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            className="grid h-ctl-md w-7 shrink-0 place-items-center rounded-control rounded-l-none border border-info-border bg-info-bg text-info hover:text-ink"
           >
             <X className="size-3.5" strokeWidth={2.25} aria-hidden />
           </button>
@@ -564,17 +611,18 @@ export function BarraContexto({
           <Pop
             rotulo="Escolher período"
             {...pop("periodo")}
-            className="w-72 p-1"
+            className={calendario ? "w-72 p-1" : "w-75 p-1"}
             gatilho={
-              <button type="button" className={clsx(GATILHO, "border-border-strong bg-surface text-ink")}>
-                <Calendar className="size-4 shrink-0 text-t2" strokeWidth={1.75} aria-hidden />
+              <button type="button" className={clsx(GATILHO, GATILHO_NEUTRO, "text-ink")}>
+                <Calendar className="size-4 shrink-0 text-t3" strokeWidth={1.75} aria-hidden />
                 <span className="whitespace-nowrap">{nomeDoPeriodo(v.periodo, atual.atual, dados.hoje)}</span>
+                {/* As datas so quando a barra do topo (o container) tem folga. */}
                 {!personalizado && (
-                  <span className="num hidden whitespace-nowrap text-t2 min-[1360px]:inline">
+                  <span className="num hidden whitespace-nowrap text-t3 @min-[1080px]:inline">
                     {rotuloIntervalo(atual.atual)}
                   </span>
                 )}
-                <ChevronDown className="size-3.5 shrink-0 text-t3" strokeWidth={1.75} aria-hidden />
+                <ChevronDown className="size-3.5 shrink-0 text-t4" strokeWidth={1.75} aria-hidden />
               </button>
             }
           >
@@ -647,10 +695,10 @@ export function BarraContexto({
             <Pop
               rotulo="Comparar com"
               {...pop("comparar")}
-              className="w-72 p-1"
+              className="w-70 p-1"
               gatilho={
-                <button type="button" className={clsx(GATILHO, "border-border-strong bg-surface text-t1")}>
-                  <span className="text-t2">vs.</span>
+                <button type="button" className={clsx(GATILHO, GATILHO_NEUTRO, "gap-1.5 text-t1")}>
+                  <span className="text-t3">vs.</span>
                   <span className="whitespace-nowrap">
                     {v.comparacao === "anterior" ? "período anterior" : "sem comparação"}
                   </span>
@@ -707,17 +755,27 @@ export function Atualizado({
 }
 
 /**
- * Desktop: so o icone. "Atualizado as HH:MM" fica na dica, que o mouse e o
- * teclado abrem, e o leitor de tela ouve a mesma frase pela regiao viva.
- * Chaveado pelo pai: le o instante uma vez por tela e por rodada.
+ * Desktop: "Atualizado as HH:MM" escrito ao lado do botao de atualizar. A
+ * frase some so quando a barra do topo (o container) nao tem folga; ai a dica
+ * do botao, que tambem diz o fuso, continua com a hora. O leitor de tela ouve
+ * a mesma frase pela regiao viva. Chaveado pelo pai: le o instante uma vez
+ * por tela e por rodada.
  */
 function AtualizarComDica({ ctx, fuso }: { ctx: Contexto; fuso: string }) {
   const [instante] = useState(() => Date.now());
-  const frase = ctx.pendente
-    ? "Atualizando…"
-    : `Atualizado às ${horaNoFuso(instante, fuso)} · ${rotuloFuso(fuso)}`;
+  const hora = horaNoFuso(instante, fuso);
+  const curta = ctx.pendente ? "Atualizando…" : `Atualizado às ${hora}`;
+  const frase = ctx.pendente ? "Atualizando…" : `Atualizado às ${hora} · ${rotuloFuso(fuso)}`;
   return (
     <Tooltip.Root>
+      {/* O servidor e o navegador podem divergir no minuto da hidratacao. */}
+      <span
+        aria-hidden
+        suppressHydrationWarning
+        className="num hidden whitespace-nowrap pr-0.5 text-label text-t3 @min-[980px]:inline"
+      >
+        {curta}
+      </span>
       <Tooltip.Trigger
         delay={150}
         type="button"
@@ -725,7 +783,7 @@ function AtualizarComDica({ ctx, fuso }: { ctx: Contexto; fuso: string }) {
         disabled={ctx.pendente}
         aria-busy={ctx.pendente}
         aria-label="Atualizar agora"
-        className="grid size-ctl-md place-items-center rounded-control border border-border-strong bg-surface text-t1 hover:border-control-border hover:text-ink disabled:cursor-wait"
+        className="grid size-ctl-md shrink-0 place-items-center rounded-control text-t2 hover:bg-hover hover:text-ink disabled:cursor-wait disabled:opacity-45"
       >
         <RefreshCw
           className={clsx("size-4", ctx.pendente && "animate-xc-spin")}
@@ -733,7 +791,6 @@ function AtualizarComDica({ ctx, fuso }: { ctx: Contexto; fuso: string }) {
           aria-hidden
         />
       </Tooltip.Trigger>
-      {/* O servidor e o navegador podem divergir no minuto da hidratacao. */}
       <span aria-live="polite" suppressHydrationWarning className="sr-only">
         {frase}
       </span>
@@ -762,7 +819,8 @@ function Hora({ fuso, pendente }: { fuso: string; pendente: boolean }) {
 }
 
 // ---------------------------------------------------------------------------
-// Celular: um botao com o resumo, que abre o contexto num painel
+// Celular: um botao com o resumo, que abre o contexto num painel. O desktop
+// usa o mesmo botao (`compacto`) quando a barra inteira nao cabe no topo.
 // ---------------------------------------------------------------------------
 
 export function ContextoCelular({
@@ -770,11 +828,14 @@ export function ContextoCelular({
   ctx,
   modo,
   chaveTela,
+  compacto,
 }: {
   dados: DadosContexto;
   ctx: Contexto;
   modo: ModoContexto;
   chaveTela: string;
+  /** Desktop: 32px de altura e sem a hora (o topo ja mostra "Atualizado as"). */
+  compacto?: boolean;
 }) {
   const [aberto, setAberto] = useState(false);
   const [rascunho, setRascunho] = useState<Valores | null>(null);
@@ -814,13 +875,18 @@ export function ContextoCelular({
         onClick={() => abrir(true)}
         aria-haspopup="dialog"
         className={clsx(
-          "flex min-h-ctl-lg w-full items-center gap-2 rounded-control border px-3 text-left text-dense text-ink",
-          nomeLoja ? "border-info-border bg-info-bg" : "border-border-strong bg-surface"
+          "flex items-center gap-2 rounded-control border text-left text-dense text-ink",
+          compacto ? "h-ctl-md min-w-0 max-w-full px-2.5" : "min-h-ctl-lg w-full px-3",
+          nomeLoja ? "border-info-border bg-info-bg" : "border-border bg-surface hover:border-border-strong"
         )}
       >
-        <SlidersHorizontal className="size-4 shrink-0 text-t2" strokeWidth={1.75} aria-hidden />
+        <SlidersHorizontal
+          className={clsx("shrink-0 text-t2", compacto ? "size-3.75" : "size-4")}
+          strokeWidth={1.75}
+          aria-hidden
+        />
         <span className="min-w-0 flex-1 truncate">{resumo.join(" · ")}</span>
-        <Atualizado ctx={ctx} fuso={dados.fuso} chaveTela={chaveTela} compacto />
+        {!compacto && <Atualizado ctx={ctx} fuso={dados.fuso} chaveTela={chaveTela} compacto />}
       </button>
 
       <Folha
@@ -910,22 +976,18 @@ export function ContextoCelular({
                   <span className={rotulo} id="cel-comparar">
                     Comparar com
                   </span>
-                  <div role="radiogroup" aria-labelledby="cel-comparar">
-                    {(["anterior", "nenhum"] as Comparacao[]).map((c) => (
-                      <Radio
-                        key={c}
-                        grande
-                        marcado={c === r.comparacao}
-                        rotulo={ROTULO_COMPARACAO[c]}
-                        sub={
-                          c === "anterior" && !faltaDia
-                            ? rotuloIntervalo(intervalosDe(dados, r.periodo).anterior)
-                            : undefined
-                        }
-                        onEscolher={() => setRascunho({ ...r, comparacao: c })}
-                      />
-                    ))}
-                  </div>
+                  <Segmentado
+                    rotuloId="cel-comparar"
+                    opcoes={OPCOES_COMPARACAO}
+                    valor={r.comparacao}
+                    grande
+                    onEscolher={(c) => setRascunho({ ...r, comparacao: c })}
+                  />
+                  {r.comparacao === "anterior" && !faltaDia && (
+                    <span className="num text-label text-t3">
+                      Compara com {rotuloIntervalo(intervalosDe(dados, r.periodo).anterior)}
+                    </span>
+                  )}
                 </div>
               )}
               <div className={secao}>

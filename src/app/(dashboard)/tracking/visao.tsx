@@ -48,8 +48,6 @@ export function Visao({
   return (
     <div className="mx-auto flex w-full max-w-205 flex-col gap-5">
       <div className="flex flex-col gap-1.5">
-        {/* No celular o titulo ja esta no topo da casca. */}
-        <h1 className="hidden text-page font-semibold text-ink md:block">Rastreamento</h1>
         <p className="text-body text-t2">Cada loja Shopify conectada.</p>
       </div>
 

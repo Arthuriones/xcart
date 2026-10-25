@@ -30,8 +30,10 @@ function Barra({ className }: { className: string }) {
 }
 
 /**
- * Esqueleto generico: titulo, quatro numeros e um bloco grande. So aparece
- * depois de 300 ms -- carregamento rapido nao pisca.
+ * Esqueleto generico: a linha da descricao, quatro numeros e um bloco grande.
+ * O titulo nao entra: ele e o h1 da barra do topo, que ja aparece com o nome
+ * da tela enquanto o conteudo carrega. So aparece depois de 300 ms --
+ * carregamento rapido nao pisca.
  */
 export function EsqueletoTela() {
   return (
@@ -40,10 +42,7 @@ export function EsqueletoTela() {
       aria-label="Carregando a tela"
       className="flex animate-xc-in flex-col gap-6 [animation-delay:300ms]"
     >
-      <div className="hidden flex-col gap-2 md:flex">
-        <Barra className="h-5.5 w-40" />
-        <Barra className="h-3.5 w-[min(420px,80%)]" />
-      </div>
+      <Barra className="h-3.5 w-[min(420px,80%)]" />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (
           <div
@@ -94,10 +93,11 @@ export function TelaComErro({
       >
         <TriangleAlert className="size-5" strokeWidth={1.75} />
       </span>
-      <h1 className="text-page font-semibold text-ink">Esta tela não abriu</h1>
+      {/* h2: o h1 da tela e o da barra do topo, que continua ali. */}
+      <h2 className="text-page font-semibold text-ink">Esta tela não abriu</h2>
       <p className="max-w-115 text-body text-t1">
         O resto do xcart continua funcionando e nenhum dado foi perdido. Tente de novo; se
-        repetir, volte para o Lucro.
+        repetir, volte para o Dashboard.
       </p>
       <div className="flex flex-wrap justify-center gap-2">
         <button
@@ -110,7 +110,7 @@ export function TelaComErro({
           {tentando ? "Tentando…" : "Tentar de novo"}
         </button>
         <Link href={APP_HOME} className={BOTAO_LINHA}>
-          Ir para o Lucro
+          Ir para o Dashboard
         </Link>
       </div>
       <details className="mt-2 text-label text-t2">
@@ -130,13 +130,13 @@ export function TelaNaoEncontrada() {
   return (
     <div className="flex min-h-[60dvh] flex-col items-center justify-center gap-3 px-4 py-12 text-center">
       <span className="font-mono text-label text-t2">Erro 404</span>
-      <h1 className="text-page font-semibold text-ink">Página não encontrada</h1>
+      <h2 className="text-page font-semibold text-ink">Página não encontrada</h2>
       <p className="max-w-115 text-body text-t1">
         O endereço pode ter mudado ou não existe mais. Nada da sua conta foi afetado.
       </p>
       <div className="flex flex-wrap items-center justify-center gap-2">
         <Link href={APP_HOME} className={BOTAO_SOLIDO}>
-          Ir para o Lucro
+          Ir para o Dashboard
         </Link>
         <button
           type="button"

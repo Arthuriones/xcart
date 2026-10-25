@@ -1,272 +1,292 @@
-"use client";
-
-import { useState } from "react";
-import { BarChart3, LineChart as IconeTotal } from "lucide-react";
+import { useState, type KeyboardEvent, type MouseEvent } from "react";
 import clsx from "clsx";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Segmented } from "@/components/ui/segmented";
-import type { PontoDia } from "@/lib/leitura/serie-diaria";
-import { COR_PARTE } from "./cascata";
+import { indicesRotulosX } from "@/components/ui/grafico";
 import {
-  agrupar,
-  dinheiro,
-  granularidadePadrao,
-  granularidades,
-  rotuloACada,
-  temMovimento,
-  type Granularidade,
+  ALTURA_LINHA,
+  LARGURA_LINHA,
+  caminhoLinha,
+  escalaLinha,
+  rotuloTick,
+  tracarLinha,
+  xDoPonto,
+  yDoValor,
+  type DefinicaoMetrica,
 } from "./lucro-dados";
 
 // ============================================================================
-// "Faturamento": uma barra por dia (ou semana/mes), empilhada em lucro,
-// anuncios, produto + frete e taxas -- ou so o faturamento. Divs com altura
-// em %, sem lib de grafico. O tooltip abre no hover e no foco do teclado.
+// O grafico de linha do destaque (mockup "design novo/Dashboard.dc.html"):
+// o periodo atual em linha de 2px com a area a 6%, o anterior tracejado, o
+// trecho de hoje pontilhado e o ponto final em anel. SVG a mao, sem lib: o
+// viewBox 1000 x 240 estica (preserveAspectRatio none) e o traco nao
+// (vector-effect). Mouse, toque e teclado (setas, Home, End) mostram o ponto.
+//
+// Sem "use client" de proposito: so o painel (client) usa este arquivo, e ele
+// recebe funcoes (formatar, extras), que nao passariam da fronteira.
 // ============================================================================
 
-type Tipo = "barra" | "total";
-
-interface Barra {
+export interface LinhaExtra {
   rotulo: string;
-  parcial: boolean;
-  receita: number;
-  lucro: number;
-  gasto: number;
-  cmv: number;
-  taxas: number;
+  texto: string;
+  negativo: boolean;
 }
 
-const compacto = new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 });
-const PASSOS = [1, 2, 2.5, 5, 10];
+type Cor = "chart-1" | "chart-2" | "chart-3";
 
-/** Passo "redondo" para 4 linhas de grade que cubram o maximo. */
-function passoDo(max: number): number {
-  const bruto = max / 4;
-  const ordem = 10 ** Math.floor(Math.log10(bruto));
-  return (PASSOS.find((p) => p * ordem >= bruto) ?? 10) * ordem;
-}
+/** % do viewBox para posicionar os pontos em HTML por cima do SVG. */
+const px = (x: number) => `${(x / LARGURA_LINHA) * 100}%`;
+const py = (y: number) => `${(y / ALTURA_LINHA) * 100}%`;
 
-export function GraficoFaturamento({
-  pontos,
-  moeda,
-  contexto,
-  rotuloReceita = "Faturamento",
+export function GraficoLinha({
+  valores,
+  anteriores,
+  rotulos,
+  titulos,
+  parcialUltimo,
+  cor,
+  tipo,
+  rotuloSerie,
+  formatar,
+  extras,
+  ariaLabel,
 }: {
-  /** Periodo atual, do dia mais antigo para o mais novo. */
-  pontos: PontoDia[];
-  moeda: string;
-  /** "Todas as lojas · Últimos 30 dias · BRL": para o leitor de tela. */
-  contexto: string;
-  /** "Recebido" na loja em contra entrega: a barra e so o que ja entrou. */
-  rotuloReceita?: string;
+  /** Periodo atual, um valor por ponto (null = sem dado ou sem base). */
+  valores: (number | null)[];
+  /** Periodo anterior alinhado por posicao. null = sem a linha tracejada. */
+  anteriores: (number | null)[] | null;
+  rotulos: string[];
+  titulos: string[];
+  parcialUltimo: boolean;
+  cor: Cor;
+  tipo: DefinicaoMetrica["tipo"];
+  /** "Lucro estimado": a primeira linha do tooltip. */
+  rotuloSerie: string;
+  formatar: (v: number) => string;
+  /** As outras metricas do ponto, no tooltip. */
+  extras: (i: number) => LinhaExtra[];
+  ariaLabel: string;
 }) {
-  const [tipo, setTipo] = useState<Tipo>("barra");
-  // null = o padrao do periodo: por semana quando o periodo passa de 45 dias.
-  const [granEscolhida, setGran] = useState<Granularidade | null>(null);
   const [hov, setHov] = useState<number | null>(null);
+  const n = Math.max(valores.length, 1);
+  const ant = anteriores ? anteriores.slice(0, n) : null;
+  const escala = escalaLinha([...valores, ...(ant ?? [])]);
+  const tracado = tracarLinha(valores, escala, parcialUltimo);
+  const linhaAnterior = ant ? caminhoLinha(ant, n, escala) : "";
+  const corVar = `var(--${cor})`;
+  const ok = (v: number | null | undefined): v is number => typeof v === "number" && Number.isFinite(v);
 
-  const dias = pontos.map((p) => p.dia);
-  const opcoesGran = granularidades(dias);
-  const valida = (g: Granularidade | null): g is Granularidade =>
-    g !== null && opcoesGran.some((o) => o.valor === g && !o.desabilitado);
-  const padrao = granularidadePadrao(dias);
-  const gran: Granularidade = valida(granEscolhida) ? granEscolhida : valida(padrao) ? padrao : "dia";
+  function mover(e: MouseEvent<HTMLDivElement>) {
+    const r = e.currentTarget.getBoundingClientRect();
+    const i = Math.max(0, Math.min(n - 1, Math.round(((e.clientX - r.left) / r.width) * (n - 1))));
+    if (i !== hov) setHov(i);
+  }
 
-  const barras: Barra[] = agrupar(pontos, dias, gran).map((g) => {
-    const s = g.soma ?? { pedidos: 0, receita: 0, cmv: 0, taxas: 0, gastoMeta: 0, gastoGoogle: 0 };
-    const gasto = s.gastoMeta + s.gastoGoogle;
-    // Devolucao de contra entrega e frete de volta: vai junto do produto + frete.
-    const cmv = s.cmv + (s.devolucoes ?? 0);
-    return {
-      rotulo: g.rotulo,
-      parcial: g.parcial,
-      receita: s.receita,
-      gasto,
-      cmv,
-      taxas: s.taxas,
-      lucro: s.receita - cmv - s.taxas - gasto,
-    };
-  });
+  function teclar(e: KeyboardEvent<HTMLDivElement>) {
+    const atual = hov ?? n - 1;
+    const proximo =
+      e.key === "ArrowLeft"
+        ? Math.max(0, atual - 1)
+        : e.key === "ArrowRight"
+          ? Math.min(n - 1, atual + 1)
+          : e.key === "Home"
+            ? 0
+            : e.key === "End"
+              ? n - 1
+              : null;
+    if (proximo === null) return;
+    e.preventDefault();
+    setHov(proximo);
+  }
 
-  const n = barras.length;
-  // Dia de prejuizo: os custos passam do faturamento e a barra fica mais alta.
-  const max = Math.max(1, ...barras.map((b) => (tipo === "total" ? b.receita : Math.max(b.receita, b.cmv + b.taxas + b.gasto))));
-  const passo = passoDo(max * 1.05);
-  const topo = passo * 4;
-  const ticks = [4, 3, 2, 1, 0].map((i) => compacto.format(i * passo));
-  const cada = rotuloACada(n);
-  const altura = (v: number) => `${(Math.max(0, v) / topo) * 100}%`;
-
-  const partes = (b: Barra): [string, number, string][] =>
-    tipo === "total"
-      ? [["receita", b.receita, COR_PARTE.receita]]
-      : (
-          [
-            ["lucro", b.lucro, COR_PARTE.lucro],
-            ["gasto", b.gasto, COR_PARTE.gasto],
-            ["cmv", b.cmv, COR_PARTE.cmv],
-            ["taxas", b.taxas, COR_PARTE.taxas],
-          ] as [string, number, string][]
-        ).filter((p) => p[1] > 0);
-
-  const legenda: [string, string][] =
-    tipo === "total"
-      ? [[rotuloReceita, COR_PARTE.receita]]
+  const hv = hov !== null && hov < n ? hov : null;
+  const vAt = hv !== null ? valores[hv] : null;
+  const vAn = hv !== null && ant ? ant[hv] : null;
+  // Posicao do ponto em % da largura, e para que lado o tooltip abre.
+  const xPct = hv !== null ? (xDoPonto(hv, n) / LARGURA_LINHA) * 100 : 0;
+  const tipAEsquerda = hv !== null && hv > n * 0.55;
+  const linhasTip =
+    hv === null
+      ? []
       : [
-          ["Lucro", COR_PARTE.lucro],
-          ["Anúncios", COR_PARTE.gasto],
-          ["Produto + frete", COR_PARTE.cmv],
-          ["Taxas", COR_PARTE.taxas],
+          ...(ok(vAt) ? [{ rotulo: rotuloSerie, texto: formatar(vAt), negativo: vAt < 0, tipo: "atual" as const }] : []),
+          ...(ant
+            ? [{ rotulo: "Período anterior", texto: ok(vAn) ? formatar(vAn) : "sem dado", negativo: false, tipo: "anterior" as const }]
+            : []),
+          ...extras(hv).map((x) => ({ ...x, tipo: "extra" as const })),
         ];
 
-  const hv = hov !== null ? barras[hov] : undefined;
-  const linhasTip: [string, number, string][] = hv
-    ? [
-        [rotuloReceita, hv.receita, COR_PARTE.receita],
-        ["Lucro", hv.lucro, hv.lucro < 0 ? COR_PARTE.prejuizo : COR_PARTE.lucro],
-        ["Anúncios", hv.gasto, COR_PARTE.gasto],
-        ["Produto + frete", hv.cmv, COR_PARTE.cmv],
-        ["Taxas", hv.taxas, COR_PARTE.taxas],
-      ]
-    : [];
-
-  const porGran = gran === "dia" ? "por dia" : gran === "semana" ? "por semana" : "por mês";
-  const semMovimento = !pontos.some((p) => temMovimento(p));
-  const gap = n > 20 ? "gap-1" : "gap-2.5";
+  const rotulosX = (max: number) =>
+    indicesRotulosX(rotulos.length, max).map((i) => ({
+      i,
+      left: rotulos.length === 1 ? "50%" : px(xDoPonto(i, rotulos.length)),
+      transform:
+        rotulos.length === 1
+          ? "translateX(-50%)"
+          : i === 0
+            ? "none"
+            : i === rotulos.length - 1
+              ? "translateX(-100%)"
+              : "translateX(-50%)",
+    }));
 
   return (
-    <section
-      id="grafico-lucro"
-      aria-labelledby="grafico-lucro-t"
-      className="flex min-w-0 scroll-mt-32 flex-col gap-3.5 rounded-overlay border border-border bg-surface p-5"
-    >
-      <div className="flex flex-wrap items-center gap-2.5">
-        <h2 id="grafico-lucro-t" className="flex-1 text-overlay">
-          {rotuloReceita}
-        </h2>
-        {n > 1 && pontos.length > 7 && (
-          <Segmented rotulo="Agrupar por" valor={gran} onValorChange={setGran} opcoes={opcoesGran} />
+    <div className="relative pt-5 pr-5 pl-[52px] min-[760px]:pl-16">
+      <div
+        role="img"
+        aria-label={ariaLabel}
+        tabIndex={0}
+        onMouseMove={mover}
+        onMouseLeave={() => setHov(null)}
+        onKeyDown={teclar}
+        onBlur={() => setHov(null)}
+        className="relative h-[200px] cursor-crosshair focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus min-[760px]:h-60"
+      >
+        {escala.ticks.map((t) => {
+          const top = py(yDoValor(t, escala));
+          return (
+            <span key={t} aria-hidden>
+              <span
+                className={clsx(
+                  "absolute inset-x-0 h-px",
+                  t === 0 && escala.min < 0 ? "bg-border-strong" : "bg-chart-grid"
+                )}
+                style={{ top }}
+              />
+              <span
+                className="num absolute right-[calc(100%+10px)] -translate-y-1/2 whitespace-nowrap text-label text-t3"
+                style={{ top }}
+              >
+                {rotuloTick(t, tipo, escala.passo)}
+              </span>
+            </span>
+          );
+        })}
+        <svg
+          viewBox={`0 0 ${LARGURA_LINHA} ${ALTURA_LINHA}`}
+          preserveAspectRatio="none"
+          aria-hidden
+          className="absolute inset-0 size-full overflow-visible"
+        >
+          {tracado.area && <path d={tracado.area} style={{ fill: corVar, fillOpacity: 0.06, stroke: "none" }} />}
+          {linhaAnterior && (
+            <path
+              d={linhaAnterior}
+              fill="none"
+              strokeWidth={1.5}
+              strokeDasharray="4 4"
+              vectorEffect="non-scaling-stroke"
+              style={{ stroke: "var(--t4)" }}
+            />
+          )}
+          <path
+            d={tracado.linha}
+            fill="none"
+            strokeWidth={2}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            vectorEffect="non-scaling-stroke"
+            style={{ stroke: corVar }}
+          />
+          {tracado.parcial && (
+            <path
+              d={tracado.parcial}
+              fill="none"
+              strokeWidth={2}
+              strokeDasharray="2 4"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+              style={{ stroke: corVar }}
+            />
+          )}
+        </svg>
+        {tracado.fim && hv === null && (
+          <span
+            aria-hidden
+            className="absolute -mt-1 -ml-1 size-2 rounded-full bg-surface"
+            style={{ left: px(tracado.fim.x), top: py(tracado.fim.y), boxShadow: `0 0 0 2px ${corVar}` }}
+          />
         )}
-        <div role="radiogroup" aria-label="Tipo de gráfico" className="flex gap-1">
-          {(
-            [
-              ["barra", "Barras empilhadas", BarChart3],
-              ["total", `Só ${rotuloReceita.toLowerCase()}`, IconeTotal],
-            ] as const
-          ).map(([id, rotulo, Icone]) => (
-            <button
-              key={id}
-              type="button"
-              role="radio"
-              aria-checked={tipo === id}
-              aria-label={rotulo}
-              title={rotulo}
-              onClick={() => setTipo(id)}
+        {hv !== null && (
+          <>
+            <span aria-hidden className="absolute inset-y-0 w-px bg-border-strong" style={{ left: px(xDoPonto(hv, n)) }} />
+            {ok(vAt) && (
+              <span
+                aria-hidden
+                className="absolute -mt-[4.5px] -ml-[4.5px] size-[9px] rounded-full shadow-[0_0_0_2px_var(--surface)]"
+                style={{ left: px(xDoPonto(hv, n)), top: py(yDoValor(vAt, escala)), background: corVar }}
+              />
+            )}
+            {ok(vAn) && (
+              <span
+                aria-hidden
+                className="absolute -mt-[4.5px] -ml-[4.5px] size-[9px] rounded-full bg-t4 shadow-[0_0_0_2px_var(--surface)]"
+                style={{ left: px(xDoPonto(hv, n)), top: py(yDoValor(vAn, escala)) }}
+              />
+            )}
+            {/* O tooltip nunca sai da area do grafico: a faixa tem a largura
+                dela, e o vao entre a borda e o tooltip (12px depois do ponto,
+                ou antes dele depois de 55%) encolhe quando nao cabe. Com left
+                em % e translate, no celular ele passava da tela. */}
+            <div
+              aria-hidden
               className={clsx(
-                "grid size-8 place-items-center rounded-control border border-border",
-                tipo === id ? "bg-info text-surface" : "bg-surface text-t1 hover:bg-hover"
+                "pointer-events-none absolute inset-x-0 -top-1.5 z-[5] flex",
+                tipAEsquerda ? "flex-row-reverse" : "flex-row"
               )}
             >
-              <Icone aria-hidden className="size-4" strokeWidth={2} />
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {semMovimento ? (
-        <EmptyState
-          variante="tracejado"
-          titulo="Ainda não há vendas para desenhar"
-          descricao="O gráfico aparece depois do primeiro pedido."
-          className="min-h-60"
-        />
-      ) : (
-        <>
-          <div role="group" aria-label="Legenda" className="flex flex-wrap gap-3.5">
-            {legenda.map(([rotulo, cor]) => (
-              <span key={rotulo} className="flex items-center gap-1.5 text-label text-t1">
-                <span aria-hidden className={clsx("size-2.5 rounded-[3px]", cor)} />
-                {rotulo}
-              </span>
-            ))}
-          </div>
-          <div className="grid h-60 grid-cols-[44px_1fr] gap-2" onMouseLeave={() => setHov(null)}>
-            <div aria-hidden className="flex flex-col justify-between pb-[22px]">
-              {ticks.map((t, i) => (
-                <span key={i} className="num text-right text-label leading-none text-t2">
-                  {t}
-                </span>
-              ))}
-            </div>
-            <div className="relative flex flex-col">
-              <div aria-hidden className="absolute inset-x-0 top-0 bottom-[22px] flex flex-col justify-between">
-                {ticks.map((_, i) => (
-                  <span key={i} className="h-px bg-chart-grid" />
-                ))}
-              </div>
-              <div
-                role="img"
-                aria-label={`${rotuloReceita} ${porGran}, dividido em lucro, anúncios, produto e taxas, ${contexto}`}
-                className={clsx("relative flex flex-1 items-end", gap)}
-              >
-                {barras.map((b, i) => (
-                  <div
-                    key={i}
-                    tabIndex={0}
-                    onMouseEnter={() => setHov(i)}
-                    onFocus={() => setHov(i)}
-                    onBlur={() => setHov(null)}
-                    aria-label={`${b.rotulo}: ${rotuloReceita.toLowerCase()} ${dinheiro(b.receita, moeda)}, lucro ${dinheiro(b.lucro, moeda)}`}
-                    className={clsx(
-                      "flex h-full flex-1 cursor-pointer flex-col justify-end outline-none focus-visible:ring-2 focus-visible:ring-focus",
-                      hov !== null && hov !== i && "opacity-55"
-                    )}
-                  >
-                    {b.receita <= 0 && b.gasto + b.cmv + b.taxas <= 0 && <span className="h-0.5 rounded-[1px] bg-border-strong" />}
-                    {partes(b).map(([id, v, cor], j) => (
+              <span className="min-w-0 shrink" style={{ flexBasis: `calc(${tipAEsquerda ? 100 - xPct : xPct}% + 12px)` }} />
+              <div className="flex min-w-[min(14rem,100%)] max-w-full shrink-0 flex-col gap-1.5 rounded-card border border-border bg-surface px-3 py-2.5 shadow-overlay">
+                <span className="text-label font-semibold text-ink">{titulos[hv]}</span>
+                {linhasTip.map((l) => (
+                  <span key={`${l.tipo}-${l.rotulo}`} className="num flex items-center gap-2 text-label">
+                    {l.tipo === "anterior" ? (
+                      <span className="w-2.5 shrink-0 border-t-2 border-dashed border-t4" />
+                    ) : (
                       <span
-                        key={id}
-                        className={clsx(cor, j === 0 && "rounded-t-sm", b.parcial && "opacity-60")}
-                        style={{ height: altura(v) }}
+                        className="h-0.5 w-2.5 shrink-0 rounded-[1px]"
+                        style={{ background: l.tipo === "atual" ? corVar : "transparent" }}
                       />
-                    ))}
-                  </div>
-                ))}
-              </div>
-              <div aria-hidden className={clsx("flex h-[22px] items-end", gap)}>
-                {barras.map((b, i) => (
-                  <span key={i} className="flex-1 overflow-visible whitespace-nowrap text-center text-label text-t2">
-                    {i % cada === 0 || i === n - 1 ? b.rotulo : ""}
+                    )}
+                    <span className="flex-1 text-t2">{l.rotulo}</span>
+                    <span
+                      className={clsx(
+                        l.tipo === "atual" ? "font-semibold" : "font-normal",
+                        l.negativo ? "text-err" : l.tipo === "atual" ? "text-ink" : "text-t1"
+                      )}
+                    >
+                      {l.texto.replace(/^-/, "−")}
+                    </span>
                   </span>
                 ))}
               </div>
-              {hv && hov !== null && (
-                <div
-                  role="status"
-                  className="pointer-events-none absolute top-0 z-10 flex min-w-52 flex-col gap-1.5 rounded-card border border-border bg-surface px-3 py-2.5 shadow-md"
-                  style={{
-                    left: `${((hov + 0.5) / n) * 100}%`,
-                    transform: hov > n * 0.6 ? "translateX(calc(-100% - 10px))" : "translateX(10px)",
-                  }}
-                >
-                  <strong className="text-label">
-                    {hv.rotulo}
-                    {hv.parcial ? " · parcial" : ""}
-                  </strong>
-                  {linhasTip.map(([rotulo, v, cor]) => (
-                    <span key={rotulo} className="num flex items-center gap-2 text-label">
-                      <span aria-hidden className={clsx("size-2 rounded-[2px]", cor)} />
-                      <span className="flex-1 text-t1">{rotulo}</span>
-                      <strong className={clsx("font-semibold", v < 0 && "text-err")}>
-                        {dinheiro(v, moeda).replace(/^-/, "−")}
-                      </strong>
-                    </span>
-                  ))}
-                </div>
-              )}
             </div>
-          </div>
-        </>
-      )}
-    </section>
+          </>
+        )}
+      </div>
+      {/* O tooltip fica dentro do role="img" (que nao e lido): aqui o leitor de
+          tela ouve o ponto escolhido pelas setas. */}
+      <span className="sr-only" aria-live="polite">
+        {hv !== null ? `${titulos[hv]}: ${linhasTip.map((l) => `${l.rotulo} ${l.texto}`).join(", ")}` : ""}
+      </span>
+      <div aria-hidden className="relative h-7">
+        {/* indicesRotulosX sempre soma o ultimo dia: 5 + 1 = ~6 rotulos no
+            desktop, 3 + 1 = ~4 no celular. */}
+        {(
+          [
+            [rotulosX(5), "hidden min-[760px]:block"],
+            [rotulosX(3), "min-[760px]:hidden"],
+          ] as const
+        ).map(([lista, classe]) =>
+          lista.map((r) => (
+            <span
+              key={`${classe}-${r.i}`}
+              className={clsx("num absolute top-2 whitespace-nowrap text-label text-t3", classe)}
+              style={{ left: r.left, transform: r.transform }}
+            >
+              {rotulos[r.i]}
+            </span>
+          ))
+        )}
+      </div>
+    </div>
   );
 }
