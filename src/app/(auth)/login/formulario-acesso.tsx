@@ -8,7 +8,6 @@ import { Callout } from "@/components/ui/callout";
 import { cn } from "@/components/ui/cn";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { dadosDoCadastro, mascaraDocumento, mascaraTelefone } from "@/lib/cadastro";
-import { createClient } from "@/lib/supabase/client";
 import { guardarPlanoEscolhido } from "@/components/billing/plano-escolhido";
 import {
   BOTAO,
@@ -53,6 +52,32 @@ const VAZIO: CamposAcesso = {
 
 const ALTO = "h-ctl-lg sm:h-ctl-md";
 const LINK = "font-medium text-brand underline underline-offset-2 hover:text-ink";
+
+// O cliente do Supabase (auth, banco, realtime: uns 70 KB gzip) so serve no
+// envio: sai do primeiro acesso. O foco num campo ja o baixa, para estar no
+// cache no clique; o import() repetido devolve o mesmo modulo. A chamada
+// continua saindo do navegador (decisao da 077).
+// O import() que falhou (rede oscilando no foco, chunk 404 depois de um
+// deploy) fica preso no cache do Turbopack: todo import() seguinte falha
+// igual, sem buscar o arquivo. Tentar de novo nunca resolve, so recarregar a
+// pagina -- por isso a falha vira PaginaSemCliente e nao passa pelo
+// erroDeAcesso (que diria "tente de novo" ou, com "429" na URL do chunk,
+// "muitas tentativas").
+class PaginaSemCliente extends Error {}
+const supabaseDoNavegador = () =>
+  import("@/lib/supabase/client").then(
+    (m) => m.createClient(),
+    () => {
+      throw new PaginaSemCliente("o cliente do Supabase nao carregou");
+    },
+  );
+function preCarregarSupabase() {
+  void import("@/lib/supabase/client").catch(() => undefined);
+}
+const RECARREGAR: ErroDeAcesso = {
+  titulo: "Recarregue a página",
+  texto: "Uma parte desta página não carregou. Recarregue a página e tente de novo.",
+};
 
 // O que vem depois do # o servidor nao ve: le no navegador, como fonte externa
 // (no servidor e na hidratacao vale "", sem divergencia).
@@ -173,6 +198,11 @@ export function FormularioAcesso({
   }
 
   function mostrarErro(e: unknown) {
+    // Sem o cliente, tentar de novo nao adianta (ver PaginaSemCliente).
+    if (e instanceof PaginaSemCliente) {
+      setErro(RECARREGAR);
+      return;
+    }
     const r = erroDeAcesso(e);
     if (r.esperarSegundos) espera.iniciar(r.esperarSegundos);
     // E-mail que ja tem conta: o formulario vira "Entrar", com o aviso.
@@ -184,7 +214,7 @@ export function FormularioAcesso({
     setErro(null);
     setEnviando(true);
     try {
-      const supabase = createClient();
+      const supabase = await supabaseDoNavegador();
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo: `${window.location.origin}/callback?type=recovery`,
       });
@@ -220,7 +250,7 @@ export function FormularioAcesso({
     setErro(null);
     setEnviando(true);
     try {
-      const supabase = createClient();
+      const supabase = await supabaseDoNavegador();
       if (modo === "criar") {
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
@@ -259,6 +289,13 @@ export function FormularioAcesso({
       titulo={erroVisivel.titulo ?? TITULO_ERRO[modo]}
       texto={erroVisivel.texto}
       detalhe={erroVisivel.detalhe}
+      acao={
+        erroVisivel === RECARREGAR ? (
+          <Button variant="secondary" size="sm" onClick={() => window.location.reload()}>
+            Recarregar a página
+          </Button>
+        ) : undefined
+      }
     />
   ) : null;
 
@@ -349,7 +386,7 @@ export function FormularioAcesso({
         <p className="text-dense text-t2">{SUBTITULO[modo]}</p>
       </header>
 
-      <form noValidate onSubmit={enviar} className="flex flex-col gap-4">
+      <form noValidate onSubmit={enviar} onFocus={preCarregarSupabase} className="flex flex-col gap-4">
         {criar ? (
           <div className="grid grid-cols-2 gap-3">
             <Campo

@@ -7,7 +7,6 @@ import { CheckIcon } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 import { APP_HOME } from "@/lib/app-home";
-import { createClient } from "@/lib/supabase/client";
 import { erroDeAcesso, validarSenhaNova, type ErroDeAcesso, type ErrosSenhaNova } from "../acesso";
 import { AvisoDeErro, CampoSenha } from "../campos";
 
@@ -17,6 +16,27 @@ import { AvisoDeErro, CampoSenha } from "../campos";
 // ============================================================================
 
 const ALTO = "h-ctl-lg sm:h-ctl-md";
+
+// O cliente do Supabase so serve no envio: sai do primeiro acesso e baixa no
+// foco de um campo (o mesmo de formulario-acesso.tsx). O import() que falhou
+// fica preso no cache do Turbopack (o autoFocus pre-carrega ja na montagem):
+// tentar de novo nunca resolve, so recarregar -- a falha vira PaginaSemCliente
+// e nao passa pelo erroDeAcesso.
+class PaginaSemCliente extends Error {}
+const supabaseDoNavegador = () =>
+  import("@/lib/supabase/client").then(
+    (m) => m.createClient(),
+    () => {
+      throw new PaginaSemCliente("o cliente do Supabase nao carregou");
+    },
+  );
+function preCarregarSupabase() {
+  void import("@/lib/supabase/client").catch(() => undefined);
+}
+const RECARREGAR: ErroDeAcesso = {
+  titulo: "Recarregue a página",
+  texto: "Uma parte desta página não carregou. Recarregue a página e tente de novo.",
+};
 
 export function FormularioSenha({ email, temSenha }: { email: string | null; temSenha: boolean }) {
   const router = useRouter();
@@ -43,7 +63,7 @@ export function FormularioSenha({ email, temSenha }: { email: string | null; tem
     setErro(null);
     setSalvando(true);
     try {
-      const supabase = createClient();
+      const supabase = await supabaseDoNavegador();
       const { error } = await supabase.auth.updateUser({
         password: senha,
         data: { has_password: true },
@@ -55,7 +75,7 @@ export function FormularioSenha({ email, temSenha }: { email: string | null; tem
       // Fica pendente ate o app abrir: sem clique duplo no meio do caminho.
       router.push(APP_HOME);
     } catch (e) {
-      setErro(erroDeAcesso(e));
+      setErro(e instanceof PaginaSemCliente ? RECARREGAR : erroDeAcesso(e));
       setSalvando(false);
     }
   }
@@ -85,7 +105,7 @@ export function FormularioSenha({ email, temSenha }: { email: string | null; tem
         ) : null}
       </header>
 
-      <form noValidate onSubmit={salvar} className="flex flex-col gap-4">
+      <form noValidate onSubmit={salvar} onFocus={preCarregarSupabase} className="flex flex-col gap-4">
         {/* Para o gerenciador de senha saber de qual conta e a senha nova. */}
         {email ? <input type="email" name="username" autoComplete="username" value={email} readOnly hidden /> : null}
 
@@ -129,7 +149,11 @@ export function FormularioSenha({ email, temSenha }: { email: string | null; tem
             texto={erro.texto}
             detalhe={erro.detalhe}
             acao={
-              erro.sessaoExpirada ? (
+              erro === RECARREGAR ? (
+                <Button variant="secondary" size="sm" onClick={() => window.location.reload()}>
+                  Recarregar a página
+                </Button>
+              ) : erro.sessaoExpirada ? (
                 <Link href="/login?mode=link" className={buttonVariants({ variant: "secondary", size: "sm" })}>
                   Pedir novo link
                 </Link>
