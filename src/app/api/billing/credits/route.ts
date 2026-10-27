@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
     admin
       .from("profiles")
       .select(
-        `document_number, pagou_subscription_id, abacatepay_subscription_id, subscription_status, plan, payment_provider, current_period_end, is_admin, access_granted${plano}`
+        `document_number, nome, sobrenome, telefone, pagou_subscription_id, abacatepay_subscription_id, subscription_status, plan, payment_provider, current_period_end, is_admin, access_granted${plano}`
       )
       .eq("id", user.id)
       .maybeSingle()
@@ -124,6 +124,9 @@ export async function POST(request: NextRequest) {
   const perfil = lido as unknown as
     | (PerfilParaLimites & {
         document_number: string | null;
+        nome?: string | null;
+        sobrenome?: string | null;
+        telefone?: string | null;
         subscription_status: string | null;
         abacatepay_subscription_id?: string | null;
       })
@@ -149,7 +152,7 @@ export async function POST(request: NextRequest) {
   const bruto = informado || digitos(perfil?.document_number || "");
   // Recarga de creditos na AbacatePay sai sem CPF.
   if (abacate && !bruto && item.kind === "credits") {
-    return gerarPixAbacate(admin, user, item, null);
+    return gerarPixAbacate(admin, user, item, null, perfil);
   }
 
   if (!bruto) {
@@ -176,7 +179,7 @@ export async function POST(request: NextRequest) {
       .eq("id", user.id);
   }
 
-  if (abacate) return gerarPixAbacate(admin, user, item, doc.number);
+  if (abacate) return gerarPixAbacate(admin, user, item, doc.number, perfil);
 
   try {
     const customerId = await getOrCreateCustomer(user.id, user.email, null, doc);
@@ -261,26 +264,30 @@ type Item = NonNullable<ReturnType<typeof itemDe>>;
  * O Pix pela AbacatePay (checkout transparente). Mesmo registro pendente e
  * mesma resposta do da Pagou -- a janela do QR (pix-dialog.tsx) nao muda: o
  * `brCode` e o copia-e-cola, e o status vem no vocabulario dela (statusDoPix).
- * O cliente so vai com o CPF; sem ele, o Pix sai sem cliente.
+ * O cliente so vai completo (nome, e-mail, CPF e celular do cadastro); faltou
+ * um, o Pix sai sem cliente (criarPix).
  */
 async function gerarPixAbacate(
   admin: ReturnType<typeof createAdminClient>,
   user: { id: string; email?: string | null },
   item: Item,
-  documento: string | null
+  documento: string | null,
+  perfil: { nome?: string | null; sobrenome?: string | null; telefone?: string | null } | null
 ) {
   try {
     const pix = await criarPix({
       valorCentavos: item.amountCents,
       descricao: item.nome,
       expiraEmSegundos: PIX_ABACATE_EXPIRA_S,
-      cliente: documento
-        ? {
-            nome: user.email?.split("@")[0] || "Cliente xcart",
-            email: user.email || `${user.id}@sem-email.xcart`,
-            documento,
-          }
-        : null,
+      cliente:
+        documento && user.email
+          ? {
+              nome: [perfil?.nome, perfil?.sobrenome].filter(Boolean).join(" ").trim(),
+              email: user.email,
+              documento,
+              telefone: digitos(perfil?.telefone || "") || null,
+            }
+          : null,
       metadata: { user_id: user.id, kind: item.kind, pack_id: item.id, ...(item.plano ? { plano: item.plano } : {}) },
     });
 

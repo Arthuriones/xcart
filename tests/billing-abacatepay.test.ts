@@ -491,6 +491,24 @@ describe("Pix avulso pela AbacatePay", () => {
     expect(banco.tabelas.credit_purchases[0]).toMatchObject({ kind: "pro_month", plano: "roteamento", amount_cents: 19700 });
   });
 
+  it("cliente so vai inteiro: com CPF e sem celular no cadastro, o Pix sai sem cliente (o 422 de producao)", async () => {
+    cenario({ document_number: "52998224725", telefone: null });
+    expect((await postCredits({ packId: "pack_50" })).status).toBe(200);
+    const criado = api.chamadas.find((c) => c.caminho === "/transparents/create")!;
+    expect((criado.corpo!.data as Record<string, unknown>).customer).toBeUndefined();
+
+    cenario({ document_number: "52998224725", telefone: "(31) 99999-0000" });
+    api.chamadas = [];
+    await postCredits({ packId: "pack_50" });
+    const comCelular = api.chamadas.find((c) => c.caminho === "/transparents/create")!;
+    expect((comCelular.corpo!.data as Record<string, unknown>).customer).toEqual({
+      name: "Ana Lima",
+      email: "lojista@exemplo.com",
+      taxId: "52998224725",
+      cellphone: "31999990000",
+    });
+  });
+
   it("a janela do QR confere pela AbacatePay e aplica com apply_paid_charge", async () => {
     cenario({}, [COMPRA_PENDENTE]);
     const { PATCH } = await import("@/app/api/billing/credits/route");

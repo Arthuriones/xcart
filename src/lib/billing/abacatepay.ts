@@ -286,13 +286,16 @@ export async function criarPix(p: {
         amount: p.valorCentavos,
         description: p.descricao.slice(0, 140),
         expiresIn: p.expiraEmSegundos,
-        ...(p.cliente
+        // No Pix o customer e opcional, mas se for, vai INTEIRO: sem o celular a
+        // API responde 422 "data.customer.cellphone is missing" (producao,
+        // 27/10/2026). Faltou um campo, o Pix sai sem cliente.
+        ...(p.cliente && p.cliente.nome && p.cliente.email && p.cliente.documento && p.cliente.telefone
           ? {
               customer: {
                 name: p.cliente.nome,
                 email: p.cliente.email,
                 taxId: p.cliente.documento,
-                ...(p.cliente.telefone ? { cellphone: p.cliente.telefone } : {}),
+                cellphone: p.cliente.telefone,
               },
             }
           : {}),
