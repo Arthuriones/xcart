@@ -2,7 +2,7 @@
 
 Feito em 27/10/2026, lendo a documentação inteira da AbacatePay (`docs.abacatepay.com/llms-full.txt`, versão de 27/10/2026) e a cobrança atual do xcart.
 
-**Status (27/10/2026): implementado e na main, desligado.** Migration 081 aplicada em produção. Liga com `NEXT_PUBLIC_BILLING_PROVIDER=abacatepay` depois que a conta existir (ver o fim de ARCHITECTURE.md §11 e o gotcha no CLAUDE.md).
+**Status (27/10/2026): ligado em produção.** Migration 081 aplicada, `NEXT_PUBLIC_BILLING_PROVIDER=abacatepay` na Vercel, produtos e webhook criados, Pix real de R$ 25 conferido de ponta a ponta. Pix Automático não liberado. Ver ARCHITECTURE.md §11 e o gotcha no CLAUDE.md.
 
 ## Resumo
 
