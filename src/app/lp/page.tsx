@@ -63,10 +63,26 @@ import { GARANTIA, NOTA_DO_PRECO, PLANOS, PRECO_A_PARTIR, type PlanoNaTela } fro
  * hero ganha a composicao em 900px e o menu lateral em 1100px.
  */
 
+const TITULO = "xcart · lucro, rastreamento e alertas para lojas Shopify";
+const DESCRICAO =
+  "Veja o lucro estimado de cada loja Shopify, já descontado o anúncio. Entregue as compras ao Meta, ao TikTok e ao Google e receba alertas quando algo quebra.";
+
+// A raiz e /lp sao a mesma pagina (o proxy reescreve a raiz para /lp): o
+// canonical diz ao Google qual vale, e o openGraph e o que aparece no link
+// compartilhado no WhatsApp e no Instagram.
 export const metadata: Metadata = {
-  title: "xcart · lucro, rastreamento e alertas para lojas Shopify",
-  description:
-    "Veja o lucro estimado de cada loja Shopify, já descontado o anúncio. Entregue as compras ao Meta, ao TikTok e ao Google e receba alertas quando algo quebra.",
+  metadataBase: new URL("https://xcart.app"),
+  title: TITULO,
+  description: DESCRICAO,
+  alternates: { canonical: "/" },
+  openGraph: {
+    title: TITULO,
+    description: DESCRICAO,
+    url: "/",
+    siteName: "xcart",
+    locale: "pt_BR",
+    type: "website",
+  },
 };
 
 const ILUSTRACAO: Record<RecursoPrincipal["id"], () => ReactNode> = {
