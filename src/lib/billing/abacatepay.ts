@@ -271,6 +271,23 @@ export interface PixAbacate {
   platformFee?: number | null;
 }
 
+/**
+ * A API recusa o travessao: 400 "Disallowed character in description: "—"
+ * (U+2014). Replace it with "-"" (producao, 27/10/2026); acento passa.
+ * Tipografia vira ASCII e o que sobrar fora do Latin-1 sai.
+ */
+export function descricaoAceita(texto: string): string {
+  return texto
+    .replace(/[‐-―−]/g, "-")
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/…/g, "...")
+    .replace(/[^ -ÿ]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 140);
+}
+
 export async function criarPix(p: {
   valorCentavos: number;
   descricao: string;
@@ -284,7 +301,7 @@ export async function criarPix(p: {
       method: "PIX",
       data: {
         amount: p.valorCentavos,
-        description: p.descricao.slice(0, 140),
+        description: descricaoAceita(p.descricao),
         expiresIn: p.expiraEmSegundos,
         // No Pix o customer e opcional, mas se for, vai INTEIRO: sem o celular a
         // API responde 422 "data.customer.cellphone is missing" (producao,
