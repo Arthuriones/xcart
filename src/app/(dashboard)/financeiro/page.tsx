@@ -14,7 +14,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ErroLucro } from "./erro-lucro";
 import { EsqueletoLucro } from "./esqueleto";
 import { FinanceiroScreen, type ConexaoLucro, type ExtrasLucro } from "./financeiro-screen";
-import { momentoAtualizado } from "./lucro-dados";
+import { foiLido, momentoAtualizado } from "./lucro-dados";
 
 export const dynamic = "force-dynamic";
 
@@ -107,13 +107,13 @@ async function Conteudo() {
           return c.ativo && d !== null && lojaSet.has(d);
         })
       : null;
+  const syncPedidos = dados.estados.map((e) => e.ultimo_sync_ok_em);
+  const syncGasto = (contasAtivas ?? []).map((c) => c.ultimo_sync_ok_em);
   const conexao: ConexaoLucro = {
     desinstaladas: marcas.status === "fulfilled" ? marcas.value : {},
     lojasComConta: contasAtivas ? [...new Set(contasAtivas.map((c) => String(destino(c))))] : null,
-    atualizadoEm: momentoAtualizado(
-      dados.estados.map((e) => e.ultimo_sync_ok_em),
-      (contasAtivas ?? []).map((c) => c.ultimo_sync_ok_em)
-    ),
+    atualizadoEm: momentoAtualizado(syncPedidos, syncGasto),
+    lido: { pedidos: foiLido(syncPedidos), gasto: foiLido(syncGasto) },
   };
 
   return (

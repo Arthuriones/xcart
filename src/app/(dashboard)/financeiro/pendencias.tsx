@@ -1,23 +1,22 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
+import { createContext, useContext, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ChevronDown, ChevronRight, Info, OctagonAlert, TriangleAlert } from "lucide-react";
+import { ChevronDown, ChevronRight, Info, OctagonAlert, RefreshCw, TriangleAlert } from "lucide-react";
 import clsx from "clsx";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { ROTAS, type SyncResposta } from "@/lib/financeiro/tipos";
-import type { Pendencia, TomPendencia } from "./lucro-dados";
+import { montarFaixa, type Pendencia, type TomPendencia } from "./lucro-dados";
 import { useListaGuardada } from "./preferencia";
 
 // ============================================================================
-// Central de pendencias: o que deixa o numero do Lucro errado ou incompleto,
-// agrupado por gravidade. Fechada, mostra so a mais grave; cada uma leva a
-// tela que resolve. E o unico bloco de aviso da tela. O que pode ser de
-// proposito (loja que vende sem anunciar) pode ser dispensado: fica guardado
-// neste navegador.
+// Faixa de pendencias: o que deixa o numero do Lucro errado ou incompleto,
+// numa linha so no topo (a mais grave; o aviso de custo so cede a uma
+// critica), com o botao dela e "Ver pendencias (N)" para o resto. Cada uma
+// leva a tela que resolve. O que pode ser de proposito (loja que vende sem
+// anunciar) pode ser dispensado: fica guardado neste navegador.
 // ============================================================================
 
 const CHAVE_DISPENSADAS = "xc_lucro_dispensadas";
@@ -25,30 +24,41 @@ const NENHUMA: readonly string[] = [];
 
 const TOM: Record<
   TomPendencia,
-  { sev: string; grupo: string; contagem: [string, string]; caixa: string; texto: string; Icone: typeof Info }
+  {
+    sev: string;
+    grupo: string;
+    caixa: string;
+    texto: string;
+    faixa: string;
+    botao: string;
+    Icone: typeof Info;
+  }
 > = {
   err: {
     sev: "Crítico",
     grupo: "Críticas",
-    contagem: ["crítica", "críticas"],
     caixa: "border-err-border bg-err-bg text-err",
     texto: "text-err",
+    faixa: "border-err-border bg-err-bg",
+    botao: "border-err-border hover:border-err",
     Icone: OctagonAlert,
   },
   warn: {
     sev: "Atenção",
     grupo: "Atenção",
-    contagem: ["de atenção", "de atenção"],
     caixa: "border-warn-border bg-warn-bg text-warn",
     texto: "text-warn",
+    faixa: "border-warn-border bg-warn-bg",
+    botao: "border-warn-border hover:border-warn",
     Icone: TriangleAlert,
   },
   info: {
     sev: "Informação",
     grupo: "Informativas",
-    contagem: ["informativa", "informativas"],
     caixa: "border-info-border bg-info-bg text-info",
     texto: "text-info",
+    faixa: "border-info-border bg-info-bg",
+    botao: "border-info-border hover:border-info",
     Icone: Info,
   },
 };
@@ -69,7 +79,8 @@ async function sincronizar(): Promise<{ falhou: boolean; linhas: string[] }> {
       // corpo vazio ou HTML: o status diz o que houve.
     }
     // Pelo status, sem repassar `error` cru ("Unauthorized"): a toast e do lojista.
-    if (res.status === 401) throw new Error("sua sessão expirou; entre de novo");
+    // Sessao vencida tambem pode voltar como redirecionamento para /login.
+    if (res.status === 401 || res.redirected) throw new Error("sua sessão expirou; entre de novo");
     if (!res.ok) throw new Error(corpo.erro || `o servidor respondeu com erro ${res.status}`);
     return {
       ok: Boolean(corpo.ok),
@@ -89,6 +100,11 @@ async function sincronizar(): Promise<{ falhou: boolean; linhas: string[] }> {
     }
     const v = res.value;
     if (v.erros.length) falhou = true;
+    // A rota pula o que leu ha menos de um minuto (ou esta lendo): nao e "0 lidas".
+    if (v.processadas === 0 && v.puladas > 0 && !v.erros.length) {
+      linhas.push(`${nome}: lido há menos de um minuto; tente de novo daqui a pouco`);
+      return;
+    }
     linhas.push(
       `${nome}: ${v.processadas} ${rotulo}` +
         (v.erros.length ? ` · ${v.erros.length} com erro: ${v.erros.slice(0, 2).join("; ")}` : "")
@@ -101,6 +117,86 @@ async function sincronizar(): Promise<{ falhou: boolean; linhas: string[] }> {
 
 function unidade(res: PromiseSettledResult<SyncResposta>, um: string, varios: string): string {
   return res.status === "fulfilled" && res.value.processadas === 1 ? um : varios;
+}
+
+/** Sincroniza, avisa o resultado e rele a tela no servidor. */
+function usePuxarAgora() {
+  const router = useRouter();
+  const [puxando, setPuxando] = useState(false);
+  const [, startTransition] = useTransition();
+
+  async function puxar() {
+    if (puxando) return;
+    setPuxando(true);
+    try {
+      const { falhou, linhas } = await sincronizar();
+      if (falhou) toast.warning("Atualização incompleta", { description: linhas.join("\n") });
+      else toast.success("Números atualizados", { description: linhas.join("\n") });
+    } finally {
+      setPuxando(false);
+      startTransition(() => router.refresh());
+    }
+  }
+
+  return { puxando, puxar };
+}
+
+const PuxarContexto = createContext<ReturnType<typeof usePuxarAgora> | null>(null);
+
+/**
+ * Um estado so para o "Atualizar agora" da faixa e o "Puxar agora" da
+ * leitura: com um lendo, o outro fica ocupado (senao saiam dois POST em
+ * paralelo, e o segundo dizia "lido ha menos de um minuto" no meio do primeiro).
+ */
+export function PuxarAgoraProvider({ children }: { children: ReactNode }) {
+  const valor = usePuxarAgora();
+  return <PuxarContexto.Provider value={valor}>{children}</PuxarContexto.Provider>;
+}
+
+function usePuxar() {
+  const c = useContext(PuxarContexto);
+  if (!c) throw new Error("usePuxar fora do PuxarAgoraProvider");
+  return c;
+}
+
+/**
+ * "Pedidos e gasto lidos há 12 min" e o "Puxar agora": o cron le a cada 15
+ * minutos, e o "Atualizar" do topo so rele o banco.
+ */
+export function LeituraDoLucro({
+  rotulo,
+  iso,
+  hora,
+}: {
+  /** null = nada lido ainda (fica so o botao). */
+  rotulo: string | null;
+  iso: string | null;
+  /** A hora da leitura, no fuso do relatorio (dica ao passar o mouse). */
+  hora: string | null;
+}) {
+  const { puxando, puxar } = usePuxar();
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+      <p aria-live="polite" className="min-w-0 text-label text-t2">
+        {puxando ? (
+          "Puxando pedidos e gasto…"
+        ) : rotulo && iso ? (
+          <time dateTime={iso} title={hora ?? undefined}>
+            {rotulo}
+          </time>
+        ) : null}
+      </p>
+      <Button variant="ghost" size="sm" pending={puxando} onClick={puxar} className="text-t2">
+        {!puxando && <RefreshCw aria-hidden />}
+        Puxar agora
+      </Button>
+    </div>
+  );
+}
+
+/** "Título." -- a linha junta titulo e detalhe numa frase so. */
+function comPonto(t: string): string {
+  return /[.!?…]$/.test(t) ? t : `${t}.`;
 }
 
 function Item({
@@ -159,30 +255,17 @@ function Item({
   );
 }
 
-export function Pendencias({ itens }: { itens: Pendencia[] }) {
-  const router = useRouter();
+/**
+ * A linha do topo. `custo` e o aviso de custo (o AvisoCusto de antes): ele e
+ * a linha, a menos que haja pendencia critica (montarFaixa).
+ */
+export function FaixaPendencias({ custo, itens }: { custo: Pendencia | null; itens: Pendencia[] }) {
   const [aberta, setAberta] = useState(false);
-  const [sincronizando, setSincronizando] = useState(false);
-  const [, startTransition] = useTransition();
+  const { puxando, puxar } = usePuxar();
   const [dispensadas, gravarDispensadas] = useListaGuardada(CHAVE_DISPENSADAS, NENHUMA);
+  const { linha, resto, total, escondidas } = montarFaixa(itens, dispensadas, custo);
 
-  const fora = new Set(dispensadas);
-  const ativas = itens.filter((p) => !(p.dispensavel && fora.has(p.id)));
-  const escondidas = itens.length - ativas.length;
-
-  async function atualizarAgora() {
-    if (sincronizando) return;
-    setSincronizando(true);
-    try {
-      const { falhou, linhas } = await sincronizar();
-      if (falhou) toast.warning("Atualização incompleta", { description: linhas.join("\n") });
-      else toast.success("Números atualizados", { description: linhas.join("\n") });
-    } finally {
-      setSincronizando(false);
-      startTransition(() => router.refresh());
-    }
-  }
-
+  const dispensar = (id: string) => gravarDispensadas([...dispensadas, id]);
   const mostrarDeNovo = (
     <button
       type="button"
@@ -194,7 +277,7 @@ export function Pendencias({ itens }: { itens: Pendencia[] }) {
   );
   const textoEscondidas = `${escondidas} ${escondidas === 1 ? "aviso dispensado" : "avisos dispensados"}.`;
 
-  if (ativas.length === 0) {
+  if (!linha) {
     return escondidas > 0 ? (
       <p className="text-label text-t2">
         {textoEscondidas} {mostrarDeNovo}
@@ -202,63 +285,84 @@ export function Pendencias({ itens }: { itens: Pendencia[] }) {
     ) : null;
   }
 
-  const contagens = (["err", "warn", "info"] as TomPendencia[])
-    .map((tom) => ({ tom, n: ativas.filter((p) => p.tom === tom).length }))
-    .filter((c) => c.n > 0);
-  const visiveis = aberta ? ativas : ativas.slice(0, 1);
+  const t = TOM[linha.tom];
+  const acao = linha.acao;
+  const classeBotao = clsx(
+    "inline-flex h-ctl-sm items-center rounded-control border bg-surface px-2.5 text-dense font-medium whitespace-nowrap text-ink no-underline hover:text-ink hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-wait disabled:opacity-60",
+    t.botao
+  );
 
   return (
-    <section aria-labelledby="pendencias-t" className="overflow-hidden rounded-card border border-border bg-surface">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border-subtle py-2.5 pl-4 pr-3">
-        <h2 id="pendencias-t" className="text-dense font-semibold text-ink">
-          Pendências
-        </h2>
-        <div className="flex flex-wrap gap-1.5">
-          {contagens.map(({ tom, n }) => (
-            <StatusBadge key={tom} tom={tom}>
-              {n} {TOM[tom].contagem[n === 1 ? 0 : 1]}
-            </StatusBadge>
-          ))}
-        </div>
-        <span className="flex-1" />
-        {ativas.length > 1 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-expanded={aberta}
-            aria-controls="pendencias-lista"
-            onClick={() => setAberta((a) => !a)}
-          >
-            {aberta ? "Recolher" : `Ver todas (${ativas.length})`}
-            <ChevronDown aria-hidden className={clsx("transition-transform", aberta && "rotate-180")} />
-          </Button>
+    <div className="flex flex-col gap-2">
+      <div
+        role="status"
+        className={clsx(
+          "flex flex-wrap items-center gap-x-3.5 gap-y-2.5 rounded-card border py-2.5 pr-3 pl-3.5",
+          t.faixa
         )}
+      >
+        <t.Icone aria-hidden className={clsx("size-4 shrink-0", t.texto)} strokeWidth={1.75} />
+        <p className="min-w-55 flex-1 text-dense text-ink text-pretty">
+          <span className="sr-only">{t.sev}: </span>
+          <strong className="font-semibold">{comPonto(linha.titulo)}</strong>
+          {linha.detalhe ? ` ${linha.detalhe}` : null}
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          {resto.length > 0 && (
+            <button
+              type="button"
+              aria-expanded={aberta}
+              aria-controls="pendencias-lista"
+              onClick={() => setAberta((a) => !a)}
+              className="inline-flex items-center gap-1 rounded-sm text-label font-medium whitespace-nowrap text-brand underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            >
+              {aberta ? "Esconder pendências" : `Ver pendências (${total})`}
+              <ChevronDown aria-hidden className={clsx("size-3.5 transition-transform", aberta && "rotate-180")} />
+            </button>
+          )}
+          {linha.dispensavel && (
+            <Button variant="ghost" size="sm" className="text-t2" onClick={() => dispensar(linha.id)}>
+              Dispensar
+            </Button>
+          )}
+          {acao && "sincronizar" in acao ? (
+            <button type="button" onClick={puxar} disabled={puxando} aria-busy={puxando} className={classeBotao}>
+              {puxando ? "Atualizando…" : acao.rotulo}
+            </button>
+          ) : acao ? (
+            <Link href={acao.href} className={classeBotao}>
+              {acao.rotulo}
+            </Link>
+          ) : null}
+        </div>
       </div>
-      <ul id="pendencias-lista">
-        {visiveis.map((p, i) => {
-          const novoGrupo = aberta && (i === 0 || visiveis[i - 1].tom !== p.tom);
-          return (
-            <PendenciaComGrupo key={p.id} grupo={novoGrupo ? p.tom : null}>
-              <Item
-                p={p}
-                sincronizando={sincronizando}
-                onSincronizar={atualizarAgora}
-                onDispensar={() => gravarDispensadas([...dispensadas, p.id])}
-              />
-            </PendenciaComGrupo>
-          );
-        })}
-      </ul>
-      {escondidas > 0 && (
-        <p className="border-t border-border-subtle bg-surface-2 px-4 py-2 text-label text-t2">
+
+      {aberta && resto.length > 0 && (
+        <div id="pendencias-lista" className="overflow-hidden rounded-card border border-border bg-surface">
+          <ul>
+            {resto.map((p, i) => (
+              <PendenciaComGrupo key={p.id} grupo={i === 0 || resto[i - 1].tom !== p.tom ? p.tom : null}>
+                <Item p={p} sincronizando={puxando} onSincronizar={puxar} onDispensar={() => dispensar(p.id)} />
+              </PendenciaComGrupo>
+            ))}
+          </ul>
+          {escondidas > 0 && (
+            <p className="border-t border-border-subtle bg-surface-2 px-4 py-2 text-label text-t2">
+              {textoEscondidas} {mostrarDeNovo}
+            </p>
+          )}
+        </div>
+      )}
+      {escondidas > 0 && resto.length === 0 && (
+        <p className="text-label text-t2">
           {textoEscondidas} {mostrarDeNovo}
         </p>
       )}
-    </section>
+    </div>
   );
 }
 
-/** Cabecalho do grupo (so com a lista aberta) antes do primeiro item dele. */
+/** Cabecalho do grupo antes do primeiro item dele. */
 function PendenciaComGrupo({ grupo, children }: { grupo: TomPendencia | null; children: ReactNode }) {
   if (!grupo) return children;
   return (

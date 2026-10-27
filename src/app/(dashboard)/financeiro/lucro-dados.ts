@@ -1108,6 +1108,37 @@ export function montarPendencias(d: EntradaPendencias): Pendencia[] {
     .map((x) => x.p);
 }
 
+export interface Faixa {
+  /** O que vai na linha. null = nada a mostrar. */
+  linha: Pendencia | null;
+  /** O que fica atras do "Ver pendencias", sem repetir a linha. */
+  resto: Pendencia[];
+  /** Tudo o que a faixa mostra, a linha junto: o N do "Ver pendencias (N)". */
+  total: number;
+  /** Dispensadas neste navegador. */
+  escondidas: number;
+}
+
+/**
+ * A faixa do topo do Lucro: uma linha so, com a mais grave, e o resto atras
+ * do link. `itens` vem de montarPendencias (ja em ordem, sem a de custo);
+ * `custo` e o aviso de custo, de atencao: so a critica passa na frente dele.
+ * Dispensada nao entra.
+ */
+export function montarFaixa(itens: Pendencia[], dispensadas: readonly string[], custo: Pendencia | null): Faixa {
+  const fora = new Set(dispensadas);
+  const ativas = itens.filter((p) => !(p.dispensavel && fora.has(p.id)));
+  const lista = custo
+    ? [...ativas.filter((p) => p.tom === "err"), custo, ...ativas.filter((p) => p.tom !== "err")]
+    : ativas;
+  return {
+    linha: lista[0] ?? null,
+    resto: lista.slice(1),
+    total: lista.length,
+    escondidas: itens.length - ativas.length,
+  };
+}
+
 /**
  * Avisos que so explicam um numero (custo padrao, cambio, fuso): viram Dica
  * no indicador que eles afetam, em vez de caixa na tela.
@@ -1198,6 +1229,15 @@ export function momentoAtualizado(
   return Math.min(p, g);
 }
 
+/**
+ * Se o lado ja teve alguma leitura (a mesma conta de momentoAtualizado). O
+ * rotulo so nomeia o lado lido: com o gasto nunca lido, momentoAtualizado
+ * devolve a hora dos pedidos, e "Pedidos e gasto lidos" mentiria.
+ */
+export function foiLido(datas: (string | null | undefined)[]): boolean {
+  return maisNova(datas) !== null;
+}
+
 /** "agora", "há 12 min", "há 3 h", "há 2 dias". */
 export function haQuanto(momentoMs: number, agoraMs: number): string {
   const min = Math.floor(Math.max(0, agoraMs - momentoMs) / 60_000);
@@ -1207,6 +1247,22 @@ export function haQuanto(momentoMs: number, agoraMs: number): string {
   if (h < 24) return `há ${h} h`;
   const dias = Math.floor(h / 24);
   return `há ${dias} ${dias === 1 ? "dia" : "dias"}`;
+}
+
+/**
+ * "Pedidos e gasto lidos há 12 min": so o lado que ja foi lido de fato (loja
+ * Shopify = pedidos; conta de anuncio ligada = gasto; ver foiLido). Checkout
+ * externo chega por webhook, nao entra. null = nada lido ainda.
+ */
+export function rotuloLeitura(
+  momentoMs: number | null,
+  agoraMs: number,
+  le: { pedidos: boolean; gasto: boolean }
+): string | null {
+  if (momentoMs === null || (!le.pedidos && !le.gasto)) return null;
+  const quando = haQuanto(momentoMs, agoraMs);
+  if (le.pedidos && le.gasto) return `Pedidos e gasto lidos ${quando}`;
+  return le.pedidos ? `Pedidos lidos ${quando}` : `Gasto lido ${quando}`;
 }
 
 // ---------------------------------------------------------------------------
