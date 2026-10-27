@@ -162,7 +162,8 @@ export async function produtoDoPlano(planoId: string): Promise<ProdutoAbacate | 
     produtos.set(planoId, { produto: p, em: Date.now() });
     return p;
   } catch (e) {
-    if (e instanceof AbacatePayError && e.status === 404) return null;
+    // A API responde 400 "Product not found" (conferido em 27/10/2026), nao 404.
+    if (e instanceof AbacatePayError && (e.status === 404 || /not found/i.test(e.message))) return null;
     throw e;
   }
 }

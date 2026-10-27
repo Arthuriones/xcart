@@ -85,7 +85,7 @@ const fetchFalso = vi.fn(async (entrada: URL | string, init?: RequestInit) => {
       return ok({ ...api.assinatura, status: "CANCELLED" });
     case "/products/get": {
       const p = api.produtos[query.externalId];
-      return p ? ok(p) : resposta(404, { data: null, success: false, error: "Product not found" });
+      return p ? ok(p) : resposta(400, { data: null, success: false, error: "Product not found" });
     }
     case "/subscriptions/checkouts/get":
       return api.checkoutPendente
