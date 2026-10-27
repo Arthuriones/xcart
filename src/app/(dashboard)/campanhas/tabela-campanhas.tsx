@@ -3,7 +3,8 @@
 import { useMemo, type ReactNode } from "react";
 import { HelpCircle, Layers } from "lucide-react";
 import { formatarDinheiro } from "@/lib/financeiro/tipos";
-import { derivar, somarLinhas, type MetricasCampanha, type SomasCampanha } from "@/lib/campanhas/metricas";
+import { derivar, somarLinhas, tomDoRoas, type MetricasCampanha, type SomasCampanha } from "@/lib/campanhas/metricas";
+import { vezes } from "../financeiro/lucro-dados";
 import type { LinhaCampanha, NivelGranularidade } from "./tipos";
 import { MAPA_COLUNAS } from "./colunas-config";
 
@@ -11,7 +12,6 @@ interface TabelaCampanhasProps {
   linhas: LinhaCampanha[];
   nivel: NivelGranularidade;
   colunasAtivas: string[];
-  carregando: boolean;
   /** Moeda do relatorio. */
   moeda: string;
 }
@@ -62,7 +62,6 @@ export function TabelaCampanhas({
   linhas,
   nivel,
   colunasAtivas,
-  carregando,
   moeda,
 }: TabelaCampanhasProps) {
   // Linha de total: das somas cruas das linhas visiveis, com a mesma conta das linhas.
@@ -97,22 +96,24 @@ export function TabelaCampanhas({
         return <span className="font-bold text-ink">{formatarNumero(v.vendas)}</span>;
       case "vendas_pendentes":
         return <span className={v.vendasPendentes > 0 ? "text-warn" : "text-t2"}>{formatarNumero(v.vendasPendentes)}</span>;
+      // Gastar nao e erro: cor so em Lucro, Margem, ROI e ROAS.
       case "gastos":
-        return <span className={`${forte} text-err`}>{formatarDinheiro(v.gastos, moeda)}</span>;
+        return <span className={`${forte} text-ink`}>{formatarDinheiro(v.gastos, moeda)}</span>;
       case "faturamento":
-        return <span className={`${forte} text-ok`}>{formatarDinheiro(v.faturamento, moeda)}</span>;
+        return <span className={`${forte} text-ink`}>{formatarDinheiro(v.faturamento, moeda)}</span>;
       case "lucro":
         return (
           <span className={`font-bold ${v.lucro >= 0 ? "text-ok" : "text-err"}`}>{formatarDinheiro(v.lucro, moeda)}</span>
         );
-      case "roas":
-        return v.roas === null ? (
-          TRACO
-        ) : (
-          <span className={`font-semibold ${v.roas >= 2 ? "text-ok" : v.roas >= 1 ? "text-warn" : "text-err"}`}>
-            {v.roas.toFixed(2)}x
+      case "roas": {
+        if (v.roas === null) return TRACO;
+        const tom = tomDoRoas(v);
+        return (
+          <span className={`font-semibold ${tom === "ok" ? "text-ok" : tom === "err" ? "text-err" : "text-t2"}`}>
+            {vezes(v.roas)}
           </span>
         );
+      }
       case "margem":
         return pct(v.margem, v.margem !== null && v.margem >= 0 ? "text-ok" : "text-err");
       case "roi":
@@ -142,7 +143,13 @@ export function TabelaCampanhas({
       case "hold_rate":
         return pct(v.holdRate);
       case "frequencia":
-        return v.frequencia === null ? TRACO : <span className="text-t2">{v.frequencia.toFixed(2)}</span>;
+        return v.frequencia === null ? (
+          TRACO
+        ) : (
+          <span className="text-t2">
+            {v.frequencia.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        );
       default:
         return TRACO;
     }
@@ -227,17 +234,9 @@ export function TabelaCampanhas({
           </thead>
 
           {/* Corpo da Tabela */}
+          {/* Sem spinner proprio: o "Atualizar agora" do topo (seletor-global.tsx) gira e diz "Atualizando…", e a tabela fica no lugar. */}
           <tbody className="divide-y divide-border/40">
-            {carregando ? (
-              <tr>
-                <td colSpan={colunasAtivas.length + 3} className="py-16 text-center text-t2">
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-brand border-t-transparent" />
-                    <span>Carregando métricas de tráfego...</span>
-                  </div>
-                </td>
-              </tr>
-            ) : linhas.length === 0 ? (
+            {linhas.length === 0 ? (
               <tr>
                 <td colSpan={colunasAtivas.length + 3} className="py-16 text-center text-t2">
                   <div className="mx-auto flex max-w-sm flex-col items-center gap-2">

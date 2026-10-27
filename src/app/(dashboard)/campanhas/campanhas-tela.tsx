@@ -1,11 +1,17 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
+import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import { BarraFiltros } from "./barra-filtros";
 import { TabelaCampanhas } from "./tabela-campanhas";
-import { ModalPersonalizarColunas } from "./modal-personalizar-colunas";
+
+// Fora do primeiro carregamento: o modal (Dialog, Checkbox e as listas) so abre
+// com clique, e pesava ~25 KB gzip a mais na tela de Campanhas.
+const ModalPersonalizarColunas = dynamic(
+  () => import("./modal-personalizar-colunas").then((m) => m.ModalPersonalizarColunas),
+  { ssr: false }
+);
 import type {
   ContaSemDetalhe,
   LinhaCampanha,
@@ -43,9 +49,6 @@ export function CampanhasTela({
   sincronizadoEm,
   moedasSemCotacao,
 }: CampanhasTelaProps) {
-  const router = useRouter();
-  const [pendente, startTransition] = useTransition();
-
   // Filtros da tela (o periodo e o da barra do topo)
   const [nivel, setNivel] = useState<NivelGranularidade>("campanha");
   const [plataforma, setPlataforma] = useState<PlataformaAds>("todas");
@@ -97,12 +100,6 @@ export function CampanhasTela({
     }
   }
 
-  function atualizarDados() {
-    startTransition(() => {
-      router.refresh();
-    });
-  }
-
   const semDetalheAqui =
     nivel === "grupo" || nivel === "anuncio"
       ? semDetalhe.filter((c) => contaSelecionada === "todas" || c.contaId === contaSelecionada)
@@ -124,8 +121,6 @@ export function CampanhasTela({
         contaSelecionada={contaSelecionada}
         aoMudarConta={setContaSelecionada}
         contasDisponiveis={contas}
-        atualizando={pendente}
-        aoAtualizar={atualizarDados}
         aoAbrirPersonalizarColunas={() => setModalColunasAberto(true)}
         atribuicao={atribuicao}
         moeda={moeda}
@@ -151,7 +146,6 @@ export function CampanhasTela({
         linhas={linhasFiltradas}
         nivel={nivel}
         colunasAtivas={colunasAtivas}
-        carregando={pendente}
         moeda={moeda}
       />
 

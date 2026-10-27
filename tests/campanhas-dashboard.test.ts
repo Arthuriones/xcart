@@ -5,7 +5,7 @@ import {
   MAPA_COLUNAS,
 } from "@/app/(dashboard)/campanhas/colunas-config";
 import type { LinhaCampanha } from "@/app/(dashboard)/campanhas/tipos";
-import { derivar, somarLinhas, somasVazias, type SomasCampanha } from "@/lib/campanhas/metricas";
+import { derivar, somarLinhas, somasVazias, tomDoRoas, type SomasCampanha } from "@/lib/campanhas/metricas";
 
 describe("Dashboard de Campanhas (estilo Cakto / UTMify)", () => {
   it("contém o catálogo completo de métricas", () => {
@@ -83,5 +83,26 @@ describe("Dashboard de Campanhas (estilo Cakto / UTMify)", () => {
     expect(total.margem).toBeCloseTo(43.33, 1);
     expect(total.cpc).toBeCloseTo(500 / 350, 6);
     expect(linhas[0].lucro).toBe(250);
+  });
+});
+
+describe("cor do ROAS na tabela", () => {
+  const valores = (p: Partial<SomasCampanha>) => {
+    const somas = { ...somasVazias(), ...p };
+    return { ...somas, ...derivar(somas) };
+  };
+
+  it("segue o sinal do lucro da linha, nao um limite fixo de ROAS", () => {
+    // ROAS 1,8 no lucro (margem boa): verde, nao amarelo.
+    expect(tomDoRoas(valores({ gastos: 100, faturamento: 180, lucroPedidos: 150, vendas: 3 }))).toBe("ok");
+    // ROAS 2,1 no prejuizo (custo alto): vermelho, nao verde.
+    expect(tomDoRoas(valores({ gastos: 100, faturamento: 210, lucroPedidos: 80, vendas: 3 }))).toBe("err");
+    // Lucro zero conta como "ok", como a coluna Lucro.
+    expect(tomDoRoas(valores({ gastos: 100, faturamento: 200, lucroPedidos: 100, vendas: 2 }))).toBe("ok");
+  });
+
+  it("sem ROAS ou sem venda paga fica neutro (o vermelho e do Lucro)", () => {
+    expect(tomDoRoas(valores({ gastos: 0, faturamento: 0 }))).toBeNull();
+    expect(tomDoRoas(valores({ gastos: 50, faturamento: 0, vendas: 0 }))).toBeNull();
   });
 });

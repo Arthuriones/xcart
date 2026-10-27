@@ -138,6 +138,16 @@ export function somarLinhas(linhas: readonly SomasCampanha[]): SomasCampanha {
   return total;
 }
 
+/**
+ * Cor do ROAS: pelo sinal do lucro da propria linha, nao por um limite fixo
+ * (ROAS 1,8 da lucro numa loja e prejuizo em outra). Sem ROAS ou sem venda
+ * paga, neutro: o vermelho fica no Lucro.
+ */
+export function tomDoRoas(m: Pick<SomasCampanha, "vendas"> & Pick<MetricasCampanha, "roas" | "lucro">): "ok" | "err" | null {
+  if (m.roas === null || m.vendas === 0) return null;
+  return m.lucro >= 0 ? "ok" : "err";
+}
+
 const razao = (a: number, b: number, fator = 1): number | null => (b > 0 ? (a / b) * fator : null);
 
 export function derivar(s: SomasCampanha): MetricasCampanha {
