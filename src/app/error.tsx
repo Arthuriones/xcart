@@ -11,14 +11,16 @@ import { useEffect } from "react";
  * <Menu.Group>. Um erro pequeno derrubava tudo e nao dizia o que era.
  *
  * Aqui o resto da tela continua de pe, o erro fica visivel e ha um botao para
- * tentar de novo sem recarregar a pagina inteira.
+ * tentar de novo sem recarregar a pagina inteira. `retry`, nao `reset`: o
+ * reset so redesenha o que ja veio, e o erro do servidor (login fora do ar)
+ * voltava igual; o retry busca de novo no servidor.
  */
 export default function Error({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
   useEffect(() => {
     console.error("[app] erro nao tratado:", error);
@@ -40,7 +42,7 @@ export default function Error({
       </p>
       <button
         type="button"
-        onClick={reset}
+        onClick={retry}
         className="mt-4 h-[30px] rounded-md bg-[var(--solid)] px-[13px] text-[12.5px] font-semibold text-[var(--on-solid)] transition-colors hover:bg-[var(--solid-hover)]"
       >
         Tentar de novo

@@ -296,6 +296,10 @@ export function caminhoInternoSeguro(valor: unknown): string | null {
     return null;
   }
   if (url.origin !== BASE) return null;
+  // A origem sobreviveu, mas o caminho normalizado pode comecar com "//":
+  // "/.//evil.com", "/a/..//evil.com" e "/%2e%2e//evil.com" saem daqui como
+  // "//evil.com", que quem usar o valor resolve como OUTRO site.
+  if (url.pathname.startsWith("//")) return null;
 
   return `${url.pathname}${url.search}${url.hash}`;
 }

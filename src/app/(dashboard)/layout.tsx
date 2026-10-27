@@ -30,7 +30,10 @@ export default async function DashboardLayout({
 }) {
   // Trava de acesso: sem acesso (free nao liberado) cai na pagina /no-access.
   // So bloqueia quando ACCESS_CONTROL_ENABLED=true; senao userHasAccess()=true.
-  const user = await getCurrentUser();
+  // Login fora do ar (getCurrentUser lanca) nao derruba a casca: a tela mostra
+  // o proprio erro com "Tentar de novo". Nunca mandar ao /login daqui: com o
+  // token ainda valido, o proxy devolve do /login para o app, e vira laco.
+  const user = await getCurrentUser().catch(() => null);
   if (user && !(await userHasAccess(user.id))) {
     redirect("/no-access");
   }

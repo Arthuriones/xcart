@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
+import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 import { APP_HOME } from "@/lib/app-home";
+import { caminhoInternoSeguro } from "@/lib/net/url-guard";
 
 const PUBLIC_PATHS = [
   "/api/health",
@@ -22,11 +24,17 @@ const PUBLIC_PATHS = [
 // getUser fazia em TODA navegacao de pagina. Ele renova o cookie vencido do
 // mesmo jeito. Quem decide acesso a dado continua sendo o layout (getUser, em
 // current-user.ts) e o RLS; o proxy so escolhe para onde redirecionar.
+//
+// Prazo de 5 s para buscar a chave publica, 15 s para renovar o token
+// (comPrazoDoSupabase): o proxy roda antes da pagina, e pendurado nem o
+// esqueleto aparece. O auth-js ainda repete a renovacao dentro da janela dele
+// de 30 s -- o prazo tira a espera sem fim, nao essa.
 function attachSupabase(request: NextRequest, response: NextResponse) {
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      global: { fetch: comPrazoDoSupabase(5_000) },
       cookies: {
         getAll() {
           return request.cookies.getAll();
@@ -44,8 +52,88 @@ function attachSupabase(request: NextRequest, response: NextResponse) {
   );
 }
 
+/**
+ * fetch com prazo para o cliente do Supabase (proxy aqui, sessao em server.ts).
+ * Sem ele, Auth ou PostgREST que aceita a conexao e nao responde segura a
+ * requisicao ate a Vercel matar a funcao.
+ *
+ * AbortController com abort() SEM motivo, de proposito: da AbortError, que o
+ * postgrest-js nao repete (o auth-js vira AuthRetryableFetchError). Com
+ * AbortSignal.timeout() o erro seria TimeoutError, e o postgrest-js repetiria o
+ * GET 3 vezes. O signal de quem chamou (.abortSignal() da consulta) continua
+ * valendo, com o motivo dele.
+ *
+ * fetch direto, sem safeFetch (tests/sem-fetch-cru.test.ts): quem monta a URL
+ * e o supabase-js, sempre no projeto de NEXT_PUBLIC_SUPABASE_URL -- nunca
+ * endereco vindo do usuario. safeFetch resolveria o DNS em toda ida ao banco.
+ */
+export function comPrazo(ms: number): typeof fetch {
+  return async (entrada, init) => {
+    const controle = new AbortController();
+    const prazo = setTimeout(() => controle.abort(), ms);
+    const deQuemChamou = init?.signal;
+    const repassar = () => controle.abort(deQuemChamou?.reason);
+    if (deQuemChamou?.aborted) repassar();
+    else deQuemChamou?.addEventListener("abort", repassar, { once: true });
+    try {
+      return await globalThis.fetch(entrada, { ...init, signal: controle.signal });
+    } finally {
+      clearTimeout(prazo);
+      deQuemChamou?.removeEventListener("abort", repassar);
+    }
+  };
+}
+
+/** Prazo minimo da renovacao do token (POST /auth/v1/token). */
+const PRAZO_DA_RENOVACAO_MS = 15_000;
+
+/**
+ * comPrazo(ms) com prazo proprio, maior, na renovacao do token.
+ *
+ * O auth-js repete o POST /auth/v1/token com o MESMO refresh token, e a
+ * tentativa que o prazo cortou pode terminar a troca no servidor mesmo assim.
+ * A repeticao que chega mais de 10 s depois da troca (a janela de reuso do
+ * login) recebe refresh_token_already_used, e o login revoga a sessao
+ * inteira: o lojista sai de verdade, e sem o aviso de instavel (400 nao e
+ * retentavel). Com o login lento -- respondendo em 6 s, digamos -- o corte em
+ * 5 s fazia exatamente isso; esperar a primeira tentativa nao. Chave publica,
+ * usuario e banco seguem com o prazo de quem chamou.
+ */
+export function comPrazoDoSupabase(ms: number): typeof fetch {
+  const geral = comPrazo(ms);
+  const renovacao = comPrazo(Math.max(ms, PRAZO_DA_RENOVACAO_MS));
+  return (entrada, init) => {
+    const url =
+      typeof entrada === "string" ? entrada : entrada instanceof URL ? entrada.href : entrada.url;
+    return (url.includes("/auth/v1/token") ? renovacao : geral)(entrada, init);
+  };
+}
+
 function isPublic(pathname: string) {
   return PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+}
+
+/**
+ * Para onde vai quem ja entrou e abriu o /login: o ?next= (so caminho interno,
+ * a mesma regra do /login), senao a home. Antes ia sempre para a home, e quem
+ * caiu no login com o cookie ainda valido perdia a tela que tinha aberto.
+ *
+ * - A origem e conferida depois de resolver: caminhoInternoSeguro normaliza os
+ *   pontos, e "/.//evil.com" (ou "/a/..//evil.com") sai dela "//evil.com", que
+ *   o new URL leva para outro site.
+ * - /api nunca: o proxy nao confere sessao la, e a rota decide pelo getUser,
+ *   que discorda do getClaims com a sessao revogada em outro aparelho (o token
+ *   vale ate 1 h) ou com o login fora do ar. /api/shopify/auth manda ao
+ *   /login?next=/api/shopify/auth..., e o laco nao fechava.
+ */
+function destinoDeQuemJaEntrou(request: NextRequest): URL {
+  const home = new URL(APP_HOME, request.url);
+  const next = caminhoInternoSeguro(request.nextUrl.searchParams.get("next"));
+  if (!next) return home;
+  const alvo = new URL(next, request.url);
+  if (alvo.origin !== home.origin) return home;
+  if (["/login", "/callback", "/api"].some((p) => alvo.pathname.startsWith(p))) return home;
+  return alvo;
 }
 
 export async function updateSession(request: NextRequest) {
@@ -166,9 +254,16 @@ export async function updateSession(request: NextRequest) {
   }
 
   // ===== Paginas do app: auth =====
+  // O /login que este proxy abriu porque o login do Supabase nao respondeu
+  // (instavel=1, abaixo) nao confere a sessao de novo: seriam mais ~30 s
+  // tentando renovar o token antes de desenhar a tela que avisa da pane.
+  if (pathname.startsWith("/login") && request.nextUrl.searchParams.get("instavel") === "1") {
+    return NextResponse.next({ request });
+  }
+
   const response = NextResponse.next({ request });
   const supabase = attachSupabase(request, response);
-  const { data } = await supabase.auth.getClaims();
+  const { data, error } = await supabase.auth.getClaims();
   const user = data?.claims ?? null;
 
   const isAuthPath =
@@ -182,6 +277,11 @@ export async function updateSession(request: NextRequest) {
     // Guarda o destino para o login devolver o usuario ao lugar certo depois de
     // entrar (ex.: link direto para /products ou instalacao da Shopify).
     url.searchParams.set("next", intendedPath);
+    // Rede, 5xx ou prazo estourado ao renovar o token ou buscar a chave: o
+    // login esta fora do ar, nao a sessao ausente (o auth-js nem apaga o
+    // cookie). O /login avisa em vez de pedir a senha como se a pessoa tivesse
+    // saido. Nao deixa passar: a pagina repetiria a mesma renovacao.
+    if (isAuthRetryableFetchError(error)) url.searchParams.set("instavel", "1");
     return NextResponse.redirect(url);
   }
 
@@ -196,9 +296,7 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
     if (isAuthPath && !isSetPassword) {
-      const url = request.nextUrl.clone();
-      url.pathname = APP_HOME;
-      return NextResponse.redirect(url);
+      return NextResponse.redirect(destinoDeQuemJaEntrou(request));
     }
   }
 

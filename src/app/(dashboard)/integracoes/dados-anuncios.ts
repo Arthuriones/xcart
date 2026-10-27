@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 import { listarContasDoUsuario } from "@/lib/ads/contas";
 import { filtroResolvido, lerCheckoutsDoUsuario } from "@/lib/filtro-global";
 import { lerGastoPorConta } from "@/lib/leitura/gasto-por-conta";
@@ -133,11 +134,10 @@ export async function carregarAnuncios(
 
   let conexoes: ConexaoOAuthResumo[] = [];
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // O mesmo usuario da requisicao (cache), sem outra ida ao login.
+    const user = await getCurrentUser();
     if (user) {
+      const supabase = await createClient();
       const { data: conRows } = await supabase
         .from("ad_connections")
         .select("id, plataforma, external_user_id, nome, email, foto_url, token_expira_em, created_at")

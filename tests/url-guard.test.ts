@@ -367,6 +367,14 @@ describe("caminhoInternoSeguro", () => {
     );
   });
 
+  it("INVALID: caminho que a normalizacao transforma em //outro-site", () => {
+    // A origem sobrevive ao resolver, mas o caminho sai com "//" na frente, e
+    // quem usar o valor (o proxy, o link do /login) iria para evil.com.
+    for (const ruim of ["/.//evil.com", "/a/..//evil.com/x", "/%2e%2e//evil.com"]) {
+      expect(caminhoInternoSeguro(ruim), ruim).toBeNull();
+    }
+  });
+
   it("INVALID: os tres bypasses confirmados do validador antigo", () => {
     // O antigo era `startsWith("/") && !startsWith("//")`. Cada um destes
     // passava e levava o usuario para evil.com depois do login.
