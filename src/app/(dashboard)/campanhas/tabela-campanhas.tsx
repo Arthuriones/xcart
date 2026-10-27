@@ -6,7 +6,7 @@ import { formatarDinheiro } from "@/lib/financeiro/tipos";
 import { derivar, somarLinhas, tomDoRoas, type MetricasCampanha, type SomasCampanha } from "@/lib/campanhas/metricas";
 import { vezes } from "../financeiro/lucro-dados";
 import type { LinhaCampanha, NivelGranularidade } from "./tipos";
-import { MAPA_COLUNAS } from "./colunas-config";
+import { MAPA_COLUNAS, ROTULOS_CONTRA_ENTREGA } from "./colunas-config";
 
 interface TabelaCampanhasProps {
   linhas: LinhaCampanha[];
@@ -14,6 +14,8 @@ interface TabelaCampanhasProps {
   colunasAtivas: string[];
   /** Moeda do relatorio. */
   moeda: string;
+  /** Visao contra entrega: Vendas sao os pedidos gerados, valores previstos. */
+  contraEntrega?: boolean;
 }
 
 /** Sem dado (sem base, sem detalhe): "—", nunca 0. */
@@ -63,6 +65,7 @@ export function TabelaCampanhas({
   nivel,
   colunasAtivas,
   moeda,
+  contraEntrega = false,
 }: TabelaCampanhasProps) {
   // Linha de total: das somas cruas das linhas visiveis, com a mesma conta das linhas.
   const totais = useMemo<Valores>(() => {
@@ -211,7 +214,7 @@ export function TabelaCampanhas({
                 const col = MAPA_COLUNAS.get(colId);
                 return (
                   <th key={colId} className="px-3 py-3 text-right">
-                    {col?.rotulo || colId}
+                    {(contraEntrega && ROTULOS_CONTRA_ENTREGA[colId]) || col?.rotulo || colId}
                   </th>
                 );
               })}

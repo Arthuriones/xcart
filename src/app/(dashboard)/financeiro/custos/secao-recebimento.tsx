@@ -26,8 +26,9 @@ import {
 // contra entrega e reconhecido pelo gateway, com a loja em qualquer modo.
 //
 // Grava pela rota de sempre (POST /api/financeiro/config), so os campos de
-// recebimento: a taxa de pagamento fica como esta. So depois de a taxa estar
-// salva (a rota nao cria a linha so com o recebimento).
+// recebimento: a taxa de pagamento fica como esta. Sem a taxa salva, so
+// "Contra entrega" grava: a rota cria a linha (taxa 0) se a loja nao tem venda
+// online, e recusa com a frase se tem.
 // ============================================================================
 
 const MODOS: { valor: ModoRecebimento; rotulo: string }[] = [
@@ -57,14 +58,16 @@ export function SecaoRecebimento({
   moedaLoja: string | null;
   sugestao: SugestaoCod;
   /**
-   * A loja ja tem a linha de taxas. Sem ela a rota recusa (409): criar a
-   * linha so com o recebimento gravaria taxa 0 e tiraria o aviso de taxa.
+   * A loja ja tem a linha de taxas. Sem ela, "Pagamento online" nao grava (a
+   * rota recusa: criar a linha so com o recebimento gravaria taxa 0 e tiraria
+   * o aviso de taxa); "Contra entrega" grava se a loja so vende na entrega.
    */
   taxaConfigurada: boolean;
   form: FormRecebimento;
   sujo: boolean;
   onMudar: (f: FormRecebimento) => void;
-  onSalvo: (gravado: FormRecebimento) => void;
+  /** `criada`: a rota criou a linha (taxa 0), a taxa passa a configurada. */
+  onSalvo: (gravado: FormRecebimento, criada: boolean) => void;
 }) {
   const router = useRouter();
   const id = useId();
@@ -73,6 +76,7 @@ export function SecaoRecebimento({
   const [recarregando, iniciar] = useTransition();
   const { erros } = validarRecebimento(form);
   const textoSugestao = textoSugestaoCod(sugestao, form.modo);
+  const precisaTaxa = !taxaConfigurada && form.modo !== "cod";
 
   async function salvar(e: FormEvent) {
     e.preventDefault();
@@ -101,7 +105,8 @@ export function SecaoRecebimento({
         setErro(mensagemDeFalha(res.redirected ? 401 : res.status, await lerJson(res)));
         return;
       }
-      onSalvo(formRecebimentoDe(corpo));
+      const resposta = (await lerJson(res)) as { criada?: unknown } | null;
+      onSalvo(formRecebimentoDe(corpo), resposta?.criada === true);
       toast.success("Recebimento salvo", {
         description: corpo.contra_entrega ? "O Dashboard já mostra a visão contra entrega." : undefined,
       });
@@ -163,10 +168,10 @@ export function SecaoRecebimento({
             <p role="alert" className="mr-auto text-dense text-err">
               {erro}
             </p>
-          ) : sujo && !taxaConfigurada ? (
+          ) : sujo && precisaTaxa ? (
             <p className="mr-auto text-dense text-t1">Salve a taxa de pagamento abaixo primeiro.</p>
           ) : null}
-          <Button type="submit" pending={salvando || recarregando} disabled={!sujo || !taxaConfigurada}>
+          <Button type="submit" pending={salvando || recarregando} disabled={!sujo || precisaTaxa}>
             {salvando ? "Salvando…" : "Salvar"}
           </Button>
         </div>

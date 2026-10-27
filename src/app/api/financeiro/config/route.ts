@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { temVendaOnline } from "@/lib/financeiro/contra-entrega";
 import { ehColunaAusente } from "@/lib/financeiro/mapear-pedido";
 import { ehUuid, type ConfigFinanceiraCorpo, type ConfigRecebimentoCorpo } from "@/lib/financeiro/tipos";
 
@@ -13,7 +14,8 @@ export const runtime = "nodejs";
 //   - como a loja recebe (068): contra_entrega, cod_taxa_entrega,
 //     cod_custo_devolucao.
 // O corpo traz um bloco ou os dois; o upsert so mexe nas colunas que vieram.
-// So o recebimento numa loja sem linha: 409, nao cria (ver abaixo).
+// So o recebimento numa loja sem linha: cria so se for contra entrega numa
+// loja sem venda online; senao 409 (ver abaixo).
 //
 // A taxa e uma regra simples (percentual + fixo por pedido, na moeda da loja)
 // ate o xcart ler a taxa real do Shopify Payments. Escrita pelo service role
@@ -94,10 +96,12 @@ export async function POST(request: NextRequest) {
   if (!loja || loja.user_id !== user.id) return erro("Loja não encontrada.", 404);
 
   const agora = new Date().toISOString();
-  // So o recebimento: atualiza a linha, nunca cria. A linha existir e o que
-  // diz "taxa configurada" no Dashboard, no Pedidos e em Custos; criada aqui,
-  // nasceria com taxa 0 (o default da 052) e o aviso de taxa sumiria calado
-  // -- na loja mista, o Shopify Payments passava a contar sem taxa nenhuma.
+  // So o recebimento: atualiza a linha. A linha existir e o que diz "taxa
+  // configurada" no Dashboard, no Pedidos e em Custos; criada aqui, nasce com
+  // taxa 0 (o default da 052) e o aviso de taxa some. Por isso so cria quando
+  // a escolha e contra entrega E a loja nao tem venda online nos ultimos 60
+  // dias: na loja que so vende na entrega (Releasit) nao ha taxa de gateway
+  // para pedir; na mista, o Shopify Payments passaria a contar sem taxa.
   if (!temTaxas) {
     const { data, error } = await admin
       .from("fin_store_settings")
@@ -110,8 +114,36 @@ export async function POST(request: NextRequest) {
       }
       return erro(`Falha ao gravar: ${error.message}`, 500);
     }
-    if (!data || data.length === 0) return erro("Salve a taxa de pagamento primeiro.", 409);
-    return NextResponse.json({ ok: true });
+    if (data && data.length > 0) return NextResponse.json({ ok: true });
+    if (campos.contra_entrega !== true) return erro("Salve a taxa de pagamento primeiro.", 409);
+
+    const desde = new Date(Date.now() - 60 * 86_400_000).toISOString();
+    const { data: pedidos, error: erroPedidos } = await admin
+      .from("fin_orders")
+      .select("tipo, gateways, cod, recebido")
+      .eq("store_id", loja.id)
+      .gte("criado_em", desde)
+      .order("criado_em", { ascending: false })
+      .limit(1000);
+    if (erroPedidos) return erro(`Falha ao ler os pedidos: ${erroPedidos.message}`, 500);
+    if (temVendaOnline(pedidos ?? [])) {
+      return erro("Esta loja também recebe online: salve a taxa de pagamento abaixo primeiro.", 409);
+    }
+    const { error: erroCriar } = await admin
+      .from("fin_store_settings")
+      .insert({ store_id: loja.id, user_id: loja.user_id, ...campos, updated_at: agora });
+    if (erroCriar?.code === "23505") {
+      // A taxa foi salva nesse meio tempo: so o recebimento muda, a taxa fica.
+      const { error: erroDeNovo } = await admin
+        .from("fin_store_settings")
+        .update({ ...campos, updated_at: agora })
+        .eq("store_id", loja.id);
+      if (erroDeNovo) return erro(`Falha ao gravar: ${erroDeNovo.message}`, 500);
+      return NextResponse.json({ ok: true });
+    }
+    if (erroCriar) return erro(`Falha ao gravar: ${erroCriar.message}`, 500);
+    // criada: a tela passa a taxa para "configurada" (0), sem recarregar.
+    return NextResponse.json({ ok: true, criada: true });
   }
 
   const { error } = await admin.from("fin_store_settings").upsert(

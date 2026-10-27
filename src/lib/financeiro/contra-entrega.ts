@@ -120,6 +120,19 @@ export function ehPedidoCod(p: Pick<FinOrderRow, "gateways"> & Partial<Pick<FinO
   return (Array.isArray(p.gateways) ? p.gateways : []).some(gatewayEhCod);
 }
 
+/**
+ * Alguma venda paga online (nao contra entrega)? Decide se "Como a loja
+ * recebe" = Contra entrega pode criar a configuracao sem a taxa de pagamento
+ * (rota /api/financeiro/config): na loja que so vende na entrega a taxa nao
+ * existe; na mista, o online contaria com taxa 0 e o aviso de taxa sumiria.
+ * Pedido online que nunca foi pago (cancelado, abandonado) nao conta.
+ */
+export function temVendaOnline(
+  pedidos: readonly (Pick<FinOrderRow, "tipo" | "gateways" | "recebido"> & Partial<Pick<FinOrderRow, "cod">>)[]
+): boolean {
+  return pedidos.some((p) => p.tipo === "venda" && !ehPedidoCod(p) && paraNumero(p.recebido) > 0);
+}
+
 // ---------------------------------------------------------------------------
 // Situacao do pedido COD
 // ---------------------------------------------------------------------------

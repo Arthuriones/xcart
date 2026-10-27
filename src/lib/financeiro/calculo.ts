@@ -601,6 +601,41 @@ function resumirEntrega(porLoja: Record<string, TaxaEntrega>, ids: string[]): Re
 // Calculo
 // ---------------------------------------------------------------------------
 
+/**
+ * As "lojas" que o Dashboard mostra na visao contra entrega (Recebido, A
+ * receber, Previsto, Pedidos gerados). A mesma regra serve o Lucro e a aba
+ * Campanhas (src/lib/campanhas/montar.ts).
+ *
+ * Checkout de comissao e sempre "a receber + previsto": entra. O de venda
+ * (Cakto) nao: Pix e boleto nao sao contra entrega.
+ *
+ * Loja que NUNCA salvou a configuracao (sem linha em fin_store_settings) e
+ * vende na entrega tambem entra, pela mesma regra da sugestao de Custos
+ * (sugerirContraEntrega: >= 2 COD e maioria nos 7 dias). Nos cartoes de loja
+ * online Faturamento e Pedidos so contam o pago, e a loja do Releasit
+ * recem-conectada mostrava as vendas como zero. Quem configurou manda. Sem um
+ * "hoje" de verdade (a serie do periodo anterior passa ""), nao ha os 7 dias
+ * da sugestao: fica so o que foi configurado.
+ */
+export function lojasEmContraEntrega(e: Pick<EntradaFinanceiro, "lojas" | "configs" | "pedidos" | "hoje">): string[] {
+  const configPorLoja = new Map(e.configs.map((c) => [c.store_id, c]));
+  const codSemConfig = (id: string) =>
+    /^\d{4}-\d{2}-\d{2}$/.test(e.hoje) &&
+    !configPorLoja.has(id) &&
+    sugerirContraEntrega(
+      e.pedidos.filter((p) => p.store_id === id),
+      e.hoje
+    ).sugere;
+  return e.lojas
+    .filter(
+      (l) =>
+        (l.tipo === "checkout" && l.modelo !== "venda") ||
+        configPorLoja.get(l.id)?.contra_entrega === true ||
+        (l.tipo !== "checkout" && codSemConfig(l.id))
+    )
+    .map((l) => l.id);
+}
+
 export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
   const converter = criarConversor(e.cambio);
   const { atual: iAtual, anterior: iAnterior } = e.intervalos;
@@ -967,31 +1002,7 @@ export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
     parcial: dia === e.hoje,
   }));
 
-  // Checkout de comissao e sempre "a receber + previsto": entra aqui tambem.
-  // O de venda (Cakto) nao: Pix e boleto nao sao contra entrega.
-  //
-  // Loja que NUNCA salvou a configuracao (sem linha em fin_store_settings) e
-  // vende na entrega tambem entra, pela mesma regra da sugestao de Custos
-  // (sugerirContraEntrega: >= 2 COD e maioria nos 7 dias). Nos cartoes de
-  // loja online Faturamento e Pedidos so contam o pago, e a loja do Releasit
-  // recem-conectada mostrava as vendas como zero. Quem configurou manda.
-  // Sem um "hoje" de verdade (a serie do periodo anterior passa ""), nao ha
-  // os 7 dias da sugestao: fica so o que foi configurado.
-  const codSemConfig = (id: string) =>
-    /^\d{4}-\d{2}-\d{2}$/.test(e.hoje) &&
-    !configPorLoja.has(id) &&
-    sugerirContraEntrega(
-      e.pedidos.filter((p) => p.store_id === id),
-      e.hoje
-    ).sugere;
-  const lojasContraEntrega = e.lojas
-    .filter(
-      (l) =>
-        (l.tipo === "checkout" && l.modelo !== "venda") ||
-        configPorLoja.get(l.id)?.contra_entrega === true ||
-        (l.tipo !== "checkout" && codSemConfig(l.id))
-    )
-    .map((l) => l.id);
+  const lojasContraEntrega = lojasEmContraEntrega(e);
 
   return {
     moeda: e.moeda,

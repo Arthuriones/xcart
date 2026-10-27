@@ -35,6 +35,8 @@ interface CampanhasTelaProps {
   diasNoPeriodo: number;
   sincronizadoEm: string | null;
   moedasSemCotacao: string[];
+  /** Visao contra entrega: pedidos gerados e valores previstos. */
+  contraEntrega: boolean;
 }
 
 export function CampanhasTela({
@@ -48,6 +50,7 @@ export function CampanhasTela({
   diasNoPeriodo,
   sincronizadoEm,
   moedasSemCotacao,
+  contraEntrega,
 }: CampanhasTelaProps) {
   // Filtros da tela (o periodo e o da barra do topo)
   const [nivel, setNivel] = useState<NivelGranularidade>("campanha");
@@ -147,6 +150,7 @@ export function CampanhasTela({
         nivel={nivel}
         colunasAtivas={colunasAtivas}
         moeda={moeda}
+        contraEntrega={contraEntrega}
       />
 
       {/* Modal Personalizar Colunas */}

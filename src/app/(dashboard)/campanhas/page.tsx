@@ -57,6 +57,7 @@ async function Conteudo() {
       diasNoPeriodo={dados.resultado.diasNoPeriodo}
       sincronizadoEm={dados.resultado.sincronizadoEm}
       moedasSemCotacao={dados.resultado.moedasSemCotacao}
+      contraEntrega={dados.resultado.contraEntrega}
     />
   );
 }

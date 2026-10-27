@@ -247,3 +247,15 @@ export const COLUNAS_PADRAO_IDS = TODAS_AS_COLUNAS
 export const MAPA_COLUNAS = new Map<string, ColunaDefinicao>(
   TODAS_AS_COLUNAS.map((c) => [c.id, c])
 );
+
+/**
+ * Cabecalho na visao contra entrega (montarCampanhas, `contraEntrega`): os
+ * mesmos nomes do Dashboard nesse modo.
+ */
+export const ROTULOS_CONTRA_ENTREGA: Partial<Record<string, string>> = {
+  vendas: "Pedidos gerados",
+  vendas_pendentes: "Pix e boleto aguardando",
+  faturamento: "Faturamento previsto",
+  lucro: "Lucro previsto",
+  roas: "ROAS previsto",
+};

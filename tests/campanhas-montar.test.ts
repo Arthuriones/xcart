@@ -428,6 +428,79 @@ describe("vendas pelos ids do pedido", () => {
     expect(a2.cpp).toBeCloseTo(a2.gastos, 6);
     expect(a2.cpt).toBeCloseTo(a2.gastos / 2, 6);
   });
+
+  it("loja em contra entrega: pedido gerado e venda, com os valores previstos do Lucro", () => {
+    expect(r.contraEntrega).toBe(false);
+    // A Dum parfemu (Releasit) em 27/10: COD aguardando envio, pago nunca marcado.
+    const cod = (dia: string) =>
+      pedido({
+        dia_local: dia,
+        gateways: ["Cash on Delivery (COD)"],
+        status_financeiro: "pending",
+        recebido: 0,
+        liquido_pago: 0,
+        linhas: [{ sku: "SKU-1", qtd: 1, qtd_atual: 1, qtd_nao_enviada: 1, preco: 100 }],
+      });
+    const Q1 = cod(D1);
+    const Q2 = cod(D2);
+    const Q3 = cod(D2); // sem UTM
+    const ori = [Q1, Q2].map((q) => ({ store_id: LOJA, shopify_order_id: q.shopify_order_id, campanha_id: C1, conjunto_id: G1, anuncio_id: A1 }));
+    // Sem linha em fin_store_settings (a loja recem-conectada) e com a linha so de recebimento (taxa 0).
+    for (const cfgs of [[], [{ ...configs[0], taxa_pct: 0, contra_entrega: true, cod_taxa_entrega: 70, cod_custo_devolucao: 0 }]]) {
+      const fin = financeiro({ pedidos: [Q1, Q2, Q3], configs: cfgs });
+      const rc = montarCampanhas(entrada({ granular: ESTRUTURA, financeiro: fin, origens: ori }));
+      expect(rc.contraEntrega).toBe(true);
+      const so = calcularFinanceiro({ ...financeiro({ pedidos: [Q1, Q2], configs: cfgs }), contas: [], gastos: [] }).atual;
+      const c1 = achar(rc, "campanha", C1)!;
+      expect(c1.vendas).toBe(2);
+      expect(c1.vendasPendentes).toBe(0);
+      expect(c1.vendasTotais).toBe(2);
+      expect(c1.faturamento).toBeCloseTo(so.cod.previsto, 6);
+      expect(c1.faturamento).toBeGreaterThan(0);
+      expect(c1.custoProduto).toBeCloseTo(so.cod.custoPrevisto, 6);
+      expect(c1.lucroPedidos).toBeCloseTo(so.cod.lucroPrevisto, 6);
+      expect(c1.cpa).toBeCloseTo(c1.gastos / 2, 6);
+      expect(rc.atribuicao.identificadas.vendas).toBe(2);
+      expect(rc.atribuicao.semId.vendas).toBe(1);
+    }
+  });
+
+  it("visao contra entrega nao muda o pedido online nem conta o Pix aguardando como gerado", () => {
+    // A loja online + o Eve; o COD so liga a visao (config da loja).
+    const externos: PedidoExternoFin[] = [
+      { checkout_id: CHECKOUT, pedido_id: "e2", situacao: "pendente", moeda: "BRL", valor: 197, receita: 197, moeda_receita: "BRL", dia_local: D2, criado_em: `${D2}T19:00:00Z`, metodo_pagamento: "pix", grupo: "e2", vence_em: `${D2}T23:59:00Z` },
+    ];
+    const cfgCod = [{ ...configs[0], contra_entrega: true, cod_taxa_entrega: 70, cod_custo_devolucao: 0 }];
+    const base = { granular: ESTRUTURA, origens, origensExternas: [{ checkout_id: CHECKOUT, pedido_id: "e2", campanha_id: C1, conjunto_id: G1, anuncio_id: A2 }] };
+    const online = montarCampanhas(entrada({ ...base, financeiro: financeiro({ pedidos, externos }) }));
+    const naVisaoCod = montarCampanhas(entrada({ ...base, financeiro: financeiro({ pedidos, externos, configs: cfgCod }) }));
+    expect(online.contraEntrega).toBe(false);
+    expect(naVisaoCod.contraEntrega).toBe(true);
+    for (const [nivel, id] of [["anuncio", A1], ["grupo", G1], ["campanha", C1]] as const) {
+      const a = achar(online, nivel, id)!;
+      const b = achar(naVisaoCod, nivel, id)!;
+      expect(b.vendas).toBe(a.vendas);
+      expect(b.vendasTotais).toBe(a.vendasTotais);
+      expect(b.faturamento).toBeCloseTo(a.faturamento, 6);
+      expect(b.lucroPedidos).toBeCloseTo(a.lucroPedidos, 6);
+    }
+    expect(achar(naVisaoCod, "anuncio", A2)!.vendasPendentes).toBe(1);
+  });
+
+  it("checkout de comissao (Sphere) sozinho nao liga a visao contra entrega", () => {
+    const fin = financeiro({ pedidos });
+    const comSphere = montarCampanhas(
+      entrada({
+        granular: ESTRUTURA,
+        origens,
+        financeiro: {
+          ...fin,
+          lojas: [...fin.lojas, { id: "44444444-4444-4444-8444-444444444444", nome: "Sphere", dominio: "Sphere", tipo: "checkout", modelo: "comissao", fuso: "America/Sao_Paulo", moeda: "EUR" }],
+        },
+      })
+    );
+    expect(comSphere.contraEntrega).toBe(false);
+  });
 });
 
 describe("derivadas sem base", () => {

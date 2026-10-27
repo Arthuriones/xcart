@@ -15,6 +15,7 @@ import {
   tagEhCod,
   tagEhRecusa,
   taxaDeEntrega,
+  temVendaOnline,
   valorCod,
 } from "@/lib/financeiro/contra-entrega";
 import { mapearPedido, resumirEntregas, semCamposDeEnvio, type NoPedidoShopify } from "@/lib/financeiro/mapear-pedido";
@@ -334,6 +335,17 @@ describe("sugestao do modo contra entrega", () => {
     expect(sugerirContraEntrega([cod({ dia_local: "2026-10-09" })], "2026-10-09").sugere).toBe(false);
     const minoria = [cod({ dia_local: "2026-10-09" }), cod({ dia_local: "2026-10-08" }), pedido({ dia_local: "2026-10-09" }), pedido({ dia_local: "2026-10-09" })];
     expect(sugerirContraEntrega(minoria, "2026-10-09").sugere).toBe(false);
+  });
+
+  it("salvar contra entrega sem taxa: so loja sem venda online (rota de config)", () => {
+    expect(temVendaOnline([])).toBe(false);
+    expect(temVendaOnline([cod(), cod({ gateways: [], cod: true })])).toBe(false);
+    // Reenvio e teste nao sao venda online.
+    expect(temVendaOnline([cod(), pedido({ tipo: "reenvio" }), pedido({ tipo: "teste" })])).toBe(false);
+    // Online que nunca foi pago (cancelado, abandonado) nao conta.
+    expect(temVendaOnline([cod(), pedido({ recebido: 0, cancelado_em: "2026-10-09T10:00:00Z" })])).toBe(false);
+    // Loja mista (Shopify Payments + COD): a taxa continua pedida.
+    expect(temVendaOnline([cod(), pedido()])).toBe(true);
   });
 });
 

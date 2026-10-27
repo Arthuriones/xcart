@@ -167,9 +167,16 @@ export function CustosScreen({
         form={recebimento}
         sujo={recebimentoSujo}
         onMudar={setRecebimento}
-        onSalvo={(gravado) => {
+        onSalvo={(gravado, criada) => {
           setRecebimentoBase(gravado);
           setRecebimento(gravado);
+          if (criada) {
+            // A rota criou a linha com taxa 0 (loja so contra entrega).
+            const zerada = formTaxasDe({ taxa_pct: 0, taxa_fixa: 0, custo_padrao_pct: null });
+            setTaxas((f) => (taxasMudaram(f, taxasBase) ? f : zerada));
+            setTaxasBase(zerada);
+            setConfigurada(true);
+          }
         }}
       />
 

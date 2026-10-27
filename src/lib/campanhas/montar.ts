@@ -1,4 +1,12 @@
-import { calcularFinanceiro, criarConversor, gastoComImposto, type EntradaFinanceiro, type PedidoExternoFin, type Totais } from "@/lib/financeiro/calculo";
+import {
+  calcularFinanceiro,
+  criarConversor,
+  gastoComImposto,
+  lojasEmContraEntrega,
+  type EntradaFinanceiro,
+  type PedidoExternoFin,
+  type Totais,
+} from "@/lib/financeiro/calculo";
 import { diasNoIntervalo, paraNumero, type AdAccountRow, type AdSpendDailyRow, type FinOrderRow } from "@/lib/financeiro/tipos";
 import {
   derivar,
@@ -38,6 +46,16 @@ import {
 // existe nesse dia; somar a venda sem o gasto inflaria o lucro) -- so na
 // campanha. Pedido que nao cai em nenhuma linha vai para o resumo "sem
 // campanha identificada".
+//
+// CONTRA ENTREGA: com alguma loja Shopify do filtro em contra entrega (a regra
+// do Lucro, lojasEmContraEntrega), a tabela usa a visao do Dashboard nesse modo:
+// Vendas = pedidos gerados (o COD nasce em aberto e "pago" e opcional),
+// Faturamento/Custo/Lucro = os previstos pela taxa de entrega. Pendentes fica
+// so com o Pix/boleto aguardando, que nao e pedido gerado (sem contar o COD em
+// aberto duas vezes nas Vendas Totais). Pedido online da o mesmo numero nas
+// duas visoes. O checkout de comissao (Sphere) sozinho NAO liga a visao: ele
+// ja aparecia como pendente/aprovado, e a aba inteira de quem nao tem loja
+// COD mudaria de numero.
 // ============================================================================
 
 export interface InsightGranularRow {
@@ -134,6 +152,8 @@ export interface ResultadoCampanhas {
   cambioAproximado: boolean;
   /** O sincronizado_em mais recente das linhas do periodo. */
   sincronizadoEm: string | null;
+  /** Visao contra entrega (ver o cabecalho): a tela troca os rotulos. */
+  contraEntrega: boolean;
 }
 
 const NIVEIS_DETALHE = new Set(["campanha", "grupo", "anuncio"]);
@@ -498,8 +518,19 @@ export function montarCampanhas(e: EntradaCampanhas): ResultadoCampanhas {
     if (r.avisos.cambioAproximado) cambioAproximado = true;
     return r.atual;
   };
+  const lojaShopify = new Set(fin.lojas.filter((l) => l.tipo !== "checkout").map((l) => l.id));
+  const contraEntrega = lojasEmContraEntrega(fin).some((id) => lojaShopify.has(id));
   const parteDe = (t: Totais | null): ParteAtribuida & Pick<SomasCampanha, "custoProduto" | "lucroPedidos"> =>
-    t
+    t && contraEntrega
+      ? {
+          vendas: t.cod.gerados,
+          vendasPendentes: t.venda.aguardando,
+          faturamento: t.cod.previsto,
+          custoProduto: t.cod.custoPrevisto,
+          // Sem gasto no grupo: previsto - custo - taxas - devolucoes previstos.
+          lucroPedidos: t.cod.lucroPrevisto,
+        }
+      : t
       ? {
           vendas: t.pedidos,
           // Pix/boleto aguardando (venda) + contra entrega vivo e comissao pendente (cod.abertos).
@@ -550,5 +581,6 @@ export function montarCampanhas(e: EntradaCampanhas): ResultadoCampanhas {
     moedasSemCotacao: [...moedasSemCotacao].filter(Boolean).sort(),
     cambioAproximado,
     sincronizadoEm,
+    contraEntrega,
   };
 }
