@@ -370,6 +370,41 @@ describe("getPainelTracking", () => {
     expect(lojas.find((l) => l.storeId === "soft")!.comprasContadasPeloMeta).toBeNull();
   });
 
+  it("com lojas pedidas, conta so a fila delas (e id alheio nao entra)", async () => {
+    tabelas.stores = [
+      { id: "lash", name: "Lash", shop_domain: "l.myshopify.com", uninstalled_at: null },
+      { id: "soft", name: "Soft", shop_domain: "s.myshopify.com", uninstalled_at: null },
+    ];
+
+    const { lojas } = await getPainelTracking(["soft", "de-outro"]);
+
+    expect(lojas.map((l) => l.storeId)).toEqual(["soft"]);
+    expect(chamadas).toHaveLength(1);
+    expect(chamadas[0].args).toMatchObject({ p_store_ids: ["soft"] });
+  });
+
+  it("loja pedida que nao e do usuario: nada, e a fila nem e lida", async () => {
+    tabelas.stores = [
+      { id: "lash", name: "Lash", shop_domain: "l.myshopify.com", uninstalled_at: null },
+    ];
+
+    const { lojas } = await getPainelTracking(["de-outro"]);
+
+    expect(lojas).toEqual([]);
+    expect(chamadas).toHaveLength(0);
+  });
+
+  it("sem lojas pedidas, todas", async () => {
+    tabelas.stores = [
+      { id: "lash", name: "Lash", shop_domain: "l.myshopify.com", uninstalled_at: null },
+      { id: "soft", name: "Soft", shop_domain: "s.myshopify.com", uninstalled_at: null },
+    ];
+
+    await getPainelTracking();
+
+    expect(chamadas[0].args).toMatchObject({ p_store_ids: ["lash", "soft"] });
+  });
+
   it("mostra loja desinstalada so se o rastreamento ficou ligado", async () => {
     tabelas.stores = [
       { id: "ligada", name: "A", shop_domain: "a.myshopify.com", uninstalled_at: "2026-09-01" },

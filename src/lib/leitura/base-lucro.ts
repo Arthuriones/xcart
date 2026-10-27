@@ -120,26 +120,45 @@ export interface BaseLucro {
  * anterior e o anuncio zerados -- nao use no Dashboard.
  */
 export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseLucro | null> => {
-  const { filtro, lojas, lojaIds, checkouts, checkoutIds } = await filtroResolvido();
-  if (lojaIds.length === 0 && checkoutIds.length === 0) return null;
   const user = await getCurrentUser();
   if (!user) return null;
   const supabase = await createClient();
-  // Filtro so com checkout: nada de Shopify a ler (e .in() vazio nao vale).
-  const temLojas = lojaIds.length > 0;
-  const ckSet = new Set(checkoutIds);
-  const checkoutsDoFiltro = (await lerCheckoutsDoUsuario()).filter((c) => ckSet.has(c.id));
 
-  const estados = temLojas
-    ? await lerTudo<FinSyncStateRow>("o estado da sincronização de pedidos", (de, ate) =>
+  // O estado da sincronizacao e as contas de anuncio so dependem do usuario:
+  // correm junto com o filtro, em vez de uma rodada cada depois dele. O estado
+  // e lido pelo dono (a RLS da 052 so devolve as linhas dele) e recortado nas
+  // lojas do filtro abaixo -- as mesmas linhas, na mesma ordem.
+  const [{ filtro, lojas, lojaIds, checkouts, checkoutIds }, checkoutsDoUsuario, estadosDoUsuario, contas] =
+    await Promise.all([
+      filtroResolvido(),
+      lerCheckoutsDoUsuario(),
+      lerTudo<FinSyncStateRow>("o estado da sincronização de pedidos", (de, ate) =>
         supabase
           .from("fin_sync_state")
           .select("*")
-          .in("store_id", lojaIds)
+          .eq("user_id", user.id)
           .order("store_id", { ascending: true })
           .range(de, ate)
-      )
-    : [];
+      ),
+      enxuta
+        ? ([] as AdAccountRow[])
+        : lerTudo<AdAccountRow>("as contas de anúncio", (de, a) =>
+            supabase
+              .from("ad_accounts")
+              .select("*")
+              .eq("user_id", user.id)
+              .order("id", { ascending: true })
+              .range(de, a)
+          ),
+    ]);
+  if (lojaIds.length === 0 && checkoutIds.length === 0) return null;
+  // Filtro so com checkout: nada de Shopify a ler (e .in() vazio nao vale).
+  const temLojas = lojaIds.length > 0;
+  const lojaSet = new Set(lojaIds);
+  const ckSet = new Set(checkoutIds);
+  const checkoutsDoFiltro = checkoutsDoUsuario.filter((c) => ckSet.has(c.id));
+
+  const estados = estadosDoUsuario.filter((e) => lojaSet.has(e.store_id));
   const estadoPorLoja = new Map(estados.map((e) => [e.store_id, e]));
 
   // O "hoje" no fuso da loja (ou do checkout) quando o filtro tem um so --
@@ -179,7 +198,86 @@ export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseL
         .overrideTypes<PedidoExternoFin[], { merge: false }>()
     );
 
-  const [pedidos, custos, configs, contas, externos] = await Promise.all([
+  // A conta liga a uma loja OU a um checkout (069).
+  const contaIds = contas
+    .filter((c) => (c.store_id && lojaSet.has(c.store_id)) || (c.checkout_id && ckSet.has(c.checkout_id)))
+    .map((c) => c.id);
+
+  // Taxa de entrega: so das lojas em contra entrega (fora delas ninguem olha),
+  // com os pedidos finalizados dos ultimos 60 dias, nao so os do periodo.
+  // Falha aqui nao derruba a tela: o Previsto cai na taxa padrao.
+  const lerAmostraCod = async (
+    configs: FinStoreSettingsRow[]
+  ): Promise<Record<string, AmostraEntrega> | undefined> => {
+    const codIds = configs.filter((c) => c.contra_entrega === true).map((c) => c.store_id);
+    if (enxuta || codIds.length === 0) return undefined;
+    const janela = intervaloDaAmostra(hoje);
+    try {
+      const linhas = await lerTudo<PedidoCod & { store_id: string; dia_local: string }>(
+        "a amostra de entregas",
+        (de, a) =>
+          supabase
+            .from("fin_orders")
+            .select(COLUNAS_AMOSTRA)
+            .in("store_id", codIds)
+            .gte("dia_local", janela.desde)
+            .lte("dia_local", janela.ate)
+            .order("store_id", { ascending: true })
+            .order("shopify_order_id", { ascending: true })
+            .range(de, a)
+            .overrideTypes<(PedidoCod & { store_id: string; dia_local: string })[], { merge: false }>()
+      );
+      return contarAmostra(linhas, janela, hoje);
+    } catch (e) {
+      console.error("[lucro] amostra de entregas", e);
+      return undefined;
+    }
+  };
+
+  // Taxa de aprovacao dos checkouts de comissao: a mesma janela, amostra
+  // propria. A venda (Cakto) nao tem Previsto: fica de fora. Falha aqui
+  // tambem nao derruba a tela (cai na taxa padrao do checkout).
+  const lerAmostraCheckouts = async (): Promise<Record<string, AmostraEntrega> | undefined> => {
+    const comissaoIds = checkoutsDoFiltro.filter((c) => c.modelo !== "venda").map((c) => c.id);
+    if (enxuta || comissaoIds.length === 0) return undefined;
+    const janela = intervaloDaAmostra(hoje);
+    try {
+      const linhas = await lerExternos("a amostra dos checkouts", () =>
+        lerTudo<Pick<PedidoExternoRow, "checkout_id" | "situacao" | "dia_local">>("a amostra dos checkouts", (de, a) =>
+          supabase
+            .from("pedidos_externos")
+            .select("checkout_id, situacao, dia_local")
+            .in("checkout_id", comissaoIds)
+            .gte("dia_local", janela.desde)
+            .lte("dia_local", janela.ate)
+            .order("checkout_id", { ascending: true })
+            .order("pedido_id", { ascending: true })
+            .range(de, a)
+        )
+      );
+      return contarAmostraExterna(linhas, janela, hoje);
+    } catch (e) {
+      console.error("[lucro] amostra dos checkouts", e);
+      return undefined;
+    }
+  };
+
+  const configsP = !temLojas
+    ? Promise.resolve([] as FinStoreSettingsRow[])
+    : lerTudo<FinStoreSettingsRow>("as taxas das lojas", (de, a) =>
+        supabase
+          .from("fin_store_settings")
+          .select("*")
+          .in("store_id", lojaIds)
+          .order("store_id", { ascending: true })
+          .range(de, a)
+      );
+  // As amostras nao dependem dos pedidos nem do cambio: correm junto com eles.
+  // Nunca lancam (a falha vira log); taxa que falhou derruba a leitura abaixo.
+  const amostras = Promise.all([configsP.then(lerAmostraCod, () => undefined), lerAmostraCheckouts()]);
+
+  let erroCampanha: string | null = null;
+  const [pedidos, custos, configs, externos, [gastos, gastosCampanha]] = await Promise.all([
     !temLojas
       ? ([] as FinOrderRow[])
       : lerPedidos(`${COLUNAS_PEDIDO}, ${COLUNAS_ENVIO}`).catch((e: unknown) => {
@@ -196,26 +294,7 @@ export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseL
             .order("id", { ascending: true })
             .range(de, a)
         ),
-    !temLojas
-      ? ([] as FinStoreSettingsRow[])
-      : lerTudo<FinStoreSettingsRow>("as taxas das lojas", (de, a) =>
-          supabase
-            .from("fin_store_settings")
-            .select("*")
-            .in("store_id", lojaIds)
-            .order("store_id", { ascending: true })
-            .range(de, a)
-        ),
-    enxuta
-      ? ([] as AdAccountRow[])
-      : lerTudo<AdAccountRow>("as contas de anúncio", (de, a) =>
-          supabase
-            .from("ad_accounts")
-            .select("*")
-            .eq("user_id", user.id)
-            .order("id", { ascending: true })
-            .range(de, a)
-        ),
+    configsP,
     // Checkout externo: os pedidos do periodo (a tela Pedidos le os dela).
     enxuta || checkoutIds.length === 0
       ? ([] as PedidoExternoFin[])
@@ -225,47 +304,40 @@ export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseL
             throw e;
           })
         ),
+    // O gasto so precisa das contas e do periodo: vem na mesma rodada.
+    contaIds.length
+      ? Promise.all([
+          lerTudo<AdSpendDailyRow>("o gasto de anúncio", (de, a) =>
+            supabase
+              .from("ad_spend_daily")
+              .select("*")
+              .in("ad_account_id", contaIds)
+              .eq("nivel", "conta")
+              .gte("data", desde)
+              .lte("data", ate)
+              .order("ad_account_id", { ascending: true })
+              .order("data", { ascending: true })
+              .range(de, a)
+          ),
+          lerTudo<AdSpendDailyRow>("o gasto por campanha", (de, a) =>
+            supabase
+              .from("ad_spend_daily")
+              .select("*")
+              .in("ad_account_id", contaIds)
+              .eq("nivel", "campanha")
+              .gte("data", intervalos.atual.desde)
+              .lte("data", ate)
+              .order("ad_account_id", { ascending: true })
+              .order("data", { ascending: true })
+              .order("campanha_id", { ascending: true })
+              .range(de, a)
+          ).catch((e: unknown) => {
+            erroCampanha = e instanceof Error ? e.message : String(e);
+            return [] as AdSpendDailyRow[];
+          }),
+        ])
+      : ([[], []] as [AdSpendDailyRow[], AdSpendDailyRow[]]),
   ]);
-
-  const lojaSet = new Set(lojaIds);
-  // A conta liga a uma loja OU a um checkout (069).
-  const contaIds = contas
-    .filter((c) => (c.store_id && lojaSet.has(c.store_id)) || (c.checkout_id && ckSet.has(c.checkout_id)))
-    .map((c) => c.id);
-
-  let erroCampanha: string | null = null;
-  const [gastos, gastosCampanha] = contaIds.length
-    ? await Promise.all([
-        lerTudo<AdSpendDailyRow>("o gasto de anúncio", (de, a) =>
-          supabase
-            .from("ad_spend_daily")
-            .select("*")
-            .in("ad_account_id", contaIds)
-            .eq("nivel", "conta")
-            .gte("data", desde)
-            .lte("data", ate)
-            .order("ad_account_id", { ascending: true })
-            .order("data", { ascending: true })
-            .range(de, a)
-        ),
-        lerTudo<AdSpendDailyRow>("o gasto por campanha", (de, a) =>
-          supabase
-            .from("ad_spend_daily")
-            .select("*")
-            .in("ad_account_id", contaIds)
-            .eq("nivel", "campanha")
-            .gte("data", intervalos.atual.desde)
-            .lte("data", ate)
-            .order("ad_account_id", { ascending: true })
-            .order("data", { ascending: true })
-            .order("campanha_id", { ascending: true })
-            .range(de, a)
-        ).catch((e: unknown) => {
-          erroCampanha = e instanceof Error ? e.message : String(e);
-          return [] as AdSpendDailyRow[];
-        }),
-      ])
-    : [[], []];
 
   const moedas = new Set<string>([filtro.moeda, "USD"]);
   for (const p of pedidos) moedas.add(String(p.moeda).toUpperCase());
@@ -290,59 +362,10 @@ export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseL
       .range(de, a)
   );
 
-  // Taxa de entrega: so das lojas em contra entrega (fora delas ninguem olha),
-  // com os pedidos finalizados dos ultimos 60 dias, nao so os do periodo.
-  // Falha aqui nao derruba a tela: o Previsto cai na taxa padrao.
-  const codIds = configs.filter((c) => c.contra_entrega === true).map((c) => c.store_id);
-  let amostraEntrega: Record<string, AmostraEntrega> | undefined;
-  if (!enxuta && codIds.length > 0) {
-    const janela = intervaloDaAmostra(hoje);
-    try {
-      const linhas = await lerTudo<PedidoCod & { store_id: string; dia_local: string }>(
-        "a amostra de entregas",
-        (de, a) =>
-          supabase
-            .from("fin_orders")
-            .select(COLUNAS_AMOSTRA)
-            .in("store_id", codIds)
-            .gte("dia_local", janela.desde)
-            .lte("dia_local", janela.ate)
-            .order("store_id", { ascending: true })
-            .order("shopify_order_id", { ascending: true })
-            .range(de, a)
-            .overrideTypes<(PedidoCod & { store_id: string; dia_local: string })[], { merge: false }>()
-      );
-      amostraEntrega = contarAmostra(linhas, janela, hoje);
-    } catch (e) {
-      console.error("[lucro] amostra de entregas", e);
-    }
-  }
-
-  // Taxa de aprovacao dos checkouts de comissao: a mesma janela, amostra
-  // propria. A venda (Cakto) nao tem Previsto: fica de fora. Falha aqui
-  // tambem nao derruba a tela (cai na taxa padrao do checkout).
-  const comissaoIds = checkoutsDoFiltro.filter((c) => c.modelo !== "venda").map((c) => c.id);
-  if (!enxuta && comissaoIds.length > 0) {
-    const janela = intervaloDaAmostra(hoje);
-    try {
-      const linhas = await lerExternos("a amostra dos checkouts", () =>
-        lerTudo<Pick<PedidoExternoRow, "checkout_id" | "situacao" | "dia_local">>("a amostra dos checkouts", (de, a) =>
-          supabase
-            .from("pedidos_externos")
-            .select("checkout_id, situacao, dia_local")
-            .in("checkout_id", comissaoIds)
-            .gte("dia_local", janela.desde)
-            .lte("dia_local", janela.ate)
-            .order("checkout_id", { ascending: true })
-            .order("pedido_id", { ascending: true })
-            .range(de, a)
-        )
-      );
-      amostraEntrega = { ...(amostraEntrega ?? {}), ...contarAmostraExterna(linhas, janela, hoje) };
-    } catch (e) {
-      console.error("[lucro] amostra dos checkouts", e);
-    }
-  }
+  const [doCod, dosCheckouts] = await amostras;
+  const amostraEntrega: Record<string, AmostraEntrega> | undefined = dosCheckouts
+    ? { ...(doCod ?? {}), ...dosCheckouts }
+    : doCod;
 
   const lojasDoFiltro: LojaFinanceira[] = [
     ...lojas

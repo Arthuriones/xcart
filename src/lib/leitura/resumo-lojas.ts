@@ -539,7 +539,8 @@ export async function lerRastreamentoDaLoja(
   id: string,
   comShopify: boolean
 ): Promise<RastreamentoDaLoja> {
-  const painel = await getPainelTracking();
+  // So a fila desta loja: o painel de todas para mostrar uma era conta a toa.
+  const painel = await getPainelTracking([id]);
   const loja = painel.lojas.find((l) => l.storeId === id) ?? null;
   if (!loja) {
     return { loja: null, diagnostico: null, conferido: false, saude: "desligado", motivos: [] };

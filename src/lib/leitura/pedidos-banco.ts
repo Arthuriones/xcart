@@ -167,9 +167,10 @@ async function lerNomesDeAnuncio(
     ...new Set(origens.flatMap((o) => [o.campanha_id, o.conjunto_id, o.anuncio_id]).filter((v): v is string => Boolean(v))),
   ];
   const nomes: Record<string, string> = {};
-  for (let i = 0; i < ids.length; i += IDS_POR_CONSULTA) {
-    const lote = ids.slice(i, i + IDS_POR_CONSULTA);
-    const [granular, campanhas] = await Promise.all([
+  const lotes: string[][] = [];
+  for (let i = 0; i < ids.length; i += IDS_POR_CONSULTA) lotes.push(ids.slice(i, i + IDS_POR_CONSULTA));
+  const lerLote = (lote: string[]) =>
+    Promise.all([
       supabase
         .from("ad_insights_granular")
         .select("objeto_id, objeto_nome")
@@ -184,6 +185,9 @@ async function lerNomesDeAnuncio(
         .order("data", { ascending: false })
         .limit(1000),
     ]);
+  // Os lotes correm juntos (como em Campanhas); o resultado e lido na ordem
+  // deles, entao o nome que vence e o mesmo da leitura um a um.
+  for (const [granular, campanhas] of await Promise.all(lotes.map(lerLote))) {
     if (granular.error) console.error("[pedidos] nomes dos anuncios", granular.error.message);
     for (const r of (granular.data ?? []) as { objeto_id: string; objeto_nome: string | null }[]) {
       const nome = (r.objeto_nome || "").trim();

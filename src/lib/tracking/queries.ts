@@ -415,17 +415,25 @@ async function comprasDoMeta(
 /** Uma pagina do PostgREST. A funcao devolve pouco, mas nao ha teto garantido. */
 const PAGINA = 1000;
 
-export async function getPainelTracking(): Promise<PainelTracking> {
+/**
+ * `storeIds`: so essas lojas (a escolhida na barra, a pagina de uma loja). A
+ * contagem cresce com os eventos da semana das lojas pedidas: contar a fila
+ * de todas para mostrar uma era pagar o painel inteiro a toa. Sem ele, todas.
+ */
+export async function getPainelTracking(storeIds?: readonly string[]): Promise<PainelTracking> {
   const [supabase, user] = await Promise.all([createClient(), getCurrentUser()]);
   if (!user) return { lojas: [] };
 
   // Sem filtrar por uninstalled_at aqui: loja desinstalada com rastreamento
   // LIGADO precisa aparecer, porque e justamente onde a venda parou de sair.
-  const { data: todas } = await supabase
+  const { data: doUsuario } = await supabase
     .from("stores")
     .select("id, name, shop_domain, uninstalled_at")
     .order("created_at", { ascending: true });
 
+  // Intersecao com as lojas lidas (RLS): id alheio pedido nao entra.
+  const pedidas = storeIds ? new Set(storeIds) : null;
+  const todas = pedidas ? doUsuario?.filter((l) => pedidas.has(l.id)) : doUsuario;
   if (!todas?.length) return { lojas: [] };
 
   const { data: configs } = await supabase

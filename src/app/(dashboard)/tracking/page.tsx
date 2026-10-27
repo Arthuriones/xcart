@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { Callout } from "@/components/ui/callout";
 import { Skeleton } from "@/components/ui/skeleton";
-import { filtroResolvido } from "@/lib/filtro-global";
+import { filtroResolvido, lerFiltroGlobal } from "@/lib/filtro-global";
 import { SoLojasShopify } from "@/components/layout/so-lojas-shopify";
 import { TODAS } from "@/lib/financeiro/tipos";
 import { diagnosticarCadaLoja } from "@/lib/leitura/tracking-diagnostico";
@@ -30,14 +30,14 @@ export const dynamic = "force-dynamic";
 // ============================================================================
 
 async function carregar() {
-  const [{ filtro, lojas: doUsuario, checkout }, painel] = await Promise.all([
-    filtroResolvido(),
-    getPainelTracking(),
-  ]);
+  const { filtro, lojas: doUsuario, checkout } = await filtroResolvido();
   // Checkout externo: a Sphere nao manda pixel nem clique (ver 069).
   if (checkout) return { checkout: checkout.nome };
   const escolhida = filtro.lojaId === TODAS ? null : filtro.lojaId;
-  const lojas = escolhida ? painel.lojas.filter((l) => l.storeId === escolhida) : painel.lojas;
+  // Com uma loja escolhida, so a fila dela e contada. O filtro vem antes por
+  // isso; ele e memorizado e o topo ja o le na mesma requisicao.
+  const painel = await getPainelTracking(escolhida ? [escolhida] : undefined);
+  const lojas = painel.lojas;
 
   // So loja ligada: perguntar a Shopify sobre loja que nem envia compra
   // gastaria 4 chamadas por loja a toa.
@@ -128,9 +128,12 @@ function Esqueleto() {
   );
 }
 
-export default function RastreamentoPage() {
+export default async function RastreamentoPage() {
+  // So cookie (sem banco): key do Suspense. Trocar a loja na barra mostra o
+  // esqueleto de novo em vez da tela da loja anterior.
+  const filtro = await lerFiltroGlobal();
   return (
-    <Suspense fallback={<Esqueleto />}>
+    <Suspense key={filtro.lojaId} fallback={<Esqueleto />}>
       <Conteudo />
     </Suspense>
   );
