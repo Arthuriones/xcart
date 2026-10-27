@@ -23,6 +23,10 @@ import { respostaJson } from "./resposta";
 // checkout (data-xcart-checkout) e o botao aponta para o link da oferta la,
 // sem nada a mais -- a ponte acrescenta o visitante, as UTMs e o clique.
 //
+// A MESMA tag da loja serve no tema da VITRINE de uma rota que leva a esta
+// loja: la ela mede visita, produto e carrinho para esta loja de checkout
+// (xcart-bridge.js, 3b). A tela diz isso e nomeia as vitrines das rotas.
+//
 // Carrega so quando o lojista abre: lista os produtos na Shopify, e isso nao
 // precisa acontecer em toda abertura do detalhe da loja.
 // ============================================================================
@@ -43,6 +47,8 @@ interface Kit {
   dominio: string;
   tag: string;
   produtos: Produto[];
+  /** As vitrines das rotas em que esta loja e o checkout. */
+  vitrines?: { nome: string; dominio: string }[];
 }
 
 /** Um checkout externo que rastreia (GET /api/tracking/pagina-externa?checkouts=1). */
@@ -85,6 +91,10 @@ export function PaginaExterna({ storeId }: { storeId: string }) {
         <p className="text-label text-t1">
           Oferta numa página fora da Shopify (VSL, advertorial) com o botão indo direto para o checkout da loja ou para
           a Cakto ou a Hubla. Gera o script da página e o link do botão.
+        </p>
+        <p className="text-label text-t2">
+          O mesmo script serve na vitrine de uma rota que leva a esta loja: colado no tema da vitrine, ele mede a visita,
+          o produto e o carrinho de lá para esta loja.
         </p>
         <div>
           <Button size="sm" variant="secondary" onClick={() => setAberto(true)}>
@@ -192,14 +202,40 @@ function KitDaLoja({ storeId }: { storeId: string }) {
     );
   }
 
+  const vitrines = kit.vitrines ?? [];
+
   return (
     <>
+      {vitrines.length > 0 && (
+        <Callout tom="info" titulo="Esta loja é o checkout de uma rota: o script vai na vitrine">
+          <div className="flex flex-col gap-1.5">
+            <p>
+              {vitrines.length > 1 ? "As vitrines das rotas são " : "A vitrine da rota é "}
+              {vitrines.map((v, i) => (
+                <span key={v.dominio}>
+                  {i > 0 && (i === vitrines.length - 1 ? " e " : ", ")}
+                  <span className="font-medium">{v.nome}</span> (<span className="font-mono">{v.dominio}</span>)
+                </span>
+              ))}
+              . Cole o script do passo 1 no tema {vitrines.length > 1 ? "de cada uma" : "dela"}, não no desta loja.
+            </p>
+            <p>{COMO_NA_VITRINE}</p>
+          </div>
+        </Callout>
+      )}
+
       <Passo n={1} titulo="Cole na página, antes de </body>">
         <Codigo rotulo="Script da página" texto={kit.tag} />
         <p className="text-label text-t2">
           Manda o PageView e o ViewContent da página pelo servidor e leva o clique do anúncio (Meta, TikTok,
           Google) até o checkout. Não instale o pixel do Meta nem do TikTok na página: contaria em dobro.
         </p>
+        {vitrines.length === 0 && (
+          <p className="text-label text-t2">
+            <span className="font-medium text-t1">Vitrine de uma rota:</span> se esta loja for o checkout de uma rota,
+            este mesmo script vai no tema da vitrine. {COMO_NA_VITRINE}
+          </p>
+        )}
       </Passo>
 
       <Passo n={2} titulo="Link do botão de comprar">
@@ -296,6 +332,13 @@ function KitDoCheckout({ checkout }: { checkout: CheckoutDaPagina }) {
     </>
   );
 }
+
+/** Onde colar na vitrine e o que ele faz la (xcart-bridge.js, 3b). */
+const COMO_NA_VITRINE =
+  "Na Shopify da vitrine: Loja virtual › Temas › Editar código › theme.liquid, antes de </body>. Lá ele manda " +
+  "PageView, ViewContent e AddToCart para esta loja, com o produto do catálogo daqui; o checkout e a compra " +
+  "continuam vindo do pixel e dos pedidos desta loja. Na vitrine não vai o link do passo 2 (a rota leva o " +
+  "carrinho), nem o script do tema desta loja, nem pixel do Meta ou do TikTok: contaria em dobro.";
 
 function rotuloDaVariante(v: Variante) {
   return v.preco ? `${v.titulo} · ${v.preco}` : v.titulo;

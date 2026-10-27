@@ -441,7 +441,7 @@ export function DetalheLoja({
         cabeca={
           <>
             <CaixaLogo marca="shopify" />
-            <span className="flex-1 text-dense font-semibold text-ink">Página externa (VSL)</span>
+            <span className="flex-1 text-dense font-semibold text-ink">Página externa (VSL) ou vitrine</span>
           </>
         }
       >

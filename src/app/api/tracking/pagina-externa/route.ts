@@ -101,6 +101,44 @@ async function checkoutsDaPagina(supabase: Awaited<ReturnType<typeof createClien
   });
 }
 
+/**
+ * As vitrines das rotas em que esta loja e a de CHECKOUT. A mesma tag, colada
+ * no tema delas, mede visita, produto e carrinho para esta loja
+ * (xcart-bridge.js, 3b): e a vitrine que recebe o anuncio e o carrinho. Pela
+ * sessao (RLS). Falhou, a tela segue sem a lista -- a tag nao depende dela.
+ */
+async function vitrinesDaLoja(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  storeId: string
+): Promise<{ nome: string; dominio: string }[]> {
+  try {
+    const [destinos, legadas] = await Promise.all([
+      supabase.from("routed_checkout_targets").select("route_id").eq("target_store_id", storeId),
+      supabase.from("routed_checkout_configs").select("id").eq("target_store_id", storeId),
+    ]);
+    const rotas = [
+      ...new Set([
+        ...((destinos.data ?? []) as { route_id: string }[]).map((d) => d.route_id),
+        ...((legadas.data ?? []) as { id: string }[]).map((r) => r.id),
+      ]),
+    ];
+    if (!rotas.length) return [];
+    const { data: configs } = await supabase.from("routed_checkout_configs").select("source_store_id").in("id", rotas);
+    const ids = [
+      ...new Set(((configs ?? []) as { source_store_id: string | null }[]).map((c) => c.source_store_id)),
+    ].filter((id): id is string => Boolean(id) && id !== storeId);
+    if (!ids.length) return [];
+    const { data: lojas } = await supabase.from("stores").select("name, shop_domain").in("id", ids);
+    return ((lojas ?? []) as { name: string | null; shop_domain: string }[]).map((l) => ({
+      nome: l.name || l.shop_domain,
+      dominio: l.shop_domain,
+    }));
+  } catch (e) {
+    console.error("[tracking/pagina-externa] vitrines", e instanceof Error ? e.message : e);
+    return [];
+  }
+}
+
 /** "gid://shopify/ProductVariant/123" -> "123". O permalink quer o numero. */
 function numero(gid: string | undefined): string | null {
   const m = (gid || "").match(/\/(\d+)$/);
@@ -154,6 +192,8 @@ export async function GET(request: NextRequest) {
   const produtos: { id: string; titulo: string; variantes: { id: string; titulo: string; preco: string }[] }[] = [];
   let dominioProprio: string | null = null;
   let after: string | null = null;
+  // Em paralelo com a Shopify: so o banco.
+  const vitrines = vitrinesDaLoja(supabase, loja.id);
   try {
     // Ate 3 paginas (300 produtos): quem tem mais escolhe pela busca da tela.
     for (let pagina = 0; pagina < 3; pagina++) {
@@ -185,5 +225,6 @@ export async function GET(request: NextRequest) {
     // pagina ao coletor (o servidor fala com o Meta e o TikTok).
     tag: `<script src="${getPublicAppUrl().replace(/\/+$/, "")}/xcart-bridge.js" data-xcart-destinos="${destinos.join(",")}" data-xcart-store="${loja.id}" data-xcart-shop="${permanente}" defer></script>`,
     produtos,
+    vitrines: await vitrines,
   });
 }
