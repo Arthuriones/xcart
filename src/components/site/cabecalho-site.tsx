@@ -30,8 +30,12 @@ export function CabecalhoSite({
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-surface/86 backdrop-blur-[14px] backdrop-saturate-[1.6] dark:bg-bg/82">
       <div className={`mx-auto flex h-15 w-full items-center gap-2 ${CAIXA_DO_SITE[caixa]}`}>
+        {/* Sem prefetch: a raiz e a landing estatica (rewrite para /lp), e o
+            Next baixava a pagina inteira de novo (~100 KB) para quem ja esta
+            nela. Nas paginas legais o clique continua rapido (sai do cache). */}
         <Link
           href="/"
+          prefetch={false}
           aria-label="xcart, início"
           className="mr-5 flex h-ctl-lg shrink-0 items-center rounded-control"
         >
