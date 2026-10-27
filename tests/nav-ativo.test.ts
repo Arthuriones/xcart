@@ -242,12 +242,15 @@ describe("indice de /configuracoes", () => {
   it("Contas, Geral e Modulos", () => {
     expect(SECOES_CONFIGURACOES.map((s) => s.titulo)).toEqual(["Contas", "Geral", "Módulos"]);
     const modulos = SECOES_CONFIGURACOES.find((s) => s.id === "modulos")!.links.map((l) => l.rotulo);
-    expect(modulos).toEqual(["Roteamento", "Importar", "Atividade", "Claude (MCP)", "Guia de configuração"]);
+    expect(modulos).toEqual(["Roteamento", "Importar", "Atividade", "Claude (MCP)"]);
   });
 
-  it("Contas abre com o Conectar operação", () => {
+  it("Contas abre com o Guia, logo depois o Conectar operação", () => {
     const contas = SECOES_CONFIGURACOES.find((s) => s.id === "contas")!.links;
-    expect(contas[0]).toMatchObject({ rotulo: "Conectar operação", href: "/conectar" });
+    // O Guia nao e modulo: no celular, sem o cartao do menu lateral, e aqui
+    // que o lojista novo o acha.
+    expect(contas[0]).toMatchObject({ rotulo: "Guia de configuração", href: "/setup" });
+    expect(contas[1]).toMatchObject({ rotulo: "Conectar operação", href: "/conectar" });
     expect(contas.map((l) => l.href)).toContain("/stores");
     expect(contas.map((l) => l.href)).toContain("/integracoes/checkouts");
   });

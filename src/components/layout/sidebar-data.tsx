@@ -27,13 +27,15 @@ export async function SidebarData() {
   // /setup.
   const jar = await cookies();
   const dispensado = jar.get(COOKIE_GUIA_DISPENSADO)?.value === "1";
+  // Login fora do ar (getCurrentUser lanca) tambem vira menu sem nome, nao
+  // casca quebrada: o erro subiria ate src/app/error.tsx, acima do layout.
   const [user, guiaDaConta, foto, perfil, alertas, rotas] = await Promise.all([
-    getCurrentUser(),
+    getCurrentUser().catch(() => null),
     dispensado ? null : lerGuiaDaConta().catch(() => null),
     dispensado ? null : lerFotoGuia().catch(() => null),
     lerPerfil().catch(() => PERFIL_VAZIO),
     contarAlertasAbertos().catch(() => 0),
-    dispensado ? contarRotas() : null,
+    dispensado ? contarRotas().catch(() => null) : null,
   ]);
   const meta = (user?.user_metadata || {}) as { full_name?: string; name?: string };
   // Leitura que falhou (null) nao esconde o grupo Roteamento de quem tem rota.
@@ -123,16 +125,29 @@ async function contarRotas(): Promise<number | null> {
 }
 
 /**
- * O menu enquanto os numeros nao chegaram: mesma largura (inclusive a regra
- * dos 1100 px do sidebar.tsx), sobre o mesmo fundo, sem pulo.
+ * O menu enquanto os numeros nao chegaram: o proprio Sidebar, com os dados
+ * vazios. Os links do menu e a barra de baixo do celular saem no primeiro
+ * byte, sem esperar perfil, alertas e o guia (que pode esperar o tema na
+ * Shopify); contadores, conta e o cartao do guia entram depois. Antes era um
+ * <aside> vazio e "hidden" no celular: la nao havia navegacao nenhuma ate o
+ * menu terminar de ler.
+ *
+ * Quem tem rota ve o grupo Roteamento entrar depois, acima do grupo do pe.
  */
 export function SidebarSkeleton({ recolhido }: { recolhido: boolean }) {
   return (
-    <aside
-      aria-hidden
-      className={
-        "sticky top-0 hidden h-dvh shrink-0 md:block " + (recolhido ? "w-15" : "w-15 min-[1100px]:w-60")
-      }
+    <Sidebar
+      dados={{
+        nome: "",
+        email: "",
+        plano: null,
+        creditos: 0,
+        alertas: 0,
+        temRota: false,
+        guia: null,
+        recolhido,
+        carregando: true,
+      }}
     />
   );
 }

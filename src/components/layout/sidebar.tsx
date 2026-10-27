@@ -37,6 +37,13 @@ export interface DadosMenu {
   guia: { feitos: number; total: number; proximo: string | null } | null;
   /** Menu recolhido, do cookie: a largura certa ja no primeiro desenho. */
   recolhido: boolean;
+  /**
+   * So o fallback do menu (SidebarSkeleton) poe true: os dados ainda nao
+   * chegaram. Nome e e-mail vazios NAO querem dizer isso -- com a sessao
+   * revogada ou o Auth fora do ar o getUser volta null e o painel abre do
+   * mesmo jeito; ai a conta precisa aparecer ("?"/"—") com o Sair.
+   */
+  carregando?: boolean;
 }
 
 /** "Arthur Ferreira" -> "AF"; um nome so (ou o e-mail) -> a primeira letra. */
@@ -96,6 +103,52 @@ function Contador({ item, dados, className }: { item: ItemNav; dados: DadosMenu;
   );
 }
 
+/**
+ * O cartao do guia: no pe do menu lateral e no topo do "Mais" do celular (la
+ * o aside nao aparece). O mesmo dado do menu, nenhuma leitura a mais.
+ */
+function CartaoGuia({
+  guia,
+  className,
+  onClick,
+}: {
+  guia: NonNullable<DadosMenu["guia"]>;
+  className: string;
+  onClick?: () => void;
+}) {
+  const pct = Math.round((guia.feitos / guia.total) * 100);
+  return (
+    <Link
+      href="/setup"
+      onClick={onClick}
+      className={clsx(
+        "flex-col gap-2 rounded-card border border-border bg-surface p-3 text-ink hover:border-border-strong hover:text-ink",
+        className
+      )}
+    >
+      <span className="flex items-baseline justify-between gap-2">
+        <span className="text-label font-semibold">{t("setupGuide")}</span>
+        <span className="num text-label text-t2">
+          {guia.feitos} de {guia.total}
+        </span>
+      </span>
+      <span
+        role="progressbar"
+        aria-label="Progresso do guia"
+        aria-valuemin={0}
+        aria-valuemax={guia.total}
+        aria-valuenow={guia.feitos}
+        className="block h-1 overflow-hidden rounded-full bg-track"
+      >
+        <span className="block h-full rounded-full bg-ink" style={{ width: `${pct}%` }} />
+      </span>
+      <span className="truncate text-label text-t2">
+        {guia.proximo ? `Próximo: ${guia.proximo}` : "Falta conferir o que ficou de fora"}
+      </span>
+    </Link>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Aberto ou recolhido
 //
@@ -152,6 +205,9 @@ export function Sidebar({ dados }: { dados: DadosMenu }) {
   const ativo = itemAtivo(pathname);
   const c = classes(recolhido);
   const nomeConta = dados.nome || dados.email;
+  // Menu ainda sem dados (o fallback de sidebar-data): a conta fica de fora em
+  // vez de "?" e "—". Conta sem usuario continua com ela, e com o Sair.
+  const temConta = !dados.carregando;
 
   function alternar() {
     const proximo = !recolhido;
@@ -160,7 +216,6 @@ export function Sidebar({ dados }: { dados: DadosMenu }) {
     gravarCookie(COOKIE_MENU, proximo ? "1" : "0");
   }
 
-  const pct = dados.guia ? Math.round((dados.guia.feitos / dados.guia.total) * 100) : 0;
   const ativoNaBarra = BARRA_CELULAR.find((b) => ativo && b.acende.includes(ativo));
 
   return (
@@ -275,95 +330,73 @@ export function Sidebar({ dados }: { dados: DadosMenu }) {
           ))}
         </nav>
 
-        {dados.guia && (
-          <Link
-            href="/setup"
-            className={clsx(
-              "mb-1 shrink-0 flex-col gap-2 rounded-card border border-border bg-surface p-3 text-ink hover:border-border-strong hover:text-ink",
-              c.flex
-            )}
-          >
-            <span className="flex items-baseline justify-between gap-2">
-              <span className="text-label font-semibold">{t("setupGuide")}</span>
-              <span className="num text-label text-t2">
-                {dados.guia.feitos} de {dados.guia.total}
-              </span>
-            </span>
-            <span
-              role="progressbar"
-              aria-label="Progresso do guia"
-              aria-valuemin={0}
-              aria-valuemax={dados.guia.total}
-              aria-valuenow={dados.guia.feitos}
-              className="block h-1 overflow-hidden rounded-full bg-track"
-            >
-              <span className="block h-full rounded-full bg-ink" style={{ width: `${pct}%` }} />
-            </span>
-            <span className="truncate text-label text-t2">
-              {dados.guia.proximo ? `Próximo: ${dados.guia.proximo}` : "Falta conferir o que ficou de fora"}
-            </span>
-          </Link>
-        )}
+        {dados.guia && <CartaoGuia guia={dados.guia} className={clsx("mb-1 shrink-0", c.flex)} />}
 
+        {/* Sem conta (menu ainda sem dados), um vazio da mesma altura: o pe
+            nao pula quando ela chega. */}
         <div className="shrink-0 border-t border-border pt-2">
-          <Pop
-            rotulo="Conta"
-            aberto={conta}
-            aoMudar={setConta}
-            lado="top"
-            className="w-62 p-1.5"
-            gatilho={
+          {!temConta ? (
+            <div aria-hidden className="h-11" />
+          ) : (
+            <Pop
+              rotulo="Conta"
+              aberto={conta}
+              aoMudar={setConta}
+              lado="top"
+              className="w-62 p-1.5"
+              gatilho={
+                <button
+                  type="button"
+                  aria-label={`Conta de ${nomeConta}`}
+                  className={clsx(
+                    "flex h-11 w-full items-center gap-2.5 rounded-control px-2 text-left hover:bg-nav-active",
+                    c.centro
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className="grid size-7 shrink-0 place-items-center rounded-full bg-ink text-label font-semibold text-surface"
+                  >
+                    {iniciais(nomeConta)}
+                  </span>
+                  <span className={clsx("min-w-0 flex-1 flex-col", c.flex)}>
+                    <span className="truncate text-dense font-medium text-ink">{dados.nome || "—"}</span>
+                    <span className="truncate text-label text-t3">{dados.plano ?? dados.email}</span>
+                  </span>
+                  <ChevronsUpDown className={clsx("size-3.5 shrink-0 text-t3", c.block)} strokeWidth={1.75} aria-hidden />
+                </button>
+              }
+            >
+              <div className="flex flex-col px-2 pb-1.5 pt-2">
+                <span className="truncate text-dense font-medium text-ink">{dados.nome || "—"}</span>
+                <span className="truncate text-label text-t3">{dados.email}</span>
+              </div>
+              <div className="flex flex-col gap-1.5 px-2 pb-2.5 pt-1">
+                <span className="text-label text-t2">{t("theme")}</span>
+                <SeletorTema />
+              </div>
+              <div className="my-0.5 h-px bg-border" />
               <button
                 type="button"
-                aria-label={`Conta de ${nomeConta}`}
-                className={clsx(
-                  "flex h-11 w-full items-center gap-2.5 rounded-control px-2 text-left hover:bg-nav-active",
-                  c.centro
-                )}
+                onClick={() => {
+                  setConta(false);
+                  abrirBusca();
+                }}
+                className="flex h-8 w-full items-center justify-between gap-2 rounded-control px-2 text-dense text-ink hover:bg-hover"
               >
-                <span
-                  aria-hidden
-                  className="grid size-7 shrink-0 place-items-center rounded-full bg-ink text-label font-semibold text-surface"
-                >
-                  {iniciais(nomeConta)}
-                </span>
-                <span className={clsx("min-w-0 flex-1 flex-col", c.flex)}>
-                  <span className="truncate text-dense font-medium text-ink">{dados.nome || "—"}</span>
-                  <span className="truncate text-label text-t3">{dados.plano ?? dados.email}</span>
-                </span>
-                <ChevronsUpDown className={clsx("size-3.5 shrink-0 text-t3", c.block)} strokeWidth={1.75} aria-hidden />
+                <span>Buscar e atalhos</span>
+                <kbd className="rounded-sm border border-border px-1.25 font-mono text-label text-t3">Ctrl K</kbd>
               </button>
-            }
-          >
-            <div className="flex flex-col px-2 pb-1.5 pt-2">
-              <span className="truncate text-dense font-medium text-ink">{dados.nome || "—"}</span>
-              <span className="truncate text-label text-t3">{dados.email}</span>
-            </div>
-            <div className="flex flex-col gap-1.5 px-2 pb-2.5 pt-1">
-              <span className="text-label text-t2">{t("theme")}</span>
-              <SeletorTema />
-            </div>
-            <div className="my-0.5 h-px bg-border" />
-            <button
-              type="button"
-              onClick={() => {
-                setConta(false);
-                abrirBusca();
-              }}
-              className="flex h-8 w-full items-center justify-between gap-2 rounded-control px-2 text-dense text-ink hover:bg-hover"
-            >
-              <span>Buscar e atalhos</span>
-              <kbd className="rounded-sm border border-border px-1.25 font-mono text-label text-t3">Ctrl K</kbd>
-            </button>
-            <button
-              type="button"
-              onClick={() => sair(router)}
-              className="flex h-8 w-full items-center gap-2 rounded-control px-2 text-dense text-err hover:bg-err-bg"
-            >
-              <LogOut className="size-3.75" strokeWidth={1.75} aria-hidden />
-              {t("logout")}
-            </button>
-          </Pop>
+              <button
+                type="button"
+                onClick={() => sair(router)}
+                className="flex h-8 w-full items-center gap-2 rounded-control px-2 text-dense text-err hover:bg-err-bg"
+              >
+                <LogOut className="size-3.75" strokeWidth={1.75} aria-hidden />
+                {t("logout")}
+              </button>
+            </Pop>
+          )}
         </div>
       </aside>
 
@@ -418,6 +451,8 @@ export function Sidebar({ dados }: { dados: DadosMenu }) {
         rotuloFechar="Fechar menu"
       >
         <div className="flex flex-col gap-3 px-4 pb-4 pt-3">
+          {/* No celular o cartao do aside nao aparece: o guia abre a folha. */}
+          {dados.guia && <CartaoGuia guia={dados.guia} className="flex" onClick={() => setMais(false)} />}
           {grupos.map((g) => (
             <div key={g.id} className="flex flex-col">
               {g.rotulo && <div className="px-2 py-1 text-label font-medium text-t3">{g.rotulo}</div>}
@@ -445,18 +480,20 @@ export function Sidebar({ dados }: { dados: DadosMenu }) {
           ))}
 
           <div className="flex flex-col gap-3 border-t border-border px-2 pt-3">
-            <div className="flex items-center gap-2.5">
-              <span
-                aria-hidden
-                className="grid size-8 shrink-0 place-items-center rounded-full bg-ink text-label font-semibold text-surface"
-              >
-                {iniciais(nomeConta)}
-              </span>
-              <span className="flex min-w-0 flex-col">
-                <span className="truncate text-body font-medium text-ink">{dados.nome || "—"}</span>
-                <span className="truncate text-label text-t3">{dados.email}</span>
-              </span>
-            </div>
+            {temConta && (
+              <div className="flex items-center gap-2.5">
+                <span
+                  aria-hidden
+                  className="grid size-8 shrink-0 place-items-center rounded-full bg-ink text-label font-semibold text-surface"
+                >
+                  {iniciais(nomeConta)}
+                </span>
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-body font-medium text-ink">{dados.nome || "—"}</span>
+                  <span className="truncate text-label text-t3">{dados.email}</span>
+                </span>
+              </div>
+            )}
             <SeletorTema grande />
             <button
               type="button"

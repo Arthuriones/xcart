@@ -193,8 +193,9 @@ export const ITENS: Record<IdItem, ItemNav> = {
  * O menu: Lucro, Rastreamento e Configuracoes -- o que o lojista abre todo
  * dia. Assinatura fica visivel no pe, com o saldo de creditos.
  *
- * Alertas mora no sino. Custos, Lojas, Integracoes e os modulos (Roteamento,
- * Importar, Atividade, Claude e Guia) moram em Configuracoes e na busca.
+ * Alertas mora no sino. Custos, Lojas, Integracoes, o Guia (em Contas) e os
+ * modulos (Roteamento, Importar, Atividade e Claude) moram em Configuracoes e
+ * na busca.
  * Quem tem rota continua vendo o grupo Roteamento.
  *
  * Campanhas entra aqui quando a tela existir -- nao antes, para o menu nao
@@ -290,6 +291,9 @@ export const SECOES_CONFIGURACOES: { id: string; titulo: string; links: LinkConf
     id: "contas",
     titulo: t("accounts"),
     links: [
+      // O Guia abre Contas, nao Modulos: e o caminho do lojista novo, e no
+      // celular (sem o cartao do menu lateral) Configuracoes e onde ele o acha.
+      { rotulo: ITENS.guia.rotulo, href: ITENS.guia.href, dica: "Os passos para deixar a operação no ar" },
       { rotulo: t("connectOperation"), href: ROTA_CONECTAR_OPERACAO, dica: "Loja Shopify ou checkout externo" },
       { rotulo: "Meta", href: "/integracoes/meta", dica: "Gasto e envio das compras" },
       { rotulo: "Google", href: "/integracoes/google", dica: "Gasto e envio das compras" },
@@ -315,7 +319,6 @@ export const SECOES_CONFIGURACOES: { id: string; titulo: string; links: LinkConf
       { rotulo: ITENS.importar.rotulo, href: ITENS.importar.href, dica: "Produtos de outras lojas para as suas" },
       { rotulo: ITENS.atividade.rotulo, href: ITENS.atividade.href, dica: "O que aconteceu na conta" },
       { rotulo: ITENS.claude.rotulo, href: ITENS.claude.href, dica: "Usar o xcart pelo Claude" },
-      { rotulo: ITENS.guia.rotulo, href: ITENS.guia.href, dica: "Os passos para deixar a operação no ar" },
     ],
   },
 ];
