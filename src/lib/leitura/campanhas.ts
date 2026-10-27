@@ -32,11 +32,12 @@ import {
 // Leitura da tela Campanhas. So banco, pela sessao (RLS); a conta e de
 // src/lib/campanhas/montar.ts.
 //
-// Pedidos, custos, taxas, cambio e o PERIODO sao os do Lucro (lerBaseLucro,
-// memorizada: a mesma leitura do Dashboard). Daqui saem so o que o Lucro nao
-// le: o detalhe por campanha/conjunto/anuncio (ad_insights_granular), o gasto
-// das contas sem loja, os ids de campanha de cada pedido e o cambio das moedas
-// das contas que o Lucro nao viu.
+// Pedidos, custos, taxas, cambio e o PERIODO sao os do Lucro (lerBaseLucro no
+// modo soAtual: so o periodo atual, sem o gasto -- a tela nao compara e le o
+// proprio gasto). Daqui saem so o que o Lucro nao le: o detalhe por
+// campanha/conjunto/anuncio (ad_insights_granular), o gasto das contas, os ids
+// de campanha de cada pedido e o cambio das moedas das contas que o Lucro nao
+// viu.
 //
 // As contas sao as do filtro do topo: a da loja (ou do checkout) escolhida;
 // com Todas, as das lojas de Todas e as que nao tem loja.
@@ -107,8 +108,9 @@ export async function lerCampanhas(): Promise<DadosCampanhas> {
   if (!user) return { contas: [], resultado: null, colunasSalvas: [], moeda: "BRL", periodo: "" };
   const supabase = await createClient();
 
-  // A base do Lucro (null = usuario sem loja nem checkout: so contas sem loja).
-  const base = await lerBaseLucro();
+  // A base do Lucro (null = usuario sem loja nem checkout: so contas sem loja),
+  // so do periodo atual: montarCampanhas nao olha o anterior.
+  const base = await lerBaseLucro(false, true);
   const { filtro, lojaIds, checkoutIds } = base ?? (await filtroResolvido());
   const hoje = base?.entrada.hoje ?? diaNoFuso(new Date(), FUSO_RELATORIO_PADRAO);
   const intervalos = base?.entrada.intervalos ?? intervaloDoPeriodo(filtro.periodo, hoje);
@@ -266,25 +268,48 @@ export async function lerCampanhas(): Promise<DadosCampanhas> {
     anteriores.gastos.push(...(s.data ?? []));
   }
 
-  // Cambio das moedas das contas que a base do Lucro nao leu (conta sem loja,
-  // detalhe em outra moeda), na janela do periodo atual.
+  // Cambio das moedas das contas que a base do Lucro nao leu (ela nao le o
+  // gasto; detalhe em outra moeda), na janela do periodo atual.
   const comCotacao = new Set(financeiro.cambio.map((c) => String(c.moeda).toUpperCase()));
   const moedas = new Set<string>([filtro.moeda]);
   for (const g of [...granular, ...gastos, ...anteriores.granular, ...anteriores.gastos]) moedas.add(String(g.moeda).toUpperCase());
   const faltaCambio = [...moedas].filter((m) => m !== "USD" && !comCotacao.has(m));
-  const cambioExtra = faltaCambio.length
-    ? await lerTudo<FxRateRow>("o câmbio", (de, a) =>
-        supabase
-          .from("fx_rates")
-          .select("data, moeda, por_usd, fonte")
-          .in("moeda", faltaCambio)
-          .gte("data", somarDias(desde, -10))
-          .lte("data", ate)
-          .order("data", { ascending: true })
-          .order("moeda", { ascending: true })
-          .range(de, a)
-      )
-    : [];
+  // O detalhe de antes do periodo (`anteriores`) converte o orcamento e o CPA
+  // desejado no dia dele. A base so tem cotacao desde o periodo atual - 10
+  // dias: a de antes vem daqui, na janela que a base lia quando trazia o
+  // periodo anterior junto (desde o anterior - 10 dias).
+  const moedasDeAntes = new Set<string>(anteriores.granular.length ? [filtro.moeda] : []);
+  for (const g of anteriores.granular) moedasDeAntes.add(String(g.moeda).toUpperCase());
+  moedasDeAntes.delete("USD");
+  const [cambioDoPeriodo, cambioDeAntes] = await Promise.all([
+    faltaCambio.length
+      ? lerTudo<FxRateRow>("o câmbio", (de, a) =>
+          supabase
+            .from("fx_rates")
+            .select("data, moeda, por_usd, fonte")
+            .in("moeda", faltaCambio)
+            .gte("data", somarDias(desde, -10))
+            .lte("data", ate)
+            .order("data", { ascending: true })
+            .order("moeda", { ascending: true })
+            .range(de, a)
+        )
+      : ([] as FxRateRow[]),
+    moedasDeAntes.size
+      ? lerTudo<FxRateRow>("o câmbio", (de, a) =>
+          supabase
+            .from("fx_rates")
+            .select("data, moeda, por_usd, fonte")
+            .in("moeda", [...moedasDeAntes])
+            .gte("data", somarDias(intervalos.anterior.desde, -10))
+            .lt("data", somarDias(desde, -10))
+            .order("data", { ascending: true })
+            .order("moeda", { ascending: true })
+            .range(de, a)
+        )
+      : ([] as FxRateRow[]),
+  ]);
+  const cambioExtra = [...cambioDoPeriodo, ...cambioDeAntes];
 
   const resultado = montarCampanhas({
     financeiro: cambioExtra.length ? { ...financeiro, cambio: [...financeiro.cambio, ...cambioExtra] } : financeiro,

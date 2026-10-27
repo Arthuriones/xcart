@@ -1,6 +1,9 @@
+import { Suspense } from "react";
+import { lerFiltroGlobal } from "@/lib/filtro-global";
 import { CabecalhoPlataforma } from "../cabecalho-plataforma";
 import { carregarAnuncios } from "../dados-anuncios";
 import { ErroLeitura } from "../erro-leitura";
+import { EsqueletoContas } from "../esqueleto";
 import { ConteudoGoogle } from "./conteudo-google";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +15,7 @@ export const dynamic = "force-dynamic";
 // /financeiro/anuncios.
 // ============================================================================
 
-export default async function GooglePage() {
+async function Conteudo() {
   const r = await carregarAnuncios("google");
   if (!r.ok) {
     return (
@@ -23,4 +26,15 @@ export default async function GooglePage() {
     );
   }
   return <ConteudoGoogle d={r.dados} />;
+}
+
+export default async function GooglePage() {
+  // So cookies (sem banco): key do Suspense. Trocar loja, periodo ou moeda na
+  // barra do topo mostra o esqueleto de novo em vez do gasto velho.
+  const filtro = await lerFiltroGlobal();
+  return (
+    <Suspense key={JSON.stringify(filtro)} fallback={<EsqueletoContas rotulo="Carregando as contas do Google" />}>
+      <Conteudo />
+    </Suspense>
+  );
 }

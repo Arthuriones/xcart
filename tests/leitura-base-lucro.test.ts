@@ -7,22 +7,31 @@ import { diaNoFuso, somarDias } from "@/lib/financeiro/tipos";
 // os pedidos, e as amostras (COD e checkouts) junto com o cambio. Aqui fica
 // travado que o que ela devolve continua o mesmo da leitura em serie: estado
 // so das lojas do filtro, gasto so das contas delas, cada amostra falhando
-// sozinha, e a falha das taxas ainda derrubando a leitura.
+// sozinha, e a falha das taxas ainda derrubando a leitura. E o modo soAtual
+// (Campanhas): so o periodo atual, sem gasto, com contas e amostras.
 // ============================================================================
 
 type Linha = Record<string, unknown>;
-type Estado = { tabela: string; select: string; eq: [string, unknown][]; in: [string, unknown[]][] };
+type Estado = {
+  tabela: string;
+  select: string;
+  eq: [string, unknown][];
+  in: [string, unknown[]][];
+  gte: [string, unknown][];
+};
 
 const tabelas: Record<string, Linha[]> = {};
 const consultas: Estado[] = [];
 let erroDe: (e: Estado) => { message: string } | null = () => null;
 
 function consulta(tabela: string) {
-  const e: Estado = { tabela, select: "", eq: [], in: [] };
+  const e: Estado = { tabela, select: "", eq: [], in: [], gte: [] };
   const b: Record<string, unknown> = {
     select: (c: string) => ((e.select = c), b),
     eq: (col: string, v: unknown) => (e.eq.push([col, v]), b),
     in: (col: string, vs: unknown[]) => (e.in.push([col, vs]), b),
+    // So anota o inicio da janela (o dado do teste nao depende dela).
+    gte: (col: string, v: unknown) => (e.gte.push([col, v]), b),
     then: (ok: (v: unknown) => unknown, falha: (x: unknown) => unknown) => {
       consultas.push(e);
       const erro = erroDe(e);
@@ -32,7 +41,7 @@ function consulta(tabela: string) {
       return Promise.resolve(erro ? { data: null, error: erro } : { data, error: null }).then(ok, falha);
     },
   };
-  for (const m of ["gte", "lte", "order", "range", "limit", "overrideTypes"]) b[m] = () => b;
+  for (const m of ["lte", "order", "range", "limit", "overrideTypes"]) b[m] = () => b;
   return b;
 }
 
@@ -185,5 +194,45 @@ describe("lerBaseLucro em rodadas paralelas", () => {
     expect(base.entrada.gastos).toEqual([]);
     expect(base.entrada.amostraEntrega).toBeUndefined();
     expect(consultas.some((c) => c.tabela === "ad_accounts" || c.tabela === "ad_spend_daily")).toBe(false);
+  });
+
+  const leituraDosPedidos = () => consultas.find((c) => c.tabela === "fin_orders" && c.select.startsWith("store_id, user_id"))!;
+  const leituraDosExternos = () =>
+    consultas.find((c) => c.tabela === "pedidos_externos" && c.select.startsWith("checkout_id, situacao, moeda"))!;
+  const leituraDoCambio = () => consultas.find((c) => c.tabela === "fx_rates")!;
+
+  it("completa (Dashboard): pedidos e cambio desde o periodo anterior", async () => {
+    const base = (await lerBaseLucro())!;
+    const { anterior } = base.entrada.intervalos;
+
+    expect(leituraDosPedidos().gte).toEqual([["dia_local", anterior.desde]]);
+    expect(leituraDosExternos().gte).toEqual([["dia_local", anterior.desde]]);
+    expect(leituraDoCambio().gte).toEqual([["data", somarDias(anterior.desde, -10)]]);
+  });
+
+  it("soAtual (Campanhas): so o periodo atual e sem gasto; contas, taxas e amostras ficam", async () => {
+    const base = (await lerBaseLucro(false, true))!;
+    const { atual } = base.entrada.intervalos;
+
+    expect(leituraDosPedidos().gte).toEqual([["dia_local", atual.desde]]);
+    expect(leituraDosExternos().gte).toEqual([["dia_local", atual.desde]]);
+    expect(leituraDoCambio().gte).toEqual([["data", somarDias(atual.desde, -10)]]);
+    expect(consultas.some((c) => c.tabela === "ad_spend_daily")).toBe(false);
+    expect(base.entrada.gastos).toEqual([]);
+    expect(base.gastosCampanha).toEqual([]);
+    expect(base.erroCampanha).toBeNull();
+
+    // Campanhas filtra as contas daqui; o Previsto do COD usa taxas e amostras.
+    expect(base.contas.map((c) => c.id)).toEqual(["act-a", "act-b", "act-ck"]);
+    expect(base.entrada.contas).toHaveLength(3);
+    expect(base.entrada.configs).toEqual([{ store_id: B, contra_entrega: true }]);
+    expect(base.entrada.amostraEntrega).toEqual({ [CK]: { entregues: 1, recusados: 0, semRetorno: 0 } });
+    const amostraCod = consultas.find((c) => c.tabela === "fin_orders" && c.select.startsWith("store_id, dia_local"));
+    expect(amostraCod?.in).toEqual([["store_id", [B]]]);
+
+    // Sem o gasto (CZK) e sem pedido, a moeda da loja do filtro entra pelo estado.
+    const moedas = leituraDoCambio().in.find(([c]) => c === "moeda")![1];
+    expect(moedas).toEqual(expect.arrayContaining(["BRL", "USD", "CZK", "EUR"]));
+    expect(moedas).not.toContain("JPY");
   });
 });

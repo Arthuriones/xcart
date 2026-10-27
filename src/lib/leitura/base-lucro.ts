@@ -106,7 +106,7 @@ export interface BaseLucro {
   fuso: string;
   /** Todas as contas de anuncio do usuario. */
   contas: AdAccountRow[];
-  /** ad_spend_daily no nivel campanha, so do periodo atual. */
+  /** ad_spend_daily no nivel campanha, so do periodo atual. Vazio no `soAtual`. */
   gastosCampanha: AdSpendDailyRow[];
   /** Falha ao ler o gasto por campanha: so a aba Campanha fica sem dado. */
   erroCampanha: string | null;
@@ -118,8 +118,14 @@ export interface BaseLucro {
  * `enxuta` (tela Pedidos): so os pedidos e o cambio do periodo ATUAL, sem
  * contas nem gasto de anuncio. calcularFinanceiro sobre ela daria o periodo
  * anterior e o anuncio zerados -- nao use no Dashboard.
+ *
+ * `soAtual` (tela Campanhas, que nao compara e le o proprio gasto): pedidos,
+ * pedidos dos checkouts e cambio so do periodo ATUAL, sem as duas leituras de
+ * ad_spend_daily. Contas, taxas, custos e as duas amostras ficam (o Previsto
+ * do COD depende delas). calcularFinanceiro sobre ela tambem daria o periodo
+ * anterior e o anuncio zerados -- nao use no Dashboard.
  */
-export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseLucro | null> => {
+export const lerBaseLucro = cache(async (enxuta: boolean = false, soAtual: boolean = false): Promise<BaseLucro | null> => {
   const user = await getCurrentUser();
   if (!user) return null;
   const supabase = await createClient();
@@ -166,7 +172,7 @@ export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseL
   const fusoRef = fusoDoFiltro(lojaIds, checkoutsDoFiltro, (id) => estadoPorLoja.get(id)?.fuso);
   const hoje = diaNoFuso(new Date(), fusoRef);
   const intervalos = intervaloDoPeriodo(filtro.periodo, hoje);
-  const desde = enxuta ? intervalos.atual.desde : intervalos.anterior.desde;
+  const desde = enxuta || soAtual ? intervalos.atual.desde : intervalos.anterior.desde;
   const ate = intervalos.atual.ate;
 
   const lerPedidos = (colunas: string) =>
@@ -305,7 +311,7 @@ export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseL
           })
         ),
     // O gasto so precisa das contas e do periodo: vem na mesma rodada.
-    contaIds.length
+    contaIds.length && !soAtual
       ? Promise.all([
           lerTudo<AdSpendDailyRow>("o gasto de anúncio", (de, a) =>
             supabase
@@ -348,6 +354,12 @@ export const lerBaseLucro = cache(async (enxuta: boolean = false): Promise<BaseL
   for (const x of externos) {
     moedas.add(String(x.moeda).toUpperCase());
     if (x.moeda_receita) moedas.add(String(x.moeda_receita).toUpperCase());
+  }
+  // soAtual: a moeda da loja (a taxa fixa e a devolucao do COD saem dela)
+  // tambem chegava pelos pedidos do periodo anterior e pelo gasto; sem eles,
+  // entra pelo estado da sincronizacao.
+  if (soAtual) {
+    for (const e of estados) if (e.moeda) moedas.add(String(e.moeda).toUpperCase());
   }
 
   const cambio = await lerTudo<FxRateRow>("o câmbio", (de, a) =>
