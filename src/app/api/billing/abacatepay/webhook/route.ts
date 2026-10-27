@@ -47,7 +47,7 @@ interface Envelope {
     transparent?: { id?: string };
     subscription?: { id?: string; frequency?: string | null };
     customer?: { id?: string } | null;
-    payment?: { createdAt?: string | null; updatedAt?: string | null } | null;
+    payment?: { createdAt?: string | null; updatedAt?: string | null; externalId?: string | null } | null;
     checkout?: { externalId?: string | null } | null;
     [k: string]: unknown;
   };
@@ -162,9 +162,12 @@ async function tratarAssinatura(evento: Parameters<typeof decidirEventoDeAssinat
   const sub = await buscarAssinatura(subId);
   const clienteId = corpo.data?.customer?.id || sub.customerId || null;
 
-  // A conta: o externalId que o /subscribe montou; senao a assinatura ou o
-  // cliente ja gravados no perfil.
-  const peloCheckout = contaDoExternalId(corpo.data?.checkout?.externalId)?.userId;
+  // A conta: o externalId que o /subscribe montou (no exemplo da doc ele vem no
+  // payment, com o do checkout nulo); senao a assinatura ou o cliente ja
+  // gravados no perfil.
+  const peloCheckout = (
+    contaDoExternalId(corpo.data?.checkout?.externalId) || contaDoExternalId(corpo.data?.payment?.externalId)
+  )?.userId;
   const porColuna = async (coluna: string, valor: string | null | undefined) =>
     valor
       ? (await admin.from("profiles").select("id").eq(coluna, valor).maybeSingle()).data?.id

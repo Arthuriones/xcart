@@ -181,13 +181,14 @@ describe("regras puras", () => {
 
   it("status do Pix no vocabulario da janela do QR", async () => {
     const { statusDoPix } = await import("../src/lib/billing/abacatepay-regras");
-    expect(["PAID", "EXPIRED", "CANCELLED", "REFUNDED", "PENDING", "?"].map(statusDoPix)).toEqual([
+    expect(["PAID", "EXPIRED", "CANCELLED", "REFUNDED", "PENDING", "?", "APPROVED"].map(statusDoPix)).toEqual([
       "paid",
       "expired",
       "canceled",
       "refunded",
       "pending",
       "pending",
+      "paid",
     ]);
   });
 
@@ -395,6 +396,20 @@ describe("webhook da AbacatePay", () => {
     expect(rpcs).toEqual([
       { nome: "reset_ai_credits", args: expect.objectContaining({ p_user_id: USER, p_period_end: "2026-12-03T12:00:00.000Z" }) },
     ]);
+  });
+
+  it("a conta tambem sai do payment.externalId (o exemplo da doc traz o do checkout nulo)", async () => {
+    api.assinatura = { id: "subs_1", status: "ACTIVE", amount: 19700, method: "CARD" };
+    const corpo = assinaturaAtiva("subscription.completed", "log_sub_pay");
+    (corpo.data as Record<string, unknown>).checkout = { id: "bill_1", externalId: null };
+    (corpo.data as Record<string, unknown>).payment = {
+      id: "char_1",
+      externalId: `xc_${USER}_roteamento_490000`,
+      createdAt: "2026-10-27T12:00:00.000Z",
+    };
+    (corpo.data as Record<string, unknown>).customer = { id: "cust_desconhecido" };
+    expect((await webhook(corpo)).status).toBe(200);
+    expect(perfil()).toMatchObject({ plan: "pro", plano: "roteamento", abacatepay_subscription_id: "subs_1" });
   });
 
   it("cancelada: o Pro fica ate o fim ja pago", async () => {

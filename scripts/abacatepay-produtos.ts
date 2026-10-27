@@ -16,6 +16,7 @@
  * Uso:
  *   npm run op -- scripts/abacatepay-produtos.ts            # so confere
  *   npm run op -- scripts/abacatepay-produtos.ts --criar    # cria o que falta
+ *   ... --producao  usa ABACATEPAY_API_KEY_PROD (sem ela, a ABACATEPAY_API_KEY, de Dev mode)
  */
 import { config } from "dotenv";
 import { PLANOS } from "../src/lib/billing/plans";
@@ -24,11 +25,13 @@ import { criarProduto, produtoDoPlano } from "../src/lib/billing/abacatepay";
 config({ path: ".env.local" });
 
 const criar = process.argv.includes("--criar");
+const producao = process.argv.includes("--producao");
 
 (async () => {
+  if (producao) process.env.ABACATEPAY_API_KEY = process.env.ABACATEPAY_API_KEY_PROD || "";
   const chave = process.env.ABACATEPAY_API_KEY || "";
   if (!chave) {
-    console.error("ABACATEPAY_API_KEY nao esta no .env.local.");
+    console.error(`${producao ? "ABACATEPAY_API_KEY_PROD" : "ABACATEPAY_API_KEY"} nao esta no .env.local.`);
     process.exit(1);
   }
   console.log(`Ambiente: ${chave.startsWith("abc_prod_") ? "PRODUCAO" : chave.startsWith("abc_dev_") ? "Dev mode" : "?"}`);

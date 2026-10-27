@@ -65,6 +65,7 @@ export function fimDoPeriodo(
 export function statusDoPix(status: unknown): "paid" | "expired" | "canceled" | "refunded" | "pending" {
   switch (String(status || "").toUpperCase()) {
     case "PAID":
+    case "APPROVED": // a doc libera o pedido em APPROVED (o enum do Pix tambem o traz)
       return "paid";
     case "EXPIRED":
       return "expired";

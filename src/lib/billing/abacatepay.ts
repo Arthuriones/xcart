@@ -111,6 +111,13 @@ export async function garantirCliente(userId: string, dados: DadosDoCliente): Pr
   const guardado = (perfil as { abacatepay_customer_id?: string | null } | null)?.abacatepay_customer_id;
   if (guardado) return guardado;
 
+  const id = await criarCliente(userId, dados);
+  await admin.from("profiles").update({ abacatepay_customer_id: id }).eq("id", userId);
+  return id;
+}
+
+/** So o cadastro na AbacatePay, sem gravar no perfil (o teste de sandbox usa). */
+export async function criarCliente(userId: string, dados: DadosDoCliente): Promise<string> {
   const criado = await api<{ id: string }>("/customers/create", {
     method: "POST",
     body: {
@@ -121,7 +128,6 @@ export async function garantirCliente(userId: string, dados: DadosDoCliente): Pr
       metadata: { user_id: userId },
     },
   });
-  await admin.from("profiles").update({ abacatepay_customer_id: criado.id }).eq("id", userId);
   return criado.id;
 }
 
@@ -298,6 +304,42 @@ export async function criarPix(p: {
 /** Status do Pix: PENDING, PAID, EXPIRED ou CANCELLED. */
 export async function conferirPix(id: string): Promise<{ status: string }> {
   return api<{ status: string }>("/transparents/check", { query: { id } });
+}
+
+/** Paga o Pix de mentira. So com a chave de Dev mode (em producao a API recusa). */
+export async function simularPagamentoPix(id: string): Promise<{ status: string }> {
+  return api<{ status: string }>("/transparents/simulate-payment", { method: "POST", query: { id }, body: {} });
+}
+
+// ---- webhooks (scripts/abacatepay-webhook.ts) -------------------------------
+
+export interface WebhookAbacate {
+  id: string;
+  name: string;
+  endpoint: string;
+  events: string[];
+  devMode: boolean;
+}
+
+export async function listarWebhooks(): Promise<WebhookAbacate[]> {
+  const data = await api<WebhookAbacate[] | { webhooks?: WebhookAbacate[] }>("/webhooks/list");
+  return Array.isArray(data) ? data : data?.webhooks || [];
+}
+
+export async function criarWebhook(w: {
+  nome: string;
+  endpoint: string;
+  segredo: string;
+  eventos: string[];
+}): Promise<WebhookAbacate> {
+  return api<WebhookAbacate>("/webhooks/create", {
+    method: "POST",
+    body: { name: w.nome, endpoint: w.endpoint, secret: w.segredo, events: w.eventos },
+  });
+}
+
+export async function apagarWebhook(id: string): Promise<void> {
+  await api<unknown>("/webhooks/delete", { method: "POST", query: { id }, body: {} });
 }
 
 // ---------------------------------------------------------------------------
