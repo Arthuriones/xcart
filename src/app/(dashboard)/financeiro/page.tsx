@@ -4,7 +4,7 @@ import { Store } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { ROTA_CONECTAR_OPERACAO, ROTULO_CONECTAR_OPERACAO } from "@/lib/conectar-operacao";
 import { filtroResolvido, lerComparacao, lerFiltroGlobal } from "@/lib/filtro-global";
-import { TODAS } from "@/lib/financeiro/tipos";
+import { TODAS, type Periodo } from "@/lib/financeiro/tipos";
 import { getFinanceiro } from "@/lib/financeiro/queries";
 import { lerBaseLucro } from "@/lib/leitura/base-lucro";
 import { montarPorCampanha } from "@/lib/leitura/por-campanha";
@@ -148,6 +148,11 @@ function SemLojas() {
   );
 }
 
+/** O periodo e um dia so? Para o esqueleto ter a forma do painel no celular. */
+function umDiaDoPeriodo(p: Periodo): boolean {
+  return typeof p === "string" ? p === "hoje" || p === "ontem" : p.desde === p.ate;
+}
+
 export default async function FinanceiroPage() {
   // So cookies (sem banco): servem de key para o Suspense. Trocar loja,
   // periodo, moeda ou comparacao mostra o esqueleto de novo em vez de deixar o
@@ -155,7 +160,10 @@ export default async function FinanceiroPage() {
   const [filtro, comparacao] = await Promise.all([lerFiltroGlobal(), lerComparacao()]);
   // Sem PageHeader: o titulo da tela fica na barra do topo da casca.
   return (
-    <Suspense key={JSON.stringify({ filtro, comparacao })} fallback={<EsqueletoLucro />}>
+    <Suspense
+      key={JSON.stringify({ filtro, comparacao })}
+      fallback={<EsqueletoLucro umDia={umDiaDoPeriodo(filtro.periodo)} />}
+    >
       <Conteudo />
     </Suspense>
   );

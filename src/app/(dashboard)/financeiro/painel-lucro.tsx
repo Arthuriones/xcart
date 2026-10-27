@@ -16,6 +16,7 @@ import {
   type FormatoVariacao,
 } from "@/components/ui/variacao";
 import type { PontoDia } from "@/lib/leitura/serie-diaria";
+import { bomComParcial, terminaHoje, textoDoAnterior } from "./comparacao-parcial";
 import { GraficoLinha, type LinhaExtra } from "./grafico-faturamento";
 // So o tipo: os indicadores sao montados no servidor.
 import type { Indicador } from "./indicadores";
@@ -217,10 +218,23 @@ export function PainelLucro({
 
   const valor = valorComSinal(m.texto, m.valor);
   const parcialHoje = serie.parcialUltimo;
+  // Periodo que termina hoje contra um anterior inteiro: a variacao sai sem
+  // verde nem vermelho (comparacao-parcial.ts).
+  const terminaEmHoje = terminaHoje(atual);
 
   const destaque = (
-    <section aria-labelledby="destaque-t" className="flex min-w-0 flex-col rounded-card border border-border bg-surface">
-      <div className="flex flex-wrap items-start justify-between gap-4 px-5 pt-5">
+    <section
+      aria-labelledby="destaque-t"
+      // Celular: primeiro da tela, antes da faixa de KPIs (ver o retorno).
+      className="flex min-w-0 flex-col rounded-card border border-border bg-surface max-[759px]:order-first"
+    >
+      <div
+        className={clsx(
+          "flex flex-wrap items-start justify-between gap-4 px-5 pt-5",
+          // Celular com um dia: a nota tracejada some e o cartao fecha aqui.
+          umDia && "pb-5 min-[760px]:pb-0"
+        )}
+      >
         <div className="flex min-w-0 flex-col gap-1.5">
           <div className="flex items-center gap-1">
             <h2 id="destaque-t" className="text-dense font-medium text-t2">
@@ -250,10 +264,13 @@ export function PainelLucro({
               <span>Sem base de comparação em {rotuloAnterior}</span>
             ) : (
               <>
-                <Variacao valor={m.variacao} bom={m.bom} formato={m.formato} pilula />
+                <Variacao valor={m.variacao} bom={bomComParcial(m.bom, terminaEmHoje)} formato={m.formato} pilula />
                 {m.anterior && (
                   <span className="num">
-                    vs. {m.anterior.cheio.replace(/^-/, "−")} em {rotuloAnterior}
+                    {textoDoAnterior(m.anterior.cheio.replace(/^-/, "−"), rotuloAnterior, {
+                      umDia,
+                      parcial: terminaEmHoje,
+                    })}
                   </span>
                 )}
               </>
@@ -279,8 +296,9 @@ export function PainelLucro({
 
       {umDia ? (
         // flex-1: o cartao estica ate a altura da Composicao ao lado, e a nota
-        // ocupa esse espaco em vez de deixar um vao embaixo dela.
-        <p className="mx-5 mt-5 mb-5 grid min-h-40 flex-1 place-items-center rounded-control border border-dashed border-border-strong px-4 py-6 text-center text-dense text-t2 text-pretty">
+        // ocupa esse espaco em vez de deixar um vao embaixo dela. No celular
+        // ela sai: 160px de caixa vazia empurravam Gasto e ROAS para baixo.
+        <p className="mx-5 mt-5 mb-5 hidden min-h-40 flex-1 place-items-center rounded-control border border-dashed border-border-strong px-4 py-6 text-center text-dense text-t2 text-pretty min-[760px]:grid">
           Com um dia só, não há linha para desenhar. Escolha 7 dias ou mais para ver a evolução.
         </p>
       ) : semMovimento ? (
@@ -330,16 +348,20 @@ export function PainelLucro({
   );
 
   const n = celulas.length;
+  // Abaixo de 760px a faixa de KPIs (Gasto, ROAS) vem logo depois do destaque e
+  // a composicao por ultimo: os dois embrulhos viram `contents`, os tres
+  // cartoes ficam irmaos de um flex-col e o `order` os arruma. A partir de
+  // 760px o embrulho de fora e `contents` e a tela e a de sempre.
   return (
-    <>
-      <div className="grid items-stretch gap-4 min-[760px]:gap-6 @min-[1032px]:grid-cols-[minmax(0,1fr)_380px]">
+    <div className="contents max-[759px]:flex max-[759px]:flex-col max-[759px]:gap-4">
+      <div className="grid items-stretch gap-4 max-[759px]:contents min-[760px]:gap-6 @min-[1032px]:grid-cols-[minmax(0,1fr)_380px]">
         {destaque}
         {composicao}
       </div>
 
       <section
         aria-label="Indicadores do período"
-        className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-border bg-border @min-[912px]:grid-cols-4"
+        className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-border bg-border max-[759px]:-order-1 @min-[912px]:grid-cols-4"
       >
         {celulas.map((c, i) => {
           const on = m.id === c.id;
@@ -414,7 +436,9 @@ export function PainelLucro({
                 {v.texto}
               </span>
               <span className="num flex min-h-4 flex-wrap items-center gap-x-2 gap-y-1 text-label text-t3">
-                {c.variacao !== undefined && <Variacao valor={c.variacao} bom={c.bom} formato={c.formato} />}
+                {c.variacao !== undefined && (
+                  <Variacao valor={c.variacao} bom={bomComParcial(c.bom, terminaEmHoje)} formato={c.formato} />
+                )}
                 {vs && <span className="min-w-0">{vs}</span>}
                 {c.detalhe && <span className="min-w-0">{c.detalhe}</span>}
                 {c.selo && <span className={c.selo.tom === "ok" ? "text-ok" : "text-warn"}>{c.selo.texto}</span>}
@@ -423,6 +447,6 @@ export function PainelLucro({
           );
         })}
       </section>
-    </>
+    </div>
   );
 }
