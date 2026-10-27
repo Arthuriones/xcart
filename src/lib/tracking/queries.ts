@@ -426,23 +426,31 @@ export async function getPainelTracking(storeIds?: readonly string[]): Promise<P
 
   // Sem filtrar por uninstalled_at aqui: loja desinstalada com rastreamento
   // LIGADO precisa aparecer, porque e justamente onde a venda parou de sair.
-  const { data: doUsuario } = await supabase
+  //
+  // Erro de banco LANCA aqui e nas leituras abaixo: engolido, virava "app
+  // desinstalado", "rastreamento desligado" ou loja sem pixel, e o lojista
+  // religava ou recriava o que estava certo. Quem chama mostra o erro.
+  const { data: doUsuario, error: erroLojas } = await supabase
     .from("stores")
     .select("id, name, shop_domain, uninstalled_at")
     .order("created_at", { ascending: true });
+  if (erroLojas) throw new Error(`Falha ao ler as lojas: ${erroLojas.message}`);
 
   // Intersecao com as lojas lidas (RLS): id alheio pedido nao entra.
   const pedidas = storeIds ? new Set(storeIds) : null;
   const todas = pedidas ? doUsuario?.filter((l) => pedidas.has(l.id)) : doUsuario;
   if (!todas?.length) return { lojas: [] };
 
-  const { data: configs } = await supabase
+  const { data: configs, error: erroConfigs } = await supabase
     .from("tracking_configs")
     .select("store_id, enabled, web_pixel_visto_em, web_pixel_com_id_em, teto_atingido_em")
     .in(
       "store_id",
       todas.map((l) => l.id)
     );
+  if (erroConfigs) {
+    throw new Error(`Falha ao ler a configuração do rastreamento: ${erroConfigs.message}`);
+  }
   const porLoja = new Map((configs || []).map((c) => [c.store_id, c]));
 
   // Desinstalada SEM rastreamento ligado continua escondida: nao ha nada a
@@ -510,13 +518,17 @@ export async function getPainelTracking(storeIds?: readonly string[]): Promise<P
     return [];
   }
 
-  const [linhas, destinosPorLoja, { data: criados }, doMeta] = await Promise.all([
-    lerContagem(),
-    destinosParaTela(admin, ids),
-    // created_at do destino: a policy do dono cobre a leitura.
-    supabase.from("tracking_destinations").select("id, created_at").in("store_id", ids),
-    comprasDoMeta(supabase, ids),
-  ]);
+  const [linhas, destinosPorLoja, { data: criados, error: erroCriados }, doMeta] =
+    await Promise.all([
+      lerContagem(),
+      destinosParaTela(admin, ids),
+      // created_at do destino: a policy do dono cobre a leitura.
+      supabase.from("tracking_destinations").select("id, created_at").in("store_id", ids),
+      comprasDoMeta(supabase, ids),
+    ]);
+  if (erroCriados) {
+    throw new Error(`Falha ao ler a data dos destinos: ${erroCriados.message}`);
+  }
 
   const criadoEm = new Map(
     ((criados || []) as { id: string; created_at: string | null }[]).map((c) => [

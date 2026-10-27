@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { fakeSupabase } from "./_fake-supabase";
 
 // queries.ts tem "server-only" e fala com o Supabase; aqui so interessa a regra
 // de contagem e QUAL cliente le a fila. Mesmo padrao de store-ownership.test.ts.
@@ -23,9 +24,11 @@ function consulta(dados: unknown, erroDaLeitura: unknown = null) {
 }
 
 const tabelas: Record<string, unknown[]> = {};
+/** Erro que a leitura de uma tabela devolve (5xx, 57014 do statement timeout). */
+const erroDaTabela: Record<string, { code: string; message: string }> = {};
 
 const clienteDoUsuario = {
-  from: (t: string) => consulta(tabelas[t] ?? []),
+  from: (t: string) => consulta(tabelas[t] ?? [], erroDaTabela[t] ?? null),
   rpc: (fn: string, args: unknown) => {
     chamadas.push({ cliente: "usuario", fn, args });
     return consulta(linhasDoPainel, erroDaRpc[fn] ?? null);
@@ -49,8 +52,12 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 const destinos = new Map<string, unknown[]>();
+let erroDosDestinos: Error | null = null;
 vi.mock("@/lib/tracking/destinos", () => ({
-  destinosParaTela: async () => destinos,
+  destinosParaTela: async () => {
+    if (erroDosDestinos) throw erroDosDestinos;
+    return destinos;
+  },
 }));
 
 const { contagensDoPainel, mapaLegado, getPainelTracking } = await import(
@@ -274,6 +281,8 @@ describe("getPainelTracking", () => {
     destinos.clear();
     for (const k of Object.keys(tabelas)) delete tabelas[k];
     for (const k of Object.keys(erroDaRpc)) delete erroDaRpc[k];
+    for (const k of Object.keys(erroDaTabela)) delete erroDaTabela[k];
+    erroDosDestinos = null;
   });
 
   it("le a fila pela funcao, com o cliente do usuario", async () => {
@@ -422,6 +431,126 @@ describe("getPainelTracking", () => {
       ["ligada", true],
       ["instalada", false],
     ]);
+  });
+});
+
+// ===========================================================================
+// Erro de banco LANCA, nunca vira estado falso
+//
+// Engolido, o erro virava tela mentindo: falha em stores = "app desinstalado",
+// em tracking_configs = toda loja "Rastreamento desligado" com o switch
+// desligado (e o diagnostico nem rodava), nos destinos = loja sem pixel ou sem
+// token. O lojista religava, recriava o pixel ou reinstalava a toa. Quem chama
+// (tracking/page, aba da loja, lista de lojas, Integracoes) ja mostra o erro.
+// ===========================================================================
+
+describe("getPainelTracking com erro de banco", () => {
+  beforeEach(() => {
+    chamadas.length = 0;
+    linhasDoPainel = [];
+    destinos.clear();
+    for (const k of Object.keys(tabelas)) delete tabelas[k];
+    for (const k of Object.keys(erroDaRpc)) delete erroDaRpc[k];
+    for (const k of Object.keys(erroDaTabela)) delete erroDaTabela[k];
+    erroDosDestinos = null;
+    tabelas.stores = [
+      { id: "loja1", name: "Loja", shop_domain: "a.myshopify.com", uninstalled_at: null },
+    ];
+    tabelas.tracking_configs = [{ store_id: "loja1", enabled: true }];
+  });
+
+  it("falha ao ler as lojas: lanca, nao devolve lista vazia", async () => {
+    erroDaTabela.stores = { code: "503", message: "upstream timeout" };
+
+    await expect(getPainelTracking()).rejects.toThrow(/lojas: upstream timeout/);
+    expect(chamadas).toHaveLength(0);
+  });
+
+  it("falha ao ler tracking_configs: lanca, nao mostra a loja desligada", async () => {
+    erroDaTabela.tracking_configs = { code: "57014", message: "statement timeout" };
+
+    await expect(getPainelTracking()).rejects.toThrow(/rastreamento: statement timeout/);
+    expect(chamadas).toHaveLength(0);
+  });
+
+  it("falha ao ler a data dos destinos: lanca", async () => {
+    erroDaTabela.tracking_destinations = { code: "57014", message: "statement timeout" };
+
+    await expect(getPainelTracking()).rejects.toThrow(/destinos: statement timeout/);
+  });
+
+  it("falha nos destinos (admin): lanca, nao mostra a loja sem pixel", async () => {
+    erroDosDestinos = new Error("falha ao ler os destinos das lojas: boom");
+
+    await expect(getPainelTracking()).rejects.toThrow(/destinos das lojas: boom/);
+  });
+
+  it("sem erro, a loja ligada continua ligada (o caminho feliz nao mudou)", async () => {
+    const { lojas } = await getPainelTracking();
+
+    expect(lojas).toHaveLength(1);
+    expect(lojas[0].ligado).toBe(true);
+  });
+});
+
+describe("destinosParaTela com erro de banco", () => {
+  // O modulo de verdade: o mock acima so vale para queries.ts.
+  async function real() {
+    return vi.importActual<typeof import("../src/lib/tracking/destinos")>(
+      "../src/lib/tracking/destinos"
+    );
+  }
+  const destino = {
+    id: "d1",
+    store_id: "loja1",
+    plataforma: "meta",
+    nome: null,
+    conta: "123",
+    labels: {},
+    test_event_code: null,
+    id_template: null,
+    ativo: false,
+  };
+
+  it("traz o desativado e so a existencia do token", async () => {
+    const { destinosParaTela } = await real();
+    const banco = fakeSupabase({
+      tracking_destinations: [destino],
+      tracking_destination_secrets: [{ destination_id: "d1", access_token: "segredo" }],
+    });
+
+    const porLoja = await destinosParaTela(banco.client, ["loja1"]);
+
+    const [d] = porLoja.get("loja1")!;
+    expect(d).toMatchObject({ id: "d1", ativo: false, temToken: true });
+    expect(d).not.toHaveProperty("token");
+  });
+
+  it("falha ao ler os destinos: lanca, nao devolve loja sem pixel", async () => {
+    const { destinosParaTela } = await real();
+    const banco = fakeSupabase({ tracking_destinations: [destino] }, (t) =>
+      t === "tracking_destinations" ? { code: "57014", message: "statement timeout" } : null
+    );
+
+    await expect(destinosParaTela(banco.client, ["loja1"])).rejects.toThrow(
+      /destinos das lojas: statement timeout/
+    );
+  });
+
+  it("falha ao ler os tokens: lanca, nao mostra o destino sem token", async () => {
+    const { destinosParaTela } = await real();
+    const banco = fakeSupabase(
+      {
+        tracking_destinations: [destino],
+        tracking_destination_secrets: [{ destination_id: "d1", access_token: "segredo" }],
+      },
+      (t) =>
+        t === "tracking_destination_secrets" ? { code: "503", message: "upstream timeout" } : null
+    );
+
+    await expect(destinosParaTela(banco.client, ["loja1"])).rejects.toThrow(
+      /tokens dos destinos: upstream timeout/
+    );
   });
 });
 

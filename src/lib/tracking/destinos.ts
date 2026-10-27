@@ -137,24 +137,31 @@ export async function destinosParaTela(
   const porLoja = new Map<string, (Omit<Destino, "token"> & { temToken: boolean })[]>();
   if (storeIds.length === 0) return porLoja;
 
-  const { data } = await admin
+  const { data, error } = await admin
     .from("tracking_destinations")
     .select(COLUNAS)
     .in("store_id", storeIds)
     .order("created_at", { ascending: true });
+
+  // Erro de banco LANCA, como em destinosDaLoja: engolido, a tela mostrava a
+  // loja sem pixel (ou sem token), e o lojista recriava o destino a toa.
+  if (error) throw new Error(`falha ao ler os destinos das lojas: ${error.message}`);
 
   const linhas = data || [];
   if (linhas.length === 0) return porLoja;
 
   // So a EXISTENCIA do token. A tabela de segredo nao tem policy nenhuma, e o
   // valor nunca atravessa para o cliente.
-  const { data: segredos } = await admin
+  const { data: segredos, error: erroSegredo } = await admin
     .from("tracking_destination_secrets")
     .select("destination_id, access_token")
     .in(
       "destination_id",
       linhas.map((l) => l.id)
     );
+  if (erroSegredo) {
+    throw new Error(`falha ao ler os tokens dos destinos: ${erroSegredo.message}`);
+  }
   const comToken = new Set(
     (segredos || []).filter((s) => s.access_token).map((s) => s.destination_id)
   );
