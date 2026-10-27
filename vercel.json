@@ -28,11 +28,11 @@
   "crons": [
     {
       "path": "/api/jobs/bulk-import/process",
-      "schedule": "0 * * * *"
+      "schedule": "57 * * * *"
     },
     {
       "path": "/api/jobs/routes/heal",
-      "schedule": "30 * * * *"
+      "schedule": "25 * * * *"
     },
     {
       "path": "/api/jobs/tracking/drain",
@@ -44,7 +44,7 @@
     },
     {
       "path": "/api/jobs/ads/meta",
-      "schedule": "*/15 * * * *"
+      "schedule": "5,20,35,50 * * * *"
     },
     {
       "path": "/api/jobs/financeiro/cambio",
@@ -52,11 +52,11 @@
     },
     {
       "path": "/api/jobs/alertas",
-      "schedule": "*/10 * * * *"
+      "schedule": "3,13,23,33,43,53 * * * *"
     },
     {
       "path": "/api/jobs/demonstracao",
-      "schedule": "*/15 * * * *"
+      "schedule": "7,22,37,52 * * * *"
     }
   ]
 }

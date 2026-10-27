@@ -75,8 +75,6 @@ async function executar(request: NextRequest) {
   );
 
   try {
-    const r = await drenarFila(limite);
-
     // ---- expurgo ----------------------------------------------------------
     //
     // `purge_tracking()` existe desde a migration 035, com comentario dizendo
@@ -92,6 +90,10 @@ async function executar(request: NextRequest) {
     // historico de 12 meses (tracking_historico, uma linha por evento) antes de
     // qualquer DELETE, e a fila fica curta -- funil 14 dias, compra 90 com o
     // payload resumido aos 8 (src/lib/tracking/retencao.ts).
+    //
+    // ANTES do drenarFila: ele nao tem prazo, e com o Meta ou o TikTok lentos
+    // (5 s por envio, 50 envios) estourava os 120 s e o expurgo da hora nao
+    // rodava. Aqui custa milissegundos (53 ms medidos em 24/10).
     let expurgo: string | null = null;
     let expurgoCheckouts: string | null = null;
     if (new Date().getUTCMinutes() < 10) {
@@ -101,6 +103,8 @@ async function executar(request: NextRequest) {
       const rc = await createAdminClient().rpc("purge_checkout_externo_rastreio");
       expurgoCheckouts = rc.error ? `falhou: ${rc.error.message}` : "ok";
     }
+
+    const r = await drenarFila(limite);
 
     // A fila do checkout externo, DEPOIS do expurgo: com o Meta ou o TikTok
     // lentos ela pode levar dezenas de segundos, e o expurgo das lojas so roda
@@ -116,7 +120,16 @@ async function executar(request: NextRequest) {
       checkouts = { erro: e instanceof Error ? e.message : "falha ao drenar a fila do checkout" };
     }
 
-    return NextResponse.json({ ok: true, ...r, expurgo, checkouts, expurgoCheckouts });
+    // Expurgo que falhou responde 500 com o mesmo corpo: o painel de Cron Jobs
+    // da Vercel marca a execucao como falha. Com 200, o purge estourando os 8 s
+    // do PostgREST (volta atras inteiro, toda hora) passava sem ninguem ver --
+    // e a fila cresce ate o banco free virar so leitura.
+    const expurgoFalhou = [expurgo, expurgoCheckouts].some((e) => e?.startsWith("falhou"));
+    if (expurgoFalhou) console.error("[tracking/drain] expurgo falhou", { expurgo, expurgoCheckouts });
+    return NextResponse.json(
+      { ok: true, ...r, expurgo, checkouts, expurgoCheckouts },
+      { status: expurgoFalhou ? 500 : 200 }
+    );
   } catch (e) {
     const mensagem = e instanceof Error ? e.message : "falha ao drenar a fila";
     return NextResponse.json({ error: mensagem }, { status: 500 });

@@ -227,7 +227,15 @@ describe("as regras da tela batem com o cron", () => {
       crons: { path: string; schedule: string }[];
     };
     const cron = vercel.crons.find((c) => c.path === "/api/jobs/alertas");
-    expect(cron?.schedule).toBe(`*/${INTERVALO_VERIFICACAO_MIN} * * * *`);
+    // O minuto pode ser deslocado (3,13,...,53: fora do :00 dos outros crons),
+    // mas o passo e o da tela, a hora inteira.
+    const [minutos, ...resto] = (cron?.schedule ?? "").split(" ");
+    expect(resto.join(" ")).toBe("* * * *");
+    const lista = minutos.startsWith("*/")
+      ? Array.from({ length: 60 / Number(minutos.slice(2)) }, (_, i) => i * Number(minutos.slice(2)))
+      : minutos.split(",").map(Number);
+    expect(lista.length).toBe(60 / INTERVALO_VERIFICACAO_MIN);
+    lista.forEach((m, i) => expect(m - lista[0]).toBe(i * INTERVALO_VERIFICACAO_MIN));
     expect(folgaDoFechamentoMin()).toBe(2 * INTERVALO_VERIFICACAO_MIN);
   });
 

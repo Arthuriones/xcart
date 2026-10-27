@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useTransition, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -63,8 +63,15 @@ const TOM: Record<
   },
 };
 
+export interface ResultadoPuxar {
+  falhou: boolean;
+  /** Lojas + contas lidas de fato (o que a rota pulou nao conta). */
+  lidas: number;
+  linhas: string[];
+}
+
 /** Puxa pedidos e gasto do Meta agora, sem esperar o cron (o mesmo das rodadas). */
-async function sincronizar(): Promise<{ falhou: boolean; linhas: string[] }> {
+export async function sincronizar(): Promise<ResultadoPuxar> {
   const chamar = async (url: string): Promise<SyncResposta> => {
     let res: Response;
     try {
@@ -92,6 +99,7 @@ async function sincronizar(): Promise<{ falhou: boolean; linhas: string[] }> {
   const [pedidos, meta] = await Promise.allSettled([chamar(ROTAS.apiSyncPedidos), chamar(ROTAS.apiSyncMeta)]);
   const linhas: string[] = [];
   let falhou = false;
+  let lidas = 0;
   const descrever = (nome: string, rotulo: string, res: PromiseSettledResult<SyncResposta>) => {
     if (res.status === "rejected") {
       falhou = true;
@@ -100,9 +108,10 @@ async function sincronizar(): Promise<{ falhou: boolean; linhas: string[] }> {
     }
     const v = res.value;
     if (v.erros.length) falhou = true;
+    lidas += v.processadas;
     // A rota pula o que leu ha menos de um minuto (ou esta lendo): nao e "0 lidas".
     if (v.processadas === 0 && v.puladas > 0 && !v.erros.length) {
-      linhas.push(`${nome}: lido há menos de um minuto; tente de novo daqui a pouco`);
+      linhas.push(`${nome}: lido há menos de um minuto ou sendo lido agora; tente de novo daqui a pouco`);
       return;
     }
     linhas.push(
@@ -112,28 +121,60 @@ async function sincronizar(): Promise<{ falhou: boolean; linhas: string[] }> {
   };
   descrever("Pedidos", unidade(pedidos, "loja lida", "lojas lidas"), pedidos);
   descrever("Meta", unidade(meta, "conta lida", "contas lidas"), meta);
-  return { falhou, linhas };
+  return { falhou, lidas, linhas };
 }
 
 function unidade(res: PromiseSettledResult<SyncResposta>, um: string, varios: string): string {
   return res.status === "fulfilled" && res.value.processadas === 1 ? um : varios;
 }
 
-/** Sincroniza, avisa o resultado e rele a tela no servidor. */
+export interface AvisoDoPuxar {
+  tom: "aviso" | "neutro" | "ok";
+  titulo: string;
+  descricao: string;
+}
+
+/**
+ * O toast do resultado. Verde so quando leu alguma coisa: com tudo pulado
+ * (lido ha menos de um minuto, ou o cron lendo a loja agora) a tela nao muda,
+ * e "Numeros atualizados" fazia o lojista tomar o numero velho pelo novo.
+ */
+export function avisoDoPuxar({ falhou, lidas, linhas }: ResultadoPuxar): AvisoDoPuxar {
+  const descricao = linhas.join("\n");
+  if (falhou) return { tom: "aviso", titulo: "Atualização incompleta", descricao };
+  if (lidas === 0) return { tom: "neutro", titulo: "Nada novo para ler agora", descricao };
+  return { tom: "ok", titulo: "Números atualizados", descricao };
+}
+
+function mostrarAviso({ tom, titulo, descricao }: AvisoDoPuxar) {
+  if (tom === "aviso") toast.warning(titulo, { description: descricao });
+  else if (tom === "ok") toast.success(titulo, { description: descricao });
+  else toast(titulo, { description: descricao });
+}
+
+/** Sincroniza, rele a tela no servidor e so entao avisa o resultado. */
 function usePuxarAgora() {
   const router = useRouter();
-  const [puxando, setPuxando] = useState(false);
-  const [, startTransition] = useTransition();
+  const [lendo, setLendo] = useState(false);
+  // O refresh da tela: o botao segue "Atualizando…" ate os numeros novos
+  // entrarem, e o toast espera por ele (antes saia com os velhos na tela).
+  const [recarregando, startTransition] = useTransition();
+  const aviso = useRef<AvisoDoPuxar | null>(null);
+  const puxando = lendo || recarregando;
+
+  useEffect(() => {
+    if (lendo || recarregando || !aviso.current) return;
+    mostrarAviso(aviso.current);
+    aviso.current = null;
+  }, [lendo, recarregando]);
 
   async function puxar() {
     if (puxando) return;
-    setPuxando(true);
+    setLendo(true);
     try {
-      const { falhou, linhas } = await sincronizar();
-      if (falhou) toast.warning("Atualização incompleta", { description: linhas.join("\n") });
-      else toast.success("Números atualizados", { description: linhas.join("\n") });
+      aviso.current = avisoDoPuxar(await sincronizar());
     } finally {
-      setPuxando(false);
+      setLendo(false);
       startTransition(() => router.refresh());
     }
   }

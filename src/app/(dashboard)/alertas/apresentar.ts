@@ -19,7 +19,8 @@ import {
 
 /**
  * De quanto em quanto tempo o cron confere. Vem do vercel.json
- * ("/api/jobs/alertas", "*\/10 * * * *"); o teste compara os dois.
+ * ("/api/jobs/alertas", "3,13,23,33,43,53 * * * *": de 10 em 10, fora dos
+ * minutos dos outros crons); o teste compara o passo.
  */
 export const INTERVALO_VERIFICACAO_MIN = 10;
 
