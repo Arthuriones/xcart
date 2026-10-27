@@ -15,6 +15,13 @@ const PUBLIC_PATHS = [
 
 // Liga o Supabase ao par request/response sem recriar a response, para os
 // cookies de sessao serem atualizados em cima dela.
+//
+// A sessao aqui e conferida por getClaims(), nao getUser(): o projeto assina o
+// token com chave assimetrica (ES256), e o getClaims confere a assinatura aqui
+// mesmo, com a chave publica em cache -- sem a ida ao servidor de login que o
+// getUser fazia em TODA navegacao de pagina. Ele renova o cookie vencido do
+// mesmo jeito. Quem decide acesso a dado continua sendo o layout (getUser, em
+// current-user.ts) e o RLS; o proxy so escolhe para onde redirecionar.
 function attachSupabase(request: NextRequest, response: NextResponse) {
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -75,6 +82,15 @@ export async function updateSession(request: NextRequest) {
   // ===== HOST COMERCIAL (landing publica) =====
   if (isMarketingHost) {
     if (isApi) return NextResponse.next({ request });
+    // A raiz E a landing: servida de /lp, que e estatica e sai do cache da
+    // borda. A page.tsx da raiz le headers() para separar landing de app, e
+    // por isso renderizava a landing inteira a cada visita, longe do Brasil
+    // (medido em 27/10: xcart.app/ 0,5 s no TTFB; xcart.app/lp 0,13 s).
+    if (pathname === "/") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/lp";
+      return NextResponse.rewrite(url);
+    }
     const marketingBare = [
       "/",
       "/lp",
@@ -98,9 +114,8 @@ export async function updateSession(request: NextRequest) {
   if (isAdminHost) {
     const response = NextResponse.next({ request });
     const supabase = attachSupabase(request, response);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data } = await supabase.auth.getClaims();
+    const user = data?.claims ?? null;
     if (
       !user &&
       !pathname.startsWith("/login") &&
@@ -146,16 +161,15 @@ export async function updateSession(request: NextRequest) {
   if (pathname.startsWith("/admin")) {
     const response = NextResponse.next({ request });
     const supabase = attachSupabase(request, response);
-    await supabase.auth.getUser();
+    await supabase.auth.getClaims();
     return response;
   }
 
   // ===== Paginas do app: auth =====
   const response = NextResponse.next({ request });
   const supabase = attachSupabase(request, response);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims ?? null;
 
   const isAuthPath =
     pathname.startsWith("/login") || pathname.startsWith("/callback");
@@ -172,6 +186,8 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user) {
+    // Do token: so muda quando ele e renovado -- por isso o formulario de senha
+    // renova a sessao depois de salvar (formulario-senha.tsx).
     const hasPassword = user.user_metadata?.has_password === true;
     const isSetPassword = pathname.startsWith("/set-password");
     if (!hasPassword && !isSetPassword && !isAuthPath) {

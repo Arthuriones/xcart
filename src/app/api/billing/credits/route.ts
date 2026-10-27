@@ -31,7 +31,9 @@ export const runtime = "nodejs";
 // O tier vem em `plano` e o valor sai de plans.ts, nunca do corpo. Os planos a
 // venda, para todo mundo; um plano anterior (fora da venda), so para quem o tem
 // valendo agora -- renovar pelo mesmo preco (planoAnteriorDaConta).
-export const PRO_PIX_ID = "pro_month";
+// Sem `export`: arquivo de rota so exporta handler e config, e o build com
+// webpack (o local, por causa do acento no caminho) recusa o resto.
+const PRO_PIX_ID = "pro_month";
 
 const JA_ASSINA_NO_CARTAO =
   "Você já assina no cartão. Para mudar de plano, fale com o suporte.";

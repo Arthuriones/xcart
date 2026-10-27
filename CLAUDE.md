@@ -55,6 +55,8 @@ tres deploys seguidos do app, num arquivo que a aplicacao nem le.
 
 ## Multi-host
 `adm.*` = admin, `user.*` = app/dashboard, other host = marketing landing only. Logic in `src/proxy.ts` → `src/lib/supabase/middleware.ts`.
+- A raiz do host comercial e um REWRITE para `/lp` (estatica, cache da borda); a `page.tsx` da raiz le `headers()` e e dinamica. Medido em 27/10: `/` 0,5 s de TTFB, `/lp` 0,13 s.
+- O proxy confere a sessao por `getClaims()` (o projeto assina com ES256: confere local, chave em cache de 10 min), nao `getUser()`. O layout (`getCurrentUser`) segue com `getUser`. **O proxy le `user_metadata` do TOKEN**, que so muda na renovacao: quem grava metadata que o proxy le (`has_password`) chama `refreshSession()` depois (`formulario-senha.tsx`), senao volta em loop para `/set-password`. Travado por `tests/proxy.test.ts`.
 
 ## Where things live
 - Routing: `src/app/api/checkout-routes/*`, `public/routed-checkout-loader.js`, `src/lib/shopify/cart-routing.ts`, `src/lib/checkout-routes/*` (rotation, targets, embed config, heal), `src/components/routed-checkout/*`

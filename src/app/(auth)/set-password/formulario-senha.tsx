@@ -49,6 +49,9 @@ export function FormularioSenha({ email, temSenha }: { email: string | null; tem
         data: { has_password: true },
       });
       if (error) throw error;
+      // Token novo, ja com has_password: o proxy le o token (getClaims), e o
+      // antigo ainda diria "sem senha" e mandaria de volta para ca.
+      await supabase.auth.refreshSession();
       // Fica pendente ate o app abrir: sem clique duplo no meio do caminho.
       router.push(APP_HOME);
     } catch (e) {
