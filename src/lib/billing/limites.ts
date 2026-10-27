@@ -56,6 +56,8 @@ export interface PerfilParaLimites {
   plano?: string | null;
   payment_provider?: string | null;
   pagou_subscription_id?: string | null;
+  abacatepay_subscription_id?: string | null;
+  subscription_status?: string | null;
   current_period_end?: string | null;
 }
 
@@ -284,7 +286,7 @@ export function acimaDoLimite(limites: LimitesPlano, uso: ContagemDeUso): boolea
 // ---------------------------------------------------------------------------
 
 const COLUNAS_PERFIL =
-  "is_admin, access_granted, plan, payment_provider, pagou_subscription_id, current_period_end";
+  "is_admin, access_granted, plan, payment_provider, pagou_subscription_id, abacatepay_subscription_id, subscription_status, current_period_end";
 
 /**
  * O erro de coluna `plano` inexistente (migration 064 pendente). Sao DOIS

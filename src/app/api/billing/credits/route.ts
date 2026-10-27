@@ -8,6 +8,9 @@ import {
   PagouError,
   respostaDoErroPagou,
 } from "@/lib/billing/pagou";
+import { AbacatePayError, conferirPix, criarPix, respostaDoErroAbacate } from "@/lib/billing/abacatepay";
+import { statusDoPix } from "@/lib/billing/abacatepay-regras";
+import { provedorDeCobranca } from "@/lib/billing/provedor";
 import {
   CREDIT_PACKS,
   CURRENCY,
@@ -70,6 +73,9 @@ export async function GET() {
   return NextResponse.json({ packs: CREDIT_PACKS, currency: CURRENCY });
 }
 
+/** O Pix da AbacatePay vale 1 h: o prazo da janela do QR (pix-dialog.tsx). */
+const PIX_ABACATE_EXPIRA_S = 3600;
+
 /**
  * POST { packId, plano?, document? } -> gera uma cobranca Pix.
  *
@@ -77,8 +83,11 @@ export async function GET() {
  * com `plano` = 'roteamento' | 'completo' | 'ilimitado_v2', ou o plano
  * anterior que a conta ainda paga).
  *
- * O Pix e assincrono: a compra nasce PENDENTE e so e aplicada quando a Pagou
- * confirmar (webhook ou o PATCH abaixo). Nunca creditamos na criacao.
+ * O Pix e assincrono: a compra nasce PENDENTE e so e aplicada quando o
+ * processador confirmar (webhook ou o PATCH abaixo). Nunca creditamos na
+ * criacao. Quem cobra e o de provedorDeCobranca(): a Pagou exige o CPF em
+ * todo Pix; na AbacatePay ele so e pedido nos 30 dias de plano (a cobranca
+ * fica no nome de quem assina), e a recarga de creditos sai sem.
  */
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -107,13 +116,17 @@ export async function POST(request: NextRequest) {
     admin
       .from("profiles")
       .select(
-        `document_number, pagou_subscription_id, subscription_status, plan, payment_provider, current_period_end, is_admin, access_granted${plano}`
+        `document_number, pagou_subscription_id, abacatepay_subscription_id, subscription_status, plan, payment_provider, current_period_end, is_admin, access_granted${plano}`
       )
       .eq("id", user.id)
       .maybeSingle()
   );
   const perfil = lido as unknown as
-    | (PerfilParaLimites & { document_number: string | null; subscription_status: string | null })
+    | (PerfilParaLimites & {
+        document_number: string | null;
+        subscription_status: string | null;
+        abacatepay_subscription_id?: string | null;
+      })
     | null;
 
   // Plano fora da venda: so a renovacao de quem o tem valendo agora.
@@ -125,14 +138,19 @@ export async function POST(request: NextRequest) {
   // cartao regrava o fim do periodo e os dias do Pix somem.
   if (
     item.kind === "pro_month" &&
-    perfil?.pagou_subscription_id &&
+    (perfil?.pagou_subscription_id || perfil?.abacatepay_subscription_id) &&
     ["active", "trialing", "past_due"].includes(String(perfil.subscription_status))
   ) {
     return NextResponse.json({ error: JA_ASSINA_NO_CARTAO }, { status: 409 });
   }
 
+  const abacate = provedorDeCobranca() === "abacatepay";
   const informado = digitos(typeof body.document === "string" ? body.document : "");
   const bruto = informado || digitos(perfil?.document_number || "");
+  // Recarga de creditos na AbacatePay sai sem CPF.
+  if (abacate && !bruto && item.kind === "credits") {
+    return gerarPixAbacate(admin, user, item, null);
+  }
 
   if (!bruto) {
     // O front usa needsDocument para abrir o campo em vez de mostrar erro cru.
@@ -157,6 +175,8 @@ export async function POST(request: NextRequest) {
       .update({ document_number: doc.number, document_type: doc.type })
       .eq("id", user.id);
   }
+
+  if (abacate) return gerarPixAbacate(admin, user, item, doc.number);
 
   try {
     const customerId = await getOrCreateCustomer(user.id, user.email, null, doc);
@@ -235,6 +255,82 @@ export async function POST(request: NextRequest) {
   }
 }
 
+type Item = NonNullable<ReturnType<typeof itemDe>>;
+
+/**
+ * O Pix pela AbacatePay (checkout transparente). Mesmo registro pendente e
+ * mesma resposta do da Pagou -- a janela do QR (pix-dialog.tsx) nao muda: o
+ * `brCode` e o copia-e-cola, e o status vem no vocabulario dela (statusDoPix).
+ * O cliente so vai com o CPF; sem ele, o Pix sai sem cliente.
+ */
+async function gerarPixAbacate(
+  admin: ReturnType<typeof createAdminClient>,
+  user: { id: string; email?: string | null },
+  item: Item,
+  documento: string | null
+) {
+  try {
+    const pix = await criarPix({
+      valorCentavos: item.amountCents,
+      descricao: item.nome,
+      expiraEmSegundos: PIX_ABACATE_EXPIRA_S,
+      cliente: documento
+        ? {
+            nome: user.email?.split("@")[0] || "Cliente xcart",
+            email: user.email || `${user.id}@sem-email.xcart`,
+            documento,
+          }
+        : null,
+      metadata: { user_id: user.id, kind: item.kind, pack_id: item.id, ...(item.plano ? { plano: item.plano } : {}) },
+    });
+
+    const linha = {
+      user_id: user.id,
+      abacatepay_charge_id: pix.id,
+      provider: "abacatepay",
+      method: "pix",
+      kind: item.kind,
+      pack_id: item.id,
+      credits: item.credits,
+      amount_cents: item.amountCents,
+      currency: CURRENCY.toLowerCase(),
+      status: "pending",
+      ...(item.plano ? { plano: item.plano } : {}),
+    };
+    let { error: insErr } = await admin.from("credit_purchases").insert(linha);
+    if (bancoRecusouPlano(insErr) && "plano" in linha) {
+      const resto: Record<string, unknown> = { ...linha };
+      delete resto.plano;
+      ({ error: insErr } = await admin.from("credit_purchases").insert(resto));
+    }
+    if (insErr) {
+      console.error("[billing/credits] falha ao registrar cobranca AbacatePay", insErr);
+      return NextResponse.json(
+        { error: "Cobrança criada, mas não foi registrada. Fale com o suporte." },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      transactionId: pix.id,
+      status: statusDoPix(pix.status),
+      kind: item.kind,
+      plano: item.plano,
+      credits: item.credits,
+      amountCents: item.amountCents,
+      pix: { qrCode: pix.brCode || null, expiresAt: pix.expiresAt || null },
+    });
+  } catch (error) {
+    if (error instanceof AbacatePayError) {
+      console.error("[billing/credits] AbacatePay", error.status, error.message);
+      const { status, error: mensagem } = respostaDoErroAbacate(error);
+      return NextResponse.json({ error: mensagem }, { status });
+    }
+    console.error("[billing/credits] AbacatePay", error);
+    return NextResponse.json({ error: "Falha ao gerar cobrança." }, { status: 500 });
+  }
+}
+
 /**
  * PATCH { transactionId } -> confere o pagamento sob demanda.
  *
@@ -258,12 +354,14 @@ export async function PATCH(request: NextRequest) {
   }
 
   const admin = createAdminClient();
+  // O id diz quem cobrou: o Pix da AbacatePay e pix_char_...; o resto e Pagou.
+  const abacate = transactionId.startsWith("pix_char_");
 
   // A cobranca tem que ser deste usuario.
   const { data: compra, error: erroLeitura } = await admin
     .from("credit_purchases")
     .select("id, user_id, status, kind")
-    .eq("pagou_transaction_id", transactionId)
+    .eq(abacate ? "abacatepay_charge_id" : "pagou_transaction_id", transactionId)
     .maybeSingle();
 
   // Banco instavel nao e "cobranca nao encontrada": o modal trata como
@@ -280,14 +378,16 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
-    const tx = await getTransaction(transactionId);
-    if (tx.status !== "paid") {
-      return NextResponse.json({ status: tx.status, credited: false });
+    const status = abacate
+      ? statusDoPix((await conferirPix(transactionId)).status)
+      : (await getTransaction(transactionId)).status;
+    if (status !== "paid") {
+      return NextResponse.json({ status, credited: false });
     }
     // Atomica e idempotente: se o webhook aplicou antes, devolve false.
-    const { data: aplicou, error: erroAplicar } = await admin.rpc("apply_paid_purchase", {
-      p_transaction_id: transactionId,
-    });
+    const { data: aplicou, error: erroAplicar } = abacate
+      ? await admin.rpc("apply_paid_charge", { p_charge_id: transactionId })
+      : await admin.rpc("apply_paid_purchase", { p_transaction_id: transactionId });
     // A Pagou confirmou, entao o status continua "paid" -- mas sem dizer que o
     // plano/credito ja entrou. O modal segue consultando e o proximo PATCH
     // repete o RPC; o webhook (com reenvio) tambem aplica.

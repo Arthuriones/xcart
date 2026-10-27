@@ -93,6 +93,8 @@ interface LinhaPerfil {
   cancel_at_period_end: boolean | null;
   payment_provider: string | null;
   pagou_subscription_id: string | null;
+  abacatepay_subscription_id?: string | null;
+  subscription_method?: string | null;
   access_granted: boolean | null;
   is_admin: boolean | null;
   document_number: string | null;
@@ -171,7 +173,7 @@ export async function lerAssinatura(opcoes: { completo?: boolean } = {}): Promis
   };
 
   const COLUNAS_PERFIL =
-    "plan, subscription_status, ai_credits, current_period_end, cancel_at_period_end, payment_provider, pagou_subscription_id, access_granted, is_admin, document_number, free_clone_store_id";
+    "plan, subscription_status, ai_credits, current_period_end, cancel_at_period_end, payment_provider, pagou_subscription_id, abacatepay_subscription_id, subscription_method, access_granted, is_admin, document_number, free_clone_store_id";
   const COLUNAS_COMPRA = "id, created_at, kind, credits, amount_cents, method, provider, status";
 
   // `plano` e da migration 064. Sem a coluna, le sem ela: a conta aparece como
@@ -227,7 +229,8 @@ export async function lerAssinatura(opcoes: { completo?: boolean } = {}): Promis
       fimPeriodo: p.current_period_end,
       cancelaNoFim: p.cancel_at_period_end === true,
       provedor: p.payment_provider,
-      temAssinaturaCartao: !!p.pagou_subscription_id,
+      temAssinaturaCartao: !!(p.pagou_subscription_id || p.abacatepay_subscription_id),
+      metodoAssinatura: p.subscription_method === "pix" ? "pix" : p.subscription_method === "card" ? "card" : null,
       acessoLiberado: p.is_admin === true || p.access_granted === true,
       saldo: Number(p.ai_credits) || 0,
       temDocumento: !!String(p.document_number || "").replace(/\D/g, ""),

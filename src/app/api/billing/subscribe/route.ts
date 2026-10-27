@@ -14,6 +14,8 @@ import {
 } from "@/lib/billing/pagou";
 import { CURRENCY, ehPlanoAVenda, planoDoValor, planoPorId } from "@/lib/billing/plans";
 import { atualizarPerfil } from "@/lib/billing/limites";
+import { provedorDeCobranca } from "@/lib/billing/provedor";
+import { assinarNaAbacatePay } from "@/lib/billing/assinar-abacatepay";
 
 export const runtime = "nodejs";
 
@@ -87,7 +89,9 @@ async function liberarTentativaAnterior(id: string, chave: string): Promise<Next
 }
 
 /**
- * POST -> cria a assinatura de um dos planos na Pagou.
+ * POST -> cria a assinatura de um dos planos na Pagou -- ou, com a cobranca
+ * na AbacatePay (provedorDeCobranca), o checkout de assinatura dela: o corpo e
+ * { plano, volta? } e a resposta { url } (assinar-abacatepay.ts).
  *
  * Body: { plano, cardToken } para cartao, ou { plano, method: "pix_automatic",
  * billingDay }. `plano` e obrigatorio e A VENDA ('roteamento' | 'completo' |
@@ -116,6 +120,12 @@ export async function POST(request: NextRequest) {
   if (!plano) {
     return NextResponse.json({ error: "Escolha um plano." }, { status: 400 });
   }
+
+  // AbacatePay: a assinatura nasce na pagina dela. Devolve { url }.
+  if (provedorDeCobranca() === "abacatepay") {
+    return assinarNaAbacatePay(user, plano, body.volta === "paywall" ? "paywall" : "billing");
+  }
+
   const cardToken = typeof body.cardToken === "string" ? body.cardToken.trim() : "";
   const usarPix = body.method === "pix_automatic";
 

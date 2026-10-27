@@ -135,10 +135,12 @@ export interface PerfilAssinatura {
   status: string | null;
   fimPeriodo: string | null;
   cancelaNoFim: boolean;
-  /** "pagou" (atual) ou "stripe" (legado). */
+  /** "pagou" ou "abacatepay" (quem cobra), ou "stripe" (legado). */
   provedor: string | null;
-  /** Existe assinatura de cartao (pagou_subscription_id). */
+  /** Existe assinatura recorrente (pagou_subscription_id ou abacatepay_subscription_id). */
   temAssinaturaCartao: boolean;
+  /** Metodo da assinatura da AbacatePay: Pix Automatico ou cartao. null = cartao. */
+  metodoAssinatura?: "card" | "pix" | null;
   /** Admin ou acesso liberado a mao pela equipe. */
   acessoLiberado: boolean;
 }
@@ -194,7 +196,16 @@ export function situacaoDoPlano(p: PerfilAssinatura, agora: number): SituacaoPla
   const temFim = Number.isFinite(fimMs);
   const fim = dataCurta(p.fimPeriodo);
   const pixVencido = forma === "pix" && temFim && fimMs < agora;
-  const pro = p.plano === "pro" && !pixVencido;
+  // Na AbacatePay o cancelamento e na hora: o Pro vale ate o fim ja pago e
+  // acaba sozinho (a porta, proDaAbacateVencido, fecha no mesmo instante).
+  const canceladaVencida =
+    p.provedor === "abacatepay" &&
+    forma === "cartao" &&
+    (p.status === "cancel_scheduled" || p.status === "canceled") &&
+    temFim &&
+    fimMs < agora;
+  const pro = p.plano === "pro" && !pixVencido && !canceladaVencida;
+  const meio = p.metodoAssinatura === "pix" ? "no Pix" : "no cartão";
 
   // Plano fora da venda (os de 08/10 e o Pro antigo sem tier) aparece como
   // "plano anterior": quem paga por ele mantem preco e limite.
@@ -311,12 +322,20 @@ export function situacaoDoPlano(p: PerfilAssinatura, agora: number): SituacaoPla
       ...base,
       selo: { tom: "warn", texto: "Pagamento pendente" },
       linha: fim ? `Ciclo atual até ${fim}.` : null,
-      aviso: {
-        tom: "warn",
-        titulo: "A última cobrança do cartão não passou",
-        texto:
-          "O acesso continua por enquanto. Confira o cartão com o seu banco; para trocar de cartão, fale com o suporte.",
-      },
+      aviso:
+        p.metodoAssinatura === "pix"
+          ? {
+              tom: "warn",
+              titulo: "A última cobrança do Pix Automático não passou",
+              texto:
+                "O acesso continua por enquanto e a cobrança é tentada de novo. Confira a autorização do Pix Automático no app do seu banco.",
+            }
+          : {
+              tom: "warn",
+              titulo: "A última cobrança do cartão não passou",
+              texto:
+                "O acesso continua por enquanto. Confira o cartão com o seu banco; para trocar de cartão, fale com o suporte.",
+            },
       podeCancelar: forma === "cartao",
     };
   }
@@ -333,8 +352,8 @@ export function situacaoDoPlano(p: PerfilAssinatura, agora: number): SituacaoPla
     linha:
       forma === "cartao"
         ? fim
-          ? `Renova em ${fim}, no cartão.`
-          : "Renova todo mês, no cartão."
+          ? `Renova em ${fim}, ${meio}.`
+          : `Renova todo mês, ${meio}.`
         : null,
     podeCancelar: forma === "cartao",
   };
@@ -520,5 +539,6 @@ export function mensagemDeErro(status: number | null, bruto: unknown, padrao: st
 export const ERRO_PADRAO = {
   pix: "Não deu para gerar o Pix agora. Nada foi cobrado; tente de novo em instantes.",
   cartao: "Não deu para concluir a assinatura agora. Confira os dados do cartão e tente de novo.",
+  pagina: "Não deu para abrir a página de pagamento agora. Nada foi cobrado; tente de novo em instantes.",
   cancelar: "Não deu para cancelar agora. Sua assinatura continua como estava; tente de novo em instantes.",
 } as const;

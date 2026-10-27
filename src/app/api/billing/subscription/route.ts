@@ -10,11 +10,14 @@ import {
 } from "@/lib/billing/pagou";
 import { atualizarPerfil, lerComPlano } from "@/lib/billing/limites";
 import { decidirAviso } from "@/lib/billing/evento-assinatura";
+import { cancelarAssinaturaAbacate, lerAssinaturaAbacate } from "@/lib/billing/assinar-abacatepay";
 
 export const runtime = "nodejs";
 
 /**
- * Substitui o Customer Portal do Stripe, que a Pagou nao tem.
+ * Substitui o Customer Portal do Stripe, que a Pagou nao tem. A assinatura da
+ * AbacatePay e lida e cancelada em assinar-abacatepay.ts (o portal dela deixa
+ * o cliente se reembolsar sozinho, entao nao e usado).
  *
  * GET    -> estado atual da assinatura (sincronizado com a API da Pagou).
  * DELETE -> agenda o cancelamento. A Pagou so cancela no fim do periodo:
@@ -35,7 +38,7 @@ export async function GET() {
     admin
       .from("profiles")
       .select(
-        `plan, payment_provider, pagou_subscription_id, stripe_subscription_id, subscription_status, current_period_end, cancel_at_period_end${plano}`
+        `plan, payment_provider, pagou_subscription_id, abacatepay_subscription_id, stripe_subscription_id, subscription_status, current_period_end, cancel_at_period_end${plano}`
       )
       .eq("id", user.id)
       .single()
@@ -45,10 +48,14 @@ export async function GET() {
     plano?: string | null;
     payment_provider: string | null;
     pagou_subscription_id: string | null;
+    abacatepay_subscription_id: string | null;
     subscription_status: string | null;
     current_period_end: string | null;
     cancel_at_period_end: boolean | null;
   } | null;
+
+  // Assinatura (ou Pix) da AbacatePay: a leitura e dela.
+  if (profile?.payment_provider === "abacatepay") return lerAssinaturaAbacate(user.id, profile);
 
   // Assinatura legada do Stripe: o app so mostra, nao gerencia por aqui.
   if (profile?.payment_provider === "stripe") {
@@ -126,9 +133,13 @@ export async function DELETE() {
   const admin = createAdminClient();
   const { data: profile } = await admin
     .from("profiles")
-    .select("payment_provider, pagou_subscription_id")
+    .select(
+      "payment_provider, pagou_subscription_id, abacatepay_subscription_id, subscription_status, current_period_end, cancel_at_period_end"
+    )
     .eq("id", user.id)
     .single();
+
+  if (profile?.payment_provider === "abacatepay") return cancelarAssinaturaAbacate(user.id, profile);
 
   if (profile?.payment_provider === "stripe") {
     return NextResponse.json(

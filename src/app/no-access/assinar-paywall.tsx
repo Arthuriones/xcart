@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CircleCheck, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -25,9 +25,21 @@ const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * nada -- e com o cartao ainda processando, o recarregar caia aqui de novo.
  * Agora ela mostra "Liberando acesso…", confere o plano em GET
  * /api/billing/me e so entao abre o app. Se o banco demorar, diz isso.
+ *
+ * Na AbacatePay o pagamento e na pagina dela, que devolve para ca com
+ * ?assinatura=ok: a conferencia comeca sozinha.
  */
 export function AssinarNoPaywall({ temDocumento }: { temDocumento?: boolean }) {
   const [fase, setFase] = useState<Fase>("assinar");
+
+  // Voltou da pagina da AbacatePay: confere sem esperar clique. O parametro
+  // sai da barra, para recarregar a pagina nao repetir a conferencia.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("assinatura") !== "ok") return;
+    window.history.replaceState(null, "", window.location.pathname);
+    void conferir();
+  }, []);
 
   async function conferir() {
     setFase("liberando");
@@ -54,7 +66,7 @@ export function AssinarNoPaywall({ temDocumento }: { temDocumento?: boolean }) {
   return (
     <div className="flex flex-col gap-4 rounded-card border border-border bg-surface p-4 sm:p-5">
       {fase === "assinar" ? (
-        <AssinarPro onPronto={conferir} temDocumento={temDocumento} />
+        <AssinarPro onPronto={conferir} temDocumento={temDocumento} volta="paywall" />
       ) : fase === "liberando" ? (
         <div role="status" className="flex min-h-60 flex-col items-center justify-center gap-3 text-center">
           <Spinner size={20} />

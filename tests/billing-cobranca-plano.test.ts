@@ -63,6 +63,8 @@ function adminFalso() {
   };
 }
 
+// As rotas tambem carregam o cliente da AbacatePay (server-only).
+vi.mock("server-only", () => ({}));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: { getUser: async () => ({ data: { user: { id: "u1", email: "a@b.com" } } }) },

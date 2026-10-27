@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Section } from "@/components/ui/section";
 import { Spinner } from "@/components/ui/spinner";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { AssinarPro } from "@/components/billing/assinar-pro";
+import { semAvisos } from "@/components/billing/plano-escolhido";
 import type { PlanoId } from "@/lib/billing/plans";
 import type { UsoDoPlano } from "@/lib/leitura/assinatura";
 import {
@@ -25,6 +26,11 @@ export interface PlanoNoBanco {
   cancelaNoFim: boolean;
   fimPeriodo: string | null;
   temAssinaturaCartao: boolean;
+}
+
+/** A pagina da AbacatePay devolveu para ca depois do pagamento (?assinatura=ok). */
+function voltouDaPaginaDePagamento(): boolean {
+  return new URLSearchParams(window.location.search).get("assinatura") === "ok";
 }
 
 function mesmoInstante(a: string | null | undefined, b: string | null | undefined): boolean {
@@ -64,6 +70,33 @@ export function SecaoPlano({
   const [assinou, setAssinou] = useState(false);
   const [erroCancelar, setErroCancelar] = useState<string>(ERRO_PADRAO.cancelar);
   const atualizar = () => iniciar(() => router.refresh());
+
+  // Voltou da pagina da AbacatePay (?assinatura=ok). Quem liga o Pro e o
+  // webhook, que costuma chegar em segundos: a tela diz "conferindo" e le de
+  // novo algumas vezes. Se o Pro ja entrou, so confirma. O parametro sai da
+  // barra, para recarregar nao repetir.
+  const podeAssinar = situacao.podeAssinar;
+  const voltouDoPagamento = useSyncExternalStore(semAvisos, voltouDaPaginaDePagamento, () => false);
+  const confirmou = useRef(false);
+  useEffect(() => {
+    if (!voltouDoPagamento) return;
+    if (!podeAssinar) {
+      if (!confirmou.current) {
+        confirmou.current = true;
+        toast.success("Assinatura confirmada.");
+        window.history.replaceState(null, "", window.location.pathname);
+      }
+      return;
+    }
+    let vezes = 0;
+    const id = setInterval(() => {
+      vezes++;
+      iniciar(() => router.refresh());
+      if (vezes >= 12) clearInterval(id);
+    }, 3000);
+    return () => clearInterval(id);
+  }, [voltouDoPagamento, podeAssinar, router]);
+  const conferindo = assinou || (voltouDoPagamento && podeAssinar);
 
   // Dependencias primitivas: depois de um refresh o objeto noBanco e novo,
   // mas so muda de valor se a conferencia acertou o banco -- ai confere mais
@@ -129,8 +162,8 @@ export function SecaoPlano({
             titulo="Cancelar a assinatura?"
             descricao={
               fim
-                ? `O cartão não será mais cobrado. Você continua com o plano até ${fim}; depois disso, a conta fica sem assinatura.`
-                : "O cartão não será mais cobrado. Você continua com o plano até o fim do período já pago; depois disso, a conta fica sem assinatura."
+                ? `Não haverá nova cobrança. Você continua com o plano até ${fim}; depois disso, a conta fica sem assinatura.`
+                : "Não haverá nova cobrança. Você continua com o plano até o fim do período já pago; depois disso, a conta fica sem assinatura."
             }
             confirmar="Cancelar assinatura"
             cancelar="Manter assinatura"
@@ -176,7 +209,7 @@ export function SecaoPlano({
       ) : null}
 
       {situacao.podeAssinar ? (
-        assinou ? (
+        conferindo ? (
           <div role="status" className="flex flex-col items-start gap-2">
             <p className="flex items-center gap-2 text-dense font-medium text-ink">
               <Spinner size={14} />

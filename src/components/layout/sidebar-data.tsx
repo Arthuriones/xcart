@@ -79,7 +79,8 @@ function cartaoDoGuia(conta: Awaited<ReturnType<typeof lerGuiaDaConta>> | null):
 const PERFIL_VAZIO = { creditos: 0, plano: null };
 
 // As colunas que limitesDoPerfil le para saber se a assinatura ainda vale.
-const COLUNAS_ACESSO = "is_admin, access_granted, plan, payment_provider, pagou_subscription_id, current_period_end";
+const COLUNAS_ACESSO =
+  "is_admin, access_granted, plan, payment_provider, pagou_subscription_id, abacatepay_subscription_id, subscription_status, current_period_end";
 
 /**
  * Saldo de creditos e o nome do plano ("Plano Completo"), numa leitura so do

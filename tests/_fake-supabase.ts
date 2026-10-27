@@ -25,6 +25,7 @@ export interface FakeSupabase {
 /** Chaves unicas por tabela: a PK do webhook e o (store, destino, evento) da fila (043). */
 const UNICOS: Record<string, string[]> = {
   shopify_webhook_events: ["webhook_id"],
+  payment_events: ["id"],
   tracking_events: ["store_id", "destination_id", "event_id"],
 };
 /** Os defaults das colunas que o codigo nao manda no insert. */

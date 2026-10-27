@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { proDaAbacateVencido } from "@/lib/billing/abacatepay-regras";
 
 // Trava de acesso. Enquanto false (default), todo mundo entra (comportamento
 // atual). Ligar so depois de liberar os usuarios certos no painel admin.
@@ -14,6 +15,8 @@ interface AccessProfile {
   // Usados so para expirar quem pagou Pro por Pix avulso.
   payment_provider?: string | null;
   pagou_subscription_id?: string | null;
+  abacatepay_subscription_id?: string | null;
+  subscription_status?: string | null;
   current_period_end?: string | null;
 }
 
@@ -23,7 +26,9 @@ interface AccessProfile {
 //
 // A checagem NAO vale para assinatura de cartao: ali o current_period_end so
 // avanca quando o webhook chega, e um atraso da Pagou tiraria o acesso de quem
-// esta pagando em dia.
+// esta pagando em dia. Na AbacatePay a mesma regra, mais a assinatura
+// cancelada (la o cancelamento e na hora e o Pro vale ate o fim ja pago):
+// proDaAbacateVencido.
 function proPorPixVencido(p: AccessProfile): boolean {
   const pagoPorPix =
     p.plan === "pro" &&
@@ -38,7 +43,7 @@ function proPorPixVencido(p: AccessProfile): boolean {
 export function profileHasAccess(profile: AccessProfile | null): boolean {
   if (!profile) return false;
   if (profile.is_admin === true || profile.access_granted === true) return true;
-  return profile.plan === "pro" && !proPorPixVencido(profile);
+  return profile.plan === "pro" && !proPorPixVencido(profile) && !proDaAbacateVencido(profile, Date.now());
 }
 
 // Pode ENTRAR no app: tem acesso total, OU ainda nao usou a clonagem gratuita
@@ -57,7 +62,7 @@ export async function userHasAccess(userId: string): Promise<boolean> {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("profiles")
-    .select("is_admin, plan, access_granted, free_clone_store_id, payment_provider, pagou_subscription_id, current_period_end")
+    .select("is_admin, plan, access_granted, free_clone_store_id, payment_provider, pagou_subscription_id, abacatepay_subscription_id, subscription_status, current_period_end")
     .eq("id", userId)
     .maybeSingle();
 
@@ -88,7 +93,7 @@ export async function checkAndConsumeFreeClone(
   const supabase = createAdminClient();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("is_admin, plan, access_granted, free_clone_store_id, payment_provider, pagou_subscription_id, current_period_end")
+    .select("is_admin, plan, access_granted, free_clone_store_id, payment_provider, pagou_subscription_id, abacatepay_subscription_id, subscription_status, current_period_end")
     .eq("id", userId)
     .single();
 

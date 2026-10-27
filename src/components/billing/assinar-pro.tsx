@@ -15,6 +15,7 @@ import { Escolha } from "@/components/billing/escolha";
 import { EscolhaDePlano } from "@/components/billing/escolha-plano";
 import { lerPlanoEscolhido, semAvisos } from "@/components/billing/plano-escolhido";
 import { ERRO_PADRAO, brl, mensagemDeErro, type ErroNaTela } from "@/components/billing/regras";
+import { pixAutomaticoLigado, provedorDeCobranca } from "@/lib/billing/provedor";
 
 // So aparecem depois de escolher a forma de pagamento. Somados sao 16 KB que
 // todo mundo baixava para ver o botao de assinar.
@@ -26,6 +27,10 @@ const PixDialog = dynamic(
   () => import("@/components/billing/pix-dialog").then((m) => m.PixDialog),
   { ssr: false }
 );
+const AssinarNaAbacatePay = dynamic(
+  () => import("@/components/billing/assinar-na-abacatepay").then((m) => m.AssinarNaAbacatePay),
+  { ssr: false }
+);
 
 // ============================================================================
 // Assinar um dos planos. Usado na Assinatura e no paywall.
@@ -34,11 +39,14 @@ const PixDialog = dynamic(
 // landing; na renovacao por Pix, tambem o plano anterior de quem ainda paga
 // por ele, pelo mesmo preco), depois a forma de pagamento. Dois caminhos,
 // porque o processador nao tem um so que sirva para todo mundo:
-//  - Cartao: assinatura de verdade, renova sozinha.
-//  - Pix: cobranca avulsa que libera 30 dias. Nao renova (a recorrencia so
-//    existe no cartao).
+//  - Cartao: assinatura de verdade, renova sozinha. Na Pagou o cartao e
+//    digitado aqui (pagou-card-form); na AbacatePay (provedorDeCobranca) o
+//    lojista paga na pagina dela, que tambem aceita Pix Automatico quando ele
+//    esta liberado, e volta (assinar-na-abacatepay).
+//  - Pix: cobranca avulsa que libera 30 dias. Nao renova.
 // Corpos: { packId: "pro_month", plano, document? } para o Pix e
-// { cardToken, plano } em /api/billing/subscribe. O valor sai do servidor.
+// { cardToken, plano } (Pagou) ou { plano, volta } (AbacatePay) em
+// /api/billing/subscribe. O valor sai do servidor.
 // ============================================================================
 
 type Via = "cartao" | "pix";
@@ -49,7 +57,10 @@ export function AssinarPro({
   temDocumento,
   mostrarResumo = true,
   planoInicial,
+  volta = "billing",
 }: {
+  /** Para onde a pagina da AbacatePay devolve: a Assinatura ou o paywall. */
+  volta?: "billing" | "paywall";
   /** Pagamento confirmado (cartao aceito ou Pix pago). */
   onPronto: () => void;
   /**
@@ -82,6 +93,8 @@ export function AssinarPro({
   const [busy, setBusy] = useState(false);
   const [pix, setPix] = useState<CobrancaPix | null>(null);
   const pixPago = useRef(false);
+  const abacate = provedorDeCobranca() === "abacatepay";
+  const comPixAutomatico = abacate && pixAutomaticoLigado();
   // Estavel: o PixDialog reinicia a consulta quando onPago muda.
   const marcarPago = useCallback(() => {
     pixPago.current = true;
@@ -179,7 +192,7 @@ export function AssinarPro({
             opcoes={[
               {
                 valor: "cartao",
-                titulo: "Cartão de crédito",
+                titulo: comPixAutomatico ? "Cartão ou Pix Automático" : "Cartão de crédito",
                 descricao: "Renova sozinho todo mês",
                 icone: <CreditCard />,
               },
@@ -194,7 +207,16 @@ export function AssinarPro({
         </div>
       ) : null}
 
-      {via === "cartao" ? (
+      {via === "cartao" && abacate ? (
+        <AssinarNaAbacatePay
+          plano={plano.id}
+          rotulo={`Assinar o ${plano.nome} por ${brl(plano.precoCentavos)} por mês`}
+          volta={volta}
+          comPix={comPixAutomatico}
+        />
+      ) : null}
+
+      {via === "cartao" && !abacate ? (
         <PagouCardForm
           plano={plano.id}
           // O botao diz o que acontece e quanto custa, em vez de um
