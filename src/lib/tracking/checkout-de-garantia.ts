@@ -7,7 +7,7 @@ import {
   PREFIXOS_DE_RESERVA,
 } from "@/lib/tracking/eventos";
 import { hashDoIp } from "@/lib/tracking/ip-balde";
-import { caminhoEhEndpoint, type PedidoShopify } from "@/lib/tracking/purchase";
+import { caminhoEhEndpoint, ipDoPedido, type PedidoShopify } from "@/lib/tracking/purchase";
 
 // ============================================================================
 // O comprador deste pedido já teve InitiateCheckout? (IC de garantia)
@@ -201,7 +201,8 @@ export async function checkoutsDoComprador(
   ];
   const cliente = (chaves.clientId || "").trim().slice(0, MAX_VISITANTE);
   const comprador = [...new Set([...visitantes, cliente].filter(Boolean))];
-  const ipHash = hashDoIp(pedido.client_details?.browser_ip || pedido.browser_ip);
+  // O do checkout ou, no pedido de app de COD, o da nota (ipDoPedido).
+  const ipHash = hashDoIp(ipDoPedido(pedido));
   const userAgent = (pedido.client_details?.user_agent || "").trim();
   const desdeExpresso = new Date(referencia - JANELA_CHECKOUT_EXPRESSO_MS).toISOString();
 

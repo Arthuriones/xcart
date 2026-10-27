@@ -257,6 +257,7 @@ async function tratarPedidoCriado(
     montarCheckoutDeGarantia,
     montarCheckoutDeGarantiaTiktok,
     sinaisDoPedido,
+    ipDoPedido,
   } = await import("@/lib/tracking/purchase");
   const { vaiPeloServidor } = await import("@/lib/tracking/eventos");
   const { contarSinais } = await import("@/lib/tracking/normalizar");
@@ -303,8 +304,9 @@ async function tratarPedidoCriado(
     return ok({ ignorado: motivo, topic: "orders/create", pedido: pedido.id ?? null });
   }
 
-  // O clique, em cascata: cart attribute -> visitante -> checkout -> URL de
-  // chegada. Os tres primeiros aqui; a URL de chegada em purchase.ts.
+  // O clique, em cascata: cart attribute -> visitante -> checkout -> IP do
+  // pedido sem chave (app de COD) -> URL de chegada. A URL de chegada em
+  // purchase.ts; o resto aqui.
   //
   // Antes so existia o primeiro passo, e ele dependia do MESMO cart attribute
   // que ja trazia os click ids: compra por "Comprar agora" ou checkout
@@ -317,7 +319,8 @@ async function tratarPedidoCriado(
     admin,
     loja.id,
     pedido,
-    sinais.visitorId
+    sinais.visitorId,
+    ipDoPedido(pedido)
   );
   // A MESMA identidade que o Purchase usa acha a UTM do clique do pedido que
   // chegou sem atributo (app de COD, "Comprar agora").

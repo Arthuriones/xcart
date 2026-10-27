@@ -5,6 +5,7 @@ import {
   type UserData,
 } from "@/lib/tracking/normalizar";
 import type { EventoCapi } from "@/lib/tracking/meta-capi";
+import { chaveDoIp } from "@/lib/tracking/ip-balde";
 import {
   montarIdDeProduto,
   montarIdsDeProdutos,
@@ -106,6 +107,26 @@ function atributo(pedido: PedidoShopify, nome: string): string | null {
   );
   const valor = (achado?.value || "").trim();
   return valor || null;
+}
+
+/**
+ * A chave da nota em que o Releasit (formulario de COD) grava o IP do
+ * comprador. Medido na AmpleStep (10/2026): 5 de 5 pedidos do Releasit sem
+ * `browser_ip`, sem `client_details` e sem `checkout_token` -- o IP so existe
+ * aqui.
+ */
+export const CHAVE_IP_DA_NOTA = "IP address";
+
+/**
+ * O IP de quem comprou. O do checkout da Shopify primeiro; sem ele (pedido de
+ * app de COD), o da nota do Releasit. A nota e texto do formulario: so essa
+ * chave, e so um endereco IP valido.
+ */
+export function ipDoPedido(pedido: PedidoShopify): string | null {
+  const doCheckout = (pedido.client_details?.browser_ip || pedido.browser_ip || "").trim();
+  if (doCheckout) return doCheckout;
+  const daNota = atributo(pedido, CHAVE_IP_DA_NOTA);
+  return daNota && chaveDoIp(daNota) ? daNota : null;
 }
 
 /**
@@ -458,10 +479,7 @@ export function montarPurchase(
     {
       fbp: sinais.fbp || identidade.fbp,
       fbc,
-      clientIp:
-        pedido.client_details?.browser_ip ||
-        pedido.browser_ip ||
-        identidade.clientIp,
+      clientIp: ipDoPedido(pedido) || identidade.clientIp,
       userAgent: pedido.client_details?.user_agent || identidade.userAgent,
     }
   );
@@ -570,8 +588,7 @@ export function montarPurchaseTiktok(
       ttclid:
         sinais.ttclid || identidade.ttclid || cliquesDaLanding(pedido.landing_site).ttclid,
       ttp: sinais.ttp || identidade.ttp,
-      clientIp:
-        pedido.client_details?.browser_ip || pedido.browser_ip || identidade.clientIp,
+      clientIp: ipDoPedido(pedido) || identidade.clientIp,
       userAgent: pedido.client_details?.user_agent || identidade.userAgent,
     }
   );

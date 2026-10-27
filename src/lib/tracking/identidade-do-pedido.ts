@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { IdentidadeGuardada } from "@/lib/tracking/purchase";
 import { limparUtm } from "@/lib/tracking/origem-pedido";
+import { hashDoIp } from "@/lib/tracking/ip-balde";
 
 // ============================================================================
 // De onde vem o clique quando o pedido nao traz.
@@ -18,12 +19,69 @@ import { limparUtm } from "@/lib/tracking/origem-pedido";
 //   1. o visitante do cart attribute -> tracking_identities por visitor_id;
 //   2. o checkout do pedido -> tracking_checkouts (gravada pelo Web Pixel) ->
 //      clientId da Shopify -> tracking_identities por shopify_client_id;
-//   3. a URL de chegada do pedido (feito em purchase.ts, que e puro).
+//   3. pedido SEM chave nenhuma (app de COD: o Releasit nao leva carrinho nem
+//      checkout) -> o IP da nota -> o visitante do tema que o coletor viu nesse
+//      IP nos 30 min antes (ver `visitanteDoIp`);
+//   4. a URL de chegada do pedido (feito em purchase.ts, que e puro).
 //
 // O passo 2 e o que fecha o buraco: o `checkout.token` que o Web Pixel ve e o
 // `checkout_token` do pedido sao o mesmo valor, e o clientId e a chave que o
 // tema publica junto com os click ids.
 // ============================================================================
+
+/** Ate quanto antes do pedido um evento do tema no mesmo IP conta (passo 3). */
+export const JANELA_VISITANTE_DO_IP_MS = 30 * 60 * 1000;
+
+/** Relogio da Shopify contra o do banco: o evento pode ter hora um pouco depois do pedido. */
+const FOLGA_VISITANTE_DO_IP_MS = 60 * 1000;
+
+/** Uma linha do funil no IP do pedido, com os sinais que o payload dela levou. */
+export interface LinhaDoIp {
+  visitor_id?: string | null;
+  created_at?: string | null;
+  fbp?: string | null;
+  fbc?: string | null;
+  ua_meta?: string | null;
+  ttp?: string | null;
+  ttclid?: string | null;
+  ua_tiktok?: string | null;
+}
+
+/**
+ * O visitante do tema por tras do IP do pedido, ou null.
+ *
+ * So quando o IP teve UM visitante na janela. Medido na Stepz (10/2026), com
+ * pedidos do checkout que traziam o `_xc_vid`: dos 22 que o IP casou, 20
+ * tinham um visitante so, e era sempre o comprador; nos 2 com dois, o mais
+ * recente errou um. Dois visitantes no IP (wifi da casa, CGNAT da operadora)
+ * = nao da para saber quem comprou, e o clique de outra pessoa creditaria o
+ * anuncio errado.
+ *
+ * Os sinais saem do payload do evento mais recente que os tem: o _fbp e o _fbc
+ * que o funil mandou, e o user agent do navegador (o pedido do Releasit nao
+ * traz nenhum dos tres).
+ */
+export function visitanteDoIp(linhas: readonly LinhaDoIp[]): IdentidadeGuardada | null {
+  const visitantes = new Set(linhas.map((l) => (l.visitor_id || "").trim()).filter(Boolean));
+  if (visitantes.size !== 1) return null;
+  const [visitorId] = visitantes;
+  const recentes = [...linhas].sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
+  const primeiro = (campo: keyof LinhaDoIp) => {
+    for (const l of recentes) {
+      const v = l[campo];
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+    return null;
+  };
+  return {
+    visitorId,
+    fbp: primeiro("fbp"),
+    fbc: primeiro("fbc"),
+    ttp: primeiro("ttp"),
+    ttclid: primeiro("ttclid"),
+    userAgent: primeiro("ua_meta") || primeiro("ua_tiktok"),
+  };
+}
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -160,7 +218,7 @@ export async function identidadePorCliente(
   return consolidarIdentidades((data || []) as LinhaIdentidade[]);
 }
 
-export type OrigemDaIdentidade = "visitante" | "checkout" | "nenhuma";
+export type OrigemDaIdentidade = "visitante" | "checkout" | "ip" | "nenhuma";
 
 /**
  * A identidade guardada para o comprador deste pedido.
@@ -172,8 +230,10 @@ export type OrigemDaIdentidade = "visitante" | "checkout" | "nenhuma";
 export async function recuperarIdentidadeDoPedido(
   admin: Admin,
   storeId: string,
-  pedido: { checkout_token?: string | null },
-  visitorIdDoAtributo: string | null
+  pedido: { checkout_token?: string | null; created_at?: string | null },
+  visitorIdDoAtributo: string | null,
+  /** O IP do comprador (ipDoPedido): o do checkout ou o da nota do Releasit. */
+  ipDoComprador: string | null = null
 ): Promise<{ identidade: IdentidadeGuardada | null; origem: OrigemDaIdentidade }> {
   // 1. Pelo visitante que veio no carrinho.
   let doVisitante: IdentidadeGuardada | null = null;
@@ -242,6 +302,56 @@ export async function recuperarIdentidadeDoPedido(
           origem: "checkout",
         };
       }
+    }
+  }
+
+  // 3. Pelo IP, so no pedido SEM chave nenhuma: sem visitante no carrinho e
+  // sem checkout (o Releasit cria o pedido pela API). Com chave, o IP casaria
+  // outra pessoa da mesma rede no lugar de quem o carrinho ja identifica.
+  const ipHash = !visitorIdDoAtributo && !token ? hashDoIp(ipDoComprador) : null;
+  if (ipHash) {
+    const criado = Date.parse(pedido.created_at || "");
+    const referencia = Number.isFinite(criado) ? Math.min(criado, Date.now()) : Date.now();
+    // So linha do coletor (a compra e a garantia nao tem ip_hash) e do tema ou
+    // da ponte: o visitor_id da linha do pixel e o clientId, nao o visitante.
+    const { data, error } = await admin
+      .from("tracking_events")
+      .select(
+        "visitor_id, created_at, fbp:payload->user_data->>fbp, fbc:payload->user_data->>fbc, ua_meta:payload->user_data->>client_user_agent, ttp:payload->user->>ttp, ttclid:payload->user->>ttclid, ua_tiktok:payload->user->>user_agent"
+      )
+      .eq("store_id", storeId)
+      .eq("ip_hash", ipHash)
+      .is("checkout_token", null)
+      .not("visitor_id", "is", null)
+      .gte("created_at", new Date(referencia - JANELA_VISITANTE_DO_IP_MS).toISOString())
+      .lte("created_at", new Date(referencia + FOLGA_VISITANTE_DO_IP_MS).toISOString())
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (error) throw new Error(`falha ao ler o visitante do IP: ${error.message}`);
+    const doIp = visitanteDoIp((data || []) as LinhaDoIp[]);
+    if (doIp?.visitorId) {
+      // O clique guardado do visitante (o fbc do cookie, o gclid, a UTM) vence
+      // o do evento; o evento completa o que a identidade nao tem.
+      const { data: linhas, error: erroIdentidade } = await admin
+        .from("tracking_identities")
+        .select(COLUNAS)
+        .eq("store_id", storeId)
+        .eq("visitor_id", doIp.visitorId)
+        .limit(1);
+      if (erroIdentidade) throw new Error(`falha ao ler identidade do visitante do IP: ${erroIdentidade.message}`);
+      const guardada = consolidarIdentidades((linhas || []) as LinhaIdentidade[]);
+      return {
+        identidade: {
+          ...guardada,
+          visitorId: doIp.visitorId,
+          fbp: guardada?.fbp || doIp.fbp,
+          fbc: guardada?.fbc || doIp.fbc,
+          ttp: guardada?.ttp || doIp.ttp,
+          ttclid: guardada?.ttclid || doIp.ttclid,
+          userAgent: doIp.userAgent,
+        },
+        origem: "ip",
+      };
     }
   }
 

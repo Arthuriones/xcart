@@ -677,6 +677,9 @@ const LEITORES_DE_JANELA_CURTA: Record<string, string> = {
   // As reservas (expresso e clique comum) da janela de 30 min e o IC do
   // comprador nas 24 h antes do pedido: user agent e event_time do clique.
   "src/lib/tracking/checkout-de-garantia.ts": "24 h",
+  // O visitante do IP do pedido sem chave (app de COD): os eventos do funil
+  // nos 30 min antes -- _fbp, _fbc, user agent e o _ttp/ttclid do TikTok.
+  "src/lib/tracking/identidade-do-pedido.ts": "30 min",
 };
 
 describe("nenhum leitor de linha velha depende do payload inteiro", () => {
@@ -715,6 +718,17 @@ describe("nenhum leitor de linha velha depende do payload inteiro", () => {
     expect(leituras).toBeGreaterThan(0);
     expect(garantia.match(/\.gte\("created_at", (desde|desdeExpresso|aPartirDe)\)/g)?.length).toBe(leituras);
     expect(garantia.match(/ics\("\w+", \w+, (\w+)\)/g)?.every((c) => /(desde|desdeExpresso)\)$/.test(c))).toBe(true);
+
+    // O visitante do IP: a unica leitura do payload, presa a janela de 30 min.
+    const cascata = readFileSync(path.join(RAIZ, "src/lib/tracking/identidade-do-pedido.ts"), "utf8");
+    const doIp = cascata.match(/JANELA_VISITANTE_DO_IP_MS = ([\d\s*]+);/)?.[1];
+    const msIp = (doIp ?? "").split("*").reduce((a, b) => a * Number(b.trim()), 1);
+    expect(msIp).toBe(30 * 60 * 1000);
+    expect(msIp).toBeLessThan(RETENCAO.resumoDaCompraDias * DIA_MS);
+    const comPayload = [...cascata.matchAll(/\.select\(\s*"([^"]*payload[^"]*)"/g)];
+    expect(comPayload).toHaveLength(1);
+    const depois = cascata.slice(comPayload[0].index);
+    expect(depois.slice(0, depois.indexOf(".limit(")).includes('.gte("created_at", new Date(referencia - JANELA_VISITANTE_DO_IP_MS)')).toBe(true);
   });
 
   it("o payload INTEIRO so e lido da linha pendente (o envio e a reserva)", () => {
