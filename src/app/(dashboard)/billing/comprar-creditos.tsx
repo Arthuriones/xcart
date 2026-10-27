@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useTransition } from "react";
+import { useCallback, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { QrCode } from "lucide-react";
@@ -50,19 +50,23 @@ export function ComprarCreditos({
   const [erro, setErro] = useState<ErroNaTela | null>(null);
   const [busy, setBusy] = useState(false);
   const [pix, setPix] = useState<CobrancaPix | null>(null);
+  // Trava sincrona: o `busy` so chega na proxima renderizacao, e dois
+  // cliques/Enter nesse meio geravam dois Pix pagaveis.
+  const enviando = useRef(false);
 
   const pacote = pacotes.find((p) => p.id === escolhido) ?? null;
   // Estavel: o PixDialog reinicia a consulta quando onPago muda.
   const atualizarSaldo = useCallback(() => iniciar(() => router.refresh()), [router]);
 
   async function comprar() {
-    if (!pacote) return;
+    if (!pacote || enviando.current) return;
     setErro(null);
     if (pedirCpf && !cpfValido(digitos(cpf))) {
       setErroCpf(digitos(cpf) ? "CPF inválido. Confira os números." : "Informe o CPF do pagador.");
       return;
     }
     setErroCpf(null);
+    enviando.current = true;
     setBusy(true);
     try {
       const res = await fetch("/api/billing/credits", {
@@ -94,6 +98,7 @@ export function ComprarCreditos({
     } catch {
       setErro({ texto: ERRO_PADRAO.pix, detalhe: null });
     } finally {
+      enviando.current = false;
       setBusy(false);
     }
   }
@@ -143,6 +148,7 @@ export function ComprarCreditos({
           erro={erroCpf}
           onEnter={comprar}
           autoFocus={temDocumento}
+          desabilitado={busy}
         />
       ) : null}
 
@@ -162,7 +168,9 @@ export function ComprarCreditos({
           {busy ? null : <QrCode aria-hidden />}
           {pacote ? `Gerar Pix de ${brl(pacote.amountCents)}` : "Escolha um pacote"}
         </Button>
-        <span className="text-label text-t2">O código Pix vale por 12 minutos.</span>
+        <span className="text-label text-t2">
+          O código Pix tem prazo; o tempo aparece na tela do pagamento.
+        </span>
       </div>
 
       {pix ? (

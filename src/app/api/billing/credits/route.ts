@@ -161,8 +161,9 @@ export async function POST(request: NextRequest) {
   try {
     const customerId = await getOrCreateCustomer(user.id, user.email, null, doc);
 
-    // Referencia unica: a Pagou devolve 409 DUPLICATE_EXTERNAL_REF se repetir,
-    // o que impede cobrar duas vezes o mesmo clique.
+    // Referencia unica por chamada (Date.now()), que tambem vai como
+    // Idempotency-Key: so protege a MESMA requisicao repetida. Dois cliques
+    // geram dois Pix pagaveis -- a trava de clique duplo fica no cliente.
     const externalRef = `${item.kind}_${user.id}_${item.id}_${Date.now()}`;
 
     const tx = await createPixTransaction({
@@ -259,12 +260,18 @@ export async function PATCH(request: NextRequest) {
   const admin = createAdminClient();
 
   // A cobranca tem que ser deste usuario.
-  const { data: compra } = await admin
+  const { data: compra, error: erroLeitura } = await admin
     .from("credit_purchases")
     .select("id, user_id, status, kind")
     .eq("pagou_transaction_id", transactionId)
     .maybeSingle();
 
+  // Banco instavel nao e "cobranca nao encontrada": o modal trata como
+  // consulta que falhou e nao afirma nada sobre o pagamento.
+  if (erroLeitura) {
+    console.error("[billing/credits] PATCH leitura", erroLeitura);
+    return NextResponse.json({ error: "Não deu para conferir agora." }, { status: 503 });
+  }
   if (!compra || compra.user_id !== user.id) {
     return NextResponse.json({ error: "Cobrança não encontrada." }, { status: 404 });
   }
@@ -278,9 +285,16 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ status: tx.status, credited: false });
     }
     // Atomica e idempotente: se o webhook aplicou antes, devolve false.
-    const { data: aplicou } = await admin.rpc("apply_paid_purchase", {
+    const { data: aplicou, error: erroAplicar } = await admin.rpc("apply_paid_purchase", {
       p_transaction_id: transactionId,
     });
+    // A Pagou confirmou, entao o status continua "paid" -- mas sem dizer que o
+    // plano/credito ja entrou. O modal segue consultando e o proximo PATCH
+    // repete o RPC; o webhook (com reenvio) tambem aplica.
+    if (erroAplicar) {
+      console.error("[billing/credits] PATCH apply", erroAplicar);
+      return NextResponse.json({ status: "paid", credited: false, aplicado: false, kind: compra.kind });
+    }
     return NextResponse.json({
       status: "paid",
       credited: aplicou === true,
