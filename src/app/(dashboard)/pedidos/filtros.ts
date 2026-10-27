@@ -302,7 +302,8 @@ export const CABECALHO_CSV = [
   "Faturamento",
   "Produto + frete do fornecedor",
   "Taxa de pagamento",
-  "Lucro estimado",
+  // Antes do anuncio: "Lucro estimado" e o do Dashboard, depois do anuncio.
+  "Lucro antes do anúncio",
   "Status",
 ];
 

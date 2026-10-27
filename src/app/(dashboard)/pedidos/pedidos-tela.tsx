@@ -331,7 +331,7 @@ export function PedidosTela({
                       ["Itens", "left"],
                       ["Origem", "left"],
                       ["Valor pago", "right"],
-                      ["Lucro estimado", "right"],
+                      ["Lucro antes do anúncio", "right"],
                       ["Rastreamento", "left"],
                       ["Envio", "left"],
                     ].map(([rotulo, lado]) => (
@@ -425,17 +425,31 @@ export function PedidosTela({
                           {p.quando} · {p.origem.rotulo}
                         </span>
                       </span>
-                      <StatusBadge tom={p.status.tom}>{p.status.rotulo}</StatusBadge>
+                      <span className="flex flex-col items-end gap-1.5">
+                        <StatusBadge tom={p.status.tom}>{p.status.rotulo}</StatusBadge>
+                        {/* A coluna Rastreamento da tabela, que no celular fica escondida. */}
+                        <span className="inline-flex gap-2.5">
+                          <PontoEnvio marca="meta" estado={p.meta} />
+                          <PontoEnvio marca="google" estado={p.google} />
+                        </span>
+                      </span>
                     </span>
-                    <span className="num flex w-full justify-between text-dense">
-                      <span className="text-t1">{dinheiro(p.valores?.valorPago ?? null)}</span>
-                      <strong
-                        className={cn(
-                          p.valores?.lucro == null ? "text-t2" : p.valores.lucro < 0 ? "text-err" : "text-ink"
-                        )}
-                      >
-                        {dinheiro(p.valores?.lucro ?? null)}
-                      </strong>
+                    <span className="flex w-full justify-between gap-3 text-dense">
+                      <span className="flex flex-col">
+                        <span className="text-label text-t2">Pago</span>
+                        <span className="num text-t1">{dinheiro(p.valores?.valorPago ?? null)}</span>
+                      </span>
+                      <span className="flex flex-col items-end text-right">
+                        <span className="text-label text-t2">Lucro antes do anúncio</span>
+                        <strong
+                          className={cn(
+                            "num",
+                            p.valores?.lucro == null ? "text-t2" : p.valores.lucro < 0 ? "text-err" : "text-ink"
+                          )}
+                        >
+                          {dinheiro(p.valores?.lucro ?? null)}
+                        </strong>
+                      </span>
                     </span>
                   </button>
                 </li>
@@ -583,14 +597,14 @@ function DetalhePedido({ p, dinheiro }: { p: PedidoTela; dinheiro: (v: number | 
                 />
                 {v.devolucao > 0 && <Linha rotulo="Devolução" valor={menos(v.devolucao)} cor="text-t1" />}
                 <Linha
-                  rotulo="Lucro estimado"
+                  rotulo="Lucro antes do anúncio"
                   valor={v.lucro === null ? "— (SKU sem custo)" : dinheiro(v.lucro)}
                   destaque
                   cor={v.lucro !== null && v.lucro < 0 ? "text-err" : "text-ink"}
                 />
               </div>
               <p className="text-label text-t2">
-                Lucro estimado antes de dividir o anúncio. O gasto entra no total do dia, não por pedido.
+                O gasto entra no total do dia, não por pedido.
               </p>
             </>
           ) : (

@@ -455,9 +455,16 @@ export function PedidosCheckout({
                     </span>
                     <StatusBadge tom={p.tom}>{p.rotulo}</StatusBadge>
                   </span>
-                  <span className="num flex w-full justify-between text-dense">
-                    <span className="text-t1">{valorDaLinha(p)}</span>
-                    <strong className="text-ink">{dinheiro(p.comissao)}</strong>
+                  <span className="flex w-full justify-between gap-3 text-dense">
+                    <span className="flex flex-col">
+                      <span className="text-label text-t2">Valor</span>
+                      <span className="num text-t1">{valorDaLinha(p)}</span>
+                    </span>
+                    <span className="flex flex-col items-end text-right">
+                      {/* O nome da coluna da tabela: Liquido na venda, Comissao na Sphere. */}
+                      <span className="text-label text-t2">{p.modelo === "venda" ? "Líquido" : "Comissão"}</span>
+                      <strong className="num text-ink">{dinheiro(p.comissao)}</strong>
+                    </span>
                   </span>
                 </li>
               ))}

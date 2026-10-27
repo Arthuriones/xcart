@@ -511,6 +511,25 @@ describe("resumo e CSV", () => {
     }
   });
 
+  it("lucro do pedido e antes do anuncio: o 'Lucro estimado' e o do Dashboard, depois do anuncio", () => {
+    const p = pedido();
+    const e = entrada([p]);
+    const { pedidos } = montarPedidos({
+      entrada: e,
+      lojas: e.lojas,
+      fuso: "America/Sao_Paulo",
+      eventos: [],
+      destinos: [],
+      lojasLigadas: [],
+      agoraMs: AGORA,
+    });
+    expect(CABECALHO_CSV).not.toContain("Lucro estimado");
+    const l = linhaCsv(pedidos[0]);
+    const lucro = pedidos[0].valores?.lucro;
+    expect(typeof lucro).toBe("number");
+    expect(Number(l[CABECALHO_CSV.indexOf("Lucro antes do anúncio")])).toBeCloseTo(lucro as number);
+  });
+
   it("valores em centavos e texto do visitante sem formula", () => {
     const p = pedido();
     const e = entrada([p], { configs: [{ ...CFG, taxa_pct: 2.5111 }] });
