@@ -14,6 +14,16 @@ import Image from "next/image";
  * e a logo aparecia visivelmente menor no tema escuro, com a mesma altura.
  * logo-claro.png e o logo-cropped.png com o fundo branco transparente: o
  * menu fica sobre o fundo quente (--bg), e o branco opaco virava um retangulo.
+ *
+ * Os arquivos servidos sao os -256 (256px de largura, gerados com o sharp a
+ * partir dos dois acima): a logo nunca passa de ~111px na tela, e o 2x do
+ * srcset e 256w. width/height sao o tamanho EXIBIDO, para o srcset sair em
+ * 96-128w/256w; com a largura do arquivo (891) ele saia em 1080w/1920w.
+ *
+ * Sem preload nem loading eager: com eles as DUAS imagens baixavam, inclusive
+ * a que o CSS esconde (e a do menu lateral no celular, onde ela nem aparece).
+ * Lazy, so a visivel baixa; `prioridade` vira fetchPriority="high", como a
+ * doc do next/image manda para imagem por tema.
  */
 export function LogoXcart({
   altura = 20,
@@ -28,26 +38,16 @@ export function LogoXcart({
 }) {
   const comum = {
     alt: "xcart",
-    priority: prioridade,
+    fetchPriority: prioridade ? ("high" as const) : undefined,
+    width: Math.round(altura * 5.03),
+    height: altura,
     style: { height: altura, width: "auto" as const },
   };
 
   return (
     <span className={className}>
-      <Image
-        {...comum}
-        src="/logo-claro.png"
-        width={891}
-        height={177}
-        className="block dark:hidden"
-      />
-      <Image
-        {...comum}
-        src="/logo-dark.png"
-        width={731}
-        height={145}
-        className="hidden dark:block"
-      />
+      <Image {...comum} src="/logo-claro-256.png" className="block dark:hidden" />
+      <Image {...comum} src="/logo-dark-256.png" className="hidden dark:block" />
     </span>
   );
 }

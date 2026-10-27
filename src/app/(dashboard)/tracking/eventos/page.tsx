@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { filtroResolvido } from "@/lib/filtro-global";
+import { filtroResolvido, lerFiltroGlobal } from "@/lib/filtro-global";
 import { SoLojasShopify } from "@/components/layout/so-lojas-shopify";
 import { lerFeed } from "@/lib/tracking/feed";
 import { fusoDaTela, nomesDosPedidos } from "@/lib/leitura/eventos";
@@ -96,9 +96,12 @@ async function Conteudo({ searchParams }: { searchParams: Busca }) {
   );
 }
 
-export default function EventosAoVivoPage({ searchParams }: { searchParams: Busca }) {
+export default async function EventosAoVivoPage({ searchParams }: { searchParams: Busca }) {
+  // So cookie (sem banco): serve de key para o Suspense. Trocar de loja na
+  // barra mostra o esqueleto de novo em vez de deixar o feed velho na tela.
+  const filtro = await lerFiltroGlobal();
   return (
-    <Suspense fallback={<EsqueletoEventos />}>
+    <Suspense key={filtro.lojaId} fallback={<EsqueletoEventos />}>
       <Conteudo searchParams={searchParams} />
     </Suspense>
   );

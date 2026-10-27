@@ -182,7 +182,7 @@ export function Sidebar({ dados }: { dados: DadosMenu }) {
         >
           {!recolhido && (
             <Link href={APP_HOME} aria-label="xcart, ir para o Dashboard" className="flex h-8 items-center">
-              <LogoXcart altura={17} prioridade />
+              <LogoXcart altura={17} />
             </Link>
           )}
           <button

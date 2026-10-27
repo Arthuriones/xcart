@@ -10,6 +10,7 @@ import {
   OctagonXIcon,
   Loader2Icon,
 } from "lucide-react"
+import { cn } from "@/components/ui/cn"
 
 /*
  * Toast: superficie solida (preto no claro, quase branco no escuro), titulo e
@@ -17,15 +18,21 @@ import {
  * "\n" colava tudo numa linha so (white-space: pre-line no titulo e detalhe).
  * Toast nunca e o unico lugar de um erro que exige acao: o erro aparece no
  * campo ou na tela tambem.
+ *
+ * Fica 6 s (o padrao do sonner, 4 s, sumia antes de ler a mensagem do
+ * servidor) e tem o X para fechar. Quem chama pode pedir mais (toast.error
+ * com duration). A casca do painel passa mobileOffset e className para o
+ * toast nascer acima da barra de baixo do celular (layout.tsx do painel).
  */
-const Toaster = ({ ...props }: ToasterProps) => {
+const Toaster = ({ className, ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme()
 
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
-      className="toaster group"
+      className={cn("toaster group", className)}
       containerAriaLabel="Notificações"
+      closeButton
       icons={{
         success: <CircleCheckIcon aria-hidden className="size-4" />,
         info: <InfoIcon aria-hidden className="size-4" />,
@@ -42,6 +49,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
         } as React.CSSProperties
       }
       toastOptions={{
+        duration: 6000,
+        closeButtonAriaLabel: "Fechar notificação",
         classNames: {
           toast: "cn-toast gap-3! shadow-overlay! font-sans! text-dense!",
           title: "whitespace-pre-line font-semibold",

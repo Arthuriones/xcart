@@ -8,10 +8,14 @@ const publicSans = Public_Sans({
   subsets: ["latin"],
 });
 
+// Sem preload: a mono so aparece em rotulo e identificador (SKU, id,
+// dominio), nunca no texto principal da tela, e os dois arquivos disputavam
+// banda com o CSS e o JS no primeiro acesso. O swap continua.
 const plexMono = IBM_Plex_Mono({
   variable: "--font-mono",
   weight: ["400", "500"],
   subsets: ["latin"],
+  preload: false,
 });
 
 export const metadata: Metadata = {

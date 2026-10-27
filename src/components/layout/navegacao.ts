@@ -143,13 +143,16 @@ export const ITENS: Record<IdItem, ItemNav> = {
   },
   integracoes: {
     id: "integracoes",
-    href: "/integracoes",
+    // Direto no Meta: /integracoes so redireciona para la, e o clique pagava
+    // duas idas ao servidor. "/integracoes" fica em tambem para Google,
+    // Shopify, Checkouts e o link antigo continuarem acendendo o item.
+    href: "/integracoes/meta",
     rotulo: t("integrations"),
     icone: Plug,
     atalho: "i",
     busca: "meta google contas de anúncio notificações telegram",
     // As contas de anuncio moram em Integracoes.
-    tambem: ["/financeiro/anuncios"],
+    tambem: ["/financeiro/anuncios", "/integracoes"],
   },
   rotas: {
     id: "rotas",

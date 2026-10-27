@@ -353,7 +353,7 @@ export function PaletaComandos({
             aria-autocomplete="list"
             aria-label="Buscar telas, lojas, pedidos ou ações"
             placeholder="Buscar telas, lojas, pedidos ou ações…"
-            className="min-w-0 flex-1 border-0 bg-transparent text-body text-ink outline-none placeholder:text-t3"
+            className="min-w-0 flex-1 border-0 bg-transparent text-body text-ink outline-none placeholder:text-t3 max-md:text-base"
           />
           <kbd className="rounded-control border border-border px-1.5 font-mono text-label text-t2">Esc</kbd>
         </div>

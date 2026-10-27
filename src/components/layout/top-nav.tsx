@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Search } from "lucide-react";
@@ -52,10 +52,23 @@ export function TopNav({
   // So o modo completo (loja, periodo, comparacao, moeda) precisa de espaco;
   // o seletor de loja sozinho cabe em qualquer painel.
   const completo = modo.tipo === "completo";
+  // Enquanto o servidor rele a tela com o contexto novo, o React mantem o
+  // conteudo antigo: o data-contexto-pendente nos headers esmaece o <main>
+  // (layout.tsx, group/painel do painel.tsx) e o aria-busy avisa o leitor de
+  // tela. O <main> e do servidor, entao o atributo vem daqui.
+  useEffect(() => {
+    if (!ctx.pendente) return;
+    const main = document.getElementById("conteudo");
+    main?.setAttribute("aria-busy", "true");
+    return () => main?.removeAttribute("aria-busy");
+  }, [ctx.pendente]);
 
   return (
     <>
-      <header className="@container sticky top-0 z-30 hidden h-14 shrink-0 items-center gap-1.5 border-b border-border bg-surface pl-5 pr-3 md:flex">
+      <header
+        data-contexto-pendente={ctx.pendente || undefined}
+        className="@container sticky top-0 z-30 hidden h-14 shrink-0 items-center gap-1.5 border-b border-border bg-surface pl-5 pr-3 md:flex"
+      >
         <h1 className="shrink-0 whitespace-nowrap text-section text-ink">{titulo}</h1>
         {contexto && temContexto && (
           <>
@@ -75,7 +88,10 @@ export function TopNav({
         <Sino total={alertasAbertos} />
       </header>
 
-      <header className="sticky top-0 z-30 border-b border-border bg-surface md:hidden">
+      <header
+        data-contexto-pendente={ctx.pendente || undefined}
+        className="sticky top-0 z-30 border-b border-border bg-surface md:hidden"
+      >
         <CabecalhoCelular titulo={titulo}>
           <button
             type="button"

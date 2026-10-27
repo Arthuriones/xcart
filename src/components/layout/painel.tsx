@@ -37,6 +37,10 @@ import { usePathname } from "next/navigation";
  * `data-casca="app"`: o PageHeader esconde o proprio h1 aqui dentro, porque o
  * titulo da tela ja e o h1 da barra do topo (top-nav.tsx). Na casca do admin,
  * que nao tem barra no desktop, o h1 dele continua.
+ *
+ * `group/painel`: com a troca de contexto pendente, o header do topo ganha
+ * data-contexto-pendente e o <main> (layout.tsx) fica esmaecido ate o
+ * servidor responder -- sem isso o numero velho ficava na tela sem aviso.
  */
 export function Painel({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -72,7 +76,7 @@ export function Painel({ children }: { children: ReactNode }) {
       id="painel"
       data-casca="app"
       onScroll={(e) => posicoes.current.set(atual.current, e.currentTarget.scrollTop)}
-      className="relative flex min-w-0 flex-1 flex-col bg-surface md:h-[calc(100dvh-16px)] md:flex-none md:scroll-pt-14 md:overflow-y-auto md:rounded-overlay md:border md:border-border"
+      className="group/painel relative flex min-w-0 flex-1 flex-col bg-surface md:h-[calc(100dvh-16px)] md:flex-none md:scroll-pt-14 md:overflow-y-auto md:rounded-overlay md:border md:border-border"
     >
       {children}
     </div>

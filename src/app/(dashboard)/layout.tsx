@@ -53,14 +53,28 @@ export default async function DashboardLayout({
           <Suspense fallback={<TopoEsqueleto />}>
             <TopoDados />
           </Suspense>
-          <main id="conteudo" tabIndex={-1} className="flex-1 pb-16 outline-none md:pb-0">
+          {/* Troca de loja/periodo/moeda pendente: o topo marca o header
+              (data-contexto-pendente) e o conteudo esmaece ate o servidor
+              responder, no desktop e no celular. */}
+          <main
+            id="conteudo"
+            tabIndex={-1}
+            className="flex-1 pb-16 outline-none transition-opacity group-has-[[data-contexto-pendente]]/painel:opacity-60 md:pb-0"
+          >
             <div className="mx-auto w-full max-w-330 px-4 pb-6 pt-4 has-[[data-largura=total]]:max-w-none md:px-6 md:pb-8 md:pt-6">
               {children}
             </div>
           </main>
         </Painel>
       </div>
-      <Toaster />
+      {/* Celular: o toast nasce acima da barra de baixo (h-16, sidebar.tsx),
+          nao em cima das abas. Ate 600px vale o mobileOffset do sonner; de
+          601 a 767px, onde a barra ainda aparece, a regra .xc-toaster-casca
+          de globals.css. O desktop (md) nao muda. */}
+      <Toaster
+        className="xc-toaster-casca"
+        mobileOffset={{ bottom: "calc(4rem + env(safe-area-inset-bottom) + 8px)" }}
+      />
     </div>
   );
 }

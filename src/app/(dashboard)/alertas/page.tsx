@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { Callout } from "@/components/ui/callout";
+import { lerFiltroGlobal } from "@/lib/filtro-global";
 import { lerAlertas } from "@/lib/leitura/alertas";
 import { FUSO_RELATORIO_PADRAO, ROTULO_REGRA } from "@/lib/financeiro/tipos";
 import { TELA_NOTIFICACOES, abaDe, destinoDoAlerta, nomeDaLoja } from "./apresentar";
@@ -81,12 +82,15 @@ export default async function AlertasPage({
 }: {
   searchParams: Promise<{ [chave: string]: string | string[] | undefined }>;
 }) {
-  const aba = abaDe((await searchParams).aba);
+  // O filtro e so cookie (sem banco): serve de key para o Suspense. Trocar de
+  // loja na barra mostra o esqueleto de novo em vez de deixar a lista velha.
+  const [sp, filtro] = await Promise.all([searchParams, lerFiltroGlobal()]);
+  const aba = abaDe(sp.aba);
   if (aba === "regras" || aba === "canal") redirect(TELA_NOTIFICACOES);
   return (
     <>
       <CabecalhoAlertas />
-      <Suspense fallback={<EsqueletoAlertas />}>
+      <Suspense key={filtro.lojaId} fallback={<EsqueletoAlertas />}>
         <Conteudo />
       </Suspense>
     </>

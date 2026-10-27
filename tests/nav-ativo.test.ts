@@ -84,6 +84,11 @@ describe("itemAtivo (todas as telas)", () => {
     expect(itemAtivo("/sales")).toBe("vendasRota");
     expect(itemAtivo("/financeiro/anuncios")).toBe("integracoes");
     expect(itemAtivo("/integracoes/meta")).toBe("integracoes");
+    // O item aponta para /integracoes/meta; "/integracoes" no tambem segura
+    // as outras abas e o link antigo.
+    expect(itemAtivo("/integracoes")).toBe("integracoes");
+    expect(itemAtivo("/integracoes/google")).toBe("integracoes");
+    expect(itemAtivo("/integracoes/checkouts")).toBe("integracoes");
     // O Claude mora em Integracoes -> Avancado; /claude redireciona para la.
     expect(itemAtivo("/claude")).toBe("claude");
     expect(itemAtivo("/integracoes/avancado")).toBe("claude");
@@ -224,7 +229,7 @@ describe("barra do celular e atalhos", () => {
       m: "/clone",
       t: "/activity",
       r: "/clone/routed-checkout",
-      i: "/integracoes",
+      i: "/integracoes/meta",
       b: "/billing",
     });
   });

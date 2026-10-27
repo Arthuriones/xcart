@@ -2,6 +2,18 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* O Tailwind varre o repo inteiro. Fora da varredura so o que com certeza nao
+   e o app: temas e backups da Shopify, prototipos do redesign, docs e as duas
+   paginas HTML soltas da raiz. Sem isso o CSS de toda tela crescia com classe
+   que so existe neles. src/, public/ e messages/ continuam varridos. */
+@source not "../../tema";
+@source not "../../tema-vitrine";
+@source not "../../backup-vitrine";
+@source not "../../design novo";
+@source not "../../docs";
+@source not "../../01.html";
+@source not "../../herocart.html";
+
 @custom-variant dark (&:is(.dark *));
 
 /* ==========================================================================
@@ -497,6 +509,16 @@
   /* A div ainda existe em app/layout.tsx. Sai quando a casca for refeita. */
   .ambient-bg {
     display: none;
+  }
+}
+
+/* Toast da casca do painel entre 601 e 767px: a barra de baixo do celular
+   (h-16) ainda aparece, mas o sonner ja usa o offset de desktop (24px) e o
+   toast ficava em cima das abas. Ate 600px quem resolve e o mobileOffset
+   ((dashboard)/layout.tsx); de md para cima nao ha barra. */
+@media (min-width: 601px) and (max-width: 767px) {
+  .xc-toaster-casca[data-y-position="bottom"] {
+    bottom: calc(4rem + env(safe-area-inset-bottom) + 8px) !important;
   }
 }
 
