@@ -1186,7 +1186,11 @@
   function ehAdicionar(url) {
     if (!url) return false;
     var texto = String(url);
-    return texto.indexOf("/cart/add") !== -1;
+    // A API Storefront tambem: o formulario de contra entrega do Releasit poe o
+    // produto no carrinho por /api/<versao>/graphql.json?cartLinesAdd ao abrir,
+    // e esse carrinho nunca passava por /cart/add (medido na Dum parfemu,
+    // 27/10: 2 vendas e o AddToCart delas nao saia).
+    return texto.indexOf("/cart/add") !== -1 || /\/graphql\.json\?cartLinesAdd\b/.test(texto);
   }
 
   // Tirar item, trocar quantidade, limpar -- e o nosso /cart/update.js. A
@@ -1295,12 +1299,41 @@
     return false;
   }
 
+  // O botao que abre o formulario de app de contra entrega. Na loja COD o
+  // formulario E o checkout: nao ha checkout da Shopify nem Web Pixel, e o
+  // pedido nasce no app. Sem isto o Meta so via o InitiateCheckout de garantia,
+  // grudado na compra (medido na Dum parfemu, 27/10). Releasit: o mesmo id nos
+  // dois botoes, o da pagina e o flutuante.
+  var SELETOR_FORMULARIO_COD = "#rsi_buy_now_button, ._rsi-buy-now-button";
+
+  function ehFormularioCod(alvo) {
+    return Boolean(alvo && alvo.closest && alvo.closest(SELETOR_FORMULARIO_COD));
+  }
+
+  // Um InitiateCheckout por aba em 30 min: abrir e fechar o formulario de novo
+  // e o mesmo checkout, nao outro. A garantia da compra (orders/create) acha
+  // este pelo visitante e nao manda outro.
+  var JANELA_FORMULARIO_COD_MS = 30 * 60 * 1000;
+
+  function formularioCod() {
+    var chave = PREFIXO + "cod_ic";
+    try {
+      var antes = Number(sessionStorage.getItem(chave) || 0);
+      if (antes && Date.now() - antes < JANELA_FORMULARIO_COD_MS) return;
+      sessionStorage.setItem(chave, String(Date.now()));
+    } catch (e) {
+      /* sem storage: a janela de 8 s do mandar segura o clique duplo */
+    }
+    mandar("begin_checkout");
+  }
+
   function observarCheckout() {
     document.addEventListener(
       "click",
       function (e) {
         // Expresso primeiro, e um OU outro: o mesmo clique nao vira dois.
         if (ehExpresso(e)) checkoutExpresso(e);
+        else if (ehFormularioCod(e.target)) formularioCod();
         else if (ehBotaoDeCheckout(e.target)) mandar("begin_checkout");
       },
       true

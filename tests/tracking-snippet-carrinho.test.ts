@@ -119,7 +119,7 @@ function abrir(
       nav.carrinho = { ...nav.carrinho, attributes: atual };
       return responder({ ...nav.carrinho, token: nav.carrinho.token + "?key=x" });
     }
-    if (alvo.includes("/cart/add")) {
+    if (alvo.includes("/cart/add") || alvo.includes("graphql.json?cartLinesAdd")) {
       if (nav.carrinho !== "pendurado" && nav.aoAdicionar) {
         nav.carrinho = nav.aoAdicionar(nav.carrinho);
       }
@@ -234,6 +234,21 @@ function abrir(
       const e = { target: form, defaultPrevented: prevenido };
       for (const o of doDocumento) if (o.tipo === "submit") o.fn(e);
     },
+    /**
+     * Um clique num elemento que casa com os seletores dados (o resto nao casa
+     * com nada: nem com o checkout expresso).
+     */
+    clicar: (casa: (sel: string) => boolean) => {
+      const alvo = {
+        closest: (sel: string) => (casa(sel) ? alvo : null),
+        getAttribute: () => null,
+      };
+      const e = { target: alvo, defaultPrevented: false };
+      for (const o of doDocumento) if (o.tipo === "click") o.fn(e);
+    },
+    /** O formulario de contra entrega do Releasit pondo o produto no carrinho pela API Storefront. */
+    adicionarPelaStorefront: () =>
+      (ctx.fetch as typeof fetch)("https://loja.test/api/2026-10/graphql.json?cartLinesAdd", { body: "{}" }),
   };
 }
 
@@ -574,6 +589,47 @@ describe("submit nativo do /cart/add (tema sem AJAX)", () => {
     p.estourarTimers();
     await assentar();
     expect(adds(p)).toHaveLength(0);
+  });
+});
+
+// Loja so contra entrega (Releasit): o formulario E o checkout. Abrir o
+// formulario e o InitiateCheckout, e o produto entra no carrinho pela API
+// Storefront (cartLinesAdd), nao por /cart/add. Medido na Dum parfemu (27/10):
+// 2 vendas com o IC so de garantia, grudado na compra, e sem AddToCart.
+describe("formulario de contra entrega (Releasit)", () => {
+  const eventos = (p: ReturnType<typeof abrir>) => p.beacons.map((b) => b.evento);
+  const botaoReleasit = (sel: string) => sel.includes("#rsi_buy_now_button");
+
+  it("abrir o formulario manda o InitiateCheckout, uma vez por aba em 30 min", async () => {
+    const nav = navegador();
+    const p = abrir(nav, "https://loja.test/collections/todos");
+    await assentar();
+    p.clicar(botaoReleasit);
+    await assentar();
+    expect(eventos(p).filter((e) => e === "begin_checkout")).toHaveLength(1);
+
+    // Fechou e abriu de novo na mesma aba (outra pagina): o mesmo checkout.
+    const p2 = abrir(nav, "https://loja.test/collections/todos");
+    await assentar();
+    p2.clicar(botaoReleasit);
+    await assentar();
+    expect(eventos(p2).filter((e) => e === "begin_checkout")).toHaveLength(0);
+  });
+
+  it("o produto entrando no carrinho pela API Storefront vira AddToCart", async () => {
+    const p = abrir(navegador(), "https://loja.test/collections/todos");
+    await assentar();
+    await p.adicionarPelaStorefront();
+    await assentar();
+    expect(eventos(p).filter((e) => e === "add_to_cart")).toHaveLength(1);
+  });
+
+  it("botao comum de finalizar continua sendo o checkout de sempre", async () => {
+    const p = abrir(navegador(), "https://loja.test/cart");
+    await assentar();
+    p.clicar((sel) => sel === '[name="checkout"]');
+    await assentar();
+    expect(eventos(p).filter((e) => e === "begin_checkout")).toHaveLength(1);
   });
 });
 
