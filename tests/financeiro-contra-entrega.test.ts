@@ -701,6 +701,25 @@ describe("loja online nao muda", () => {
     expect(depois.atual.devolucoes).toBe(0);
   });
 
+  it("loja que nunca configurou e so vende na entrega vai para os cartoes de contra entrega", () => {
+    // A Dum parfemu (Releasit) em 27/10: 2 vendas COD, nenhuma linha em
+    // fin_store_settings. Nos cartoes de loja online as duas viravam zero.
+    const semConfig = calcularFinanceiro(entrada({ pedidos: [cod(), cod()], configs: [] }));
+    expect(semConfig.lojasContraEntrega).toEqual([LOJA]);
+    expect(semConfig.atual.cod.aReceber).toBe(200);
+    expect(semConfig.atual.cod.gerados).toBe(2);
+    // Uma venda so nao basta (a mesma regra da sugestao de Custos).
+    expect(calcularFinanceiro(entrada({ pedidos: [cod()], configs: [] })).lojasContraEntrega).toEqual([]);
+    // A maioria online: segue como loja online.
+    expect(
+      calcularFinanceiro(entrada({ pedidos: [cod(), cod(), pedido(), pedido(), pedido()], configs: [] })).lojasContraEntrega
+    ).toEqual([]);
+    // Quem configurou manda, mesmo dizendo que nao e contra entrega.
+    expect(
+      calcularFinanceiro(entrada({ pedidos: [cod(), cod()], configs: [config({ contra_entrega: false })] })).lojasContraEntrega
+    ).toEqual([]);
+  });
+
   it("sem contra entrega, o previsto e o realizado", () => {
     const r = calcularFinanceiro(entrada({ pedidos: online(), gastos: [gasto(50)], configs: [config()] }));
     expect(r.atual.cod.aReceber).toBe(0);

@@ -5,6 +5,7 @@ import {
   contaDoPedido,
   qtdComCusto,
   situacaoViva,
+  sugerirContraEntrega,
   taxaDeEntrega,
   type AmostraEntrega,
   type TaxaEntrega,
@@ -968,8 +969,28 @@ export function calcularFinanceiro(e: EntradaFinanceiro): ResultadoFinanceiro {
 
   // Checkout de comissao e sempre "a receber + previsto": entra aqui tambem.
   // O de venda (Cakto) nao: Pix e boleto nao sao contra entrega.
+  //
+  // Loja que NUNCA salvou a configuracao (sem linha em fin_store_settings) e
+  // vende na entrega tambem entra, pela mesma regra da sugestao de Custos
+  // (sugerirContraEntrega: >= 2 COD e maioria nos 7 dias). Nos cartoes de
+  // loja online Faturamento e Pedidos so contam o pago, e a loja do Releasit
+  // recem-conectada mostrava as vendas como zero. Quem configurou manda.
+  // Sem um "hoje" de verdade (a serie do periodo anterior passa ""), nao ha
+  // os 7 dias da sugestao: fica so o que foi configurado.
+  const codSemConfig = (id: string) =>
+    /^\d{4}-\d{2}-\d{2}$/.test(e.hoje) &&
+    !configPorLoja.has(id) &&
+    sugerirContraEntrega(
+      e.pedidos.filter((p) => p.store_id === id),
+      e.hoje
+    ).sugere;
   const lojasContraEntrega = e.lojas
-    .filter((l) => (l.tipo === "checkout" && l.modelo !== "venda") || configPorLoja.get(l.id)?.contra_entrega === true)
+    .filter(
+      (l) =>
+        (l.tipo === "checkout" && l.modelo !== "venda") ||
+        configPorLoja.get(l.id)?.contra_entrega === true ||
+        (l.tipo !== "checkout" && codSemConfig(l.id))
+    )
     .map((l) => l.id);
 
   return {
