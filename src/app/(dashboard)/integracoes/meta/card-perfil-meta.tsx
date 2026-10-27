@@ -6,6 +6,7 @@ import Image from "next/image";
 import { ChevronDown, ChevronUp, LogOut, Plus, RefreshCw, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { ConexaoOAuthResumo } from "../dados-anuncios";
 import { AssistenteMeta, CartaoTokenMeta } from "./token-meta";
@@ -33,9 +34,11 @@ export function CardPerfilMeta({
 }) {
   const router = useRouter();
   const [pendente, startTransition] = useTransition();
-  const [conexoes, setConexoes] = useState<ConexaoOAuthResumo[]>(conexoesIniciais);
+  // A lista vem da prop: o router.refresh depois do popup/modal traz o perfil
+  // novo. O estado guarda so quem foi desconectado aqui, ate o refresh chegar.
+  const [removidos, setRemovidos] = useState<Set<string>>(() => new Set());
+  const conexoes = conexoesIniciais.filter((c) => !removidos.has(c.id));
   const [mostrarManual, setMostrarManual] = useState(false);
-  const [desconectandoId, setDesconectandoId] = useState<string | null>(null);
   const [modalConectarAberto, setModalConectarAberto] = useState(false);
 
   // Escuta o evento de sucesso enviado pelo popup OAuth
@@ -86,26 +89,18 @@ export function CardPerfilMeta({
     }
   }
 
+  // Chamada pelo ConfirmDialog: lanca na falha (HTTP ou rede) e o dialogo
+  // mostra o erro no lugar do toast.
   async function desconectar(id: string) {
-    setDesconectandoId(id);
-    try {
-      const resp = await fetch("/api/auth/meta/desconectar", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ connectionId: id }),
-      });
-      if (resp.ok) {
-        toast.success("Perfil desconectado.");
-        setConexoes((prev) => prev.filter((c) => c.id !== id));
-        startTransition(() => router.refresh());
-      } else {
-        toast.error("Erro ao desconectar perfil.");
-      }
-    } catch {
-      toast.error("Falha de rede ao desconectar.");
-    } finally {
-      setDesconectandoId(null);
-    }
+    const resp = await fetch("/api/auth/meta/desconectar", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ connectionId: id }),
+    });
+    if (!resp.ok) throw new Error(`desconectar: HTTP ${resp.status}`);
+    toast.success("Perfil desconectado.");
+    setRemovidos((prev) => new Set(prev).add(id));
+    startTransition(() => router.refresh());
   }
 
   const temConexao = conexoes.length > 0;
@@ -172,17 +167,24 @@ export function CardPerfilMeta({
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => desconectar(c.id)}
-                      disabled={desconectandoId === c.id}
-                      title="Desconectar perfil"
-                      className="text-t3 hover:text-err"
-                    >
-                      <LogOut className="size-3.5" />
-                    </Button>
+                    <ConfirmDialog
+                      gatilho={
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Desconectar ${c.nome || "este perfil"}`}
+                          className="text-t3 hover:text-err max-md:size-ctl-lg"
+                        >
+                          <LogOut className="size-3.5" aria-hidden />
+                        </Button>
+                      }
+                      titulo={`Desconectar ${c.nome || "este perfil"}?`}
+                      descricao="O perfil sai da lista. Para conectá-lo de novo, você precisa autorizar o Facebook outra vez."
+                      confirmar="Desconectar"
+                      mensagemErro="Não deu para desconectar agora. Tente de novo."
+                      onConfirmar={() => desconectar(c.id)}
+                    />
                   </div>
                 </div>
               ))}

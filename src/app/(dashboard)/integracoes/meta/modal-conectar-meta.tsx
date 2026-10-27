@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ExternalLink, Copy, Check, X, Loader2, Sparkles } from "lucide-react";
+import { ExternalLink, Copy, Check, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { LogoXcart } from "@/components/layout/logo";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface ModalConectarMetaProps {
   aberto: boolean;
@@ -69,8 +71,6 @@ export function ModalConectarMeta({
     };
   }, [aguardandoMultilogin, ticketAtivo, aoConectadoComSucesso, aoFechar]);
 
-  if (!aberto) return null;
-
   async function gerarECopiarLinkMultilogin() {
     setCopiando(true);
     try {
@@ -110,118 +110,109 @@ export function ModalConectarMeta({
     setTimeout(() => setCopiado(false), 2500);
   }
 
+  // Dialog do sistema: Esc, clique fora e o X fecham pelo aoFechar, o foco fica
+  // preso no modal, e as cores sao so tokens (o fundo fixo sumia no tema claro).
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md rounded-2xl border border-border/80 bg-[#141822] p-6 text-ink shadow-2xl overflow-hidden">
-        {/* Topo: Logo xcart e Fechar */}
-        <div className="flex items-center justify-between pb-4">
-          <div className="flex items-center gap-2">
-            <LogoXcart className="h-6 w-auto text-white" />
-          </div>
-          <button
-            type="button"
-            onClick={aoFechar}
-            className="rounded-lg p-1 text-t3 transition hover:bg-surface hover:text-white"
-            aria-label="Fechar"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+    <Dialog
+      open={aberto}
+      onOpenChange={(v) => {
+        if (!v) aoFechar();
+      }}
+    >
+      <DialogContent size="sm">
+        {/* Topo: Logo xcart (o X e o do DialogContent) */}
+        <LogoXcart className="h-6 w-auto" />
 
         {/* Título Principal */}
-        <div className="text-center py-2">
-          <h2 className="text-xl font-bold text-white tracking-tight">Conectar Meta Ads</h2>
-          <p className="mt-1.5 text-xs text-t2 text-balance">
+        <DialogHeader className="items-center px-8 text-center">
+          <DialogTitle>Conectar Meta Ads</DialogTitle>
+          <DialogDescription className="text-t2 text-balance">
             Escolha como deseja conectar sua conta Meta Ads
-          </p>
-        </div>
+          </DialogDescription>
+        </DialogHeader>
 
         {/* Conteúdo: Escolha dos 2 Botões ou Tela de Aguardo */}
         {!aguardandoMultilogin ? (
-          <div className="mt-6 flex flex-col gap-4">
+          <div className="flex flex-col gap-4">
             {/* Opção 1: Continuar neste navegador */}
             <div className="flex flex-col gap-1.5">
-              <button
+              <Button
                 type="button"
+                size="lg"
+                className="w-full"
                 onClick={() => {
                   aoFechar();
                   aoContinuarNavegador();
                 }}
-                className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-brand px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-brand/20 transition hover:bg-brand-hover active:scale-[0.99] cursor-pointer"
               >
-                <ExternalLink className="h-4 w-4" />
-                <span>Continuar neste navegador</span>
-              </button>
-              <p className="text-center text-[11px] text-t3">
+                <ExternalLink aria-hidden />
+                Continuar neste navegador
+              </Button>
+              <p className="text-center text-label text-t2">
                 Conecte sua conta Meta Ads diretamente neste navegador
               </p>
             </div>
 
             {/* Opção 2: Copiar link para navegador multilogin */}
             <div className="flex flex-col gap-1.5">
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="lg"
+                className="w-full"
                 onClick={gerarECopiarLinkMultilogin}
-                disabled={copiando}
-                className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-border bg-[#0b0e14] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-[#111622] hover:border-border-subtle active:scale-[0.99] disabled:opacity-50 cursor-pointer"
+                pending={copiando}
               >
-                {copiando ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-brand" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-                <span>Copiar link para navegador multilogin</span>
-              </button>
-              <p className="text-center text-[11px] text-t3">
+                {copiando ? null : <Copy aria-hidden />}
+                Copiar link para navegador multilogin
+              </Button>
+              <p className="text-center text-label text-t2">
                 Gere um link para conectar em outro navegador ou compartilhar com colaboradores
               </p>
             </div>
           </div>
         ) : (
           /* Estado de Aguardo Multilogin */
-          <div className="mt-5 flex flex-col items-center gap-4 rounded-xl border border-brand/20 bg-brand/5 p-5 text-center">
-            <div className="relative flex h-12 w-12 items-center justify-center rounded-full bg-brand/10 text-brand">
-              <Loader2 className="h-6 w-6 animate-spin" />
-              <Sparkles className="absolute -top-1 -right-1 h-4 w-4 text-emerald-400" />
+          <div className="flex flex-col items-center gap-4 rounded-card border border-border bg-surface-2 p-5 text-center">
+            <div className="relative flex size-12 items-center justify-center rounded-full bg-surface text-brand">
+              <Loader2 className="size-6 animate-spin" aria-hidden />
+              <Sparkles className="absolute -top-1 -right-1 size-4 text-ok" aria-hidden />
             </div>
 
             <div className="flex flex-col gap-1">
-              <span className="text-sm font-semibold text-white">
+              <span className="text-dense font-semibold text-ink">
                 Aguardando autorização no multilogin...
               </span>
-              <p className="text-xs text-t2 text-balance">
+              <p className="text-label text-t1 text-balance">
                 Cole o link no seu navegador antidetect (Dolphin, AdsPower, etc.) onde o perfil do Facebook está logado.
               </p>
             </div>
 
             {/* Caixa com o link para re-copiar */}
-            <div className="flex w-full items-center gap-2 rounded-lg border border-border bg-[#0c0f16] p-2 text-left">
+            <div className="flex w-full items-center gap-2 rounded-control border border-border bg-surface p-2 text-left">
               <input
                 type="text"
                 readOnly
                 value={urlTicket || ""}
-                className="w-full bg-transparent text-[11px] font-mono text-t2 outline-none select-all truncate"
+                aria-label="Link para o navegador multilogin"
+                className="min-w-0 flex-1 truncate bg-transparent font-mono text-label text-t1 outline-none select-all"
               />
-              <button
-                type="button"
-                onClick={copiarNovamente}
-                className="flex shrink-0 items-center gap-1 rounded bg-surface px-2 py-1 text-[11px] font-medium text-white hover:bg-surface-elevated transition"
-              >
-                {copiado ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
-                <span>{copiado ? "Copiado" : "Copiar"}</span>
-              </button>
+              <Button type="button" variant="secondary" size="sm" onClick={copiarNovamente}>
+                {copiado ? <Check className="text-ok" aria-hidden /> : <Copy aria-hidden />}
+                {copiado ? "Copiado" : "Copiar"}
+              </Button>
             </div>
 
             <button
               type="button"
               onClick={() => setAguardandoMultilogin(false)}
-              className="text-xs text-t3 hover:text-white underline transition"
+              className="text-label text-t2 underline underline-offset-4 hover:text-ink"
             >
               Voltar às opções
             </button>
           </div>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

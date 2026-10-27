@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronUp, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { ConexaoOAuthResumo } from "../dados-anuncios";
 
@@ -38,8 +39,10 @@ export function CardPerfilGoogle({
 }) {
   const router = useRouter();
   const [pendente, startTransition] = useTransition();
-  const [conexoes, setConexoes] = useState<ConexaoOAuthResumo[]>(conexoesIniciais);
-  const [desconectandoId, setDesconectandoId] = useState<string | null>(null);
+  // A lista vem da prop: o router.refresh depois do popup traz o perfil novo.
+  // O estado guarda so quem foi desconectado aqui, ate o refresh chegar.
+  const [removidos, setRemovidos] = useState<Set<string>>(() => new Set());
+  const conexoes = conexoesIniciais.filter((c) => !removidos.has(c.id));
 
   // Escuta o evento de sucesso enviado pelo popup OAuth
   useEffect(() => {
@@ -51,10 +54,11 @@ export function CardPerfilGoogle({
         if (event.data.ok) {
           const nome = event.data.nome || "Conta Google";
           const total = event.data.contas;
-          toast.success(`${nome} conectada com sucesso!`, {
+          // Nada le o gasto do Google pela API ainda: so o script de cada conta
+          toast.success(`${nome} conectada.`, {
             description: total
-              ? `${total} conta(s) do Google Ads vinculada(s).`
-              : "Google Ads vinculado. Sincronização automática ativa.",
+              ? `${total} conta(s) do Google Ads encontrada(s). O gasto ainda entra pelo script de cada conta, abaixo.`
+              : "O gasto ainda entra pelo script de cada conta, abaixo.",
           });
           startTransition(() => {
             router.refresh();
@@ -88,26 +92,18 @@ export function CardPerfilGoogle({
     }
   }
 
+  // Chamada pelo ConfirmDialog: lanca na falha (HTTP ou rede) e o dialogo
+  // mostra o erro no lugar do toast.
   async function desconectar(id: string) {
-    setDesconectandoId(id);
-    try {
-      const resp = await fetch("/api/auth/google/desconectar", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ connectionId: id }),
-      });
-      if (resp.ok) {
-        toast.success("Conta Google desconectada.");
-        setConexoes((prev) => prev.filter((c) => c.id !== id));
-        startTransition(() => router.refresh());
-      } else {
-        toast.error("Erro ao desconectar conta.");
-      }
-    } catch {
-      toast.error("Falha de rede ao desconectar.");
-    } finally {
-      setDesconectandoId(null);
-    }
+    const resp = await fetch("/api/auth/google/desconectar", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ connectionId: id }),
+    });
+    if (!resp.ok) throw new Error(`desconectar: HTTP ${resp.status}`);
+    toast.success("Conta Google desconectada.");
+    setRemovidos((prev) => new Set(prev).add(id));
+    startTransition(() => router.refresh());
   }
 
   const temConexao = conexoes.length > 0;
@@ -122,7 +118,7 @@ export function CardPerfilGoogle({
           <div>
             <h3 className="text-dense font-medium text-ink">Google Ads</h3>
             <p className="text-label text-t2">
-              Conecte seus perfis por aqui (login em 1 clique):
+              O gasto ainda não vem por aqui: ele entra pelo script de cada conta, abaixo.
             </p>
           </div>
         </div>
@@ -175,17 +171,24 @@ export function CardPerfilGoogle({
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => desconectar(c.id)}
-                    disabled={desconectandoId === c.id}
-                    title="Desconectar conta Google"
-                    className="text-t3 hover:text-err"
-                  >
-                    <LogOut className="size-3.5" />
-                  </Button>
+                  <ConfirmDialog
+                    gatilho={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Desconectar ${c.nome || c.email || "esta conta Google"}`}
+                        className="text-t3 hover:text-err max-md:size-ctl-lg"
+                      >
+                        <LogOut className="size-3.5" aria-hidden />
+                      </Button>
+                    }
+                    titulo={`Desconectar ${c.nome || c.email || "esta conta Google"}?`}
+                    descricao="O perfil sai da lista e o gasto das contas pelo script continua entrando. Para conectá-lo de novo, você precisa autorizar o Google outra vez."
+                    confirmar="Desconectar"
+                    mensagemErro="Não deu para desconectar agora. Tente de novo."
+                    onConfirmar={() => desconectar(c.id)}
+                  />
                 </div>
               </div>
             ))}

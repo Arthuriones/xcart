@@ -13,21 +13,18 @@ import { CardPerfilGoogle } from "./card-perfil-google";
 
 /** O conteudo de Google com os dados ja lidos (a page le; aqui so desenha). */
 export function ConteudoGoogle({ d }: { d: DadosAnuncios }) {
-  const temConexaoOAuth = (d.conexoes?.length ?? 0) > 0;
-  const ligado = d.daPlataforma.length > 0 || temConexaoOAuth;
+  // O estado sai so das contas: o login com Google grava o perfil, mas nada le
+  // o gasto pela API ainda (sem developer token e sem job). Quem le e o script.
+  const ligado = d.daPlataforma.length > 0;
   const estadoLeitura = estadoScriptsGoogle(d.daPlataforma.map((c) => situacaoDaConta(c, d.agoraMs, d.fuso)));
-
-  const textoEstado = temConexaoOAuth
-    ? "Conectado · Login com Google"
-    : d.daPlataforma.length > 0
-      ? "Conectado · Modo manual"
-      : "Não conectado";
 
   return (
     <>
       <CabecalhoPlataforma
         titulo="Google Ads"
-        estado={ligado ? { tom: "ok", texto: textoEstado } : { tom: "neutral", texto: "Não conectado" }}
+        estado={
+          ligado ? { tom: "ok", texto: "Conectado · Modo manual" } : { tom: "neutral", texto: "Não conectado" }
+        }
         dica="As conversões saem do navegador do comprador, pela tag do Google, com o AW- e os rótulos de cada conta cadastrados no Rastreamento."
         acao={
           <Link
@@ -56,7 +53,7 @@ export function ConteudoGoogle({ d }: { d: DadosAnuncios }) {
           <CardPerfilGoogle conexoesIniciais={d.conexoes} />
 
           <Callout tom="info" titulo="São identificadores diferentes.">
-            O ID de cliente (123-456-7890) lê o gasto pelo script ou API; o AW- recebe as compras. Um não substitui o
+            O ID de cliente (123-456-7890) lê o gasto pelo script; o AW- recebe as compras. Um não substitui o
             outro.
           </Callout>
 
