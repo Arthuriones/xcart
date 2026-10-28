@@ -3,6 +3,7 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 import {
   JANELA_CHECKOUT_EXPRESSO_MS,
   PREFIXO_CHECKOUT_EXPRESSO,
+  PREFIXO_RESERVA_DA_PONTE,
   PREFIXO_RESERVA_DO_CHECKOUT,
   PREFIXOS_DE_RESERVA,
 } from "@/lib/tracking/eventos";
@@ -49,7 +50,14 @@ import { caminhoEhEndpoint, ipDoPedido, type PedidoShopify } from "@/lib/trackin
 // IPv6 o pedido chega por um endereço e o coletor viu outro (#1016 e #1017 da
 // Softnook). E SEM CHAVE, qualquer EXPRESSO pendente da loja barra a garantia:
 // pode ser o dele, e não há como saber. A reserva do clique comum não: nasce
-// no carrinho, que leva o `_xc_vid` ao pedido.
+// no carrinho, que leva o `_xc_vid` ao pedido. A da PONTE (`begin_checkout_rs_
+// ponte_*`: o clique na vitrine de rota ou no permalink da VSL) é uma reserva
+// do clique comum e entra na mesma leitura: quando o pedido não traz o
+// visitante dela, o IP ou o user agent a acham. Depois dos 30 min, o visitante
+// dela só chega ao pedido se a reescrita do link da ponte o levou
+// (`attributes[_xc_vid]`) e nada o trocou no caminho -- então ela tem mais uma
+// leitura, pelo IP do pedido, nas 24 h. Só o IP: o user agent em 24 h é de
+// muita gente.
 //
 // Erro de banco NÃO lança: sem saber, não manda a garantia -- falta um IC, não
 // sai um a mais -- e a compra segue como sempre.
@@ -222,10 +230,24 @@ export async function checkoutsDoComprador(
   const precisaDePagina = caminhoEhEndpoint(pedido.landing_site) && visitantes.length > 0;
 
   try {
-    const [porComprador, porIp, reservas, pagina] = await Promise.all([
+    const [porComprador, porIp, pontePorIp, reservas, pagina] = await Promise.all([
       Promise.all(comprador.map((c) => ics("visitor_id", c, desde))),
       // Sem chave, o IP acha também o clique comum do tema e o IC do pixel.
       !comprador.length && ipHash ? ics("ip_hash", ipHash, desdeExpresso) : null,
+      // A reserva da PONTE do mesmo IP, nas 24 h (ver o cabeçalho). Sem as
+      // canceladas no filtro, que é fixo.
+      ipHash
+        ? admin
+            .from("tracking_events")
+            .select("destination_id, status, sent_at")
+            .eq("store_id", storeId)
+            .eq("ip_hash", ipHash)
+            .eq("event_name", "begin_checkout")
+            .like("event_id", `${PREFIXO_RESERVA_DA_PONTE}%`)
+            .or("status.eq.pendente,and(status.eq.enviado,sent_at.not.is.null)")
+            .gte("created_at", desde)
+            .limit(50)
+        : null,
       // Uma leitura por prefixo (o expresso e a reserva do clique comum), cada
       // uma com o seu teto: o PostgREST não junta dois LIKE sem `or`.
       //
@@ -261,7 +283,7 @@ export async function checkoutsDoComprador(
     ]);
 
     let jaIniciados: Set<string> | null = new Set();
-    for (const r of [...porComprador, porIp]) {
+    for (const r of [...porComprador, porIp, pontePorIp]) {
       if (!r) continue;
       if (r.error) {
         console.error("[tracking/garantia] falha ao conferir o IC do comprador", r.error.message);

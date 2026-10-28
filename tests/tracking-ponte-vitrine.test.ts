@@ -261,9 +261,29 @@ function abrir(opts: {
     sair: () => {
       for (const o of daJanela) if (o.tipo === "pagehide") o.fn({});
     },
+    /** O clique (sintetico ou nao) num link: os ouvintes de captura do document. Devolve o href na navegacao. */
+    clicar: (a: ReturnType<typeof link>) => {
+      const e = { target: { closest: (sel: string) => (sel === "a[href]" ? a : null) } };
+      for (const o of doDocumento) if (o.tipo === "click") o.fn(e);
+      return a.getAttribute("href");
+    },
     rodarTimers: () => timers.splice(0).forEach((fn) => fn()),
     andar: (ms: number) => {
       relogio += ms;
+    },
+  };
+}
+
+/**
+ * Um <a>. `rota` = o link que o loader cria e clica para levar o carrinho a
+ * loja de checkout (irParaCheckout, marca data-xcart-rota).
+ */
+function link(href: string, rota = false) {
+  const attrs: Record<string, string> = { href, ...(rota ? { "data-xcart-rota": "1" } : {}) };
+  return {
+    getAttribute: (n: string) => attrs[n] ?? null,
+    setAttribute: (n: string, v: string) => {
+      attrs[n] = v;
     },
   };
 }
@@ -449,6 +469,108 @@ describe("ponte na vitrine de rota: adicionar ao carrinho", () => {
     p.rodarTimers();
     expect(eventos(p.envios)).toEqual(["page_view", "view_item"]);
     expect(p.envios[1].produto).toBeNull();
+  });
+});
+
+/**
+ * Abriu checkout = InitiateCheckout. Na rota o comprador clica em "Finalizar
+ * compra" na VITRINE; o loader cria um <a data-xcart-rota> com o permalink da
+ * loja de checkout sorteada e da .click() -- e o clique passa pelos ouvintes de
+ * captura do document, onde a ponte o ve. Sem isto, o IC so saia se o Web Pixel
+ * do checkout rodasse (consentimento negado e Shop Pay em shop.app ficavam sem
+ * IC; medido na Stepz: 64 do pixel contra 32 de garantia em 7 dias).
+ */
+describe("ponte na vitrine de rota: abriu checkout = InitiateCheckout", () => {
+  const inicios = (envios: Corpo[]) => envios.filter((e) => e.evento === "begin_checkout");
+  const CARRINHO = "https://vitrine.com/cart";
+
+  it("o link do loader para ESTA loja: begin_checkout como a loja de checkout, sem produto e sem valor", async () => {
+    const p = abrir({ url: CARRINHO, produto: null });
+    await assentar();
+    p.clicar(link(`https://${SHOP}/cart/9111:1,9222:2?country=GB`, true));
+    const ics = inicios(p.envios);
+    expect(ics.length).toBe(1);
+    expect(ics[0]).toMatchObject({
+      shop: SHOP,
+      storeId: STORE,
+      fonte: "ponte",
+      visitorId: p.envios[0].visitorId,
+      pageUrl: CARRINHO,
+    });
+    // O carrinho pode ter varios itens: sem produto, como o clique do tema.
+    expect(ics[0].produto).toBeNull();
+    expect(JSON.stringify(ics[0])).not.toMatch(/"value"|"currency"|"price"/);
+  });
+
+  it("pelo dominio de checkout da lista tambem; uma vez por aba em 30 min", async () => {
+    const sessao = new Map<string, string>();
+    const destino = () => link("https://www.checkout-x.store/cart/9111:1", true);
+    const p = abrir({ url: CARRINHO, produto: null, sessao });
+    p.clicar(destino());
+    p.clicar(destino());
+    expect(inicios(p.envios).length).toBe(1);
+    // Voltou do checkout (outra pagina, mesma aba) e clicou de novo: a mesma tentativa.
+    const volta = abrir({ url: CARRINHO, produto: null, sessao });
+    volta.clicar(destino());
+    expect(inicios(volta.envios)).toEqual([]);
+    // Passados os 30 min, e outra.
+    volta.andar(31 * 60e3);
+    volta.clicar(destino());
+    expect(inicios(volta.envios).length).toBe(1);
+  });
+
+  it("rodizio com as duas lojas rastreadas (uma tag por loja): o IC de uma nao tranca o da outra na mesma aba", async () => {
+    // As duas tags rodam na mesma pagina e dividem o sessionStorage da aba.
+    const sessao = new Map<string, string>();
+    const B = "outra.myshopify.com";
+    const a = abrir({ url: CARRINHO, produto: null, sessao });
+    const b = abrir({
+      url: CARRINHO,
+      produto: null,
+      sessao,
+      tag: { "data-xcart-destinos": B, "data-xcart-shop": B, "data-xcart-store": "99999999-2222-3333-4444-555555555555" },
+    });
+    // 1o Finalizar: o sorteio cai na A.
+    a.clicar(link(`https://${SHOP}/cart/9111:1`, true));
+    expect(inicios(a.envios).map((e) => e.shop)).toEqual([SHOP]);
+    // Voltou e clicou de novo, minutos depois: agora o sorteio cai na B.
+    b.clicar(link(`https://${B}/cart/7777:1`, true));
+    expect(inicios(b.envios).map((e) => e.shop)).toEqual([B]);
+    // E a A segue com a janela dela.
+    a.clicar(link(`https://${SHOP}/cart/9111:1`, true));
+    expect(inicios(a.envios).length).toBe(1);
+  });
+
+  it("rodizio: o sorteio mandou a OUTRA loja de checkout -- nada sai como esta, e o link fica intocado", async () => {
+    const p = abrir({ url: CARRINHO, produto: null });
+    const outra = "https://outra.myshopify.com/cart/7777:1?country=GB";
+    expect(p.clicar(link(outra, true))).toBe(outra);
+    expect(inicios(p.envios)).toEqual([]);
+  });
+
+  it("so o link do checkout: o /checkout da vitrine, o produto e o /cart da loja nao sao IC", async () => {
+    const p = abrir({ url: CARRINHO, produto: null });
+    p.clicar(link("/checkout"));
+    p.clicar(link(`https://${SHOP}/products/tenis`));
+    p.clicar(link(`https://${SHOP}/cart`));
+    p.clicar(link(`https://${SHOP}.evil.com/cart/9111:1`, true));
+    expect(inicios(p.envios)).toEqual([]);
+  });
+
+  it("na propria loja do rastreamento, nada: quem conta e o snippet do tema e o pixel", async () => {
+    const p = abrir({ url: `https://${SHOP}/cart`, produto: null, loja: SHOP });
+    p.clicar(link(`https://${SHOP}/cart/9111:1`, true));
+    expect(inicios(p.envios)).toEqual([]);
+  });
+
+  it("pagina de checkout externo (Cakto) nao manda IC de loja", async () => {
+    const p = abrir({
+      url: CARRINHO,
+      produto: null,
+      tag: { "data-xcart-checkout": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b" },
+    });
+    p.clicar(link(`https://${SHOP}/cart/9111:1`, true));
+    expect(inicios(p.envios).filter((e) => e.shop)).toEqual([]);
   });
 });
 

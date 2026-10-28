@@ -413,6 +413,21 @@ export function idDaReservaDoCheckout(visitorId: string, quandoMs: number): stri
   return `${PREFIXO_RESERVA_DO_CHECKOUT}${visitorId}_${Math.floor(quandoMs / BALDE_CHECKOUT_EXPRESSO_MS)}`;
 }
 
+/**
+ * A reserva do clique que a PONTE viu (xcart-bridge.js, fonte "ponte"): o link
+ * que o loader clica na vitrine de uma rota, ou o permalink /cart/VARIANTE:QTD
+ * de uma VSL. E a reserva do clique comum com uma marca a mais: o MESMO prefixo
+ * (janela, atraso, cancelamento pelo visitante, drain, IC de garantia e
+ * historico valem igual), e o pixel do checkout acha esta tambem pelo IP -- o
+ * clientId dele e de outra loja, e o visitante da ponte so chega ao checkout
+ * quando vai como atributo do carrinho. Ver o coletor.
+ */
+export const PREFIXO_RESERVA_DA_PONTE = `${PREFIXO_RESERVA_DO_CHECKOUT}ponte_`;
+
+export function idDaReservaDaPonte(visitorId: string, quandoMs: number): string {
+  return `${PREFIXO_RESERVA_DA_PONTE}${visitorId}_${Math.floor(quandoMs / BALDE_CHECKOUT_EXPRESSO_MS)}`;
+}
+
 /** As linhas que esperam o pixel na fila e que ele cancela: o expresso e a reserva do clique comum. */
 export const PREFIXOS_DE_RESERVA = [PREFIXO_CHECKOUT_EXPRESSO, PREFIXO_RESERVA_DO_CHECKOUT] as const;
 

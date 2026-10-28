@@ -48,7 +48,8 @@
  *           defer></script>
  *
  * Com `data-xcart-store` e `data-xcart-shop` a ponte tambem avisa o coletor do
- * xcart -- PageView ao abrir e ViewContent do produto dos botoes de compra --
+ * xcart -- PageView ao abrir, ViewContent do produto dos botoes de compra e
+ * InitiateCheckout no clique do link direto para o checkout (3c) --
  * e e o NOSSO servidor que fala com o Meta e o TikTok, igual ao snippet do
  * tema. A pagina nao precisa (e nao deve) ter o pixel do Meta no navegador:
  * contaria em dobro. Por isso a ponte gera o _fbp quando falta, como o
@@ -86,7 +87,11 @@
  *
  *   - view_item na pagina de produto (uma vez por produto em 30 min na aba);
  *   - add_to_cart quando o /cart/add da vitrine da certo -- fetch, XHR ou o
- *     submit nativo do formulario, com a janela de 8 s do snippet do tema.
+ *     submit nativo do formulario, com a janela de 8 s do snippet do tema;
+ *   - begin_checkout no clique do link que o loader cria para levar o
+ *     carrinho a loja de checkout, so quando o destino e ESTA loja (3c). O
+ *     pixel do checkout, quando roda, o cancela pelo visitante ou pelo IP (o
+ *     clientId dele e de outra loja).
  *
  * O produto e o da LOJA DE CHECKOUT: a variante da vitrine nao existe no
  * catalogo dela. A ponte le o mesmo xcart-config.json que o loader usa para
@@ -901,6 +906,44 @@
     if (!repetido("begin_checkout")) entregar(corpoDoEvento("begin_checkout", null));
   }
 
+  // ---- 3c. o checkout da LOJA rastreada: abriu checkout = InitiateCheckout --
+  //
+  // Sem nada preenchido, no clique que leva ao checkout dela. Dois caminhos:
+  //
+  //   - o link que o loader de roteamento cria e clica para levar o carrinho da
+  //     vitrine a loja de checkout (marca data-xcart-rota);
+  //   - o link direto para o checkout numa VSL/advertorial, /cart/VARIANTE:QTD.
+  //
+  // So quando o link vai para ESTA loja (data-xcart-shop ou um dominio da
+  // lista): com rodizio o sorteio pode mandar a outra loja de checkout, e o IC
+  // dela nao e daqui. Na propria loja quem conta e o snippet do tema.
+  //
+  // Com o Web Pixel cobrindo a loja o coletor guarda o clique como RESERVA: o
+  // checkout_started do pixel (o IC rico) a cancela, pelo visitante ou pelo IP,
+  // e ela so sai quando o pixel nao roda (consentimento negado, Shop Pay em
+  // shop.app). Sem pixel, sai na hora. Uma vez em 30 min por aba, sem valor e
+  // sem gtag; sendBeacon, porque a navegacao vem logo depois. Isto so manda o
+  // evento: nao poe nada no link.
+  function checkoutDaLoja(a, href) {
+    if (!COLETOR || !SHOP || CHECKOUT_ID) return;
+    if (LOJA_DA_PAGINA === SHOP) return;
+    var u;
+    try {
+      u = new URL(href, location.href);
+    } catch (e) {
+      return;
+    }
+    if (u.protocol !== "http:" && u.protocol !== "https:") return;
+    var host = u.hostname.toLowerCase().replace(/^www\./, "");
+    if (host !== SHOP && !ehDestino(u.href)) return;
+    var daRota = !!a.getAttribute && a.getAttribute("data-xcart-rota") !== null;
+    if (!daRota && !/^\/cart\/\d+:\d+/.test(u.pathname)) return;
+    // A janela e por loja: a vitrine com duas lojas do rodizio rastreadas leva
+    // uma tag de cada, no mesmo sessionStorage, e o IC de uma nao tranca o da
+    // outra quando o proximo sorteio cai nela.
+    if (!repetido("begin_checkout:" + SHOP)) entregar(corpoDoEvento("begin_checkout", null));
+  }
+
   // Ultima rede de seguranca, na fase de captura: pega link cujo href foi
   // definido por JS no proprio clique, antes de a navegacao acontecer.
   document.addEventListener(
@@ -909,7 +952,10 @@
       var a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
       if (!a) return;
       var href = a.getAttribute("href");
-      if (!href || !ehDestino(href)) return;
+      if (!href) return;
+      // Pelo href como o loader (ou a pagina) o montou, antes da reescrita.
+      checkoutDaLoja(a, href);
+      if (!ehDestino(href)) return;
       var novo = comParametros(href);
       if (novo !== href) a.setAttribute("href", novo);
       inicioDoCheckout();

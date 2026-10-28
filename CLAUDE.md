@@ -122,16 +122,39 @@ Every AI call receives `StoreContext` (name, niche, target_audience, brand_voice
   sobrevive e nao existe buraco nenhum. O conserto para quem usa roteamento
   seria um token opaco no permalink, resolvido so no nosso servidor (nao o id da
   rota, que era o que existia antes e foi removido de proposito). Fica anotado,
-  nao feito.
-- **Na vitrine de rota, quem mede produto e carrinho e a PONTE** (`xcart-bridge.js`
+  nao feito. **Mas com a PONTE no tema da vitrine (5ce03c5, 25/10) o link sai com
+  eles**: a reescrita dela (`comParametros`) poe click ids, UTMs, `attributes[_fbp]`,
+  `attributes[_xc_vid]` e `attributes[_xc_utm_*]` no `<a data-xcart-rota>` do loader
+  quando o host esta em `data-xcart-destinos` (a tag gerada lista os dominios da loja de
+  checkout). `buildCartPermalink` segue sem attributes. Manter ou tirar e decisao do
+  Arthur, pendente; sem o `_xc_vid` o IC da ponte (abaixo) fica casado so pelo IP.
+- **Na vitrine de rota, quem mede produto, carrinho e o abrir do checkout e a PONTE** (`xcart-bridge.js`
   com `data-xcart-shop` = a loja de checkout, colada no tema da vitrine; ARCHITECTURE.md
   §10.4): com o loader na pagina e `Shopify.shop` diferente da loja rastreada, manda
   `view_item` e `add_to_cart` (fetch, XHR lendo o item da resposta, submit nativo; janela
   de 8 s do snippet) COMO a loja de checkout. O produto e a variante DO CHECKOUT pelo
   `xcart-config.json` do loader (variant_map, depois sku_map; SKU so com o par do
   sku_map); sem par vai sem produto, nunca o id da vitrine. O `product_added_to_cart`
-  do Web Pixel fica de fora de proposito (duplicaria o do snippet). Travado por
-  `tests/tracking-ponte-vitrine.test.ts`.
+  do Web Pixel fica de fora de proposito (duplicaria o do snippet). **Abriu checkout =
+  IC**: no clique do `<a data-xcart-rota>` que o loader cria (e, na VSL, do permalink
+  `/cart/ID:QTD`) para ESTA loja -- host = `data-xcart-shop` ou da lista; o sorteio que
+  manda a OUTRA loja do rodizio nao conta -- a ponte manda `begin_checkout` (sem valor,
+  sem produto, sem gtag, 1x por aba e por loja em 30 min -- a vitrine com as duas lojas
+  do rodizio rastreadas tem uma tag de cada). O envio nao mexe no link; a reescrita de
+  sempre da ponte mexe (bullet acima). Com o pixel
+  cobrindo vira reserva `begin_checkout_rs_ponte_*` (`idDaReservaDaPonte`, da familia da
+  `rs_`: drain, garantia e historico iguais), que o begin_checkout do pixel cancela pelo
+  visitante (o `_xc_vid` que a reescrita leva como atributo) ou PELO IP -- o clientId do
+  pixel e de outra loja; so a marca da ponte, so `pendente`, so do pixel com token e so
+  10 min para tras (`JANELA_RESERVA_DA_PONTE_PELO_IP_MS`), inclusive no `duplicado`. A
+  reconferencia da reserva ja procura o pixel do mesmo IP (a ponte nao manda clientId).
+  A garantia a acha por visitante, IP ou user agent nos 30 min da leitura das reservas e,
+  depois, pelo visitante do pedido ou por uma leitura a mais da marca da ponte pelo IP
+  nas 24 h (sem user agent: em 24 h e de muita gente) -- o pedido pago 40 min depois do
+  clique, sem o `_xc_vid` da ponte, mandava o 2o IC. IP trocado (IPv6) e sem o
+  `_xc_vid`, ainda pode dobrar. Travado por `tests/tracking-ponte-vitrine.test.ts`,
+  `tests/tracking-ponte-advertorial.test.ts`, o bloco "reserva da ponte" de
+  `tests/tracking-checkout-expresso.test.ts` e `tests/tracking-checkout-de-garantia.test.ts`.
 - **Pedido de app de COD (Releasit) acha o visitante pelo IP da NOTA** (ARCHITECTURE.md
   §13.12): o Releasit cria o pedido pela API, sem `browser_ip`, `client_details`,
   `checkout_token` nem atributo do carrinho -- o IP so vem na nota, chave `IP address`.

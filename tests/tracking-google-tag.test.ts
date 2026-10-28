@@ -174,7 +174,11 @@ describe("contas Google para o navegador", () => {
     expect(coletor).toContain(
       'const reservaComum = !doPixel && evento === "begin_checkout" && pixelCobrindo && !expresso;'
     );
-    expect(coletor).toContain("if (reservaComum) eventId = idDaReservaDoCheckout(visitorId, Date.now());");
+    // O clique que a ponte viu (vitrine de rota, VSL) e a mesma reserva, com a
+    // marca da ponte no id ("reserva da ponte" no mesmo arquivo).
+    expect(coletor).toMatch(
+      /if \(reservaComum\) \{\s+eventId = daPonte \? idDaReservaDaPonte\(visitorId, Date\.now\(\)\) : idDaReservaDoCheckout\(visitorId, Date\.now\(\)\);\s+\}/
+    );
     expect(coletor).not.toContain("checkout coberto pelo Web Pixel");
     // A dedupe de 10 min do pixel NAO vale contra a reserva: o IC do pixel e
     // o rico, e e ele que cancela a outra.

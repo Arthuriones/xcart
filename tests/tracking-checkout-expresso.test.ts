@@ -5,6 +5,8 @@ import vm from "node:vm";
 import {
   ATRASO_CHECKOUT_EXPRESSO_MS,
   ATRASO_RESERVA_DO_CHECKOUT_MS,
+  PREFIXO_RESERVA_DA_PONTE,
+  idDaReservaDaPonte,
   idDaReservaDoCheckout,
   idDoCheckoutExpresso,
 } from "../src/lib/tracking/eventos";
@@ -348,7 +350,13 @@ const ZERADO = "00000000-0000-0000-0000-000000000000";
  * manda ao coletor no checkout_started. `cookies` e o que `browser.cookie.get`
  * responde -- o mesmo caminho do _xc_teste.
  */
-async function beaconDoPixel(opcoes: { clientId: string; token: string; cookies: Record<string, string> }) {
+async function beaconDoPixel(opcoes: {
+  clientId: string;
+  token: string;
+  cookies: Record<string, string>;
+  /** Os atributos do carrinho (`checkout.attributes`): o permalink da VSL leva o `_xc_vid` da ponte. */
+  atributos?: { key: string; value: string }[];
+}) {
   const handlers: Record<string, (e: unknown) => void> = {};
   const beacons: Record<string, unknown>[] = [];
   const api = {
@@ -381,7 +389,7 @@ async function beaconDoPixel(opcoes: { clientId: string; token: string; cookies:
   handlers.checkout_started({
     id: "e7",
     clientId: opcoes.clientId,
-    data: { checkout: { token: opcoes.token, attributes: [] } },
+    data: { checkout: { token: opcoes.token, attributes: opcoes.atributos ?? [] } },
     context: { document: { location: { href: "https://loja.test/checkouts/x" }, referrer: "" } },
   });
   // As leituras de cookie sao Promise: o evento espera por elas.
@@ -1076,5 +1084,205 @@ describe("coletor: reserva do clique comum (pixel cobrindo)", () => {
     vi.setSystemTime(AGORA + 1 * MIN);
     await postar({ ...CLIQUE, eventId: "begin_checkout_vid-1_9" });
     expect(noMeta()).toEqual([CLIQUE.eventId, "begin_checkout_vid-1_9"]);
+  });
+});
+
+// ============================================================================
+// A reserva da PONTE: abriu checkout = IC, na vitrine de rota e na VSL.
+//
+// A ponte (xcart-bridge.js) manda o begin_checkout no clique do link que o
+// loader cria na vitrine para levar o carrinho a loja de checkout, e no clique
+// do permalink /cart/VARIANTE:QTD de uma VSL -- como a loja de checkout, fonte
+// "ponte". Com o pixel cobrindo vira reserva, com a marca da ponte no id. O
+// pixel do checkout nem sempre tem o visitante dela (so quando ele vai como
+// atributo do carrinho) e o clientId dele e de OUTRA loja: sem o IP, quem
+// consentiu tinha dois IC.
+// ============================================================================
+
+describe("coletor: reserva da ponte (vitrine de rota e VSL)", () => {
+  const VID = "mvs6l2h4.1f78oowh";
+  const IP = "203.0.113.9";
+  const pt = (vid: string, quando = AGORA) => idDaReservaDaPonte(vid, quando);
+  /** O que a ponte manda no clique: sem clientId, sem produto, sem valor. */
+  const DA_PONTE = {
+    evento: "begin_checkout",
+    eventId: `begin_checkout_${VID}_1793195976137`,
+    visitorId: VID,
+    fonte: "ponte",
+    fbclid: "ABC123",
+    produto: null,
+    pageUrl: "https://vitrine.test/cart",
+  };
+  /** O checkout_started do pixel da loja de checkout, com consentimento: o clientId e de la. */
+  const PIXEL_DA_LOJA = { ...DO_PIXEL, visitorId: "cli-77", clientId: "cli-77", checkoutToken: "T77" };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(AGORA);
+    mundo.eventos.length = 0;
+    mundo.meta.length = 0;
+    mundo.identidades.length = 0;
+    mundo.antesDeEnfileirar = null;
+    mundo.aoLerPendentes = null;
+    mundo.duranteMeta = null;
+    mundo.respostaMeta = null;
+    mundo.pixelVistoEm = AGORA - 10 * MIN;
+    bancoFalso();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("pixel cobrindo: o clique vira a reserva DA PONTE, 2 min, com o event_time do clique; sem pixel, o cron a manda", async () => {
+    const r = await postar(DA_PONTE, IP);
+    expect(r.destinos).toEqual({ "meta:dest-met": "aguardando o pixel" });
+    expect(pt(VID).startsWith(PREFIXO_RESERVA_DA_PONTE)).toBe(true);
+    expect(linha(pt(VID))).toMatchObject({
+      event_name: "begin_checkout",
+      visitor_id: VID,
+      shopify_client_id: null,
+      status: "pendente",
+      next_attempt_at: new Date(AGORA + ATRASO_RESERVA_DO_CHECKOUT_MS).toISOString(),
+    });
+    expect(linha(pt(VID)).ip_hash).toBeTruthy();
+    expect(linha(pt(VID)).payload).toMatchObject({
+      event_name: "InitiateCheckout",
+      event_id: pt(VID),
+      event_time: Math.floor(AGORA / 1000),
+      event_source_url: "https://vitrine.test/cart",
+    });
+    expect(JSON.stringify(linha(pt(VID)).payload)).not.toMatch(/"value"|"currency"/);
+    expect(mundo.meta).toEqual([]);
+
+    // Consentimento negado e Shop Pay em shop.app: o pixel nao roda, e ela sai.
+    expect(await drenar(AGORA + 2 * MIN)).toMatchObject({ pegos: 1, enviados: 1 });
+    expect(noMeta()).toEqual([pt(VID)]);
+    expect(mundo.meta[0].payload.event_time).toBe(Math.floor(AGORA / 1000));
+  });
+
+  it("com consentimento: o pixel da loja de checkout (outro clientId, sem o visitante) cancela pelo IP -- um IC, o do pixel", async () => {
+    await postar(DA_PONTE, IP);
+    // A rota leva segundos ate o checkout_started.
+    vi.setSystemTime(AGORA + 4e3);
+    expect(await postar(PIXEL_DA_LOJA, IP)).not.toHaveProperty("ignorado");
+    expect(linha(pt(VID))).toMatchObject({
+      status: "enviado",
+      sent_at: null,
+      response: { enviado: false, substituido_por: "pixel" },
+    });
+    expect(linha(pt(VID)).last_error).toMatch(/^cancelado: .*mesmo IP/);
+    await drenar(AGORA + 10 * MIN);
+    expect(noMeta()).toEqual(["begin_checkout_ck_T77"]);
+  });
+
+  it("sem consentimento (clientId zerado, sem cookie nem atributo): tambem pelo IP", async () => {
+    await postar(DA_PONTE, IP);
+    vi.setSystemTime(AGORA + 4e3);
+    const corpo = await beaconDoPixel({ clientId: ZERADO, token: "T78", cookies: {} });
+    expect(corpo).not.toHaveProperty("vidDoTema");
+    await postar(corpo, IP);
+    expect(linha(pt(VID))).toMatchObject({ status: "enviado", sent_at: null });
+    await drenar(AGORA + 10 * MIN);
+    expect(noMeta()).toEqual(["begin_checkout_ck_T78"]);
+  });
+
+  it("VSL: o pixel le o _xc_vid que a ponte pos no permalink e cancela pelo visitante, mesmo com o IP trocado", async () => {
+    await postar(DA_PONTE, IP);
+    vi.setSystemTime(AGORA + 4e3);
+    const corpo = await beaconDoPixel({
+      clientId: ZERADO,
+      token: "T79",
+      cookies: {},
+      atributos: [{ key: "_xc_vid", value: VID }],
+    });
+    expect(corpo).toMatchObject({ vidDoTema: VID });
+    // O checkout abriu por IPv6; a ponte foi vista por IPv4.
+    await postar(corpo, "2001:db8:85a3::8a2e:370:7334");
+    expect(linha(pt(VID))).toMatchObject({ status: "enviado", sent_at: null });
+    expect(linha(pt(VID)).last_error).not.toMatch(/mesmo IP/);
+    await drenar(AGORA + 10 * MIN);
+    expect(noMeta()).toEqual(["begin_checkout_ck_T79"]);
+  });
+
+  it("o IP so derruba a reserva DA PONTE, so do mesmo IP e so dos 10 min antes do pixel", async () => {
+    // A ponte de 11 min atras, do mesmo IP: outra tentativa (o cron ja a teria mandado).
+    vi.setSystemTime(AGORA - 11 * MIN);
+    await postar({ ...DA_PONTE, visitorId: "velho.ponte" }, IP);
+    vi.setSystemTime(AGORA);
+    // A ponte de outro IP, agora.
+    await postar({ ...DA_PONTE, visitorId: "outro.ip" }, "198.51.100.4");
+    // O clique comum do TEMA de outra pessoa da casa (mesmo IP, sem clientId).
+    await postar({ ...DO_TEMA, visitorId: "outra.pessoa", clientId: null }, IP);
+    expect(linha(idDaReservaDoCheckout("outra.pessoa", AGORA)).status).toBe("pendente");
+
+    vi.setSystemTime(AGORA + 5e3);
+    await postar(PIXEL_DA_LOJA, IP);
+    expect(linha(pt("velho.ponte", AGORA - 11 * MIN)).status).toBe("pendente");
+    expect(linha(pt("outro.ip")).status).toBe("pendente");
+    expect(linha(idDaReservaDoCheckout("outra.pessoa", AGORA)).status).toBe("pendente");
+  });
+
+  it("checkout lento: a reserva da ponte ja saiu quando o pixel do mesmo IP chega (dentro dos 10 min) -- o IP nao a desfaz", async () => {
+    await postar(DA_PONTE, IP);
+    expect(await drenar(AGORA + 2 * MIN)).toMatchObject({ enviados: 1 });
+    const enviada = linha(pt(VID)).sent_at;
+    expect(enviada).toBeTruthy();
+
+    vi.setSystemTime(AGORA + 3 * MIN);
+    await postar(PIXEL_DA_LOJA, IP);
+    // Entregue ao Meta: segue enviada, sem a marca de cancelada.
+    expect(linha(pt(VID))).toMatchObject({ status: "enviado", sent_at: enviada });
+    expect(String(linha(pt(VID)).last_error ?? "")).not.toMatch(/cancelado/);
+  });
+
+  it("o pixel so cancela pelo IP no begin_checkout: o payment_info nao mexe na reserva", async () => {
+    await postar(DA_PONTE, IP);
+    vi.setSystemTime(AGORA + 30e3);
+    await postar({ ...PIXEL_DA_LOJA, evento: "payment_info", eventId: "payment_info_e1" }, IP);
+    expect(linha(pt(VID)).status).toBe("pendente");
+  });
+
+  it("corrida: o pixel inteiro entre a janela e o INSERT da reserva da ponte -- ela se fecha pelo IP", async () => {
+    mundo.antesDeEnfileirar = async (eventId) => {
+      if (!eventId.startsWith(PREFIXO_RESERVA_DA_PONTE)) return;
+      mundo.antesDeEnfileirar = null;
+      vi.setSystemTime(AGORA + 2e3);
+      expect((await postar(PIXEL_DA_LOJA, IP)).destinos).toEqual({ "meta:dest-met": "enviado" });
+    };
+    const r = await postar(DA_PONTE, IP);
+    expect(r.destinos).toEqual({ "meta:dest-met": "cancelado: checkout ja iniciado" });
+    expect(linha(pt(VID, AGORA))).toMatchObject({
+      status: "enviado",
+      sent_at: null,
+      response: { enviado: false, substituido_por: "pixel" },
+    });
+    await drenar(AGORA + 10 * MIN);
+    expect(noMeta()).toEqual(["begin_checkout_ck_T77"]);
+  });
+
+  it("volta ao MESMO checkout depois de 30 min: o pixel duplicado derruba a reserva da ponte pelo IP", async () => {
+    vi.setSystemTime(AGORA - 40 * MIN);
+    await postar(PIXEL_DA_LOJA, IP);
+    vi.setSystemTime(AGORA);
+    expect((await postar(DA_PONTE, IP)).destinos).toEqual({ "meta:dest-met": "aguardando o pixel" });
+    vi.setSystemTime(AGORA + 3e3);
+    expect((await postar(PIXEL_DA_LOJA, IP)).destinos).toEqual({ "meta:dest-met": "duplicado" });
+    expect(linha(pt(VID))).toMatchObject({ status: "enviado", sent_at: null });
+    await drenar(AGORA + 10 * MIN);
+    expect(noMeta()).toEqual(["begin_checkout_ck_T77"]);
+  });
+
+  it("varios cliques na mesma tentativa: um IC so (a janela de 30 min do visitante)", async () => {
+    await postar(DA_PONTE, IP);
+    vi.setSystemTime(AGORA + 5 * MIN);
+    expect(await postar({ ...DA_PONTE, eventId: `begin_checkout_${VID}_2` }, IP)).toMatchObject({
+      ignorado: "checkout ja iniciado nos ultimos 30 min",
+    });
+  });
+
+  it("loja sem pixel cobrindo: o clique da ponte sai na hora, com o id do navegador", async () => {
+    mundo.pixelVistoEm = AGORA - 8 * 24 * 60 * MIN;
+    expect((await postar(DA_PONTE, IP)).destinos).toEqual({ "meta:dest-met": "enviado" });
+    expect(noMeta()).toEqual([DA_PONTE.eventId]);
   });
 });

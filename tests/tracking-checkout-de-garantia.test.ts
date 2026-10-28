@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { fakeSupabase, type FakeSupabase } from "./_fake-supabase";
 import {
   ATRASO_RESERVA_DO_CHECKOUT_MS,
+  idDaReservaDaPonte,
   idDaReservaDoCheckout,
   idDoEventoDoCheckout,
 } from "../src/lib/tracking/eventos";
@@ -608,6 +609,75 @@ describe("IC de garantia no webhook orders/create", () => {
       event_id: reserva,
       custom_data: expect.objectContaining({ value: 96.18 }),
     });
+  });
+
+  // ---- a reserva da PONTE (vitrine de rota, VSL) ----------------------------
+  //
+  // O clique na vitrine que o loader leva a loja de checkout: a ponte manda o
+  // begin_checkout como a loja de checkout, e ele vira a reserva da ponte. O
+  // pedido nasce na loja de checkout sem o `_xc_vid` da vitrine; o IP (ou o user
+  // agent) o acha, como a reserva do clique comum.
+  const DA_PONTE = {
+    evento: "begin_checkout",
+    eventId: "begin_checkout_mvit0001.ponte001_1",
+    visitorId: "mvit0001.ponte001",
+    fonte: "ponte",
+    pageUrl: "https://vitrine.test/cart",
+  };
+
+  it("reserva da ponte e compra pelo Shop Pay, pedido sem chave: a compra a ENRIQUECE -- um IC, o do clique", async () => {
+    vi.setSystemTime(AGORA - 50e3);
+    expect(await coletor(DA_PONTE)).toMatchObject({ destinos: { "meta:dest-met": "aguardando o pixel" } });
+    const reserva = idDaReservaDaPonte(DA_PONTE.visitorId, AGORA - 50e3);
+    expect(linha(reserva)).toMatchObject({ status: "pendente" });
+
+    vi.setSystemTime(AGORA);
+    expect((await webhook(SEM_CARRINHO)).corpo).toMatchObject({
+      checkoutDeGarantia: { "meta:dest-met": "na reserva do clique" },
+    });
+    expect(linha(idDoEventoDoCheckout("begin_checkout", "outro-token"))).toBeUndefined();
+    await drenar(AGORA + 5 * MIN);
+    expect(ics()).toHaveLength(1);
+    const ic = mundo.saiu.find((s) => s.evento.event_name === "InitiateCheckout")!.evento;
+    expect(ic).toMatchObject({ event_id: reserva, event_time: Math.floor((AGORA - 50e3) / 1000) });
+    expect(ic.custom_data).toMatchObject({ value: 96.18 });
+  });
+
+  it("reserva da ponte ja enviada (o pixel nao rodou) e o pedido chega depois, com outra chave: a garantia nao dobra", async () => {
+    vi.setSystemTime(AGORA - 10 * MIN);
+    await coletor(DA_PONTE);
+    await drenar(AGORA - 7 * MIN);
+    expect(ics()).toHaveLength(1);
+
+    vi.setSystemTime(AGORA);
+    // O pedido traz o _xc_vid e o clientId do tema da LOJA DE CHECKOUT: nenhum e o da ponte.
+    expect((await webhook()).corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "já iniciado" } });
+    expect(ics()).toHaveLength(1);
+  });
+
+  // Fora da leitura de 30 min das reservas, so o visitante do pedido acharia a
+  // da ponte -- e ele so chega se a reescrita do link (attributes[_xc_vid]) o
+  // levou e nada o trocou depois. O IP a acha nas 24 h.
+  it("reserva da ponte enviada 40 min antes e pedido SEM o visitante dela: o IP a acha nas 24 h, a garantia nao dobra", async () => {
+    vi.setSystemTime(AGORA - 40 * MIN);
+    await coletor(DA_PONTE);
+    await drenar(AGORA - 37 * MIN);
+    expect(ics()).toHaveLength(1);
+
+    vi.setSystemTime(AGORA);
+    expect((await webhook()).corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "já iniciado" } });
+    expect(ics()).toHaveLength(1);
+  });
+
+  it("reserva da ponte de OUTRO IP enviada 40 min antes: nao barra a garantia (so o IP conta nas 24 h)", async () => {
+    vi.setSystemTime(AGORA - 40 * MIN);
+    await coletor(DA_PONTE);
+    await drenar(AGORA - 37 * MIN);
+    const reserva = fila().find((l) => String(l.event_id).startsWith("begin_checkout_rs_ponte_"))!;
+    reserva.ip_hash = hashDoIp("198.51.100.77");
+
+    vi.setSystemTime(AGORA);
+    expect((await webhook()).corpo).toMatchObject({ checkoutDeGarantia: { "meta:dest-met": "enviado" } });
   });
 
   it("Shop Pay desviado sem compra: a reserva sai no Meta e no TikTok depois do prazo, e so ela", async () => {

@@ -336,8 +336,9 @@ function KitDoCheckout({ checkout }: { checkout: CheckoutDaPagina }) {
 /** Onde colar na vitrine e o que ele faz la (xcart-bridge.js, 3b). */
 const COMO_NA_VITRINE =
   "Na Shopify da vitrine: Loja virtual › Temas › Editar código › theme.liquid, antes de </body>. Lá ele manda " +
-  "PageView, ViewContent e AddToCart para esta loja, com o produto do catálogo daqui; o checkout e a compra " +
-  "continuam vindo do pixel e dos pedidos desta loja. Na vitrine não vai o link do passo 2 (a rota leva o " +
+  "PageView, ViewContent e AddToCart para esta loja, com o produto do catálogo daqui, e o InitiateCheckout no " +
+  "clique que abre o checkout desta loja (quando o pixel desta loja roda no checkout, vale o dele). A compra " +
+  "continua vindo dos pedidos desta loja. Na vitrine não vai o link do passo 2 (a rota leva o " +
   "carrinho), nem o script do tema desta loja, nem pixel do Meta ou do TikTok: contaria em dobro.";
 
 function rotuloDaVariante(v: Variante) {

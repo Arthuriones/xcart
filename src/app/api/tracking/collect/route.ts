@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   eventoValido,
   definicaoDoEvento,
+  idDaReservaDaPonte,
   idDaReservaDoCheckout,
   idDoCheckoutExpresso,
   idDoEventoDoCheckout,
@@ -12,6 +13,7 @@ import {
   ATRASO_RESERVA_DO_CHECKOUT_MS,
   JANELA_CHECKOUT_EXPRESSO_MS,
   PREFIXO_CHECKOUT_EXPRESSO,
+  PREFIXO_RESERVA_DA_PONTE,
   PREFIXO_RESERVA_DO_CHECKOUT,
   PREFIXOS_DE_RESERVA,
   vaiPeloServidor,
@@ -128,6 +130,16 @@ const JANELA_CHECKOUT_DO_TEMA_MS = 10 * 60 * 1000;
  * do clique (medido: minimo 1,96 s, p10 2,08 s).
  */
 const FOLGA_DO_PIXEL_PELO_IP_MS = 10 * 1000;
+
+/**
+ * A reserva da PONTE (o clique na vitrine de rota ou no permalink da VSL) que o
+ * begin_checkout do pixel fecha pelo IP: a criada ate este tanto antes dele. Do
+ * clique ao checkout_started sao segundos (50 de 51 checkouts em ate 35 s, p90
+ * 11 s), e a reserva so fica pendente 2 a 12 min (o atraso de 2 min e o cron de
+ * 10 em 10): 10 min cobrem o checkout lento (login no Shop, 3G, rota pela API)
+ * sem alcancar o clique de outra pessoa do mesmo IP muito antes.
+ */
+const JANELA_RESERVA_DA_PONTE_PELO_IP_MS = 10 * 60 * 1000;
 
 /** Itens do carrinho num evento. Carrinho de verdade nao chega perto disto. */
 const MAX_ITENS = 20;
@@ -666,9 +678,16 @@ export async function POST(request: NextRequest) {
   // no shadow fechado), o pixel manda o dele e cancela o expresso pendente.
   const pixelCobrindo = Date.now() - vistoEm < JANELA_PIXEL_CHECKOUT_MS;
   const reservaComum = !doPixel && evento === "begin_checkout" && pixelCobrindo && !expresso;
+  // O clique que a PONTE viu (xcart-bridge.js): o link do loader na vitrine de
+  // rota ou o permalink da VSL. E a reserva do clique comum, com a marca no id
+  // que deixa o pixel do checkout acha-la tambem pelo IP (ver
+  // `idDaReservaDaPonte` e `cancelarReservaPendente`).
+  const daPonte = !doPixel && (corpo.fonte || "").trim() === "ponte";
   // O id do servidor, por balde, como o do expresso: com o do navegador cada
   // POST com id novo seria outra reserva.
-  if (reservaComum) eventId = idDaReservaDoCheckout(visitorId, Date.now());
+  if (reservaComum) {
+    eventId = daPonte ? idDaReservaDaPonte(visitorId, Date.now()) : idDaReservaDoCheckout(visitorId, Date.now());
+  }
   /** Fica pendente esperando o pixel, que a cancela: o expresso ou o clique comum. */
   const reserva = expresso || reservaComum;
 
@@ -897,7 +916,8 @@ export async function POST(request: NextRequest) {
    * Pelos visitantes do tema (o visitor_id da linha: o resolvido pelo clientId
    * e o do cookie `_xc_vid` que o pixel leu) e pelo clientId que a linha
    * guarda (migration 057). Uma atualizacao por chave e prefixo, com `.eq`, pelo
-   * mesmo motivo da janela deslizante: os valores vem do navegador.
+   * mesmo motivo da janela deslizante: os valores vem do navegador. A reserva
+   * da ponte, o pixel acha tambem pelo IP (abaixo).
    */
   async function cancelarReservaPendente(
     visitantes: (string | null)[],
@@ -917,12 +937,32 @@ export async function POST(request: NextRequest) {
         .gte("created_at", desde)
         .eq(coluna, valor);
     const porVisitante = [...new Set(visitantes.filter((v): v is string => Boolean(v)))];
-    const feitos = await Promise.all(
-      prefixos.flatMap((p) => [
+    // A reserva da PONTE, pelo IP. O pixel do checkout nem sempre tem o
+    // visitante dela -- so quando ele vai como atributo do carrinho, e o cookie
+    // `_xc_vid` da loja vence o atributo -- e o clientId dele e de outra loja:
+    // sem isto, quem consentiu teria dois IC. So do pixel de um checkout de
+    // verdade, so contra a marca da ponte (a reserva do tema de outro
+    // comprador da casa nao cai pelo IP) e so na janela curta. Filtro fixo,
+    // com o hash feito aqui.
+    const pelaPonte =
+      doPixel && checkoutToken && ipHash && prefixos.includes(PREFIXO_RESERVA_DO_CHECKOUT)
+        ? admin
+            .from("tracking_events")
+            .update(fechamentoDoExpresso("pixel", "chegou pelo mesmo IP"))
+            .eq("store_id", registro.id)
+            .eq("event_name", "begin_checkout")
+            .eq("status", "pendente")
+            .like("event_id", `${PREFIXO_RESERVA_DA_PONTE}%`)
+            .eq("ip_hash", ipHash)
+            .gte("created_at", new Date(Date.now() - JANELA_RESERVA_DA_PONTE_PELO_IP_MS).toISOString())
+        : null;
+    const feitos = await Promise.all([
+      ...prefixos.flatMap((p) => [
         ...porVisitante.map((v) => cancelar(p, "visitor_id", v)),
         cliente ? cancelar(p, "shopify_client_id", cliente) : null,
-      ])
-    );
+      ]),
+      pelaPonte,
+    ]);
     // Melhor esforco: sem o cancelamento sai um IC a mais, nao some nenhum.
     for (const f of feitos) {
       if (f?.error) console.error("[tracking/collect] falha ao cancelar o expresso", f.error.message);
@@ -1300,6 +1340,11 @@ export async function POST(request: NextRequest) {
     // nesse caso, o IP: um begin_checkout do pixel (com checkout_token) do
     // mesmo IP gravado depois que este POST chegou. Filtro fixo, com o hash
     // feito aqui. Errar para o lado de fechar custa um IC, nao um a mais.
+    //
+    // A reserva da PONTE cai sempre aqui, com ou sem consentimento: a ponte
+    // nao manda clientId, e a linha do pixel do checkout (visitor_id = o
+    // clientId dele ou o token) nao cruza com o visitante dela. E o outro lado
+    // do cancelamento pelo IP em `cancelarReservaPendente`.
     if (reservaGravada.length) {
       let outro = await checkoutDoComprador(expresso ? PREFIXOS_DE_RESERVA : [PREFIXO_RESERVA_DO_CHECKOUT]);
       if (!outro && reservaComum && !clienteDaReserva && ipHash) {

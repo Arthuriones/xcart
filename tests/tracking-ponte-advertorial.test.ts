@@ -584,13 +584,85 @@ describe("a ponte numa pagina de vendas de checkout externo (Cakto)", () => {
     expect(new URL(links[0]).searchParams.get("fbclid")).toBe("IwAR_abc");
   });
 
-  it("pagina de LOJA segue igual: o clique no botao nao manda InitiateCheckout nem callback", () => {
+  it("pagina de LOJA: o clique no permalink manda o InitiateCheckout da LOJA, nunca o do checkout externo nem callback", () => {
     const { envios, clicar } = rodar({ url: anuncio, hrefs: ["https://loja.shop/cart/4567:1"], tag: LOJA });
     const href = clicar(0);
     expect(href).not.toContain("callback");
-    expect(envios.map((e) => e.corpo.evento)).toEqual(["page_view", "view_item"]);
-    expect(envios[0].corpo.shop).toBe("loja-x.myshopify.com");
-    expect(envios[0].corpo).not.toHaveProperty("checkoutId");
+    expect(envios.map((e) => e.corpo.evento)).toEqual(["page_view", "view_item", "begin_checkout"]);
+    for (const e of envios) {
+      expect(e.corpo.shop).toBe("loja-x.myshopify.com");
+      expect(e.corpo).not.toHaveProperty("checkoutId");
+    }
+  });
+});
+
+/**
+ * Abriu checkout = InitiateCheckout, tambem na VSL com link direto para o
+ * checkout (/cart/VARIANTE:QTD): nenhuma pagina do tema roda, e o IC dependia
+ * do Web Pixel. O clique no permalink da loja rastreada avisa o coletor; com o
+ * pixel cobrindo vira reserva, que o pixel cancela pelo `_xc_vid` que vai no
+ * permalink (o mesmo visitante do evento).
+ */
+describe("a ponte manda o InitiateCheckout no clique do permalink da loja", () => {
+  const vsl = "https://vsl.com/oferta?fbclid=ABC123";
+  const inicios = (envios: { corpo: Record<string, unknown> }[]) =>
+    envios.map((e) => e.corpo).filter((c) => c.evento === "begin_checkout");
+
+  it("como a loja, com o visitante que vai no permalink, sem produto e sem valor; uma vez na aba", () => {
+    const { envios, clicar } = rodar({ url: vsl, hrefs: ["https://loja.shop/cart/4567:2,4568:1"], tag: LOJA });
+    const href = clicar(0);
+    clicar(0);
+    const ics = inicios(envios);
+    expect(ics.length).toBe(1);
+    expect(ics[0]).toMatchObject({
+      shop: "loja-x.myshopify.com",
+      storeId: LOJA["data-xcart-store"],
+      fonte: "ponte",
+      fbclid: "ABC123",
+      produto: null,
+      pageUrl: vsl,
+    });
+    expect(ics[0].visitorId).toBe(envios[0].corpo.visitorId);
+    // O pixel do checkout le este atributo como vidDoTema e cancela a reserva.
+    expect(new URL(href).searchParams.get("attributes[_xc_vid]")).toBe(ics[0].visitorId);
+    expect(JSON.stringify(ics[0])).not.toMatch(/"value"|"currency"|"price"/);
+  });
+
+  it("o dominio permanente (data-xcart-shop) conta mesmo fora da lista -- e o link fica como esta", () => {
+    const { envios, clicar } = rodar({ url: vsl, hrefs: ["https://loja-x.myshopify.com/cart/4567:1"], tag: LOJA });
+    expect(clicar(0)).toBe("https://loja-x.myshopify.com/cart/4567:1");
+    expect(inicios(envios).length).toBe(1);
+  });
+
+  it("so o permalink de variante da loja: pagina do tema, /cart, outra loja e terceiro nao sao IC", () => {
+    const { envios, clicar } = rodar({
+      url: vsl,
+      hrefs: [
+        "https://loja.shop/products/x",
+        "https://loja.shop/cart",
+        "https://outra-loja.shop/cart/4567:1",
+        "https://instagram.com/loja",
+      ],
+      tag: LOJA,
+    });
+    for (let i = 0; i < 4; i++) clicar(i);
+    expect(inicios(envios)).toEqual([]);
+  });
+
+  it("sem a loja identificada (so a lista), so leva o clique: nada vai ao coletor", () => {
+    const { envios, clicar } = rodar({ url: vsl, hrefs: ["https://loja.shop/cart/4567:1"] });
+    clicar(0);
+    expect(envios).toEqual([]);
+  });
+
+  it("a reserva da ponte e da familia da reserva do clique comum (o coletor esta em tracking-checkout-expresso)", async () => {
+    const { idDaReservaDaPonte, PREFIXO_RESERVA_DA_PONTE, PREFIXO_RESERVA_DO_CHECKOUT, ehReservaDeCheckout } =
+      await import("../src/lib/tracking/eventos");
+    const id = idDaReservaDaPonte("mg1abc0.k2j3h4x9", Date.parse("2026-10-28T12:00:00Z"));
+    // A mesma familia da reserva do clique comum: drain, garantia e historico a tratam igual.
+    expect(id.startsWith(PREFIXO_RESERVA_DO_CHECKOUT)).toBe(true);
+    expect(id.startsWith(PREFIXO_RESERVA_DA_PONTE)).toBe(true);
+    expect(ehReservaDeCheckout(id)).toBe(true);
   });
 });
 });
