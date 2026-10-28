@@ -81,21 +81,6 @@ export function resolveCheckoutLinesDetailed(
   });
 }
 
-// Deriva o mercado (pais/locale) do idioma da loja destino para o checkout
-// abrir na moeda certa via Shopify Markets. Ex.: "es-CL" => country CL.
-// Exige que a loja checkout tenha esse mercado/moeda configurado na Shopify.
-export function marketParamsFromLanguage(
-  language?: string | null
-): { country?: string; locale?: string } {
-  const lang = String(language || "").trim();
-  if (!lang) return {};
-  const [, region] = lang.split("-");
-  return {
-    country: region ? region.toUpperCase() : undefined,
-    locale: lang,
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Cupom do carrinho da vitrine -> `?discount=` do permalink.
 //

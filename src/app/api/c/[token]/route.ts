@@ -39,7 +39,7 @@ export async function GET(
     dominioDeDestino(target?.shop_domain) ||
     "";
   // Mesma regra do resolve e do embed-config ("auto" nunca vira country=auto).
-  const market = mercadoDoDestino(settings, target?.target_language);
+  const market = mercadoDoDestino(settings);
   const country = market.country || "";
   const locale = market.locale || "";
 

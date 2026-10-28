@@ -52,7 +52,6 @@ const CheckoutSettingsDialog = dynamic(
 
 /** O ajuste de checkout na linha da loja; o padrao nao aparece. */
 function textoDoCheckout(c: CheckoutDoDestino): string {
-  if (c.modo === "comprador") return " · checkout no país do comprador";
   if (c.modo === "fixo" && c.pais) {
     const m = mercadoDoPais(c.pais);
     return ` · checkout em ${m ? `${m.nome} (${m.moeda})` : c.pais}`;

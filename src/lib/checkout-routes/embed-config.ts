@@ -45,7 +45,7 @@ export function toEmbedTarget(target: RouteTarget): EmbedTarget {
 
   // Mesma regra do /resolve: o comprador abre no mesmo mercado pelos dois
   // caminhos. "Pais do comprador" sai com country vazio, e o loader nao manda.
-  const market = mercadoDoDestino(target.settings, target.targetLanguage);
+  const market = mercadoDoDestino(target.settings);
   const country = market.country || "";
   const locale = market.locale || "";
 

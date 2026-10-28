@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
       }));
 
     // Pais/idioma do DESTINO sorteado (settings dele), igual ao embed-config.
-    const market = mercadoDoDestino(target.settings, target.targetLanguage);
+    const market = mercadoDoDestino(target.settings);
 
     // Sem atributos de carrinho aqui de proposito -- ver buildCartPermalink.
     // O cupom vai: e o codigo, nao o valor (buildCartPermalink revalida).

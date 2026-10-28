@@ -21,10 +21,6 @@ import {
   mercadoDoPais,
   type CheckoutDoDestino,
 } from "@/lib/checkout-routes/mercado";
-import { marketParamsFromLanguage } from "@/lib/shopify/cart-routing";
-
-/** O Select nao aceita value "": "idioma" e o padrao (nada gravado). */
-const PELO_IDIOMA = "idioma";
 
 type Tema = { estado?: string } | undefined;
 
@@ -46,9 +42,7 @@ interface Props {
 }
 
 function valorInicial(c: CheckoutDoDestino): string {
-  if (c.modo === "comprador") return PAIS_DO_COMPRADOR;
-  if (c.modo === "fixo" && c.pais) return c.pais;
-  return PELO_IDIOMA;
+  return c.modo === "fixo" && c.pais ? c.pais : PAIS_DO_COMPRADOR;
 }
 
 function nomeDoPais(pais: string | null | undefined): string | null {
@@ -89,26 +83,15 @@ export function CheckoutSettingsDialog({ open, onOpenChange, rotaId, destino, on
     };
   }, [rotaId, destino.id]);
 
-  const paisDoIdioma = marketParamsFromLanguage(destino.idiomaDaLoja).country ?? null;
-  const rotuloIdioma = `Pelo idioma da loja: ${nomeDoPais(paisDoIdioma) ?? "mercado principal"}`;
   // Pais fixo gravado que a lista nao tem continua escolhivel.
   const extra = valor.length === 2 && !mercadoDoPais(valor) ? [valor] : [];
 
-  const rotulo = (v: string) =>
-    v === PELO_IDIOMA
-      ? rotuloIdioma
-      : v === PAIS_DO_COMPRADOR
-        ? "Automático (país do comprador)"
-        : (nomeDoPais(v) ?? v);
+  const rotulo = (v: string) => (v === PAIS_DO_COMPRADOR ? "Automático (país do comprador)" : (nomeDoPais(v) ?? v));
 
   const ajuda =
     valor === PAIS_DO_COMPRADOR
-      ? "A Shopify abre o checkout no país do comprador, na moeda dele. A loja de checkout precisa ter esses mercados ativos."
-      : valor === PELO_IDIOMA
-        ? paisDoIdioma
-          ? `Todo comprador abre o checkout em ${nomeDoPais(paisDoIdioma)}, venha de onde vier.`
-          : "Sem país no idioma da loja: a Shopify decide pelo mercado principal."
-        : `Todo comprador abre o checkout em ${nomeDoPais(valor)}. A loja de checkout precisa ter esse mercado ativo.`;
+      ? "A Shopify abre o checkout no país do comprador, na moeda dele. Sem mercado ativo para o país dele, abre no mercado principal da loja."
+      : `Todo comprador abre o checkout em ${nomeDoPais(valor)}, venha de onde vier. A loja de checkout precisa ter esse mercado ativo.`;
 
   async function salvar() {
     setSalvando(true);
@@ -120,7 +103,8 @@ export function CheckoutSettingsDialog({ open, onOpenChange, rotaId, destino, on
           id: rotaId,
           targetId: destino.id,
           checkoutDomain: dominio.trim(),
-          checkoutCountry: valor === PELO_IDIOMA ? "" : valor,
+          // Automatico e o padrao: grava vazio (o "auto" antigo vale igual).
+          checkoutCountry: valor === PAIS_DO_COMPRADOR ? "" : valor,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string; tema?: Tema };
@@ -145,12 +129,11 @@ export function CheckoutSettingsDialog({ open, onOpenChange, rotaId, destino, on
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor={idPais}>País e moeda</Label>
-          <Select value={valor} onValueChange={(v) => setValor(typeof v === "string" && v ? v : PELO_IDIOMA)}>
+          <Select value={valor} onValueChange={(v) => setValor(typeof v === "string" && v ? v : PAIS_DO_COMPRADOR)}>
             <SelectTrigger id={idPais} aria-describedby={`${idPais}-ajuda`}>
               <SelectValue>{(v: string) => rotulo(v)}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={PELO_IDIOMA}>{rotuloIdioma}</SelectItem>
               <SelectItem value={PAIS_DO_COMPRADOR}>Automático (país do comprador)</SelectItem>
               {[...extra, ...MERCADOS.map((m) => m.pais)].map((pais) => (
                 <SelectItem key={pais} value={pais}>

@@ -1,5 +1,3 @@
-import { marketParamsFromLanguage } from "@/lib/shopify/cart-routing";
-
 // ============================================================================
 // Pais e idioma com que o checkout abre, POR LOJA DE CHECKOUT.
 //
@@ -8,13 +6,15 @@ import { marketParamsFromLanguage } from "@/lib/shopify/cart-routing";
 // resolve e o tema so leem no destino legado -- o dialogo da tela mudava um
 // campo que nenhum comprador via.
 //
-// Tres modos:
-//   - "idioma"    (padrao, nada gravado): o pais sai do idioma da loja de
-//                 checkout ("en-US" -> country=US). E o comportamento de
-//                 sempre; rota existente fica nele ate o lojista escolher.
-//   - "comprador" (checkout_country = "auto"): NAO manda country. A Shopify
-//                 geolocaliza o comprador e abre no mercado dele.
+// Dois modos:
+//   - "comprador" (padrao: nada gravado, "auto" ou valor torto): NAO manda
+//                 country nem locale. A Shopify geolocaliza o comprador e abre
+//                 no mercado dele.
 //   - "fixo"      (checkout_country = "CL"): manda country/locale fixos.
+//
+// Ate 27/10/2026 o padrao era o pais do IDIOMA da loja de checkout ("en-US"
+// -> country=US para o mundo todo): o cliente do Reino Unido via £ na vitrine
+// e pagava em USD, com "United States" no checkout (reclamacao da Stepz).
 //
 // O que a doc da Shopify confirma do permalink
 // (shopify.dev/docs/apps/build/checkout/create-cart-permalinks, 10/2026):
@@ -67,7 +67,7 @@ export function moedaDoPais(pais: string | null | undefined): string | null {
   return mercadoDoPais(pais)?.moeda ?? null;
 }
 
-export type ModoDoMercado = "idioma" | "comprador" | "fixo";
+export type ModoDoMercado = "comprador" | "fixo";
 
 export interface AjusteDeMercado {
   modo: ModoDoMercado;
@@ -77,16 +77,14 @@ export interface AjusteDeMercado {
 }
 
 /**
- * O que esta gravado no destino. Valor torto (pais de 3 letras, minusculo
- * que nao e "auto") vale como nada gravado: cai no padrao de sempre, nunca
- * vira parametro de URL.
+ * O que esta gravado no destino. Nada gravado, "auto" ou valor torto (pais
+ * de 3 letras) = pais do comprador: nunca vira parametro de URL.
  */
 export function lerAjusteDeMercado(settings: unknown): AjusteDeMercado {
   const s = (settings && typeof settings === "object" ? settings : {}) as Record<string, unknown>;
   const bruto = typeof s.checkout_country === "string" ? s.checkout_country.trim() : "";
-  if (bruto.toLowerCase() === PAIS_DO_COMPRADOR) return { modo: "comprador" };
   const pais = bruto.toUpperCase();
-  if (!PAIS_RE.test(pais)) return { modo: "idioma" };
+  if (!PAIS_RE.test(pais)) return { modo: "comprador" };
   const locale = typeof s.checkout_locale === "string" ? s.checkout_locale.trim() : "";
   return {
     modo: "fixo",
@@ -117,22 +115,16 @@ export function checkoutDoDestino(settings: unknown): CheckoutDoDestino {
  * divergirem, o mesmo comprador abre o checkout em moedas diferentes conforme
  * o caminho que o carrinho tomou.
  */
-export function mercadoDoDestino(
-  settings: unknown,
-  targetLanguage: string | null | undefined
-): { country?: string; locale?: string } {
+export function mercadoDoDestino(settings: unknown): { country?: string; locale?: string } {
   const ajuste = lerAjusteDeMercado(settings);
   if (ajuste.modo === "comprador") return {};
-  if (ajuste.modo === "fixo") {
-    return { country: ajuste.country, ...(ajuste.locale ? { locale: ajuste.locale } : {}) };
-  }
-  return marketParamsFromLanguage(targetLanguage);
+  return { country: ajuste.country, ...(ajuste.locale ? { locale: ajuste.locale } : {}) };
 }
 
 /**
- * Entrada da tela -> o que gravar. "" volta ao padrao (apaga), "auto" e o
- * pais do comprador, "XX" e pais fixo (locale da lista quando a tela nao
- * manda um).
+ * Entrada da tela -> o que gravar. "" volta ao padrao (apaga = pais do
+ * comprador), "auto" tambem e o pais do comprador (gravado antes de 27/10),
+ * "XX" e pais fixo (locale da lista quando a tela nao manda um).
  */
 export function ajusteParaGravar(
   pais: unknown,

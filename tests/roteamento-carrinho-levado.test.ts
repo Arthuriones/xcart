@@ -213,29 +213,27 @@ describe("cupom no permalink", () => {
 // ---------------------------------------------------------------------------
 
 describe("pais e idioma do checkout, por destino", () => {
-  it("sem ajuste: o de sempre, pais do idioma da loja", () => {
-    expect(mercadoDoDestino({}, "en-US")).toEqual({ country: "US", locale: "en-US" });
-    expect(mercadoDoDestino({ generatedBy: "connect_wizard" }, "pt-BR")).toEqual({
-      country: "BR",
-      locale: "pt-BR",
-    });
-    expect(mercadoDoDestino(null, null)).toEqual({});
+  it("sem ajuste: pais do comprador -- nunca o do idioma da loja (en-US forcava US para o mundo todo)", () => {
+    expect(mercadoDoDestino({})).toEqual({});
+    expect(mercadoDoDestino({ generatedBy: "connect_wizard" })).toEqual({});
+    expect(mercadoDoDestino(null)).toEqual({});
+    expect(checkoutDoDestino({}).modo).toBe("comprador");
   });
 
   it("pais fixo do destino ganha do idioma (o que ja esta gravado em producao: CL/es-CL)", () => {
-    expect(mercadoDoDestino({ checkout_country: "CL", checkout_locale: "es-CL" }, "pt-BR")).toEqual({
+    expect(mercadoDoDestino({ checkout_country: "CL", checkout_locale: "es-CL" })).toEqual({
       country: "CL",
       locale: "es-CL",
     });
   });
 
   it("pais do comprador nao manda country nem locale", () => {
-    expect(mercadoDoDestino({ checkout_country: PAIS_DO_COMPRADOR }, "en-US")).toEqual({});
+    expect(mercadoDoDestino({ checkout_country: PAIS_DO_COMPRADOR })).toEqual({});
   });
 
   it("valor torto vale como nada gravado, nunca vira parametro", () => {
-    expect(mercadoDoDestino({ checkout_country: "USA" }, "en-US")).toEqual({ country: "US", locale: "en-US" });
-    expect(mercadoDoDestino({ checkout_country: "cl", checkout_locale: "<x>" }, "en-US")).toEqual({
+    expect(mercadoDoDestino({ checkout_country: "USA" })).toEqual({});
+    expect(mercadoDoDestino({ checkout_country: "cl", checkout_locale: "<x>" })).toEqual({
       country: "CL",
     });
   });
@@ -248,7 +246,8 @@ describe("pais e idioma do checkout, por destino", () => {
     const auto = toEmbedTarget(destino({ settings: { checkout_country: PAIS_DO_COMPRADOR } }));
     expect(auto.country).toBe("");
     expect(auto.locale).toBe("");
-    expect(toEmbedTarget(destino())).toMatchObject({ country: "US", locale: "en-US" });
+    // Sem ajuste: o loader nao manda country (destino() tem idioma en-US).
+    expect(toEmbedTarget(destino())).toMatchObject({ country: "", locale: "" });
   });
 
   it("o que a tela grava: padrao apaga, auto e o comprador, pais fixo leva o idioma da lista", () => {
@@ -320,10 +319,11 @@ describe("/api/checkout-routes/resolve", () => {
     expect(url.searchParams.has("discount")).toBe(false);
   });
 
-  it("destino sem ajuste continua como sempre: pais do idioma da loja", async () => {
+  it("destino sem ajuste (loja en-US): permalink SEM country/locale -- a Shopify abre no pais do comprador", async () => {
     banco.destinos = [destino()];
     const url = await chamar({ discountCodes: "SAVE10" });
-    expect(url.searchParams.get("country")).toBe("US");
+    expect(url.searchParams.has("country")).toBe(false);
+    expect(url.searchParams.has("locale")).toBe(false);
     // Cupom que nao veio como lista nao passa.
     expect(url.searchParams.has("discount")).toBe(false);
   });

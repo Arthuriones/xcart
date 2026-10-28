@@ -9,7 +9,6 @@ import { verificarParDaRota } from "@/lib/shopify/store-health";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { conferirWebhooks } from "@/lib/checkout-routes/sensores";
-import { marketProfileFor } from "@/lib/gemini/market-profile";
 import { lerAjusteDeMercado } from "@/lib/checkout-routes/mercado";
 
 interface ShippingZone {
@@ -87,19 +86,6 @@ async function checkShipping(
       checkedCountry: countryCode,
     };
   }
-}
-
-// "es-CL" -> "CL". Quando o idioma nao carrega regiao, cai no pais principal
-// do perfil de mercado (ex.: "ja" -> Japao).
-function countryFromLanguage(language: string | null | undefined): string | null {
-  const value = (language || "").trim();
-  if (!value) return null;
-  const parts = value.split(/[-_]/);
-  if (parts.length > 1 && parts[1].length === 2) return parts[1].toUpperCase();
-  const fallback: Record<string, string> = { pt: "BR", ja: "JP", en: "US" };
-  const base = parts[0].toLowerCase();
-  // marketProfileFor valida que o idioma e conhecido antes do fallback.
-  return marketProfileFor(base) && fallback[base] ? fallback[base] : null;
 }
 
 function countRates(zone: ShippingZone): number {
@@ -342,15 +328,10 @@ export async function POST(request: NextRequest) {
     );
 
     // Pais efetivo do checkout desta loja: o ajuste do DESTINO (o que o
-    // resolve usa; rota legada sem linha le o da rota), senao o do idioma da
-    // loja. "Pais do comprador" nao tem pais: confere so se ha alguma tarifa.
+    // resolve usa; rota legada sem linha le o da rota). "Pais do comprador"
+    // (o padrao) nao tem pais: confere so se ha alguma tarifa.
     const ajuste = lerAjusteDeMercado(alvo ? alvo.settings : config.settings);
-    const marketCountry =
-      ajuste.modo === "fixo"
-        ? (ajuste.country ?? null)
-        : ajuste.modo === "comprador"
-          ? null
-          : countryFromLanguage(targetStore.target_language);
+    const marketCountry = ajuste.modo === "fixo" ? (ajuste.country ?? null) : null;
     const shipping = await checkShipping(targetCreds, marketCountry);
 
     const ok =
