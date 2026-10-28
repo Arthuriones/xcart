@@ -4,7 +4,8 @@
 // insert com a PK de shopify_webhook_events e o indice unico da fila de
 // rastreamento, update/delete pelos filtros e contagem com { head: true }.
 // Ordem nao e aplicada: o teste guarda as linhas ja na ordem que a consulta
-// pediria. upsert pela coluna do onConflict; .select() depois de uma escrita
+// pediria. upsert pela coluna do onConflict (com ignoreDuplicates, a linha que
+// ja existe fica e nao volta no select); .select() depois de uma escrita
 // devolve as linhas escritas (o insert ganha um id se nao tem). Coluna JSON no
 // select (`apelido:payload->a->>b`) vem junto da linha, pelo apelido.
 
@@ -129,6 +130,7 @@ export function fakeSupabase(
     let unico = false;
     let devolver = false;
     let conflito = "id";
+    let ignorarDuplicadas = false;
     let json: ReturnType<typeof colunasJson> = [];
 
     /** A linha com as colunas JSON pedidas no select, pelo apelido. */
@@ -178,9 +180,14 @@ export function fakeSupabase(
         const gravadas: Linha[] = [];
         for (const n of novas) {
           const atual = linhas.find((l) => cols.every((c) => l[c] === n[c]));
+          // ON CONFLICT DO NOTHING: a linha que ja existe nao muda nem volta.
+          if (atual && ignorarDuplicadas) continue;
           if (atual) Object.assign(atual, n);
-          else linhas.push({ ...n });
-          gravadas.push({ ...(atual ?? n) });
+          else if (ignorarDuplicadas && devolver && n.id === undefined) {
+            // So no modo novo: o upsert antigo dos testes continua sem id.
+            linhas.push({ id: `${tabela}-${++novoId}`, ...n });
+          } else linhas.push({ ...n });
+          gravadas.push({ ...(atual ?? linhas[linhas.length - 1]) });
           saida.upserts.push({ tabela, linha: { ...n } });
         }
         return resposta(gravadas);
@@ -211,10 +218,11 @@ export function fakeSupabase(
         json = colunasJson(cols);
         return q;
       },
-      upsert: (l: unknown, o?: { onConflict?: string }) => {
+      upsert: (l: unknown, o?: { onConflict?: string; ignoreDuplicates?: boolean }) => {
         op = "upsert";
         payload = l;
         if (o?.onConflict) conflito = o.onConflict;
+        ignorarDuplicadas = Boolean(o?.ignoreDuplicates);
         return q;
       },
       insert: (l: unknown) => {

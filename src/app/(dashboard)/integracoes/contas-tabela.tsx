@@ -624,7 +624,7 @@ export function ContasTabela({
           acao?.tipo === "script"
             ? "O script colado hoje no Google Ads para de funcionar. Você vai precisar colar o novo no lugar dele, e ele aparece uma vez só."
             : meta
-              ? "O gasto já gravado dela sai do Lucro. Nada muda no Meta. Se o token ainda enxergar a conta, ela volta quando você colar o token de novo."
+              ? "O gasto já gravado dela sai do Lucro. Nada muda no Meta. Se o perfil ou o token ainda enxergar a conta, ela volta quando você buscar contas novas ou colar o token de novo."
               : "O gasto já gravado dela sai do Lucro e o script colado no Google Ads para de ser aceito. Nada muda no Google Ads."
         }
         confirmar={acao?.tipo === "script" ? "Gerar novo script" : "Remover conta"}

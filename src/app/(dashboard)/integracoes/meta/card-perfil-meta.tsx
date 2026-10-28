@@ -10,7 +10,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { ConexaoOAuthResumo } from "../dados-anuncios";
 import { AssistenteMeta, CartaoTokenMeta } from "./token-meta";
-import type { Estado } from "../regras";
+import { chamar } from "../api";
+import { plural, type Estado } from "../regras";
 import { ModalConectarMeta } from "./modal-conectar-meta";
 
 function IconeFacebook({ className = "size-4" }: { className?: string }) {
@@ -40,6 +41,7 @@ export function CardPerfilMeta({
   const conexoes = conexoesIniciais.filter((c) => !removidos.has(c.id));
   const [mostrarManual, setMostrarManual] = useState(false);
   const [modalConectarAberto, setModalConectarAberto] = useState(false);
+  const [buscando, setBuscando] = useState(false);
 
   // Escuta o evento de sucesso enviado pelo popup OAuth
   useEffect(() => {
@@ -103,13 +105,48 @@ export function CardPerfilMeta({
     startTransition(() => router.refresh());
   }
 
+  // Conta criada no Meta depois de conectar o perfil: o login so listou as
+  // contas daquela hora.
+  async function buscarContasNovas() {
+    setBuscando(true);
+    const r = await chamar<{ novas?: number; erros?: string[] }>("/api/auth/meta/buscar-contas", {
+      method: "POST",
+    });
+    setBuscando(false);
+    // Sempre: um clique que gravou e perdeu a resposta (rede, tempo) deixa a
+    // conta no banco, e o seguinte responde zero novas.
+    startTransition(() => router.refresh());
+    if (!r.ok) {
+      toast.error("Não deu para buscar as contas agora", { description: r.erro });
+      return;
+    }
+    const novas = r.novas ?? 0;
+    const erros = Array.isArray(r.erros) ? r.erros : [];
+    if (novas > 0) {
+      toast.success(`${plural(novas, "conta nova", "contas novas")} do Meta`, {
+        description: "Ligue cada uma a uma loja em Contas de anúncio.",
+      });
+    } else if (erros.length === 0) {
+      toast("Nenhuma conta nova", {
+        description: "O xcart já tem todas as contas que os perfis conectados enxergam.",
+      });
+    }
+    if (erros.length > 0) {
+      // Uma frase por perfil, cada uma com o nome dele: a acao muda (esperar ou reconectar).
+      toast.warning(
+        erros.length === 1 ? "Um perfil precisa de atenção" : `${erros.length} perfis precisam de atenção`,
+        { description: erros.join(" ") }
+      );
+    }
+  }
+
   const temConexao = conexoes.length > 0;
 
   return (
     <div className="flex flex-col gap-4">
       {/* Card estilo UTMify */}
       <div className="rounded-panel border border-border bg-surface p-5">
-        <div className="flex items-center justify-between gap-3 border-b border-border pb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
           <div className="flex items-center gap-3">
             <div className="grid size-10 place-items-center rounded-control bg-[#1877F2]/10 text-[#1877F2]">
               <IconeFacebook className="size-5" />
@@ -122,15 +159,29 @@ export function CardPerfilMeta({
             </div>
           </div>
 
-          <Button
-            type="button"
-            onClick={() => setModalConectarAberto(true)}
-            disabled={pendente}
-            className="bg-[#1877F2] font-medium text-white hover:bg-[#166fe5] shadow-xs gap-2"
-          >
-            <IconeFacebook className="size-4" />
-            {temConexao ? "Conectar outro perfil" : "Adicionar perfil"}
-          </Button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {temConexao ? (
+              <Button
+                type="button"
+                variant="secondary"
+                pending={buscando}
+                disabled={pendente}
+                onClick={buscarContasNovas}
+              >
+                {buscando ? null : <RefreshCw className="size-4" aria-hidden />}
+                Buscar contas novas
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              onClick={() => setModalConectarAberto(true)}
+              disabled={pendente}
+              className="bg-[#1877F2] font-medium text-white hover:bg-[#166fe5] shadow-xs gap-2"
+            >
+              <IconeFacebook className="size-4" />
+              {temConexao ? "Conectar outro perfil" : "Adicionar perfil"}
+            </Button>
+          </div>
         </div>
 
         {/* Perfis Conectados */}
