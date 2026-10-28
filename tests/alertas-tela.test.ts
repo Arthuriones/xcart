@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { ROTULO_REGRA, type AlertaRow, type RegraAlerta } from "../src/lib/financeiro/tipos";
+import { REGRAS_DO_OPERADOR, ROTULO_REGRA, type AlertaRow, type RegraAlerta } from "../src/lib/financeiro/tipos";
 import {
   INTERVALO_VERIFICACAO_MIN,
   abaDe,
@@ -206,7 +206,8 @@ describe("as regras da tela batem com o cron", () => {
 
   it("uma linha por regra, sem faltar nem sobrar", () => {
     const tela = regrasNaTela(30).map((r) => r.regra);
-    expect([...tela].sort()).toEqual([...REGRAS].sort());
+    // As do operador (IA de fotos fora do ar) nao sao do lojista: ficam fora.
+    expect([...tela].sort()).toEqual(REGRAS.filter((r) => !REGRAS_DO_OPERADOR.includes(r)).sort());
     expect(new Set(tela).size).toBe(tela.length);
   });
 

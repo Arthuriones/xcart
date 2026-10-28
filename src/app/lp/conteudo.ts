@@ -240,12 +240,12 @@ export const PERGUNTAS: Pergunta[] = [
   {
     pergunta: "Como eu pago?",
     resposta:
-      "Cartão de crédito, que renova sozinho todo mês, ou Pix, que libera 30 dias e não renova. Os créditos extras são pagos por Pix.",
+      "Cartão de crédito, que renova sozinho todo mês, ou Pix, que libera 30 dias e não renova. As fotos com IA extras são pagas por Pix.",
   },
   {
-    pergunta: "O que é um crédito de IA?",
+    pergunta: "O que são as fotos com IA?",
     resposta:
-      `Cada crédito refaz com IA a foto de um produto, sem a marca. Tradução e texto não gastam crédito. Os créditos comprados à parte somam ao saldo; na renovação do cartão, o saldo volta para ${CREDITOS_INCLUSOS}.`,
+      `Servem para tirar a marca das fotos: a IA refaz a foto principal do produto sem a marca, na loja de checkout do roteamento ou ao importar produtos com troca de marca. Cada foto refeita usa 1. Rastreamento, lucro, texto e tradução não usam. O plano soma ${CREDITOS_INCLUSOS} por mês, e nenhuma vence.`,
   },
   {
     pergunta: "Posso cancelar?",

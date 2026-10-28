@@ -248,9 +248,9 @@ describe("mensagemDeErro: nada de ingles nem nome de fornecedor na tela", () => 
 describe("historico de compras", () => {
   it("rotulos em portugues", () => {
     const base = { credits: 200, method: "pix", provider: "pagou", status: "paid" };
-    expect(rotuloCompra({ ...base, kind: "credits" })).toBe("200 créditos");
+    expect(rotuloCompra({ ...base, kind: "credits" })).toBe("200 fotos com IA");
     expect(rotuloCompra({ ...base, kind: "pro_month" })).toBe("Plano Pro · 30 dias");
-    expect(rotuloCompra({ ...base, kind: "credits", credits: 1 })).toBe("1 crédito");
+    expect(rotuloCompra({ ...base, kind: "credits", credits: 1 })).toBe("1 foto com IA");
     expect(formaDaCompra({ ...base, kind: "credits" })).toBe("Pix");
     expect(formaDaCompra({ ...base, kind: "credits", method: null, provider: "stripe" })).toBe("Cartão");
   });

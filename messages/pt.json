@@ -12,7 +12,7 @@
     "tracking": "Rastreamento",
     "activity": "Atividade",
     "account": "Conta",
-    "billing": "Assinatura e créditos",
+    "billing": "Assinatura",
     "myAccount": "Minha conta",
     "logout": "Sair",
     "claude": "Claude (MCP)",
@@ -69,7 +69,7 @@
     "fail": "Falha."
   },
   "billing": {
-    "title": "Assinatura e créditos",
+    "title": "Assinatura",
     "subtitle": "Gerencie seu plano e recarregue créditos de IA.",
     "subscribed": "Assinatura ativada!",
     "creditsAdded": "Créditos adicionados!",

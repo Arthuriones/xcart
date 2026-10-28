@@ -46,9 +46,12 @@ export function dataHora(iso: string | null | undefined): string | null {
   return `${dia} às ${hora}`;
 }
 
-/** "1 crédito", "200 créditos". */
+/**
+ * "1 foto", "200 fotos". Na tela o credito de IA e "foto com IA": a unica coisa
+ * que desconta e 1 foto refeita sem marca (no banco segue ai_credits).
+ */
 export function creditos(n: number): string {
-  return `${n.toLocaleString("pt-BR")} ${n === 1 ? "crédito" : "créditos"}`;
+  return `${n.toLocaleString("pt-BR")} ${n === 1 ? "foto" : "fotos"}`;
 }
 
 /** "1 dia", "5 dias". */
@@ -114,7 +117,7 @@ export function pacotesComPreco<P extends PacoteBase>(pacotes: readonly P[]): Pa
   });
 }
 
-/** "R$ 0,38" por credito (duas casas, arredondado). */
+/** "R$ 0,38" por foto (duas casas, arredondado). */
 export function precoPorCredito(centavos: number): string {
   return brl(Math.round(centavos));
 }
@@ -390,13 +393,13 @@ export interface CompraBase {
   status: string | null;
 }
 
-/** "200 créditos" ou "Plano Pro · 30 dias". */
+/** "200 fotos com IA" ou "Plano Pro · 30 dias". */
 export function rotuloCompra(c: CompraBase & { plano?: string | null }): string {
   if (c.kind === "pro_month") {
     const nome = planoPorId(c.plano)?.nome;
     return nome ? `Plano ${nome} · 30 dias` : "Plano Pro · 30 dias";
   }
-  return creditos(c.credits);
+  return `${creditos(c.credits)} com IA`;
 }
 
 /** "Pix", "Cartão" ou "—". */

@@ -231,6 +231,8 @@ const DESTINOS: Record<RegraAlerta, Destino> = {
   roteamento_conserto_falhando: { href: "/clone/routed-checkout", tela: "Rotas" },
   roteamento_loja_fora_do_ar: { href: "/clone/routed-checkout", tela: "Rotas" },
   roteamento_vitrine_com_senha: { href: "/clone/routed-checkout", tela: "Rotas" },
+  // So na conta do operador: o conserto e recarregar o AI Studio, fora do app.
+  ia_imagem_fora_do_ar: { href: "/alertas", tela: "Alertas" },
 };
 
 /** Para qual aba da rota cada alerta de roteamento leva. */

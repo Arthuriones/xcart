@@ -14,18 +14,24 @@ export const dynamic = "force-dynamic";
  * -- a antiga mostrava "Free" e 0 creditos. Os fluxos de pagamento (cartao,
  * Pix, cancelar) chamam as mesmas rotas, com os mesmos corpos.
  */
-async function Conteudo() {
+async function Conteudo({ querComprar }: { querComprar: boolean }) {
   const d = await lerAssinatura();
   if (!d.perfil) console.error("[billing] perfil não veio", d.erros.perfil);
-  return <TelaAssinatura d={d} />;
+  return <TelaAssinatura d={d} querComprar={querComprar} />;
 }
 
-export default function BillingPage() {
+export default async function BillingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [chave: string]: string | string[] | undefined }>;
+}) {
+  // ?comprar=1: veio de um "Comprar fotos" (falta de saldo numa tela de gasto).
+  const querComprar = (await searchParams).comprar === "1";
   return (
     <>
       <CabecalhoAssinatura />
       <Suspense fallback={<EsqueletoAssinatura />}>
-        <Conteudo />
+        <Conteudo querComprar={querComprar} />
       </Suspense>
     </>
   );

@@ -277,9 +277,9 @@ export interface CreditPack {
 }
 
 export const CREDIT_PACKS: CreditPack[] = [
-  { id: "pack_50", credits: 50, amountCents: 2500, label: "50 créditos" },
-  { id: "pack_200", credits: 200, amountCents: 7500, label: "200 créditos" },
-  { id: "pack_500", credits: 500, amountCents: 15000, label: "500 créditos" },
+  { id: "pack_50", credits: 50, amountCents: 2500, label: "50 fotos com IA" },
+  { id: "pack_200", credits: 200, amountCents: 7500, label: "200 fotos com IA" },
+  { id: "pack_500", credits: 500, amountCents: 15000, label: "500 fotos com IA" },
 ];
 
 export function getCreditPack(id: string): CreditPack | undefined {

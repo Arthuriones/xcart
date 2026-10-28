@@ -118,7 +118,7 @@ export const ITENS: Record<IdItem, ItemNav> = {
     rotulo: t("billing"),
     icone: CreditCard,
     atalho: "b",
-    busca: "plano",
+    busca: "plano créditos fotos",
     contador: "creditos",
   },
   // Alertas mora no sino do topo (e na barra do celular), nao no menu lateral.
@@ -308,7 +308,7 @@ export const SECOES_CONFIGURACOES: { id: string; titulo: string; links: LinkConf
     links: [
       { rotulo: ITENS.custos.rotulo, href: ITENS.custos.href, dica: "Custo do produto e taxa de pagamento" },
       { rotulo: t("notifications"), href: "/integracoes/notificacoes", dica: "Onde os alertas chegam" },
-      { rotulo: ITENS.assinatura.rotulo, href: ITENS.assinatura.href, dica: "Plano e créditos de IA" },
+      { rotulo: ITENS.assinatura.rotulo, href: ITENS.assinatura.href, dica: "Plano e fotos com IA" },
     ],
   },
   {

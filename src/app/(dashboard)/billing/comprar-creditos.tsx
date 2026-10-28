@@ -105,14 +105,14 @@ export function ComprarCreditos({
 
   return (
     <Section
-      titulo="Comprar créditos"
-      descricao="Pagamento único por Pix. Os créditos entram no saldo assim que o pagamento é confirmado."
+      titulo="Comprar fotos com IA"
+      descricao="Pix, pagamento único. Entram no saldo assim que o Pix confirma."
     >
       {pacotes.length === 0 ? (
         <p className="text-dense text-t2">Nenhum pacote disponível agora.</p>
       ) : (
         <Escolha
-          rotulo="Pacote de créditos"
+          rotulo="Pacote"
           valor={escolhido}
           onValor={(v) => {
             setEscolhido(v);
@@ -124,7 +124,7 @@ export function ComprarCreditos({
             titulo: creditos(p.credits),
             descricao: (
               <span className="num">
-                {precoPorCredito(p.centavosPorCredito)} por crédito
+                {precoPorCredito(p.centavosPorCredito)} por foto
                 {p.economia !== null ? ` · ${Math.round(p.economia * 100)}% a menos` : ""}
               </span>
             ),

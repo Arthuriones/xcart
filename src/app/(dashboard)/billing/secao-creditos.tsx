@@ -1,6 +1,6 @@
 import { Section } from "@/components/ui/section";
 import { PRO_INCLUDED_CREDITS } from "@/lib/billing/plans";
-import { creditos, type FormaPagamento } from "@/components/billing/regras";
+import { creditos } from "@/components/billing/regras";
 
 function diaMes(iso: string): string {
   return `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
@@ -17,7 +17,6 @@ export function SecaoCreditos({
   inicioDoMes,
   erroUso,
   pro,
-  forma,
   cobrancaLigada,
 }: {
   saldo: number;
@@ -25,35 +24,26 @@ export function SecaoCreditos({
   inicioDoMes: string;
   erroUso: string | null;
   pro: boolean;
-  forma: FormaPagamento | null;
   cobrancaLigada: boolean;
 }) {
   const notas: string[] = [];
-  if (pro && forma === "cartao") {
-    // E o que o aviso de renovacao faz hoje (reset_ai_credits): o saldo VOLTA
-    // para o incluso, nao soma. Dito aqui para ninguem achar que acumula.
-    notas.push(
-      `O plano inclui ${creditos(PRO_INCLUDED_CREDITS)} por mês. Na renovação do cartão, o saldo volta para ${PRO_INCLUDED_CREDITS}.`
-    );
-  } else if (pro && forma === "pix") {
-    notas.push(`Cada Pix de 30 dias do plano soma ${creditos(PRO_INCLUDED_CREDITS)} ao saldo.`);
-  } else if (pro) {
-    notas.push(`O plano inclui ${creditos(PRO_INCLUDED_CREDITS)} por mês.`);
-  }
-  if (!cobrancaLigada) notas.push("Por enquanto, neutralizar imagens não desconta créditos do saldo.");
+  // Renovacao do cartao (reset_ai_credits, 082) e Pix de 30 dias SOMAM: uma
+  // regra so para os dois.
+  if (pro) notas.push(`O plano soma ${creditos(PRO_INCLUDED_CREDITS)} por mês. Nenhuma vence.`);
+  if (!cobrancaLigada) notas.push("Por enquanto, refazer fotos não desconta do saldo.");
 
   return (
     <Section
-      titulo="Créditos de IA"
-      descricao="1 crédito = 1 imagem neutralizada com IA. Neutralizar texto não usa crédito."
+      titulo="Fotos com IA"
+      descricao="Refaz sem marca a foto principal do produto, no roteamento e na importação. Texto e tradução são grátis."
     >
       <dl className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1 rounded-card border border-border-subtle bg-surface-2 p-3">
-          <dt className="text-label font-medium text-t1">Saldo</dt>
+          <dt className="text-label font-medium text-t1">Disponíveis</dt>
           <dd className="num text-kpi text-ink">{saldo.toLocaleString("pt-BR")}</dd>
         </div>
         <div className="flex flex-col gap-1 rounded-card border border-border-subtle bg-surface-2 p-3">
-          <dt className="text-label font-medium text-t1">Usados este mês</dt>
+          <dt className="text-label font-medium text-t1">Usadas este mês</dt>
           <dd className="num text-kpi text-ink">
             {usadosNoMes === null ? "—" : usadosNoMes.toLocaleString("pt-BR")}
           </dd>

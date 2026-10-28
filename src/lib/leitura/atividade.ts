@@ -291,7 +291,7 @@ export async function lerAtividade(pedido: PedidoAtividade): Promise<LeituraAtiv
   if (clones.erro || jobs.erro) falhas.push("importações");
   if (abertos.erro || resolvidos.erro) falhas.push("alertas");
   if (rastreamento.erro) falhas.push("rastreamento");
-  if (compras.erro) falhas.push("créditos");
+  if (compras.erro) falhas.push("compras");
 
   leitura.itens = itens;
   leitura.proximo = proximo;

@@ -66,12 +66,25 @@ export type EstadoEstimativa =
   | { tipo: "semLeitura"; texto: string }
   | { tipo: "livre"; texto: string }
   | { tipo: "ok"; texto: string }
-  | { tipo: "falta"; texto: string };
+  | { tipo: "falta"; texto: string; faltam: number };
+
+/** "1 foto", "34 fotos". */
+function fotos(n: number): string {
+  return n === 1 ? "1 foto" : `${n.toLocaleString("pt-BR")} fotos`;
+}
+
+/** "Falta 1 foto com IA", "Faltam 28 fotos com IA". */
+export function tituloDaFalta(n: number): string {
+  return `${n === 1 ? "Falta" : "Faltam"} ${fotos(n)} com IA`;
+}
 
 /**
- * Estimativa de creditos para recriar as imagens: 1 credito por produto (uma
- * imagem cada). Falta de saldo BLOQUEIA o botao (antes so pintava de vermelho).
+ * Estimativa das fotos com IA para recriar as imagens: 1 por produto (a foto
+ * principal). Falta de saldo BLOQUEIA o botao (antes so pintava de vermelho):
+ * aqui a foto NAO fica com a original sozinha -- o lojista compra ou escolhe
+ * manter a imagem original.
  */
+
 export function estimativaCreditos(a: {
   produtos: number | null;
   saldo: number | null;
@@ -80,23 +93,28 @@ export function estimativaCreditos(a: {
   saldoFalhou: boolean;
 }): EstadoEstimativa {
   if (a.produtos === null) return { tipo: "calculando" };
-  const uso = a.produtos === 1 ? "1 crédito" : `${a.produtos.toLocaleString("pt-BR")} créditos`;
+  const uso = fotos(a.produtos);
   if (a.saldoFalhou) {
-    return { tipo: "semLeitura", texto: `Vai usar cerca de ${uso} (1 por produto). Não deu para ler seu saldo agora.` };
+    return { tipo: "semLeitura", texto: `Vai refazer até ${uso} sem marca. Não deu para ler seu saldo agora.` };
   }
   if (!a.cobrando) {
-    return { tipo: "livre", texto: "A cobrança de créditos ainda não está ativa: recriar as imagens não gasta crédito por enquanto." };
+    return { tipo: "livre", texto: "Por enquanto, refazer fotos não desconta do saldo." };
   }
+  if (a.produtos === 0) return { tipo: "ok", texto: "Nenhuma foto será refeita." };
   if (a.saldo !== null && a.produtos > a.saldo) {
-    const tem = a.saldo === 1 ? "1" : a.saldo.toLocaleString("pt-BR");
-    return { tipo: "falta", texto: `Precisa de ${uso} (1 por produto) e você tem ${tem}.` };
+    const faltam = a.produtos - a.saldo;
+    return {
+      tipo: "falta",
+      faltam,
+      texto: `Vai refazer até ${uso}. Você tem ${a.saldo.toLocaleString("pt-BR")}.`,
+    };
   }
   return {
     tipo: "ok",
     texto:
       a.saldo === null
-        ? `Vai usar cerca de ${uso} (1 por produto).`
-        : `Vai usar cerca de ${uso} (1 por produto). Você tem ${a.saldo.toLocaleString("pt-BR")}.`,
+        ? `Vai refazer até ${uso} sem marca.`
+        : `Vai refazer até ${uso} sem marca. Você tem ${a.saldo.toLocaleString("pt-BR")}.`,
   };
 }
 

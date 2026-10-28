@@ -79,13 +79,13 @@ export function PassoRevisao({
 
       <section aria-labelledby="imp-rev-creditos" className="flex flex-col gap-3 rounded-card border border-border p-4">
         <h3 id="imp-rev-creditos" className="text-dense font-semibold text-ink">
-          Créditos
+          Fotos com IA
         </h3>
         <dl className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-0.5">
             <dt className="text-label text-t2">Estimativa</dt>
             <dd className="num text-section text-ink">
-              {estimativa === 0 ? "Nenhum" : `até ${contar(estimativa, "crédito", "créditos")}`}
+              {estimativa === 0 ? "Nenhuma" : `até ${contar(estimativa, "foto", "fotos")}`}
             </dd>
           </div>
           <div className="flex flex-col gap-0.5">
@@ -98,8 +98,8 @@ export function PassoRevisao({
             tom="warn"
             titulo={creditos.texto}
             acao={
-              <Link href="/billing" className={buttonVariants({ variant: "secondary", size: "sm" })}>
-                Comprar créditos
+              <Link href="/billing?comprar=1" className={buttonVariants({ variant: "secondary", size: "sm" })}>
+                Comprar fotos
               </Link>
             }
           />
@@ -115,7 +115,7 @@ export function PassoRevisao({
         )}
         {estimativa > 0 ? (
           <p className="text-label text-t2">
-            Só a foto principal refeita com IA gasta crédito. Produto que já existe e é pulado não gasta.
+            Só a foto principal refeita com IA conta. Produto que já existe e é pulado não conta.
           </p>
         ) : null}
       </section>

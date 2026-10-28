@@ -10,6 +10,7 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AI_COST, logAiUsage } from "@/lib/billing/usage";
 import { consumeCredits, refundCredits } from "@/lib/billing/credits";
+import { FRASE_SEM_FOTOS, erroDoJobDeImagem } from "@/lib/ai/erro-ia-imagem";
 
 export const IMAGE_JOB_TYPE = "neutralize_image";
 const MAX_ATTEMPTS = 3;
@@ -270,6 +271,9 @@ export async function processImageNeutralizeJobs(input: {
     await runPool(jobs, concurrency, async (job) => {
       const payload = (job.progress || {}) as ImageJobPayload;
       let creditConsumed = false;
+      // A etapa que falhou: so o erro do Gemini passa pela frase da IA fora --
+      // o 429 do throttle da Shopify (replaceProductHeroImage) segue cru.
+      let naIa = false;
       try {
         // Gating (Fase 5): debita 1 credito ANTES de gastar Gemini. Sem credito,
         // marca o job e nao chama a IA (zero custo). So bloqueia se
@@ -280,8 +284,8 @@ export async function processImageNeutralizeJobs(input: {
             .from("background_jobs")
             .update({
               status: "failed",
-              progress: { ...payload, step: "Sem creditos" },
-              error: "Sem creditos de IA. Recarregue para continuar.",
+              progress: { ...payload, step: "Sem fotos com IA" },
+              error: FRASE_SEM_FOTOS,
             })
             .eq("id", job.id);
           summary.failed += 1;
@@ -289,6 +293,7 @@ export async function processImageNeutralizeJobs(input: {
         }
         creditConsumed = credit.enforced;
 
+        naIa = true;
         const neutral = await neutralizeProductImage({
           userId: input.userId,
           imageUrl: payload.imageUrl,
@@ -299,6 +304,7 @@ export async function processImageNeutralizeJobs(input: {
           storageClient,
         });
 
+        naIa = false;
         const mediaId = await replaceProductHeroImage(creds, payload.productId, {
           src: neutral.src,
           altText: payload.title,
@@ -346,10 +352,11 @@ export async function processImageNeutralizeJobs(input: {
         // sucesso). Numa retentativa o credito e debitado de novo.
         if (creditConsumed) await refundCredits(input.userId, 1);
         const attempts = (payload.attempts || 0) + 1;
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Falha ao neutralizar imagem.";
+        // Erro da IA que e nosso (saldo pre-pago do Google, cota): o lojista le
+        // a nossa frase, nunca o texto do Google -- e o alerta do operador
+        // (alertas/avaliar.ts, ia_imagem_fora_do_ar) conta por ela.
+        const cru = error instanceof Error ? error.message : "Falha ao neutralizar imagem.";
+        const message = naIa ? erroDoJobDeImagem(cru).texto : cru;
         const exhausted = attempts >= MAX_ATTEMPTS;
         await supabase
           .from("background_jobs")

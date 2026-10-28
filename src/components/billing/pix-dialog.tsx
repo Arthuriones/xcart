@@ -296,8 +296,8 @@ export function PixDialog({
   }
 
   const nomePlano = `Plano ${cobranca.nomePlano ?? "Pro"}`;
-  const oQue = ehPro ? `${nomePlano} por 30 dias` : creditos(cobranca.credits);
-  const libera = ehPro ? "o plano libera" : "os créditos entram";
+  const oQue = ehPro ? `${nomePlano} por 30 dias` : `${creditos(cobranca.credits)} com IA`;
+  const libera = ehPro ? "o plano libera" : "as fotos entram";
   const fim =
     status === "expirado"
       ? {

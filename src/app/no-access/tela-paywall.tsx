@@ -31,7 +31,7 @@ const PERGUNTAS: { p: string; r: string }[] = [
     r:
       "O número de vitrines e de lojas de checkout no roteamento, e o rastreamento. " +
       PLANOS.map((pl) => `${pl.nome}: ${comMinuscula(resumoDosLimites(pl.limites)).replace(" · ", "; ")}.`).join(" ") +
-      " Os créditos de IA são os mesmos nos três.",
+      " As fotos com IA são as mesmas nos três.",
   },
   {
     p: "Quando o acesso libera?",
@@ -39,15 +39,15 @@ const PERGUNTAS: { p: string; r: string }[] = [
   },
   {
     p: "Posso cancelar quando quiser?",
-    r: `Sim. No cartão, o cancelamento fica em Assinatura e créditos, e o acesso continua até o fim do período já pago. O Pix não renova sozinho, então não há o que cancelar. Nos primeiros ${GARANTIA_DIAS} dias, se não gostar, fale com o suporte e o dinheiro volta.`,
+    r: `Sim. No cartão, o cancelamento fica em Assinatura, e o acesso continua até o fim do período já pago. O Pix não renova sozinho, então não há o que cancelar. Nos primeiros ${GARANTIA_DIAS} dias, se não gostar, fale com o suporte e o dinheiro volta.`,
   },
   {
     p: "Como funciona o pagamento por Pix?",
     r: "Cada Pix libera 30 dias do plano escolhido. Se pagar antes de acabar, os dias novos se somam aos que ainda faltam.",
   },
   {
-    p: "O que é um crédito de IA?",
-    r: `Um crédito neutraliza uma imagem com IA. Todo plano inclui ${PRO_INCLUDED_CREDITS} por mês, e dá para comprar mais por Pix dentro do app. Neutralizar texto não usa crédito.`,
+    p: "O que são as fotos com IA?",
+    r: `Servem para tirar a marca das fotos: a IA refaz a foto principal do produto sem a marca, na loja de checkout do roteamento ou ao importar produtos com troca de marca. Cada foto refeita usa 1. Rastreamento, lucro, texto e tradução não usam. O plano soma ${PRO_INCLUDED_CREDITS} por mês, e nenhuma vence.`,
   },
 ];
 

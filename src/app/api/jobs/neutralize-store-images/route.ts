@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
         totalProducts,
         alreadyClean,
         creditsShort,
-        message: "Sem creditos suficientes. Recarregue para trocar as imagens.",
+        message: "Faltam fotos com IA para trocar as imagens. Compre mais em Assinatura.",
       });
     }
 

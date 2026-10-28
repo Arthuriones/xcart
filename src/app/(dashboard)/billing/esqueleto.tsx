@@ -8,7 +8,7 @@ export function EsqueletoAssinatura() {
   return (
     <div
       aria-busy="true"
-      aria-label="Carregando assinatura e créditos"
+      aria-label="Carregando assinatura"
       className="flex animate-xc-in flex-col gap-4 [animation-delay:300ms]"
     >
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">

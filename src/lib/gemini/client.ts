@@ -46,7 +46,7 @@ function genAIClient() {
  * Este arquivo usava @google/generative-ai, que o proprio Google marcou como
  * legado: o README diz "End-of-Life ... August 31st, 2025" -- ou seja, nem
  * correcao critica recebe mais. O SDK vivo e @google/genai, que o resto do
- * projeto (product-neutralizer, image/generate) ja usa. Manter os dois era
+ * projeto (product-neutralizer) ja usa. Manter os dois era
  * carregar duas dependencias para o mesmo provedor, uma delas morta.
  *
  * A migracao vira um adaptador de 20 linhas porque os 6 pontos de chamada

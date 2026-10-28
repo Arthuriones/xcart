@@ -206,6 +206,6 @@ export const POLITICA_TESTE = {
 
 /**
  * A nota unica abaixo dos cartoes: teste, formas de pagamento e os pacotes de
- * credito (a caixa "Créditos extras" separada saiu no redesign).
+ * fotos com IA (a caixa "Créditos extras" separada saiu no redesign).
  */
-export const NOTA_DO_PRECO = `${POLITICA_TESTE.longa} Cartão de crédito, que renova sozinho todo mês, ou Pix, que libera 30 dias e não renova. Créditos de IA extras por Pix: ${PACOTES_EM_TEXTO}.`;
+export const NOTA_DO_PRECO = `${POLITICA_TESTE.longa} Cartão de crédito, que renova sozinho todo mês, ou Pix, que libera 30 dias e não renova. Fotos com IA extras por Pix: ${PACOTES_EM_TEXTO}.`;

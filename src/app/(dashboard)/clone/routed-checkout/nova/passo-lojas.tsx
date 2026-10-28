@@ -17,6 +17,7 @@ import {
   IDIOMAS,
   MODOS,
   ocupadasPorOutros,
+  tituloDaFalta,
   type Escolha,
   type EstadoEstimativa,
   type Modo,
@@ -285,14 +286,14 @@ export function PassoLojas({
           estimativa.tipo === "falta" ? (
             <Callout
               tom="err"
-              titulo="Faltam créditos para recriar as imagens"
+              titulo={tituloDaFalta(estimativa.faltam)}
               acao={
-                <Link href="/billing" className={buttonVariants({ variant: "secondary", size: "sm" })}>
-                  Comprar créditos
+                <Link href="/billing?comprar=1" className={buttonVariants({ variant: "secondary", size: "sm" })}>
+                  Comprar fotos
                 </Link>
               }
             >
-              {estimativa.texto} Compre créditos ou escolha manter a imagem original.
+              {estimativa.texto} Compre mais ou escolha “Manter a imagem original”.
             </Callout>
           ) : (
             <p aria-live="polite" className="text-dense text-t1">

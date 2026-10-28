@@ -1,5 +1,7 @@
 import "server-only";
 import type { createAdminClient } from "@/lib/supabase/admin";
+import { FRASE_IA_FORA } from "@/lib/ai/erro-ia-imagem";
+import { CONTA_DO_OPERADOR } from "./operador";
 import {
   diaNoFuso,
   formatarDinheiro,
@@ -925,6 +927,31 @@ export async function coletarCondicoesDetalhado(
         detalhe: detalheForaDoAr(r, f),
       });
     }
+  });
+
+  // IA de fotos fora do ar: a fila de neutralizacao gravou a frase da IA
+  // fora (erro-ia-imagem.ts: 429, saldo pre-pago do Google AI Studio, cota)
+  // nas ultimas 2 h. E problema do xcart, nao do lojista: abre so na conta do
+  // operador. Critico renotifica a cada 6 h enquanto aberto e fecha sozinho
+  // quando as falhas param (FALSOS_PARA_RESOLVER).
+  await rodar("ia_imagem_fora_do_ar", async () => {
+    const { count, error } = await admin
+      .from("background_jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("type", "neutralize_image")
+      .eq("error", FRASE_IA_FORA)
+      .gte("updated_at", new Date(agora.getTime() - 2 * HORA).toISOString());
+    if (error) throw new Error(error.message);
+    if (!count) return;
+    condicoes.push({
+      user_id: CONTA_DO_OPERADOR,
+      store_id: null,
+      regra: "ia_imagem_fora_do_ar",
+      chave: "gemini",
+      severidade: "critico",
+      titulo: "IA de fotos fora do ar",
+      detalhe: `${plural(count, "foto falhou", "fotos falharam")} nas últimas 2 h com erro da IA de imagem (429: saldo pré-pago do Google AI Studio ou cota). A foto com IA do lojista voltou ao saldo. Recarregue o saldo no AI Studio.`,
+    });
   });
 
   return { condicoes, regrasComFalha, lojas, erros };

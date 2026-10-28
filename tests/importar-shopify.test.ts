@@ -151,9 +151,12 @@ describe("creditos", () => {
     expect(situacaoCreditos(10, null, true).texto).toMatch(/saldo/);
     expect(situacaoCreditos(10, 10, true).tom).toBe("ok");
     expect(situacaoCreditos(10, 3, true).texto).toBe(
-      "Faltam 7 créditos: as fotos além do saldo ficam com a imagem original."
+      "Você tem 3 fotos com IA para 10 fotos: 7 ficam com a foto original."
     );
-    expect(situacaoCreditos(10, 9, true).texto).toMatch(/^Faltam 1 crédito:/);
+    expect(situacaoCreditos(10, 9, true).texto).toBe("Você tem 9 fotos com IA para 10 fotos: 1 fica com a foto original.");
+    expect(situacaoCreditos(10, 0, true).texto).toBe("Você não tem fotos com IA: as 10 ficam com a original.");
+    expect(situacaoCreditos(10, 10, true).texto).toBe("Vai refazer até 10 fotos sem marca. Você tem 10.");
+    expect(situacaoCreditos(0, 5, true).texto).toBe("Nenhuma foto será refeita.");
     expect(situacaoCreditos(10, 0, false).tom).toBe("info");
   });
 });

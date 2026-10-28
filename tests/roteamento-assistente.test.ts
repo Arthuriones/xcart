@@ -44,14 +44,15 @@ describe("papeis das lojas", () => {
   });
 });
 
-describe("estimativa de creditos", () => {
+describe("estimativa das fotos com IA", () => {
   it("calculando enquanto a contagem nao volta", () => {
     expect(estimativaCreditos({ produtos: null, saldo: 10, cobrando: true, saldoFalhou: false }).tipo).toBe("calculando");
   });
   it("falta de saldo bloqueia", () => {
     const e = estimativaCreditos({ produtos: 40, saldo: 12, cobrando: true, saldoFalhou: false });
     expect(e.tipo).toBe("falta");
-    expect(e.tipo === "falta" && e.texto).toBe("Precisa de 40 créditos (1 por produto) e você tem 12.");
+    expect(e.tipo === "falta" && e.texto).toBe("Vai refazer até 40 fotos. Você tem 12.");
+    expect(e.tipo === "falta" && e.faltam).toBe(28);
   });
   it("sem cobranca ativa nao gasta", () => {
     expect(estimativaCreditos({ produtos: 40, saldo: 0, cobrando: false, saldoFalhou: false }).tipo).toBe("livre");
@@ -61,7 +62,11 @@ describe("estimativa de creditos", () => {
   });
   it("com saldo de sobra", () => {
     const e = estimativaCreditos({ produtos: 1, saldo: 300, cobrando: true, saldoFalhou: false });
-    expect(e.tipo === "ok" && e.texto).toBe("Vai usar cerca de 1 crédito (1 por produto). Você tem 300.");
+    expect(e.tipo === "ok" && e.texto).toBe("Vai refazer até 1 foto sem marca. Você tem 300.");
+  });
+  it("vitrine sem produto nao refaz nada", () => {
+    const e = estimativaCreditos({ produtos: 0, saldo: 0, cobrando: true, saldoFalhou: false });
+    expect(e).toEqual({ tipo: "ok", texto: "Nenhuma foto será refeita." });
   });
 });
 

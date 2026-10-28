@@ -69,11 +69,11 @@ describe("o que cada plano inclui", () => {
     expect(linha).toMatch(/Google pela tag/);
   });
 
-  it("cita os créditos inclusos com o número do plano, uma vez em cada plano", () => {
+  it("cita as fotos com IA inclusas com o número do plano, uma vez em cada plano", () => {
     for (const p of PLANOS_COBRADOS) {
-      const comCreditos = recursosDoPlano(p.limites).filter((b) => b.includes("créditos"));
+      const comCreditos = recursosDoPlano(p.limites).filter((b) => b.includes("fotos com IA"));
       expect(comCreditos).toHaveLength(1);
-      expect(comCreditos[0].startsWith(`${PRO_INCLUDED_CREDITS} créditos`)).toBe(true);
+      expect(comCreditos[0].startsWith(`${PRO_INCLUDED_CREDITS} fotos com IA`)).toBe(true);
     }
   });
 });

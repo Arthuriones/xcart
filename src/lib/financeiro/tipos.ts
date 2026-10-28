@@ -537,7 +537,8 @@ export type RegraAlerta =
   | "roteamento_escape_vitrine"
   | "roteamento_conserto_falhando"
   | "roteamento_loja_fora_do_ar"
-  | "roteamento_vitrine_com_senha";
+  | "roteamento_vitrine_com_senha"
+  | "ia_imagem_fora_do_ar";
 
 export const ROTULO_REGRA: Record<RegraAlerta, string> = {
   ads_sync_atrasado: "Gasto de anúncio sem atualizar",
@@ -553,7 +554,15 @@ export const ROTULO_REGRA: Record<RegraAlerta, string> = {
   roteamento_conserto_falhando: "Conserto da rota falhando",
   roteamento_loja_fora_do_ar: "Loja da rota fora do ar",
   roteamento_vitrine_com_senha: "Vitrine da rota com senha",
+  ia_imagem_fora_do_ar: "IA de fotos fora do ar",
 };
+
+/**
+ * Regras que abrem so na conta do operador do xcart (alertas/operador.ts): o
+ * problema e do xcart, nao do lojista, e por isso ficam fora da lista de
+ * regras que o lojista ve em Notificacoes.
+ */
+export const REGRAS_DO_OPERADOR: readonly RegraAlerta[] = ["ia_imagem_fora_do_ar"];
 
 export interface AlertaRow {
   id: string;

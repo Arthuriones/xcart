@@ -69,7 +69,9 @@ async function sair(router: ReturnType<typeof useRouter>) {
 /** Quanto o contador do item vale agora (0 = nao mostra). */
 function valorDoContador(item: ItemNav, dados: DadosMenu): number {
   if (!item.contador) return 0;
-  return item.contador === "alertas" ? dados.alertas : dados.creditos;
+  if (item.contador === "alertas") return dados.alertas;
+  // Fotos com IA so se gastam no roteamento: sem rota, o saldo nao aparece.
+  return dados.temRota ? dados.creditos : 0;
 }
 
 /**
@@ -80,7 +82,7 @@ function nomeAcessivel(item: ItemNav, dados: DadosMenu): string {
   const n = valorDoContador(item, dados);
   if (!n) return item.rotulo;
   if (item.contador === "alertas") return `${item.rotulo}, ${n} ${n === 1 ? "aberto" : "abertos"}`;
-  return `${item.rotulo}, ${n.toLocaleString("pt-BR")} ${n === 1 ? "crédito" : "créditos"}`;
+  return `${item.rotulo}, ${n.toLocaleString("pt-BR")} ${n === 1 ? "foto com IA" : "fotos com IA"}`;
 }
 
 function Contador({ item, dados, className }: { item: ItemNav; dados: DadosMenu; className?: string }) {

@@ -179,7 +179,8 @@ export async function POST(request: NextRequest) {
 
     const logoBuffer = Buffer.from(await logoData.arrayBuffer());
 
-    // imageUrl vem crua do corpo do POST -- mesmo buraco de /api/image/generate.
+    // imageUrl vem crua do corpo do POST -- o mesmo buraco que a
+    // /api/image/generate tinha (apagada em 27/10/2026: gerava imagem sem debitar).
     // safeFetch resolve o DNS e revalida cada redirect.
     let imgRes: Response;
     try {

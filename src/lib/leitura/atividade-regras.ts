@@ -68,7 +68,7 @@ export const TIPOS: readonly OpcaoTipo[] = [
   { id: "importacao", rotulo: "Importação", filtro: "Importações", nenhum: "Nenhuma importação" },
   { id: "alerta", rotulo: "Alerta", filtro: "Alertas", nenhum: "Nenhum alerta" },
   { id: "rastreamento", rotulo: "Rastreamento", filtro: "Rastreamento", nenhum: "Nenhum envio de compras ligado" },
-  { id: "creditos", rotulo: "Créditos e plano", filtro: "Créditos e plano", nenhum: "Nenhuma compra de créditos", daConta: true },
+  { id: "creditos", rotulo: "Fotos com IA e plano", filtro: "Fotos com IA e plano", nenhum: "Nenhuma compra de fotos com IA", daConta: true },
   { id: "rota", rotulo: "Rota", filtro: "Rotas", nenhum: "Nenhuma rota criada", soComRota: true },
   { id: "carrinho", rotulo: "Carrinho", filtro: "Carrinhos", nenhum: "Nenhum carrinho registrado", soComRota: true },
 ];
@@ -602,7 +602,7 @@ function eventoCompra(c: LinhaCompra): EventoAtividade {
   const pix = c.method === "pix";
   const plano = c.kind === "pro_month";
   const creditos = Math.max(0, Number(c.credits) || 0);
-  const oque = plano ? "Plano Pro" : creditos === 1 ? "1 crédito" : `${creditos} créditos`;
+  const oque = plano ? "Plano Pro" : creditos === 1 ? "1 foto com IA" : `${creditos} fotos com IA`;
   const preco = valor ? ` por ${valor}` : "";
   const comum = {
     id: `compra-${c.id}`,
@@ -610,7 +610,7 @@ function eventoCompra(c: LinhaCompra): EventoAtividade {
     loja: null,
     at: c.created_at,
     href: "/billing",
-    destino: "Abrir Assinatura e créditos",
+    destino: "Abrir Assinatura",
   };
   switch (c.status) {
     case "paid":
@@ -618,7 +618,7 @@ function eventoCompra(c: LinhaCompra): EventoAtividade {
         ...comum,
         tom: "ok",
         selo: null,
-        titulo: plano ? "Plano Pro pago" : "Créditos comprados",
+        titulo: plano ? "Plano Pro pago" : "Fotos com IA compradas",
         descricao: `${oque}${preco}${pix ? ", pago por Pix" : ""}.`,
       };
     case "refused":

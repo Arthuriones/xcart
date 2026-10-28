@@ -184,7 +184,7 @@ export function Assistente({ lojas, origem }: { lojas: Loja[]; origem: string })
   const estimativa = !estimaImagens
     ? null
     : contagem?.chave === chaveContagem && produtos === null
-      ? { tipo: "semLeitura" as const, texto: "Não deu para contar os produtos da vitrine agora. Cada produto usa 1 crédito." }
+      ? { tipo: "semLeitura" as const, texto: "Não deu para contar os produtos da vitrine agora. Cada produto usa 1 foto com IA." }
       : saldo === null
         ? { tipo: "calculando" as const }
         : estimativaCreditos({ produtos, saldo: saldo.valor, cobrando: saldo.cobrando, saldoFalhou: saldo.falhou });

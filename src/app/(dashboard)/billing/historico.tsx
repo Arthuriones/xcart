@@ -92,7 +92,7 @@ export function Historico({
           <DataTable
             colunas={COLUNAS}
             linhas={linhas}
-            legenda="Compras de créditos e de meses do Pro, da mais recente para a mais antiga"
+            legenda="Compras de fotos com IA e de meses do Pro, da mais recente para a mais antiga"
             ordenacaoInicial={[{ chave: "quando", direcao: "desc" }]}
             vazio={
               <EmptyState

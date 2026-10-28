@@ -244,21 +244,28 @@ export function situacaoCreditos(
   cobrando: boolean
 ): SituacaoCreditos {
   if (estimativa === 0) {
-    return { tom: "neutral", texto: "Sem custo em créditos: nenhuma imagem será refeita com IA." };
+    return { tom: "neutral", texto: "Nenhuma foto será refeita." };
   }
   if (!cobrando) {
-    return { tom: "info", texto: "Hoje a IA de imagem não desconta créditos da sua conta." };
+    return { tom: "info", texto: "Por enquanto, refazer fotos não desconta do saldo." };
   }
   if (saldo === null) {
     return { tom: "warn", texto: "Não deu para ler o seu saldo agora. Confira em Assinatura." };
   }
+  const fotos = estimativa === 1 ? "1 foto" : `${inteiro(estimativa)} fotos`;
   if (saldo >= estimativa) {
-    return { tom: "ok", texto: "Seu saldo cobre esta importação." };
+    return { tom: "ok", texto: `Vai refazer até ${fotos} sem marca. Você tem ${inteiro(saldo)}.` };
   }
+  // O produto entra com a foto original e o job da troca e que falha sem
+  // saldo (image-neutralize-processor): a foto alem do saldo fica a original.
   const falta = estimativa - saldo;
+  const ficam = falta === 1 ? "1 fica" : `${inteiro(falta)} ficam`;
+  if (saldo === 0) {
+    return { tom: "warn", texto: `Você não tem fotos com IA: ${estimativa === 1 ? "a foto fica" : `as ${inteiro(estimativa)} ficam`} com a original.` };
+  }
   return {
     tom: "warn",
-    texto: `Faltam ${inteiro(falta)} ${falta === 1 ? "crédito" : "créditos"}: as fotos além do saldo ficam com a imagem original.`,
+    texto: `Você tem ${saldo === 1 ? "1 foto" : `${inteiro(saldo)} fotos`} com IA para ${fotos}: ${ficam} com a foto original.`,
   };
 }
 

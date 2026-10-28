@@ -461,10 +461,10 @@ describe("Pix avulso pela AbacatePay", () => {
     });
     const criado = api.chamadas.find((c) => c.caminho === "/transparents/create")!;
     expect(criado.corpo).toMatchObject({ method: "PIX", data: { amount: 2500, expiresIn: 3600 } });
-    // A API recusa o travessao do nome do pacote ("xcart — 50 créditos"): 400 em producao.
+    // A API recusa o travessao do nome do pacote ("xcart — 50 fotos com IA"): 400 em producao.
     const descricao = String((criado.corpo!.data as Record<string, unknown>).description);
     expect(descricao).not.toMatch(/[^ -ÿ]/);
-    expect(descricao).toContain("créditos");
+    expect(descricao).toContain("fotos com IA");
     expect((criado.corpo!.data as Record<string, unknown>).customer).toBeUndefined();
     // metadata so com texto (a AbacatePay recusa numero).
     for (const v of Object.values((criado.corpo!.data as { metadata: Record<string, unknown> }).metadata)) {

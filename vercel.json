@@ -6,9 +6,6 @@
       "maxDuration": 60,
       "memory": 1024
     },
-    "src/app/api/image/generate/route.ts": {
-      "maxDuration": 60
-    },
     "src/app/api/jobs/bulk-import/process/route.ts": {
       "maxDuration": 300
     },

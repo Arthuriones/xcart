@@ -207,13 +207,14 @@ export function SwapImagesDialog({ open, onOpenChange, storeId, storeLabel }: Sw
     estimate.estimatedCredits > estimate.creditBalance;
 
   let textoEstimativa: string;
-  if (estimating || !estimate) textoEstimativa = "Calculando quantos créditos a troca usa…";
-  else if (!estimate.billingEnforced)
-    textoEstimativa = "A cobrança de créditos ainda não está ativa: a troca não gasta crédito por enquanto.";
+  if (estimating || !estimate) textoEstimativa = "Calculando quantas fotos a troca refaz…";
+  else if (!estimate.billingEnforced) textoEstimativa = "Por enquanto, refazer fotos não desconta do saldo.";
+  else if (estimate.estimatedCredits === 0) textoEstimativa = "Nenhuma foto será refeita.";
   else
-    textoEstimativa = `Vai usar cerca de ${plural(estimate.estimatedCredits, "crédito", "créditos")} (1 por imagem)${
+    textoEstimativa = `Vai refazer até ${plural(estimate.estimatedCredits, "foto", "fotos")} sem marca${
       estimate.creditBalance !== null ? `. Você tem ${estimate.creditBalance.toLocaleString("pt-BR")}.` : "."
     }`;
+  const faltam = falta && estimate ? estimate.estimatedCredits - (estimate.creditBalance ?? 0) : 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -248,25 +249,25 @@ export function SwapImagesDialog({ open, onOpenChange, storeId, storeLabel }: Sw
             />
           </div>
 
-          {!progress?.total ? (
-            falta ? (
+          {/* A falta aparece tambem depois de uma troca anterior: o "Trocar de
+              novo" fica bloqueado e precisa dizer por que. */}
+          {falta && !running ? (
               <Callout
                 tom="err"
-                titulo="Faltam créditos"
+                titulo={`${faltam === 1 ? "Falta" : "Faltam"} ${plural(faltam, "foto", "fotos")} com IA`}
                 acao={
-                  <Link href="/billing" className={buttonVariants({ variant: "secondary", size: "sm" })}>
-                    Comprar créditos
+                  <Link href="/billing?comprar=1" className={buttonVariants({ variant: "secondary", size: "sm" })}>
+                    Comprar fotos
                   </Link>
                 }
               >
-                Precisa de {plural(estimate?.estimatedCredits ?? 0, "crédito", "créditos")} e você tem{" "}
+                Vai refazer até {plural(estimate?.estimatedCredits ?? 0, "foto", "fotos")}. Você tem{" "}
                 {(estimate?.creditBalance ?? 0).toLocaleString("pt-BR")}.
               </Callout>
-            ) : (
+          ) : !progress?.total ? (
               <p aria-live="polite" className="text-dense text-t1">
                 {textoEstimativa}
               </p>
-            )
           ) : null}
 
           {progress && progress.total > 0 ? (
@@ -294,7 +295,11 @@ export function SwapImagesDialog({ open, onOpenChange, storeId, storeLabel }: Sw
             </Button>
           ) : (
             <Button pending={starting} disabled={falta} onClick={handleStart}>
-              {started ? "Trocar de novo" : "Trocar as imagens agora"}
+              {started
+                ? "Trocar de novo"
+                : estimate && estimate.estimatedCredits > 0
+                  ? `Refazer ${plural(estimate.estimatedCredits, "foto", "fotos")}`
+                  : "Trocar as imagens agora"}
             </Button>
           )}
         </div>

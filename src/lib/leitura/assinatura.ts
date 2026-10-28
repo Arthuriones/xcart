@@ -69,6 +69,11 @@ export interface LeituraAssinatura {
   uso: UsoDoPlano | null;
   /** O debito de credito esta ligado nesta instalacao. */
   cobrancaDeCreditoLigada: boolean;
+  /**
+   * Tem rota de checkout (onde as fotos com IA se gastam). A leitura que falha
+   * conta como "tem", igual ao menu: nunca esconde a compra de quem usa.
+   */
+  temRota: boolean;
   /** Instante da leitura (ms): base de "vence em N dias" sem divergir na hidratacao. */
   agora: number;
   erros: { perfil: string | null; uso: string | null; compras: string | null; lojas: string | null };
@@ -129,6 +134,7 @@ export async function lerAssinatura(opcoes: { completo?: boolean } = {}): Promis
     compras: null,
     uso: null,
     cobrancaDeCreditoLigada: billingEnforced(),
+    temRota: true,
     agora,
     erros: { perfil: null, uso: null, compras: null, lojas: null },
   };
@@ -203,7 +209,7 @@ export async function lerAssinatura(opcoes: { completo?: boolean } = {}): Promis
       .limit(LIMITE_COMPRAS);
   };
 
-  const [perfil, uso, compras, lojas] = await Promise.all([
+  const [perfil, uso, compras, lojas, rotas] = await Promise.all([
     lerPerfil(),
     completo ? somarUso().catch((e) => ({ total: null, erro: mensagem(e) })) : null,
     completo ? lerCompras() : null,
@@ -213,7 +219,16 @@ export async function lerAssinatura(opcoes: { completo?: boolean } = {}): Promis
           (e) => ({ u: null, erro: mensagem(e) })
         )
       : null,
+    completo
+      ? Promise.resolve(
+          supabase.from("routed_checkout_configs").select("id", { count: "exact", head: true }).eq("user_id", userId)
+        ).then(
+          (r) => (r.error ? null : (r.count ?? 0)),
+          () => null
+        )
+      : null,
   ]);
+  leitura.temRota = rotas !== 0;
 
   if (perfil.error) {
     leitura.erros.perfil = perfil.error.message;

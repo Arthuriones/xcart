@@ -184,7 +184,7 @@ export function LinhaDoTempo({
       <EmptyState
         icone={<History />}
         titulo="Nada aconteceu na conta ainda"
-        descricao="Lojas, importações, alertas e compras de créditos aparecem aqui."
+        descricao="Lojas, importações, alertas e compras de fotos com IA aparecem aqui."
         acao={
           <Link
             href={ROTA_CONECTAR_OPERACAO}
@@ -411,7 +411,7 @@ function VazioFiltrado({
       <EmptyState
         variante="simples"
         className="min-h-45"
-        titulo="Créditos e plano são da conta, não de uma loja"
+        titulo="Fotos com IA e plano são da conta, não de uma loja"
         descricao="Com uma loja escolhida, as compras não aparecem."
         acao={
           <Button variant="secondary" onClick={onTodasLojas} className="h-ctl-lg sm:h-ctl-md">

@@ -4,8 +4,8 @@ import { PageHeader } from "@/components/layout/page-header";
 export function CabecalhoAssinatura() {
   return (
     <PageHeader
-      title="Assinatura e créditos"
-      description="Seu plano, o saldo de créditos de IA e as compras feitas por Pix."
+      title="Assinatura"
+      description="Seu plano e as compras feitas por Pix."
     />
   );
 }

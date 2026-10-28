@@ -151,7 +151,7 @@ describe("nota abaixo dos cartões", () => {
   it("teste, formas de pagamento e os pacotes de crédito do catálogo", () => {
     expect(limpo(PACOTES_EM_TEXTO)).toBe("50 por R$ 25,00, 200 por R$ 75,00 ou 500 por R$ 150,00");
     expect(limpo(NOTA_DO_PRECO)).toBe(
-      `${POLITICA_TESTE.longa} Cartão de crédito, que renova sozinho todo mês, ou Pix, que libera 30 dias e não renova. Créditos de IA extras por Pix: 50 por R$ 25,00, 200 por R$ 75,00 ou 500 por R$ 150,00.`
+      `${POLITICA_TESTE.longa} Cartão de crédito, que renova sozinho todo mês, ou Pix, que libera 30 dias e não renova. Fotos com IA extras por Pix: 50 por R$ 25,00, 200 por R$ 75,00 ou 500 por R$ 150,00.`
     );
   });
 });

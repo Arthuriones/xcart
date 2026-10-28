@@ -298,13 +298,13 @@ describe("linha do banco vira evento", () => {
       ctx
     );
     expect(eventos.map((e) => e.titulo)).toEqual([
-      "Créditos comprados",
+      "Fotos com IA compradas",
       "Pix gerado",
       "Pix não pago",
       "Pagamento devolvido",
       "Plano Pro pago",
     ]);
-    expect(eventos[0].descricao).toMatch(/^200 créditos por R\$\s?49,90, pago por Pix\.$/);
+    expect(eventos[0].descricao).toMatch(/^200 fotos com IA por R\$\s?49,90, pago por Pix\.$/);
     expect(eventos[1].selo?.texto).toBe("Sem confirmação");
     expect(eventos.every((e) => e.href === "/billing" && e.loja === null)).toBe(true);
   });

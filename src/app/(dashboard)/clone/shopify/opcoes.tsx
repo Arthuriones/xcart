@@ -154,7 +154,7 @@ export function PassoOpcoes({
       <Grupo titulo="IA de imagem">
         {trocaMarca ? (
           <Callout tom="info" titulo="A foto principal é refeita com IA">
-            Depois de criar cada produto, em segundo plano: 1 crédito por produto. O produto entra só com a foto
+            Depois de criar cada produto, em segundo plano: 1 foto com IA por produto. O produto entra só com a foto
             principal.
           </Callout>
         ) : (

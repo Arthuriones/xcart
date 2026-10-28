@@ -38,9 +38,9 @@ const RASTREAMENTO = [
   "Checkouts externos (Cakto, Hubla e Sphere) no mesmo painel",
 ] as const;
 
-const CREDITOS = `${PRO_INCLUDED_CREDITS} créditos de IA por mês (1 crédito = 1 imagem neutralizada)`;
+const CREDITOS = `${PRO_INCLUDED_CREDITS} fotos com IA por mês (tira a marca das fotos dos produtos)`;
 
-/** A lista do plano, na ordem: roteamento, rastreamento (se tem), creditos. */
+/** A lista do plano, na ordem: roteamento, rastreamento (se tem), fotos com IA. */
 export function recursosDoPlano(l: Pick<LimitesPlano, "rastreamento" | "checkouts">): string[] {
   const rodizio = l.checkouts === null || l.checkouts > 1;
   return [

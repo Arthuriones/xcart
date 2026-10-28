@@ -25,7 +25,7 @@ export function ErroAssinatura({ detalhe }: { detalhe: string | null }) {
     <EmptyState
       role="alert"
       titulo="Não deu para carregar sua assinatura"
-      descricao="Seu plano e seus créditos continuam como estavam: foi a leitura que falhou."
+      descricao="Seu plano e suas fotos com IA continuam como estavam: foi a leitura que falhou."
       acao={
         <div className="flex flex-col items-center gap-2">
           <BotaoTentarDeNovo />
