@@ -111,11 +111,11 @@ Every AI call receives `StoreContext` (name, niche, target_audience, brand_voice
   O id é o do pixel (`idDoEventoDoCheckout`, a mesma função no coletor: `begin_checkout_ck_<token>`; sem token, `begin_checkout_pedido_<id>`), e o índice único junta os dois em qualquer ordem. A linha tem `order_id` numérico e `checkout_token` nulo, event_time 1 s antes do pagamento, user_data/valor/itens da compra, e sai junto dela. `landing_site` que é endpoint (`/cart/add.js`, checkout com token) vira a última página do comprador ou a raiz (`caminhoEhEndpoint`). Travado por `tests/tracking-checkout-de-garantia.test.ts`.
 - **TikTok Ads sai pelo servidor no molde do Meta** (Events API, `POST /open_api/v1.3/event/track/`, `src/lib/tracking/tiktok-api.ts`): destino `plataforma='tiktok'` com `conta` = Pixel Code ALFANUMERICO (nao arranque as letras como no id do Meta), token em `tracking_destination_secrets` mandado no header `Access-Token`. **Sucesso e `code === 0`, nao o HTTP 200** -- o TikTok responde 200 com erro. A fila despacha por `linha.destination`; o payload da linha e o evento do TikTok (`event`, `user`, `page`, `properties`), com o MESMO `event_id` do Meta e `event_name` da fila igual (`Purchase` na compra). Compra = `Purchase` (nao `CompletePayment`/`PlaceAnOrder`); valor e moeda so do webhook. Telefone em E.164 COM '+' antes do hash (hash diferente do Meta). Migration 059 (CHECKs, `tracking_identities.ttp`, painel/feed lendo `payload.user.ttclid`) antes do deploy. Travado por `tests/tracking-tiktok*.test.ts`.
 - **Campanha, conjunto e anuncio vao NO PEDIDO** (`fin_order_origem`, migration 071; regras em `src/lib/tracking/utm.ts` e `origem-pedido.ts`, ver ARCHITECTURE.md §5.2). O Meta, com o campo de Parametros de URL vazio, ja manda os ids -- mas com o CONJUNTO em `utm_term` (no modelo da Utmify e no nosso, `PARAMETROS_URL`, o conjunto e o `utm_medium`): quem decide e o `utm_medium` ser id ou nao. O `landing_site` corta em 255 e o fbclid vem antes das UTMs (campanha em 0 de 23 pedidos): a campanha vem da jornada da Shopify (sync), do carrinho (`_xc_utm_*` + `_xc_utm_em`, que o snippet e a ponte gravam) e da identidade (`tracking_identities.utm`, pela cascata do Purchase). Toque com hora so vale 7 dias antes do pedido. **Click id sem hora nao diz a plataforma** (gclid/ttclid/fbclid do carrinho ou da identidade duram 90 dias): fica so na coluna `clique`; so o `_fbc` traz a hora dele. O clique novo SEM UTM (Google so com auto-tagging) chega datado porque o snippet e a ponte guardam o conjunto `{utm_*, gad_campaignid, clique, em}` -- qualquer click id NOVO na URL troca o conjunto inteiro (`_xc_utm_clique`, `_xc_utm_gad` no carrinho); o mesmo que ja estava no cookie e recarga ou aba reaberta, e a hora fica a da chegada -- e a ponte repassa a loja a hora do clique que ela viu (`xcart_clique_em`), para o click id de semanas atras nao virar clique de agora. Webhook e sync se MESCLAM (`mesclarOrigens`), nunca um apaga o outro. **071 antes do deploy**: sem ela o coletor faz dois UPDATE por evento. Atributo do pedido so por lista fechada: a nota do Releasit traz nome, telefone, endereco e IP. Pedido de app de COD sem visita fica "Sem dado" com o motivo, nunca "Direto".
-- **Em rota vitrine -> checkout, o gclid NAO chega ao pedido.**
+- **Em rota vitrine -> checkout, o gclid so chega ao pedido pela PONTE na vitrine.**
   `buildCartPermalink` nao leva `attributes` de proposito (a loja de checkout
-  nao deve saber a origem), e o pedido nasce na loja de checkout. Logo a compra
-  sai sem atribuicao em loja roteada. Carrinho e checkout funcionam, porque
-  acontecem na vitrine.
+  nao deve saber a origem), e o pedido nasce na loja de checkout. Sem a ponte no
+  tema da vitrine, a compra sai sem atribuicao em loja roteada. Carrinho e
+  checkout funcionam, porque acontecem na vitrine.
   **Nao va consertar isso por conta propria.** A operacao do Arthur decidiu
   (2026-09-26) rodar o anuncio DIRETO na loja de checkout, sem vitrine -- e ai
   quem recebe o clique e quem cria o pedido sao a mesma loja, o cart attribute
@@ -126,8 +126,12 @@ Every AI call receives `StoreContext` (name, niche, target_audience, brand_voice
   eles**: a reescrita dela (`comParametros`) poe click ids, UTMs, `attributes[_fbp]`,
   `attributes[_xc_vid]` e `attributes[_xc_utm_*]` no `<a data-xcart-rota>` do loader
   quando o host esta em `data-xcart-destinos` (a tag gerada lista os dominios da loja de
-  checkout). `buildCartPermalink` segue sem attributes. Manter ou tirar e decisao do
-  Arthur, pendente; sem o `_xc_vid` o IC da ponte (abaixo) fica casado so pelo IP.
+  checkout). `buildCartPermalink` segue sem attributes. **O Arthur decidiu MANTER
+  (28/10/2026)**: o pedido roteado nasce com os attributes e a compra fica ligada a
+  campanha, ao custo de a loja de checkout ver os parametros do anuncio (nome de
+  campanha inclusive) no link e no pedido. Nao tire o `<a data-xcart-rota>` da
+  reescrita: e o `_xc_vid` que deixa o pixel cancelar o IC da ponte (abaixo) pelo
+  visitante; sem ele, so pelo IP.
 - **Na vitrine de rota, quem mede produto, carrinho e o abrir do checkout e a PONTE** (`xcart-bridge.js`
   com `data-xcart-shop` = a loja de checkout, colada no tema da vitrine; ARCHITECTURE.md
   §10.4): com o loader na pagina e `Shopify.shop` diferente da loja rastreada, manda
