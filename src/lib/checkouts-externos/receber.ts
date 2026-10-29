@@ -74,6 +74,8 @@ export interface MarcaCheckout {
   ultimo_evento_em?: string;
   ultimo_evento?: string;
   ultimo_evento_teste?: boolean;
+  /** O formato do ultimo aviso real (085), da plataforma que o descreve (`formato`). */
+  ultimo_formato?: unknown;
   ultimo_erro?: string | null;
   ultimo_erro_em?: string | null;
 }
@@ -486,6 +488,7 @@ export async function receberEvento(
     ultimo_evento_teste: false,
     ultimo_erro: null,
     ultimo_erro_em: null,
+    ...(plataforma.formato ? { ultimo_formato: plataforma.formato(corpo, agora) } : {}),
   });
 
   if (venda) return { status: 200, corpo: { ok: true }, notificar, ...comEnvios };

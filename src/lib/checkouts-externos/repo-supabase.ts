@@ -3,7 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { hashSegredo } from "@/lib/ads/google-ingest";
 import { paraNumero } from "@/lib/financeiro/tipos";
-import { CAMPOS_VENDA, type EstadoPedido } from "./estado";
+import { CAMPOS_UTM, CAMPOS_VENDA, type EstadoPedido } from "./estado";
 import type { CheckoutParaReceber, PedidoGravado, RepositorioCheckout } from "./receber";
 import { COLUNAS_VENDA, RE_TOKEN, colunaAusente, comColunas072, comColunasEmOrdem, type SituacaoExterna } from "./tipos";
 
@@ -152,9 +152,18 @@ function linhaDoPedido(p: EstadoPedido, venda: boolean) {
     perdido_em: p.perdido_em,
     atualizado_em: p.atualizado_em,
   };
-  // Venda: as colunas da 072. Comissao: so as da 069 (grava sem a migration).
+  // Venda: as colunas da 072. Comissao: so as da 069 (grava sem a migration)
+  // -- mais a UTM e os ids do anuncio (072) quando o aviso trouxe o clique.
   if (venda) for (const k of CAMPOS_VENDA) linha[k] = p[k];
+  else if (CAMPOS_UTM.some((k) => p[k] !== null && p[k] !== undefined)) for (const k of CAMPOS_UTM) linha[k] = p[k];
   return linha;
+}
+
+/** A linha sem a UTM: a comissao gravando num banco sem as colunas da 072. */
+function semUtm(linha: Record<string, unknown>): Record<string, unknown> {
+  const saida = { ...linha };
+  for (const k of CAMPOS_UTM) delete saida[k];
+  return saida;
 }
 
 export function repositorioSupabase(admin: Admin): RepositorioCheckout {
@@ -194,25 +203,34 @@ export function repositorioSupabase(admin: Admin): RepositorioCheckout {
       return data ? estadoDaLinha(data as unknown as Record<string, unknown>) : null;
     },
     async inserirPedido(x) {
-      const { error } = await admin.from("pedidos_externos").insert({
-        checkout_id: x.checkout_id,
-        user_id: x.user_id,
-        pedido_id: x.pedido_id,
-        ...linhaDoPedido(x.pedido, x.venda === true),
-        versao: 0,
-      });
+      const linha = linhaDoPedido(x.pedido, x.venda === true);
+      const inserir = (l: Record<string, unknown>) =>
+        admin.from("pedidos_externos").insert({
+          checkout_id: x.checkout_id,
+          user_id: x.user_id,
+          pedido_id: x.pedido_id,
+          ...l,
+          versao: 0,
+        });
+      let { error } = await inserir(linha);
+      // Comissao com UTM num banco sem a 072: grava como antes, sem ela.
+      if (error && x.venda !== true && colunaAusente(error)) ({ error } = await inserir(semUtm(linha)));
       if (error?.code === "23505") return "existe";
       if (error) throw new Error(`falha ao gravar o pedido: ${error.message}`);
       return "ok";
     },
     async atualizarPedido(x) {
-      const { data, error } = await admin
-        .from("pedidos_externos")
-        .update({ ...linhaDoPedido(x.pedido, x.venda === true), versao: x.versao + 1 })
-        .eq("checkout_id", x.checkout_id)
-        .eq("pedido_id", x.pedido_id)
-        .eq("versao", x.versao)
-        .select("pedido_id");
+      const linha = linhaDoPedido(x.pedido, x.venda === true);
+      const atualizar = (l: Record<string, unknown>) =>
+        admin
+          .from("pedidos_externos")
+          .update({ ...l, versao: x.versao + 1 })
+          .eq("checkout_id", x.checkout_id)
+          .eq("pedido_id", x.pedido_id)
+          .eq("versao", x.versao)
+          .select("pedido_id");
+      let { data, error } = await atualizar(linha);
+      if (error && x.venda !== true && colunaAusente(error)) ({ data, error } = await atualizar(semUtm(linha)));
       if (error) throw new Error(`falha ao atualizar o pedido: ${error.message}`);
       return (data ?? []).length > 0;
     },
@@ -237,10 +255,18 @@ export function repositorioSupabase(admin: Admin): RepositorioCheckout {
       return (await dono()) === x.checkout_id ? "ok" : "em_uso";
     },
     async marcarCheckout(checkoutId, campos) {
-      const { error } = await admin
-        .from("checkouts_externos")
-        .update({ ...campos, updated_at: new Date().toISOString() })
-        .eq("id", checkoutId);
+      const marcar = (c: typeof campos) =>
+        admin
+          .from("checkouts_externos")
+          .update({ ...c, updated_at: new Date().toISOString() })
+          .eq("id", checkoutId);
+      let { error } = await marcar(campos);
+      // Sem a 085 (ultimo_formato): marca o resto como antes.
+      if (error && campos.ultimo_formato !== undefined && colunaAusente(error)) {
+        const { ultimo_formato: _semColuna, ...resto } = campos;
+        void _semColuna;
+        ({ error } = await marcar(resto));
+      }
       if (error) console.error("[checkout/webhook] falha ao marcar o checkout", error.message);
     },
   };

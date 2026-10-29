@@ -211,3 +211,131 @@ describe("evento de teste", () => {
     expect(sphere.gatilhos).toEqual(["pedido.criado", "pedido.expirado", "comissao.aprovada", "comissao.paga"]);
   });
 });
+
+// ============================================================================
+// O clique do anuncio no aviso (29/10/2026): a doc nao mostra onde vem, entao o
+// leitor procura sub1..sub3 e UTMs no corpo, no pedido e nas caixas usuais.
+// url_tags da operacao: sub1 = anuncio, sub2 = conjunto, sub3 = campanha.
+// ============================================================================
+
+describe("lerSphere: o clique do anuncio", () => {
+  const ler = (c: unknown) => {
+    const r = lerSphere(c, AGORA);
+    if (!r.ok) throw new Error(r.erro);
+    return r.evento;
+  };
+
+  it("sem sub nem UTM: nada de rastreio (o pedido grava como antes)", () => {
+    expect(ler(DOC).rastreio).toBeUndefined();
+  });
+
+  it("sub1..sub3 com id no pedido viram anuncio, conjunto e campanha; a UTM fica no resto", () => {
+    const ev = ler(
+      com((c) => {
+        Object.assign(c.pedido, {
+          sub1: "120255889727850350",
+          sub2: "120255882587730350",
+          sub3: "120255882587420350",
+          utm_source: "facebook",
+          utm_medium: "paid",
+        });
+      })
+    );
+    expect(ev.rastreio?.utm).toEqual({
+      source: "facebook",
+      medium: "120255882587730350",
+      campaign: "120255882587420350",
+      content: "120255889727850350",
+      term: null,
+    });
+  });
+
+  it("so o sub1 (o id do anuncio) ja basta; caixa aninhada e chave em maiusculo tambem", () => {
+    expect(ler(com((c) => ({ ...c, tracking: { SUB1: "120255889727850350" } }))).rastreio?.utm).toMatchObject({
+      content: "120255889727850350",
+      campaign: null,
+      medium: null,
+    });
+    expect(ler(com((c) => ({ ...c, pedido: { ...c.pedido, subs: { sub_1: "120255889727850350" } } }))).rastreio?.utm.content).toBe(
+      "120255889727850350"
+    );
+  });
+
+  it("utm sem prefixo dentro de uma caixa 'utm' e lida como utm_*", () => {
+    const ev = ler(com((c) => ({ ...c, utm: { source: "FB", campaign: "120255882587420350", medium: "120255882587730350", content: "120255889727850350" } })));
+    expect(ev.rastreio?.utm).toMatchObject({ source: "FB", campaign: "120255882587420350", content: "120255889727850350" });
+  });
+
+  it("sub que nao e id (o clickid do RedTrack) nao vira anuncio", () => {
+    const ev = ler(com((c) => ({ ...c, pedido: { ...c.pedido, sub1: "6ad52420b4af675a77481833", utm_source: "facebook" } })));
+    expect(ev.rastreio?.utm).toMatchObject({ source: "facebook", content: null });
+    expect(ler(com((c) => ({ ...c, pedido: { ...c.pedido, sub1: "6ad52420b4af675a77481833" } }))).rastreio).toBeUndefined();
+  });
+});
+
+describe("formato do aviso (085): caminhos e so o valor do clique", () => {
+  it("guarda todos os caminhos e o valor so das chaves de clique, nunca do comprador", async () => {
+    const { formatoDoAvisoSphere } = await import("@/lib/checkouts-externos/plataformas/sphere");
+    const corpo = com((c) => ({
+      ...c,
+      pedido: { ...c.pedido, sub1: "120255889727850350", utm_source: "facebook", cliente: { nome: "Maria", telefone: "+351900000000" } },
+      itens: [{ sku: "X", nome: "Mandura" }],
+    }));
+    const f = formatoDoAvisoSphere(corpo, AGORA) as { evento: string; chaves: string[]; rastreio: Record<string, string> };
+    expect(f.evento).toBe("comissao.aprovada");
+    expect(f.chaves).toEqual(expect.arrayContaining(["pedido.sub1", "pedido.cliente.nome", "pedido.cliente.telefone", "itens[0].sku", "afiliado.codigo"]));
+    expect(f.rastreio).toEqual({ "pedido.sub1": "120255889727850350", "pedido.utm_source": "facebook" });
+    expect(JSON.stringify(f)).not.toMatch(/Maria|351900000000/);
+  });
+
+  it("a Sphere descreve o formato; o recebimento guarda junto da marca do checkout", () => {
+    expect(typeof sphere.formato).toBe("function");
+  });
+});
+
+describe("o clique da Sphere passa pela mesma limpeza dos outros adaptadores", () => {
+  const ler = (c: unknown) => {
+    const r = lerSphere(c, AGORA);
+    if (!r.ok) throw new Error(r.erro);
+    return r.evento;
+  };
+
+  it("'@', controle e macro saem (o CHECK da 072 recusaria o pedido inteiro)", () => {
+    const ev = ler(
+      com((c) => {
+        Object.assign(c.pedido, {
+          utm_source: "face\u0000book",
+          utm_content: "UGC @maria|120211111111111111",
+          utm_term: "maria@gmail.com",
+          utm_campaign: "{{campaign.name}}",
+        });
+      })
+    );
+    expect(ev.rastreio?.utm).toEqual({ source: "facebook", medium: null, campaign: null, content: null, term: null });
+  });
+
+  it("so UTM suja: sem rastreio, o pedido grava como antes", () => {
+    expect(ler(com((c) => void Object.assign(c.pedido, { utm_term: "maria@gmail.com" }))).rastreio).toBeUndefined();
+  });
+
+  it("o formato so guarda o valor das chaves de clique pelo nome inteiro, e sem e-mail", async () => {
+    const { formatoDoAvisoSphere } = await import("@/lib/checkouts-externos/plataformas/sphere");
+    const corpo = com((c) => ({
+      ...c,
+      pedido: {
+        ...c.pedido,
+        sub1: "120255889727850350",
+        sub5: "joao@gmail.com",
+        click_ip: "85.240.1.2",
+        tracking_number: "RR123456789PT",
+        rastreio: "LX999PT",
+        suburb: "Alfama",
+        subscriber_phone: "+351912345678",
+      },
+    }));
+    const f = formatoDoAvisoSphere(corpo, AGORA) as { chaves: string[]; rastreio: Record<string, string> };
+    expect(f.rastreio).toEqual({ "pedido.sub1": "120255889727850350" });
+    expect(f.chaves).toEqual(expect.arrayContaining(["pedido.click_ip", "pedido.rastreio", "pedido.sub5"]));
+    expect(JSON.stringify(f)).not.toMatch(/85\.240|RR123|LX999|Alfama|351912|joao@/);
+  });
+});

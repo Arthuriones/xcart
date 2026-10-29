@@ -191,4 +191,10 @@ export interface PlataformaCheckout {
   assinar?(raw: string, segredo: string, agora: Date): Record<string, string>;
   /** Corpo de exemplo, marcado como teste: o "Enviar evento de teste". */
   exemplo(agora: Date, segredo?: string | null): unknown;
+  /**
+   * O formato do aviso real, guardado em checkouts_externos.ultimo_formato
+   * (085): so caminhos de chave e o valor das chaves de clique, nunca dado do
+   * comprador. Ausente = nada guardado (a plataforma ja tem o formato conhecido).
+   */
+  formato?(corpo: unknown, agora: Date): unknown;
 }

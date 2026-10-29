@@ -98,7 +98,8 @@ export const CAMPOS_VENDA = [
   "anuncio_id",
 ] as const satisfies readonly (keyof EstadoPedido)[];
 
-const CAMPOS_UTM = [
+/** A UTM e os ids do anuncio: a comissao (Sphere) tambem grava, quando o aviso traz o clique. */
+export const CAMPOS_UTM = [
   "utm_source",
   "utm_medium",
   "utm_campaign",
@@ -174,7 +175,8 @@ export function pedidoDoEvento(ev: EventoNormalizado, fuso: string | null | unde
     reembolsado_em: v?.reembolsadoEm ?? null,
     chargeback_em: v?.chargebackEm ?? null,
     reembolso_pedido_em: v?.reembolsoPedidoEm ?? null,
-    ...(v
+    // A comissao (Sphere) so tem UTM quando o aviso traz o clique (sub/UTM).
+    ...(v || ev.rastreio
       ? utmDoEvento(ev)
       : {
           utm_source: null,

@@ -452,3 +452,42 @@ describe("notificacao 'Venda no celular'", () => {
     expect(mensagemDaVenda(v).titulo).toBe("Comissão aprovada · €75.00");
   });
 });
+
+describe("Sphere com o clique do anuncio (comissao com UTM)", () => {
+  it("o pedido grava a UTM e os ids; o evento seguinte sem rastreio nao apaga", async () => {
+    const { lerSphere } = await import("@/lib/checkouts-externos/plataformas/sphere");
+    const agora = new Date("2026-10-29T12:00:00.000Z");
+    const corpo = (evento: string, extra: Record<string, unknown> = {}) => ({
+      evento,
+      data_evento: evento === "pedido.criado" ? "2026-10-29T10:55:41.000Z" : "2026-10-29T11:30:00.000Z",
+      pedido: { id: 34169, status: "created", moeda: "EUR", valor: "62.00", criado_em: "2026-10-29T10:55:41.000Z", ...extra },
+      comissao: { valor: "33.00", status: evento === "pedido.criado" ? "pending" : "approved" },
+      afiliado: { codigo: "arthurferreira3", programa_id: "dtc-ed-portugal" },
+    });
+    const ler = (c: unknown) => {
+      const r = lerSphere(c, agora);
+      if (!r.ok) throw new Error(r.erro);
+      return r.evento;
+    };
+    const criado = aplicarEvento(null, ler(corpo("pedido.criado", { sub1: "120255889727850350", utm_source: "facebook" })), "Europe/Lisbon").pedido;
+    expect(criado).toMatchObject({ anuncio_id: "120255889727850350", utm_source: "facebook", utm_content: "120255889727850350", campanha_id: null });
+    const aprovado = aplicarEvento(criado, ler(corpo("comissao.aprovada")), "Europe/Lisbon").pedido;
+    expect(aprovado).toMatchObject({ situacao: "aprovado", anuncio_id: "120255889727850350", utm_source: "facebook" });
+  });
+
+  it("sem o clique, a comissao segue sem UTM (como antes)", async () => {
+    const { lerSphere } = await import("@/lib/checkouts-externos/plataformas/sphere");
+    const r = lerSphere(
+      {
+        evento: "pedido.criado",
+        pedido: { id: 1, moeda: "EUR", valor: "62.00", criado_em: "2026-10-29T10:55:41.000Z" },
+        comissao: { valor: "33.00", status: "pending" },
+        afiliado: { codigo: "a", programa_id: "p" },
+      },
+      new Date("2026-10-29T12:00:00.000Z")
+    );
+    if (!r.ok) throw new Error(r.erro);
+    const p = aplicarEvento(null, r.evento, "Europe/Lisbon").pedido;
+    expect([p.utm_source, p.utm_campaign, p.campanha_id, p.conjunto_id, p.anuncio_id]).toEqual([null, null, null, null, null]);
+  });
+});
