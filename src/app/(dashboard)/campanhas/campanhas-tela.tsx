@@ -21,6 +21,7 @@ import type {
   StatusFiltro,
 } from "./tipos";
 import { COLUNAS_PADRAO_IDS } from "./colunas-config";
+import { filtrarLinhas, semDetalheDoFiltro } from "@/lib/campanhas/filtrar";
 
 interface CampanhasTelaProps {
   linhas: LinhaCampanha[];
@@ -65,26 +66,9 @@ export function CampanhasTela({
   );
   const [modalColunasAberto, setModalColunasAberto] = useState(false);
 
-  // Filtragem local
-  const linhasFiltradas = linhas.filter((l) => {
-    if (l.nivel !== nivel) return false;
-    if (plataforma !== "todas" && l.plataforma !== plataforma) return false;
-    if (contaSelecionada !== "todas" && l.contaId !== contaSelecionada) return false;
-
-    // Sem status (campanha so com gasto, sem detalhe) nao e ativa nem pausada.
-    if (status === "ativa" && l.status !== "ACTIVE") return false;
-    if (status === "pausada" && (l.status === null || l.status === "ACTIVE")) return false;
-
-    // Busca textual: nome, conta ou o id (colado do gerenciador)
-    if (busca.trim()) {
-      const q = busca.trim().toLowerCase();
-      const achou =
-        l.nome.toLowerCase().includes(q) || l.contaNome.toLowerCase().includes(q) || l.objetoId.includes(q);
-      if (!achou) return false;
-    }
-
-    return true;
-  });
+  // Filtragem local: a mesma regra da rota do app (src/lib/campanhas/filtrar.ts)
+  const filtro = { nivel, plataforma, conta: contaSelecionada, status, busca };
+  const linhasFiltradas = filtrarLinhas(linhas, filtro);
 
   async function salvarColunas(novasColunas: string[]) {
     setColunasAtivas(novasColunas);
@@ -103,10 +87,7 @@ export function CampanhasTela({
     }
   }
 
-  const semDetalheAqui =
-    nivel === "grupo" || nivel === "anuncio"
-      ? semDetalhe.filter((c) => contaSelecionada === "todas" || c.contaId === contaSelecionada)
-      : [];
+  const semDetalheAqui = semDetalheDoFiltro(semDetalhe, filtro);
 
   return (
     <div className="flex flex-col gap-5">

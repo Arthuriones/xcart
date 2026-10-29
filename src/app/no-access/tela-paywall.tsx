@@ -10,6 +10,7 @@ import {
   resumoDosLimites,
 } from "@/lib/billing/plans";
 import { APP_HOME } from "@/lib/app-home";
+import { ExcluirConta } from "@/components/conta/excluir-conta";
 import { AssinarNoPaywall, BotaoSair } from "./assinar-paywall";
 
 /**
@@ -112,6 +113,7 @@ export function TelaPaywall({
         <div className="flex justify-center border-t border-border-subtle pt-4 lg:justify-start">
           <BotaoSair />
         </div>
+        <ExcluirConta />
       </main>
     </div>
   );

@@ -2,6 +2,7 @@ import "server-only";
 import { safeFetch } from "@/lib/net/safe-url";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { ID_LEGADO, MAX_CELULARES, NOME_PADRAO, type CelularDaTela } from "./venda-celulares";
+import { aparelhosDoDono, enviarPushDeVenda } from "./push-expo";
 
 // ============================================================================
 // Notificacao de venda no celular: o xcart chama as URLs que o lojista colou
@@ -348,6 +349,7 @@ export async function enviarParaUmCelular(
 /**
  * A venda para TODOS os celulares do dono, em paralelo: um fora do ar nao
  * segura nem derruba os outros (allSettled, e cada envio tem timeout de 4 s).
+ * Os aparelhos do app (push-expo.ts) vao no mesmo allSettled.
  * Falha vai para o log so com o host. Nunca lanca: quem chama e o webhook do
  * pedido, e notificacao nunca derruba pedido. `origem` e so o prefixo do log.
  */
@@ -357,27 +359,40 @@ export async function notificarVendaNosCelulares(
   v: Venda,
   origem: string
 ): Promise<{ enviados: number; falhas: number }> {
-  let destinos: DestinoDeVenda[];
-  try {
-    destinos = await webhooksDeVendaDoDono(admin, userId);
-  } catch (e) {
+  // Webhooks e aparelhos do app (push do Expo, 084) leem cada um por si:
+  // falha na leitura de um nao tira a venda do outro.
+  const [webhooks, doApp] = await Promise.allSettled([
+    webhooksDeVendaDoDono(admin, userId),
+    aparelhosDoDono(admin, userId),
+  ]);
+  if (webhooks.status === "rejected") {
+    const e = webhooks.reason;
     console.error(`[${origem}] notificacao de venda: leitura dos celulares`, e instanceof Error ? e.message : e);
-    return { enviados: 0, falhas: 0 };
   }
-  const resultados = await Promise.allSettled(destinos.map((d) => enviarParaUmCelular(admin, userId, d, v)));
+  if (doApp.status === "rejected") {
+    const e = doApp.reason;
+    console.error(`[${origem}] notificacao de venda: leitura dos aparelhos do app`, e instanceof Error ? e.message : e);
+  }
+  const destinos = webhooks.status === "fulfilled" ? webhooks.value : [];
+  const aparelhos = doApp.status === "fulfilled" ? doApp.value : [];
+  const resultados = await Promise.allSettled<ResultadoEnvio | ResultadoEnvio[]>([
+    ...destinos.map((d) => enviarParaUmCelular(admin, userId, d, v)),
+    // Um resultado por aparelho; o texto e o mesmo dos webhooks.
+    ...(aparelhos.length ? [enviarPushDeVenda(admin, userId, aparelhos, mensagemDaVenda(v))] : []),
+  ]);
   let enviados = 0;
   let falhas = 0;
   for (const r of resultados) {
-    if (r.status === "fulfilled" && r.value.ok) {
-      enviados += 1;
-      continue;
+    const lista = r.status === "fulfilled" ? (Array.isArray(r.value) ? r.value : [r.value]) : [null];
+    for (const x of lista) {
+      if (x?.ok) {
+        enviados += 1;
+        continue;
+      }
+      falhas += 1;
+      // O erro ja vem so com o host; o motivo de uma rejeicao nao vai, pode ter a URL.
+      console.warn(`[${origem}] notificacao de venda falhou`, x ? x.erro : "erro inesperado no envio");
     }
-    falhas += 1;
-    // O erro ja vem so com o host; o motivo de uma rejeicao nao vai, pode ter a URL.
-    console.warn(
-      `[${origem}] notificacao de venda falhou`,
-      r.status === "fulfilled" ? r.value.erro : "erro inesperado no envio"
-    );
   }
   return { enviados, falhas };
 }

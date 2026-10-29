@@ -21,10 +21,12 @@ const auth = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
+  tokenDoApp: async () => null,
   createClient: async () => ({ auth: { getUser: async () => auth.resposta } }),
 }));
 vi.mock("next/headers", () => ({
   cookies: async () => ({ getAll: () => [], set: () => {} }),
+  headers: async () => new Headers(),
 }));
 vi.mock("@supabase/ssr", () => ({
   createServerClient: (_url: string, _chave: string, opcoes: { global?: { fetch?: typeof fetch } }) => {

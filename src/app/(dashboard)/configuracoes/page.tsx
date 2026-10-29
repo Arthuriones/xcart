@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { SECOES_CONFIGURACOES } from "@/components/layout/navegacao";
 import { textos } from "@/lib/textos";
+import { ExcluirConta } from "@/components/conta/excluir-conta";
 
 const t = textos("nav");
 
@@ -10,7 +11,8 @@ const t = textos("nav");
  * Configuracoes: o indice do que saiu do menu -- contas, custos, notificacoes,
  * assinatura e os modulos (Roteamento, Importar, Atividade, Claude e Guia).
  * So links, sem leitura de banco: abre na hora. A lista mora em navegacao.ts,
- * junto do menu, e e travada por tests/nav-ativo.test.ts.
+ * junto do menu, e e travada por tests/nav-ativo.test.ts. No fim, Conta com o
+ * Excluir conta (Apple e Google exigem o caminho na web), fora da lista.
  */
 export default function ConfiguracoesPage() {
   return (
@@ -49,6 +51,12 @@ export default function ConfiguracoesPage() {
             </ul>
           </section>
         ))}
+        <section id="conta" aria-labelledby="cfg-conta" className="flex scroll-mt-20 flex-col gap-3">
+          <h2 id="cfg-conta" className="text-section text-ink">
+            Conta
+          </h2>
+          <ExcluirConta />
+        </section>
       </div>
     </>
   );

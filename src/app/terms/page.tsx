@@ -4,7 +4,7 @@ import { LegalPage } from "@/components/legal/legal-page";
 export const metadata: Metadata = {
   title: "Termos de Uso | xcart",
   description:
-    "Termos de uso do xcart para importação de produtos, IA, Shopify e checkout roteado.",
+    "Termos de uso do xcart (site, painel e app de celular) para importação de produtos, IA, Shopify e checkout roteado.",
 };
 
 export default function TermsPage() {
@@ -12,8 +12,8 @@ export default function TermsPage() {
     <LegalPage
       atual="terms"
       title="Termos de Uso"
-      description="Estes termos definem as condições de uso do xcart e de seus recursos de importação, automação, IA, Shopify e checkout roteado."
-      updatedAt="8 de maio de 2026"
+      description="Estes termos definem as condições de uso do xcart, no site, no painel e no app de celular, e de seus recursos de importação, automação, IA, Shopify e checkout roteado."
+      updatedAt="29 de outubro de 2026"
       sections={[
         {
           title: "1. Aceitação dos termos",
@@ -66,10 +66,18 @@ export default function TermsPage() {
           ],
         },
         {
-          title: "8. Encerramento e exclusão",
+          title: "8. App de celular",
+          body: [
+            "O app do xcart para iPhone e Android faz parte da plataforma: usa a mesma conta e o mesmo login do site, e estes termos valem para ele.",
+            "O app serve para acompanhar os números da conta e receber avisos de venda. Não há compra dentro do app.",
+            "As notificações podem ser desligadas nos ajustes do celular, e a conta pode ser excluída pelo próprio app, em Conta > Excluir conta.",
+          ],
+        },
+        {
+          title: "9. Encerramento e exclusão",
           body: [
             "Podemos suspender ou encerrar acesso em caso de abuso, risco de segurança, violação destes termos ou uso incompatível com políticas de terceiros.",
-            "O usuário pode solicitar exclusão de dados seguindo as instruções em /data-deletion.",
+            "O usuário pode excluir a conta pelo app ou pelo site, ou solicitar exclusão de dados seguindo as instruções em /data-deletion.",
           ],
         },
       ]}

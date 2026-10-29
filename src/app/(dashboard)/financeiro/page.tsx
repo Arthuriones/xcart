@@ -10,11 +10,11 @@ import { lerBaseLucro } from "@/lib/leitura/base-lucro";
 import { montarPorCampanha } from "@/lib/leitura/por-campanha";
 import { montarPorProduto } from "@/lib/leitura/por-produto";
 import { montarSerieDiaria } from "@/lib/leitura/serie-diaria";
+import { montarConexao } from "@/lib/financeiro/painel";
 import { createClient } from "@/lib/supabase/server";
 import { ErroLucro } from "./erro-lucro";
 import { EsqueletoLucro } from "./esqueleto";
 import { FinanceiroScreen, type ConexaoLucro, type ExtrasLucro } from "./financeiro-screen";
-import { foiLido, momentoAtualizado } from "./lucro-dados";
 
 export const dynamic = "force-dynamic";
 
@@ -98,23 +98,12 @@ async function Conteudo() {
 
   // Contas ativas das lojas (e checkouts) do filtro. getFinanceiro le a MESMA
   // base (memorizada): se ele abriu, ela tambem. Sem ela, nada de inventar.
-  const lojaSet = new Set([...dados.lojaIds, ...dados.checkoutIds]);
-  const destino = (c: { store_id: string | null; checkout_id?: string | null }) => c.store_id ?? c.checkout_id ?? null;
-  const contasAtivas =
-    base.status === "fulfilled" && base.value
-      ? base.value.contas.filter((c) => {
-          const d = destino(c);
-          return c.ativo && d !== null && lojaSet.has(d);
-        })
-      : null;
-  const syncPedidos = dados.estados.map((e) => e.ultimo_sync_ok_em);
-  const syncGasto = (contasAtivas ?? []).map((c) => c.ultimo_sync_ok_em);
-  const conexao: ConexaoLucro = {
-    desinstaladas: marcas.status === "fulfilled" ? marcas.value : {},
-    lojasComConta: contasAtivas ? [...new Set(contasAtivas.map((c) => String(destino(c))))] : null,
-    atualizadoEm: momentoAtualizado(syncPedidos, syncGasto),
-    lido: { pedidos: foiLido(syncPedidos), gasto: foiLido(syncGasto) },
-  };
+  // A mesma regra da rota do app (src/lib/financeiro/painel.ts).
+  const conexao: ConexaoLucro = montarConexao(
+    dados,
+    base.status === "fulfilled" && base.value ? base.value.contas : null,
+    marcas.status === "fulfilled" ? marcas.value : {}
+  );
 
   return (
     <FinanceiroScreen

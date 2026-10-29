@@ -1,7 +1,29 @@
 import "server-only";
 import { cache } from "react";
-import { isAuthRetryableFetchError } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/server";
+import { headers } from "next/headers";
+import { isAuthRetryableFetchError, type User } from "@supabase/supabase-js";
+import { createClient, tokenDoApp } from "@/lib/supabase/server";
+
+async function lerUsuario(): Promise<User | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+  if (error && (isAuthRetryableFetchError(error) || error.status === 429)) {
+    throw new Error("O login do xcart não respondeu agora.");
+  }
+  return user;
+}
+
+/**
+ * O `cache` do React so memoriza no render, nao em Route Handler -- e o app
+ * do celular so fala por rota: cada getCurrentUser era mais um GET
+ * /auth/v1/user (de 3 a 8 por requisicao do app). No app, o resultado fica
+ * guardado pelo objeto de cabecalhos da requisicao, o mesmo do comeco ao fim
+ * dela (WeakMap: some junto). Falha nao fica guardada.
+ */
+const doAppPorRequisicao = new WeakMap<object, Promise<User | null>>();
 
 /**
  * O usuário da requisição, validado uma vez só.
@@ -21,13 +43,13 @@ import { createClient } from "@/lib/supabase/server";
  * tentar de novo. Quem chama já tem try/catch, allSettled ou o error.tsx.
  */
 export const getCurrentUser = cache(async () => {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-  if (error && (isAuthRetryableFetchError(error) || error.status === 429)) {
-    throw new Error("O login do xcart não respondeu agora.");
+  if (!(await tokenDoApp())) return lerUsuario();
+  const chave = await headers();
+  let lido = doAppPorRequisicao.get(chave);
+  if (!lido) {
+    lido = lerUsuario();
+    doAppPorRequisicao.set(chave, lido);
+    lido.catch(() => doAppPorRequisicao.delete(chave));
   }
-  return user;
+  return lido;
 });

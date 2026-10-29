@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
-import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { cookies, headers } from "next/headers";
+import { createClient, tokenDoApp } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import {
   COOKIE_LOJA,
@@ -28,14 +28,29 @@ import { comMarcaDeDemonstracao, ehDemonstracao } from "@/lib/demonstracao";
 // navegacao: um seletor no topo que dependesse da URL se perderia a cada
 // clique no menu. Cookie viaja em toda requisicao -- a pagina le no servidor,
 // o seletor grava no navegador (document.cookie) e chama router.refresh().
+//
+// O APP DO CELULAR (Bearer, src/lib/supabase/server.ts) manda o mesmo valor
+// em cabecalho, `x-xc-<nome do cookie sem xc_>`: o cookie dele nao conta, e
+// tudo que le o filtro (filtroResolvido, lerBaseLucro, lerCampanhas) segue
+// conferindo dono, demonstracao e o teto do periodo sem saber de onde veio.
 // ============================================================================
 
-export async function lerFiltroGlobal(): Promise<FiltroGlobal> {
+/** O valor do filtro: do cabecalho no app, do cookie no site. */
+async function valorDoFiltro(): Promise<(nomeDoCookie: string) => string | undefined> {
+  if (await tokenDoApp()) {
+    const h = await headers();
+    return (nome) => h.get(`x-${nome.replace(/_/g, "-")}`) ?? undefined;
+  }
   const c = await cookies();
+  return (nome) => c.get(nome)?.value;
+}
+
+export async function lerFiltroGlobal(): Promise<FiltroGlobal> {
+  const valor = await valorDoFiltro();
   return filtroDeCookies({
-    loja: c.get(COOKIE_LOJA)?.value,
-    periodo: c.get(COOKIE_PERIODO)?.value,
-    moeda: c.get(COOKIE_MOEDA)?.value,
+    loja: valor(COOKIE_LOJA),
+    periodo: valor(COOKIE_PERIODO),
+    moeda: valor(COOKIE_MOEDA),
   });
 }
 
@@ -45,8 +60,8 @@ export async function lerFiltroGlobal(): Promise<FiltroGlobal> {
  * (Lucro) precisa pedir este valor.
  */
 export async function lerComparacao(): Promise<Comparacao> {
-  const c = await cookies();
-  return comparacaoDeCookie(c.get(COOKIE_COMPARAR)?.value);
+  const valor = await valorDoFiltro();
+  return comparacaoDeCookie(valor(COOKIE_COMPARAR));
 }
 
 /**

@@ -13,6 +13,8 @@ export const runtime = "nodejs";
  */
 export async function POST() {
   const supabase = await createClient();
-  await supabase.auth.signOut();
+  // So esta sessao: o padrao do auth-js e "global", que derrubava tambem o
+  // app do celular (e todo outro navegador) a cada "Sair" no site.
+  await supabase.auth.signOut({ scope: "local" });
   return NextResponse.json({ ok: true });
 }

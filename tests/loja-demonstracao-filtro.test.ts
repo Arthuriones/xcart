@@ -28,6 +28,7 @@ vi.mock("next/headers", () => ({
 }));
 vi.mock("@/lib/supabase/current-user", () => ({ getCurrentUser: async () => ({ id: "u1" }) }));
 vi.mock("@/lib/supabase/server", () => ({
+  tokenDoApp: async () => null,
   createClient: async () => ({
     from: (tabela: string) => {
       let colunas = "";
