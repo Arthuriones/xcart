@@ -118,6 +118,13 @@ export const CAMINHO_WEBHOOK = "/api/webhooks/checkout";
 /** O formato de gerarSegredo (32 bytes em base64url). */
 export const RE_TOKEN = /^[A-Za-z0-9_-]{43}$/;
 
+/**
+ * O postback da Sphere (086): o lojista cola a URL do webhook com isto no fim,
+ * no programa dela (Pixels › RedTrack). O `{clickid}` e o sub1 do link, o
+ * id do anuncio nos url_tags. Ver src/lib/checkouts-externos/postback.ts.
+ */
+export const SUFIXO_POSTBACK_SPHERE = "?clickid={clickid}&t={t}&sum={sum}&currency={currency}&status={status}&type={type}";
+
 export function urlDoWebhook(base: string, token: string): string {
   return `${base.replace(/\/+$/, "")}${CAMINHO_WEBHOOK}/${token}`;
 }

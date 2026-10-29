@@ -19,7 +19,7 @@ import { POR_PAGINA, textoCsv } from "./filtros";
 // (src/lib/checkouts-externos/pedidos.ts); aqui so busca, filtro, pagina e CSV.
 //
 //   comissao (Sphere): data, pedido, produto, pais, valor do pedido,
-//     comissao e situacao -- como sempre foi.
+//     comissao, situacao e campanha/anuncio (do postback, 086).
 //   venda (Cakto): metodo, valor, taxa, liquido, situacao e campanha/anuncio,
 //     tudo na moeda do relatorio.
 //   misto (os dois no filtro): as colunas da venda; na linha da Sphere o
@@ -72,7 +72,19 @@ function casaBusca(p: PedidoExternoTela, busca: string): boolean {
     .includes(q);
 }
 
-const CABECALHO = ["Pedido", "Data", "Checkout", "Produto", "País", "Valor do pedido", "Moeda do pedido", "Comissão", "Situação"];
+const CABECALHO = [
+  "Pedido",
+  "Data",
+  "Checkout",
+  "Produto",
+  "País",
+  "Valor do pedido",
+  "Moeda do pedido",
+  "Comissão",
+  "Situação",
+  "Campanha",
+  "Anúncio",
+];
 const CABECALHO_VENDA = [
   "Pedido",
   "Data",
@@ -170,6 +182,8 @@ export function PedidosCheckout({
             p.moedaPedido,
             p.comissao === null ? null : Math.round(p.comissao * 100) / 100,
             p.rotulo,
+            textoCsv(p.campanha),
+            textoCsv(p.anuncio),
           ])
         );
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
@@ -257,6 +271,7 @@ export function PedidosCheckout({
         ["Valor do pedido", "right"],
         ["Comissão", "right"],
         ["Situação", "left"],
+        ["Campanha", "left"],
       ];
 
   /** Valor da venda na moeda do relatorio; a linha da Sphere (misto) fica na moeda dela. */
@@ -311,7 +326,7 @@ export function PedidosCheckout({
                 setPagina(0);
               }}
               aria-label="Buscar pedido ou produto"
-              placeholder={venda ? "Buscar #pedido, produto ou campanha" : "Buscar #pedido ou produto"}
+              placeholder="Buscar #pedido, produto ou campanha"
               className="pl-8 text-dense"
             />
           </div>
@@ -432,6 +447,10 @@ export function PedidosCheckout({
                           <td className="whitespace-nowrap">
                             <StatusBadge tom={p.tom}>{p.rotulo}</StatusBadge>
                           </td>
+                          <td className="max-w-50 text-t1" title={[p.campanha, p.anuncio].filter(Boolean).join(" · ") || undefined}>
+                            <span className="block truncate">{p.campanha ?? "—"}</span>
+                            {p.anuncio ? <span className="block truncate text-label text-t2">{p.anuncio}</span> : null}
+                          </td>
                         </tr>
                       ))}
                 </tbody>
@@ -449,7 +468,7 @@ export function PedidosCheckout({
                       </strong>
                       <span className="truncate text-label text-t2">
                         {p.quando} ·{" "}
-                        {(p.modelo === "venda" ? [p.produto, p.metodo, p.campanha] : [p.produto, p.pais]).filter(Boolean).join(" · ") ||
+                        {(p.modelo === "venda" ? [p.produto, p.metodo, p.campanha] : [p.produto, p.pais, p.campanha]).filter(Boolean).join(" · ") ||
                           "—"}
                       </span>
                     </span>

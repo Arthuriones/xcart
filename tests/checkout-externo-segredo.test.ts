@@ -201,9 +201,9 @@ describe("POST /api/webhooks/checkout/[token]", () => {
     expect(r.status).toBe(400);
   });
 
-  it("GET so diz o que a URL e, sem banco", async () => {
+  it("GET sem a query do postback so diz o que a URL e, sem banco", async () => {
     const { GET } = await import("@/app/api/webhooks/checkout/[token]/route");
-    const r = GET();
+    const r = await GET(new Request(`https://x.test/api/webhooks/checkout/${TOKEN}`), { params: Promise.resolve({ token: TOKEN }) });
     expect(r.status).toBe(200);
     expect(estado.chamadasToken).toEqual([]);
   });

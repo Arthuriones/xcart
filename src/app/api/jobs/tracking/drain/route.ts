@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { drenarFila } from "@/lib/tracking/fila";
 import { drenarFilaDoCheckout } from "@/lib/checkouts-externos/rastreio";
+import { decidirPostbacks } from "@/lib/checkouts-externos/postback-supabase";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -25,7 +26,8 @@ export const maxDuration = 120;
 //
 // A fila do checkout externo (Cakto, 073: checkout_externo_envios) tambem
 // drena aqui, DEPOIS da das lojas e do expurgo, sem encostar nelas: falha de
-// uma nao para a outra.
+// uma nao para a outra. E o postback da Sphere (086) que ja passou da janela
+// e decidido aqui: de que anuncio veio a comissao (so banco, nada sai).
 // ============================================================================
 
 const POR_EXECUCAO = 50;
@@ -104,6 +106,15 @@ async function executar(request: NextRequest) {
       expurgoCheckouts = rc.error ? `falhou: ${rc.error.message}` : "ok";
     }
 
+    // O postback da Sphere (086), ANTES do drenarFila (sem prazo: com o Meta
+    // lento ele estoura os 120 s). So banco, rapido; erro dele nao para nada.
+    let postbacks: Record<string, unknown>;
+    try {
+      postbacks = await decidirPostbacks(createAdminClient(), new Date());
+    } catch (e) {
+      postbacks = { erro: e instanceof Error ? e.message : "falha ao decidir os postbacks" };
+    }
+
     const r = await drenarFila(limite);
 
     // A fila do checkout externo, DEPOIS do expurgo: com o Meta ou o TikTok
@@ -127,7 +138,7 @@ async function executar(request: NextRequest) {
     const expurgoFalhou = [expurgo, expurgoCheckouts].some((e) => e?.startsWith("falhou"));
     if (expurgoFalhou) console.error("[tracking/drain] expurgo falhou", { expurgo, expurgoCheckouts });
     return NextResponse.json(
-      { ok: true, ...r, expurgo, checkouts, expurgoCheckouts },
+      { ok: true, ...r, expurgo, checkouts, expurgoCheckouts, postbacks },
       { status: expurgoFalhou ? 500 : 200 }
     );
   } catch (e) {

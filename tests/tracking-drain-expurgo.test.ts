@@ -41,6 +41,8 @@ vi.mock("@/lib/checkouts-externos/rastreio", () => ({
     return { processadas: 0 };
   },
 }));
+// O postback da Sphere (086) decide no mesmo cron; o teste dele e o do postback.
+vi.mock("@/lib/checkouts-externos/postback-supabase", () => ({ decidirPostbacks: async () => ({ casado: 0 }) }));
 
 async function chamar(minutoUtc: number, cron = true) {
   vi.setSystemTime(new Date(Date.UTC(2026, 9, 27, 15, minutoUtc, 5)));

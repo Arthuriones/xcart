@@ -6,6 +6,8 @@ import { plataformaLiberada } from "@/lib/checkouts-externos/liberadas";
 import { checkoutDoToken, repositorioSupabase, segredoDaPlataforma } from "@/lib/checkouts-externos/repo-supabase";
 import { notificarPedidoExterno } from "@/lib/checkouts-externos/notificar";
 import { entregarEnvios, rastreioSupabase } from "@/lib/checkouts-externos/rastreio";
+import { ehPostback, lerPostback } from "@/lib/checkouts-externos/postback";
+import { receberPostback } from "@/lib/checkouts-externos/postback-supabase";
 
 export const runtime = "nodejs";
 // Sem cache: cada entrega e um evento.
@@ -56,6 +58,12 @@ export const maxDuration = 30;
 // A Sphere espera 10 s e a Cakto 8 s: a notificacao no celular sai DEPOIS da
 // resposta. A compra ao Meta e ao TikTok (073, so no modelo venda) entra na
 // fila ANTES da resposta e sai em after(); o que falhar o cron do drain manda.
+//
+// POSTBACK DA SPHERE (086): GET nesta mesma URL com `clickid`/`t` na query
+// (o lojista cola a URL do webhook + SUFIXO_POSTBACK_SPHERE no programa). O
+// `{clickid}` e o sub1, o id do anuncio. Aqui so grava e casa pelo `{t}`;
+// pela hora, quem decide e o cron do drain, com a janela ja fechada
+// (postback.ts). So checkout da Sphere; 503 na falha nossa.
 // ============================================================================
 
 const MAX_CORPO = 64 * 1024;
@@ -189,10 +197,37 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   return resposta(r.status, r.corpo);
 }
 
-/** Abrir a URL no navegador: diz o que ela e, sem consultar o banco. */
-export function GET() {
-  return new NextResponse("Webhook do xcart: use POST com JSON.", {
-    status: 200,
-    headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
-  });
+/**
+ * O postback da Sphere (com `clickid` ou `t` na query). Sem eles, alguem
+ * abriu a URL no navegador: diz o que ela e, sem consultar o banco.
+ */
+export async function GET(request: Request, { params }: { params: Promise<{ token: string }> }) {
+  const query = new URL(request.url).searchParams;
+  if (!ehPostback(query)) {
+    return new NextResponse("Webhook do xcart: use POST com JSON.", {
+      status: 200,
+      headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+    });
+  }
+
+  const { token } = await params;
+  const admin = createAdminClient();
+  let checkout: Awaited<ReturnType<typeof checkoutDoToken>>;
+  try {
+    checkout = await checkoutDoToken(admin, token);
+  } catch (e) {
+    console.error("[checkout/postback]", e instanceof Error ? e.message : e);
+    return resposta(503, { ok: false, erro: "tente de novo" });
+  }
+  if (!checkout || checkout.plataforma !== "sphere") return NAO_ENCONTRADO();
+
+  const lido = lerPostback(query);
+  if (!lido.ok) return resposta(200, { ok: true, ignorado: lido.ignorado });
+  try {
+    const situacao = await receberPostback(admin, checkout, lido.postback, new Date());
+    return resposta(200, { ok: true, postback: situacao });
+  } catch (e) {
+    console.error("[checkout/postback] falha ao receber", e instanceof Error ? e.message : e);
+    return resposta(503, { ok: false, erro: "tente de novo" });
+  }
 }

@@ -27,7 +27,8 @@ import {
 // tests/financeiro-checkout-externo.test.ts (comissao) e
 // tests/checkout-externo-cakto.test.ts (venda).
 //
-// Comissao (Sphere): produto, pais, valor do pedido, comissao e situacao. A
+// Comissao (Sphere): produto, pais, valor do pedido, comissao, situacao e
+// campanha/anuncio (do postback, 086). A
 // comissao vai para a moeda do relatorio pela cotacao do dia do pedido (a
 // mesma do Dashboard); o valor do pedido fica na moeda dele, so referencia.
 //
@@ -239,8 +240,10 @@ export function montarPedidosExternos(e: {
       taxa: null,
       comissoes: null,
       estado: null,
-      campanha: null,
-      anuncio: null,
+      // O postback da Sphere (086) poe a origem: nome do anuncio quando a
+      // sincronizacao do Meta o conhecia, senao o id.
+      campanha: nomeDe(p.utm_campaign) ?? p.campanha_id ?? null,
+      anuncio: nomeDe(p.utm_content) ?? p.anuncio_id ?? null,
       oferta: null,
     });
   }

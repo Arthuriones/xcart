@@ -26,6 +26,7 @@ import { FUSO_RELATORIO_PADRAO } from "@/lib/financeiro/tipos";
 import {
   MOEDAS_COMISSAO,
   PLATAFORMAS_CHECKOUT,
+  SUFIXO_POSTBACK_SPHERE,
   modeloDaPlataforma,
   moedaPadraoDe,
   nomeDaPlataforma,
@@ -243,6 +244,53 @@ function CampoSegredo({
 }
 
 // ---------------------------------------------------------------------------
+// O postback da Sphere (086): de que anuncio veio cada venda
+// ---------------------------------------------------------------------------
+
+/** A URL do webhook com a query do postback: o webhook dela nao diz o anuncio. */
+function CampoPostback({ url, erro }: { url: string | null; erro: boolean }) {
+  const id = useId();
+  const [copiado, setCopiado] = useState(false);
+  const postback = url ? `${url}${SUFIXO_POSTBACK_SPHERE}` : null;
+
+  async function copiar() {
+    if (!postback) return;
+    try {
+      await navigator.clipboard.writeText(postback);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+    } catch {
+      toast.error("Não deu para copiar", { description: "Selecione a URL e copie à mão." });
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5 border-t border-border-subtle pt-4">
+      <Label htmlFor={`${id}-postback`}>URL do postback (campanha de cada venda)</Label>
+      <div className="flex gap-2">
+        <Input
+          id={`${id}-postback`}
+          readOnly
+          value={postback ?? (erro ? "" : "Carregando…")}
+          onFocus={(ev) => ev.currentTarget.select()}
+          className="min-w-0 flex-1 font-mono text-dense"
+          aria-describedby={`${id}-postback-ajuda`}
+        />
+        <Button variant="secondary" onClick={copiar} disabled={!postback}>
+          {copiado ? <CheckIcon aria-hidden /> : <CopyIcon aria-hidden />}
+          {copiado ? "Copiada" : "Copiar"}
+        </Button>
+      </div>
+      <p id={`${id}-postback-ajuda`} className="text-label text-t2 text-pretty">
+        O webhook da Sphere não diz de que anúncio veio a venda. Na Sphere, abra <Forte>Pixels › Novo pixel › RedTrack</Forte>,
+        escolha o programa e cole esta URL em Purchase (COD) e Purchase (Cartão). Repita em cada programa. Nos parâmetros de
+        URL do anúncio, o <span className="font-mono">sub1</span> tem de ser <span className="font-mono">{"{{ad.id}}"}</span>.
+      </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Painel da URL: copiar, os passos, o ultimo evento e o teste
 // ---------------------------------------------------------------------------
 
@@ -375,6 +423,8 @@ function PainelUrl({
           </li>
         ))}
       </ol>
+
+      {checkout.plataforma === "sphere" ? <CampoPostback url={url} erro={erroUrl !== null} /> : null}
 
       {assina ? (
         <CampoSegredo
@@ -1132,7 +1182,7 @@ export function CheckoutsTela({
         descricao={
           trocando && usaSegredo(trocando.plataforma)
             ? `A URL antiga para de funcionar na hora. Cole a nova no webhook da ${nomeCurto(trocando.plataforma)} logo em seguida, senão os eventos se perdem. O ${nomeDoSegredo(trocando.plataforma)} continua o mesmo.`
-            : "A URL antiga para de funcionar na hora e os afiliados ligados a ela ficam livres. Cole a nova na Sphere logo em seguida, senão os eventos se perdem."
+            : "A URL antiga para de funcionar na hora e os afiliados ligados a ela ficam livres. Cole a nova no webhook da Sphere e troque a URL do postback em cada programa logo em seguida, senão os eventos e a campanha das vendas se perdem."
         }
         confirmar="Trocar URL"
         onConfirmar={async () => {
@@ -1146,7 +1196,13 @@ export function CheckoutsTela({
           setTrocando(null);
           setUrlDe(alvo);
           if (r.aviso) toast.warning("URL trocada", { description: r.aviso });
-          else toast.success("URL trocada", { description: `Cole a nova na ${nomeCurto(alvo.plataforma)}.` });
+          else
+            toast.success("URL trocada", {
+              description:
+                alvo.plataforma === "sphere"
+                  ? "Cole a nova no webhook da Sphere e no postback de cada programa."
+                  : `Cole a nova na ${nomeCurto(alvo.plataforma)}.`,
+            });
           atualizar();
         }}
       />
