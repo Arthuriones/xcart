@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   escalaLinha,
-  caminhoLinha,
   montarCascata,
   montarSerieLinha,
   rotuloTick,
-  tracarLinha,
   trilhaSparkline,
   valorDaSerie,
   vaoDaCelula,
+  vereditoDoPeriodo,
 } from "@/app/(dashboard)/financeiro/lucro-dados";
 import { montarIndicadores, type BaseIndicadores } from "@/app/(dashboard)/financeiro/indicadores";
 import type { Totais } from "@/lib/financeiro/calculo";
@@ -93,7 +92,7 @@ function totais(p: Partial<Totais> = {}): Totais {
   };
 }
 
-describe("eixo Y do grafico de linha", () => {
+describe("eixo Y do grafico do destaque", () => {
   it("zero dentro, passo redondo e folga de 4% em cima", () => {
     expect(escalaLinha([100, 250, 3000])).toEqual({ min: 0, max: 4000, passo: 1000, ticks: [0, 1000, 2000, 3000, 4000] });
   });
@@ -128,25 +127,35 @@ describe("eixo Y do grafico de linha", () => {
   });
 });
 
-describe("desenho da linha", () => {
-  const e = { min: 0, max: 40 };
+describe("frase acima do grafico", () => {
+  const loja = (lucro: number, movimento = true) => ({ lucro, movimento });
 
-  it("buraco onde falta dado, nunca zero; ponto isolado vira um ponto", () => {
-    expect(caminhoLinha([10, 20, null, 40], 4, e)).toBe("M0.0 180.0 L333.3 120.0 M1000.0 0.0 l0.01 0");
+  it("em quantas lojas deu lucro e o ROAS contra o de equilibrio", () => {
+    expect(
+      vereditoDoPeriodo({
+        lojas: [loja(100), loja(50), loja(-20), loja(10), loja(5)],
+        roas: 2.7,
+        equilibrio: 1.69,
+        previsto: false,
+        palavra: "lojas",
+      })
+    ).toBe("Lucro em 4 de 5 lojas. ROAS real 2,70× contra equilíbrio de 1,69×.");
   });
 
-  it("o ultimo trecho (hoje) sai a parte, e a area fecha no zero", () => {
-    const t = tracarLinha([10, 20, 30], e, true);
-    expect(t.linha).toBe("M0.0 180.0 L500.0 120.0");
-    expect(t.parcial).toBe("M500.0 120.0 L1000.0 60.0");
-    expect(t.area).toBe("M0.0 240.0 L0.0 180.0 L500.0 120.0 L1000.0 60.0 L1000.0 240.0 Z");
-    expect(t.fim).toEqual({ x: 1000, y: 60 });
+  it("loja sem movimento nao conta; com uma so, fica so o ROAS", () => {
+    expect(
+      vereditoDoPeriodo({ lojas: [loja(80), loja(0, false)], roas: 3, equilibrio: null, previsto: false, palavra: "lojas" })
+    ).toBe("ROAS real 3,00×.");
   });
 
-  it("sem dia parcial a linha vai ate o fim", () => {
-    const t = tracarLinha([10, 20, 30], e, false);
-    expect(t.linha).toBe("M0.0 180.0 L500.0 120.0 L1000.0 60.0");
-    expect(t.parcial).toBe("");
+  it("contra entrega fala do previsto; sem gasto e sem lojas, nada", () => {
+    expect(
+      vereditoDoPeriodo({ lojas: [loja(10), loja(-5)], roas: 1.2, equilibrio: 1.5, previsto: true, palavra: "operações" })
+    ).toBe("Lucro previsto em 1 de 2 operações. ROAS previsto 1,20× contra equilíbrio de 1,50×.");
+    expect(vereditoDoPeriodo({ lojas: [loja(10)], roas: null, equilibrio: null, previsto: false, palavra: "lojas" })).toBeNull();
+    expect(vereditoDoPeriodo({ lojas: [loja(10)], roas: null, equilibrio: 1.4, previsto: false, palavra: "lojas" })).toBe(
+      "ROAS de equilíbrio 1,40×."
+    );
   });
 });
 
@@ -227,7 +236,7 @@ describe("faixa de KPIs", () => {
   });
 });
 
-describe("serie do grafico de linha", () => {
+describe("serie do grafico do destaque", () => {
   const d = dias("2026-09-03", 14);
   const atual = d.map((x, i) => ponto(x, { receita: 100, cmv: 40, gastoMeta: 20, pedidos: 2, parcial: i === 13 }));
   const anterior = dias("2026-08-20", 14).map((x, i) => ponto(x, { receita: i < 2 ? 0 : 50 }));
@@ -246,6 +255,16 @@ describe("serie do grafico de linha", () => {
     expect(semana.titulos).toEqual(["Semana 03/09–09/09", "Semana 10/09–16/09 · parcial"]);
     expect(semana.atual.map((x) => x?.receita)).toEqual([700, 700]);
     expect(montarSerieLinha({ atual, anterior, gran: "mes" }).anterior).toBeNull();
+  });
+
+  it("variacao do ponto so entre grupos com o mesmo numero de dias", () => {
+    // O anterior comeca 2 dias depois (antes do historico): a 1a semana tem 5 dias contra 7.
+    expect(montarSerieLinha({ atual, anterior, gran: "semana" }).comparavel).toEqual([false, true]);
+    expect(montarSerieLinha({ atual, anterior, gran: "dia" }).comparavel?.slice(0, 3)).toEqual([false, false, true]);
+    // "Mes passado" de 31 dias contra 30: a ultima semana fica com um dia a menos no anterior.
+    const curto = montarSerieLinha({ atual, anterior: anterior.slice(0, 13), gran: "semana" });
+    expect(curto.comparavel).toEqual([false, false]);
+    expect(montarSerieLinha({ atual, anterior: null, gran: "semana" }).comparavel).toBeNull();
   });
 
   it("anterior sem movimento nenhum: sem a linha tracejada", () => {

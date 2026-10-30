@@ -50,10 +50,10 @@ export function SeletorTema({ grande = false }: { grande?: boolean }) {
             onClick={() => setTheme(o.id)}
             className={clsx(
               // O segmentado da casca: trilho bg-track, a opcao marcada em
-              // superficie com anel (o mesmo da moeda, em seletor-global.tsx).
-              "flex-1 rounded-sm",
+              // superficie com sombra (o mesmo da moeda, em seletor-global.tsx).
+              "flex-1 rounded-[6px] font-medium",
               grande ? "h-10 text-dense" : "h-6.5 text-label",
-              on ? "bg-surface font-semibold text-ink ring-1 ring-border" : "text-t2 hover:text-ink"
+              on ? "bg-surface text-ink shadow-[0_1px_2px_rgba(20,20,20,.12)]" : "text-t2 hover:text-ink"
             )}
           >
             {o.rotulo}

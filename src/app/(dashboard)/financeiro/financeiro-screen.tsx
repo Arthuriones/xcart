@@ -10,10 +10,10 @@ import { PainelLucro } from "./painel-lucro";
 import { FaixaPendencias, LeituraDoLucro, PuxarAgoraProvider } from "./pendencias";
 
 // ============================================================================
-// A tela Dashboard (mockup "design novo/Dashboard.dc.html"), montada no
+// A tela Dashboard (design "design novo/Panda Track - App.dc.html"), montada no
 // servidor: a faixa de pendencias (uma linha: o aviso de custo ou a pendencia
 // mais grave), de quando sao os pedidos e o gasto com o "Puxar agora", o
-// destaque com o grafico de linha ao lado da composicao do lucro, a faixa de
+// destaque (abas das metricas e grafico de barras) ao lado da composicao do lucro, a faixa de
 // KPIs, "Detalhar por" e "Como calculamos". So a faixa, a leitura, o painel do
 // destaque e as abas sao client.
 //
@@ -82,6 +82,7 @@ export function FinanceiroScreen({
         moeda={moeda}
         principal={p.principal}
         celulas={p.celulas}
+        veredito={p.veredito}
         atual={pontos}
         anterior={extras ? extras.serie.anterior : null}
         comparacao={p.comparacao}

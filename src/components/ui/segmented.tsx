@@ -86,10 +86,11 @@ function Segmented<V extends string>({
             onClick={() => !o.desabilitado && onValorChange(o.valor)}
             onKeyDown={(e) => aoTeclar(e, i)}
             className={cn(
-              "inline-flex items-center justify-center rounded-sm px-3 whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus",
+              "inline-flex items-center justify-center rounded-[6px] px-3 font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus",
               tamanho === "md" ? "h-7 text-dense" : "h-6 text-label",
+              // A marcada com sombra, como no design do Panda Track.
               marcado
-                ? "bg-surface font-semibold text-ink ring-1 ring-border"
+                ? "bg-surface text-ink shadow-[0_1px_2px_rgba(20,20,20,.12)]"
                 : "text-t2 hover:text-ink",
               o.desabilitado && "cursor-not-allowed text-t4 hover:text-t4"
             )}

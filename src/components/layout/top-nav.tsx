@@ -29,7 +29,8 @@ import { Sino, SinoCelular } from "./sino";
  * As larguras sao do PAINEL, nao da janela (container query no header): o
  * menu aberto ou recolhido muda o espaco. Abaixo de 860px a barra inteira vira
  * o botao compacto, que abre o contexto numa folha; "Atualizado as" aparece
- * de 980px e as datas do periodo de 1080px (seletor-global.tsx).
+ * de 980px, as datas do periodo de 1080px e o "5 ativas" da loja de 1120px
+ * (seletor-global.tsx).
  *
  * Celular: logo, titulo, busca e sino; o contexto vira um botao de largura
  * total que abre num painel, com Aplicar.
@@ -69,7 +70,9 @@ export function TopNav({
         data-contexto-pendente={ctx.pendente || undefined}
         className="@container sticky top-0 z-30 hidden h-14 shrink-0 items-center gap-1.5 border-b border-border bg-surface pl-5 pr-3 md:flex"
       >
-        <h1 className="shrink-0 whitespace-nowrap text-section text-ink">{titulo}</h1>
+        <h1 className="mr-1 shrink-0 whitespace-nowrap text-[20px] leading-7 font-semibold tracking-[-0.01em] text-ink">
+          {titulo}
+        </h1>
         {contexto && temContexto && (
           <>
             <span aria-hidden className="mx-2 h-5 w-px shrink-0 bg-border" />
@@ -145,7 +148,9 @@ export function TopoCarregando() {
   return (
     <>
       <div className="sticky top-0 z-30 hidden h-14 shrink-0 items-center gap-1.5 border-b border-border bg-surface pl-5 pr-3 md:flex">
-        <h1 className="shrink-0 whitespace-nowrap text-section text-ink">{titulo}</h1>
+        <h1 className="mr-1 shrink-0 whitespace-nowrap text-[20px] leading-7 font-semibold tracking-[-0.01em] text-ink">
+          {titulo}
+        </h1>
         {temContexto && (
           <>
             <span aria-hidden className="mx-2 h-5 w-px shrink-0 bg-border" />

@@ -26,6 +26,7 @@ import {
   situacaoDasLojas,
   temMovimento,
   valorComSinal,
+  vereditoDoPeriodo,
   vezes,
   type Pendencia,
 } from "@/app/(dashboard)/financeiro/lucro-dados";
@@ -134,6 +135,8 @@ export interface PainelMontado {
   comissao: boolean;
   principal: Indicador;
   celulas: Indicador[];
+  /** "Lucro em 4 de 5 lojas. ROAS real 2,70× contra equilíbrio de 1,69×." null = nada a dizer. */
+  veredito: string | null;
   comparacao: ModoComparacao;
   /** O aviso de custo, a parte das pendencias (montarFaixa decide a ordem). */
   custo: Pendencia | null;
@@ -244,6 +247,22 @@ export function montarPainel(
       ? `os dias contam no ${rotuloFuso(dados.fuso)}`
       : `cada pedido conta no dia do fuso da loja, e “hoje” segue o ${rotuloFuso(dados.fuso)}`;
 
+  // A frase acima do grafico: em quantas lojas deu lucro e o ROAS contra o de
+  // equilibrio (em contra entrega, os previstos, como o destaque).
+  const veredito = vereditoDoPeriodo({
+    lojas: r.porLoja.map((l) => ({
+      lucro: contraEntrega ? l.cod.lucroPrevisto : l.lucro,
+      // A regra da aba Loja: custo sem venda (reenvio, reembolso depois do
+      // envio) tambem e movimento -- e prejuizo, e conta.
+      movimento:
+        l.receita > 0 || l.pedidos > 0 || l.gasto > 0 || l.cmv !== 0 || l.lucro !== 0 || (contraEntrega && l.cod.gerados > 0),
+    })),
+    roas: contraEntrega ? r.atual.cod.roasPrevisto : r.atual.roas,
+    equilibrio: contraEntrega ? r.atual.cod.roasEquilibrioPrevisto : r.atual.roasEquilibrio,
+    previsto: contraEntrega,
+    palavra: r.porLoja.some((l) => dados.checkoutIds.includes(l.storeId)) ? "operações" : "lojas",
+  });
+
   return {
     moeda,
     rotuloLoja,
@@ -258,6 +277,7 @@ export function montarPainel(
     comissao: comissaoIds.length > 0,
     principal,
     celulas,
+    veredito,
     comparacao: !comparando ? "nenhuma" : semBase ? "sem-base" : "anterior",
     custo: avisoDeCusto(cobertura, r.avisos.lojasSemCustoPadraoComFalta.length > 0),
     pendencias,

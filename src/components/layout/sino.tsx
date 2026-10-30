@@ -107,8 +107,8 @@ export function Sino({ total }: { total: number | null }) {
           type="button"
           aria-label={rotuloSino(n)}
           className={clsx(
-            "relative grid size-ctl-md shrink-0 place-items-center rounded-control text-t2 hover:bg-hover hover:text-ink",
-            aberto && "bg-hover text-ink"
+            "relative grid size-ctl-md shrink-0 place-items-center rounded-control border border-border bg-surface text-t2 hover:border-border-strong hover:text-ink",
+            aberto && "border-border-strong text-ink"
           )}
         >
           <Bell className="size-4" strokeWidth={1.75} aria-hidden />

@@ -277,6 +277,8 @@ export interface Grupo {
   parcial: boolean;
   /** null = nenhum dia do grupo tem dado (fora do historico). */
   soma: Soma | null;
+  /** Quantos dias do grupo tem dado. */
+  dias: number;
 }
 
 type Ponto = PontoDia | null;
@@ -287,6 +289,7 @@ function grupoDe(rotulo: string, pontos: Ponto[]): Grupo {
     rotulo,
     parcial: comDado.some((p) => p.parcial),
     soma: comDado.length ? somar(comDado) : null,
+    dias: comDado.length,
   };
 }
 
@@ -452,6 +455,42 @@ export function tipoDaSerie(id: IdSerie): DefinicaoMetrica["tipo"] {
   return id === "custos" || id === "taxas" || id === "devolucoes" ? "dinheiro" : METRICAS[id].tipo;
 }
 
+/**
+ * A frase acima do grafico (design do Panda Track): "Lucro em 4 de 5 lojas.
+ * ROAS real 2,70× contra equilíbrio de 1,69×." So conta loja com movimento
+ * no periodo (venda, pedido ou gasto); com uma so, a primeira frase sai.
+ * Em contra entrega fala do previsto. null = nada a dizer.
+ */
+export function vereditoDoPeriodo(e: {
+  lojas: { lucro: number; movimento: boolean }[];
+  roas: number | null;
+  equilibrio: number | null;
+  previsto: boolean;
+  /** "lojas", ou "operações" quando entra checkout externo. */
+  palavra: string;
+}): string | null {
+  const ok = (v: number | null): v is number => v !== null && Number.isFinite(v);
+  const ativas = e.lojas.filter((l) => l.movimento);
+  const partes: string[] = [];
+  if (ativas.length >= 2) {
+    const comLucro = ativas.filter((l) => l.lucro > 0).length;
+    partes.push(`${e.previsto ? "Lucro previsto" : "Lucro"} em ${comLucro} de ${ativas.length} ${e.palavra}.`);
+  }
+  if (ok(e.roas)) {
+    const nome = e.previsto ? "ROAS previsto" : "ROAS real";
+    partes.push(
+      ok(e.equilibrio)
+        ? `${nome} ${vezes(e.roas)} contra equilíbrio de ${vezes(e.equilibrio)}.`
+        : `${nome} ${vezes(e.roas)}.`
+    );
+  } else if (ok(e.equilibrio)) {
+    // Sem gasto nao ha ROAS, mas o de equilibrio ainda diz quanto o anuncio
+    // precisa devolver (era o que a celula do ROAS mostrava).
+    partes.push(`ROAS de equilíbrio ${vezes(e.equilibrio)}.`);
+  }
+  return partes.length ? partes.join(" ") : null;
+}
+
 const fmtTickCompacto = new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 });
 const fmtTickPct = new Intl.NumberFormat("pt-BR", { style: "percent", maximumFractionDigits: 0 });
 const fmtTickVezes = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
@@ -514,9 +553,15 @@ export interface SerieLinha {
   titulos: string[];
   /** As somas de cada ponto do periodo atual. null = sem dado. */
   atual: (Soma | null)[];
-  /** O periodo anterior alinhado por posicao. null = sem a linha tracejada. */
+  /** O periodo anterior alinhado por posicao. null = sem o traco do anterior. */
   anterior: (Soma | null)[] | null;
-  /** O ultimo ponto tem o dia de hoje (parcial): o trecho final sai pontilhado. */
+  /**
+   * Ponto a ponto, se o anterior tem o mesmo numero de dias com dado que o
+   * atual (so entao a variacao do ponto e honesta: "Mes passado" de 31 dias
+   * contra 30, por semana, terminava com 3 dias contra 2). null = sem anterior.
+   */
+  comparavel: boolean[] | null;
+  /** O ultimo ponto tem o dia de hoje (parcial): a ultima barra sai hachurada. */
   parcialUltimo: boolean;
 }
 
@@ -535,6 +580,7 @@ export function montarSerieLinha(opcoes: {
   const grupos = agrupar(atual, dias, gran);
   const ant =
     opcoes.anterior && gran !== "mes" ? agrupar(semInicioVazio(opcoes.anterior), dias, gran) : null;
+  const temAnterior = ant !== null && ant.some((g) => g.soma !== null);
 
   const titulos: string[] =
     gran === "dia"
@@ -556,7 +602,8 @@ export function montarSerieLinha(opcoes: {
     rotulos: grupos.map((g) => g.rotulo),
     titulos,
     atual: grupos.map((g) => g.soma),
-    anterior: ant && ant.some((g) => g.soma !== null) ? ant.map((g) => g.soma) : null,
+    anterior: temAnterior ? ant.map((g) => g.soma) : null,
+    comparavel: temAnterior ? grupos.map((g, i) => ant[i]?.dias === g.dias) : null,
     parcialUltimo: grupos.length > 1 && grupos[grupos.length - 1].parcial,
   };
 }
@@ -575,10 +622,6 @@ function limpo(n: number): number {
   return Number(n.toPrecision(12));
 }
 
-/** O SVG do grafico: viewBox 1000 x 240, esticado com preserveAspectRatio none. */
-export const LARGURA_LINHA = 1000;
-export const ALTURA_LINHA = 240;
-
 export interface EscalaLinha {
   min: number;
   max: number;
@@ -587,9 +630,9 @@ export interface EscalaLinha {
 }
 
 /**
- * Eixo Y do grafico de linha: o zero sempre dentro, um passo "redondo"
+ * Eixo Y do grafico do destaque: o zero sempre dentro, um passo "redondo"
  * (1, 2, 2,5, 5 ou 10 x 10^n) para uns 4 intervalos, e 4% de folga em cima
- * para a linha nao encostar no topo.
+ * para a barra nao encostar no topo.
  */
 export function escalaLinha(valores: (number | null | undefined)[]): EscalaLinha {
   const v = valores.filter(finito);
@@ -611,79 +654,7 @@ export function escalaLinha(valores: (number | null | undefined)[]): EscalaLinha
   return { min, max, passo, ticks };
 }
 
-/** X do ponto i de n no viewBox (um ponto so fica no meio). */
-export function xDoPonto(i: number, n: number): number {
-  return n <= 1 ? LARGURA_LINHA / 2 : (i / (n - 1)) * LARGURA_LINHA;
-}
-
-/** Y do valor no viewBox (0 em cima). */
-export function yDoValor(v: number, e: Pick<EscalaLinha, "min" | "max">): number {
-  return ALTURA_LINHA - ((v - e.min) / (e.max - e.min)) * ALTURA_LINHA;
-}
-
 const c1 = (n: number) => n.toFixed(1);
-
-/**
- * Caminho de uma serie nos primeiros `ate` pontos de um eixo de `n`. null
- * quebra a linha (buraco, nunca zero); ponto isolado vira um traco minimo,
- * que o stroke-linecap redondo mostra como um ponto.
- */
-export function caminhoLinha(
-  valores: (number | null)[],
-  n: number,
-  e: Pick<EscalaLinha, "min" | "max">,
-  ate = valores.length
-): string {
-  let d = "";
-  let noTrecho = 0;
-  for (let i = 0; i < Math.min(ate, valores.length); i++) {
-    const v = valores[i];
-    if (!finito(v)) {
-      if (noTrecho === 1) d += "l0.01 0 ";
-      noTrecho = 0;
-      continue;
-    }
-    d += `${noTrecho ? "L" : "M"}${c1(xDoPonto(i, n))} ${c1(yDoValor(v, e))} `;
-    noTrecho++;
-  }
-  if (noTrecho === 1) d += "l0.01 0";
-  return d.trim();
-}
-
-export interface TracadoLinha {
-  /** A linha cheia (sem o ultimo trecho quando o ultimo ponto e parcial). */
-  linha: string;
-  /** O ultimo trecho, pontilhado: hoje ainda vai mudar. */
-  parcial: string;
-  /** A area embaixo da linha, ate o zero. */
-  area: string;
-  /** O ultimo ponto com dado (o anel). */
-  fim: { x: number; y: number } | null;
-}
-
-/** O desenho do periodo atual: linha, trecho parcial, area e ponto final. */
-export function tracarLinha(
-  valores: (number | null)[],
-  e: Pick<EscalaLinha, "min" | "max">,
-  parcialUltimo: boolean
-): TracadoLinha {
-  const n = valores.length;
-  const separa = parcialUltimo && n > 1;
-  const linha = caminhoLinha(valores, n, e, separa ? n - 1 : n);
-  const penultimo = valores[n - 2];
-  const ultimo = valores[n - 1];
-  const parcial =
-    separa && finito(penultimo) && finito(ultimo)
-      ? `M${c1(xDoPonto(n - 2, n))} ${c1(yDoValor(penultimo, e))} L${c1(xDoPonto(n - 1, n))} ${c1(yDoValor(ultimo, e))}`
-      : "";
-  const pontos = valores.flatMap((v, i) => (finito(v) ? [{ x: xDoPonto(i, n), y: yDoValor(v, e) }] : []));
-  const base = yDoValor(Math.max(e.min, Math.min(0, e.max)), e);
-  const area =
-    pontos.length > 1
-      ? `M${c1(pontos[0].x)} ${c1(base)} ${pontos.map((p) => `L${c1(p.x)} ${c1(p.y)}`).join(" ")} L${c1(pontos[pontos.length - 1].x)} ${c1(base)} Z`
-      : "";
-  return { linha, parcial, area, fim: pontos.length ? pontos[pontos.length - 1] : null };
-}
 
 /**
  * Sparkline da faixa de KPIs e da aba Loja: so a forma (escala pelo minimo e

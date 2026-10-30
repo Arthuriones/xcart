@@ -393,7 +393,7 @@ function Radio({
 
 /**
  * O segmentado da casca, um estilo so: trilho bg-track e a opcao marcada em
- * superficie com anel. Moeda, comparacao (folha do celular) e tema
+ * superficie com sombra (design do Panda Track). Moeda, comparacao (folha do celular) e tema
  * (tema.tsx) usam o mesmo desenho.
  */
 function Segmentado<T extends string>({
@@ -432,9 +432,9 @@ function Segmentado<T extends string>({
             aria-checked={on}
             onClick={() => onEscolher(o.id)}
             className={clsx(
-              "rounded-sm",
+              "rounded-[6px] font-medium",
               grande ? "h-10 flex-1 px-2.5 text-dense" : "h-full px-2.25 text-label",
-              on ? "bg-surface font-semibold text-ink ring-1 ring-border" : "text-t2 hover:text-ink"
+              on ? "bg-surface text-ink shadow-[0_1px_2px_rgba(20,20,20,.12)]" : "text-t2 hover:text-ink"
             )}
           >
             {o.texto}
@@ -497,6 +497,9 @@ export function BarraContexto({
   const comparar = modo.tipo === "completo" && !modo.semComparar;
   const nomeLoja = nomeDaLoja(dados.lojas, v.lojaId);
   const filtrada = !!nomeLoja;
+  // "5 ativas" ao lado de "Todas as lojas": as lojas Shopify que a Shopify
+  // deixa ler (a lista do seletor chama de Ativas).
+  const ativas = dados.lojas.filter((l) => l.tipo !== "checkout" && !l.semAcesso).length;
   const pop = (qual: "loja" | "periodo" | "comparar") => ({
     aberto: aberto === qual,
     aoMudar: (a: boolean) => {
@@ -537,11 +540,11 @@ export function BarraContexto({
               )}
             >
               {filtrada && prefixoDa(dados.lojas, v.lojaId) === "Checkout" ? (
-                <CreditCard className="size-4 shrink-0 text-info" strokeWidth={1.75} aria-hidden />
+                <CreditCard className="size-3.5 shrink-0 text-info" strokeWidth={1.75} aria-hidden />
               ) : (
-                <Store className={clsx("size-4 shrink-0", filtrada ? "text-info" : "text-t3")} strokeWidth={1.75} aria-hidden />
+                <Store className={clsx("size-3.5 shrink-0", filtrada ? "text-info" : "text-t3")} strokeWidth={1.75} aria-hidden />
               )}
-              <span className="truncate">
+              <span className="truncate font-medium">
                 {filtrada ? (
                   <>
                     <span className="sr-only">{prefixoDa(dados.lojas, v.lojaId)}: </span>
@@ -551,7 +554,12 @@ export function BarraContexto({
                   "Todas as lojas"
                 )}
               </span>
-              <ChevronDown className="size-3.5 shrink-0 text-t4" strokeWidth={1.75} aria-hidden />
+              {!filtrada && ativas > 0 && (
+                <span className="num hidden whitespace-nowrap text-t3 @min-[1120px]:inline">
+                  {ativas} {ativas === 1 ? "ativa" : "ativas"}
+                </span>
+              )}
+              <ChevronDown className="size-3 shrink-0 text-t3" strokeWidth={2} aria-hidden />
             </button>
           }
         >
@@ -614,15 +622,15 @@ export function BarraContexto({
             className={calendario ? "w-72 p-1" : "w-75 p-1"}
             gatilho={
               <button type="button" className={clsx(GATILHO, GATILHO_NEUTRO, "text-ink")}>
-                <Calendar className="size-4 shrink-0 text-t3" strokeWidth={1.75} aria-hidden />
-                <span className="whitespace-nowrap">{nomeDoPeriodo(v.periodo, atual.atual, dados.hoje)}</span>
+                <Calendar className="size-3.5 shrink-0 text-t3" strokeWidth={1.75} aria-hidden />
+                <span className="whitespace-nowrap font-medium">{nomeDoPeriodo(v.periodo, atual.atual, dados.hoje)}</span>
                 {/* As datas so quando a barra do topo (o container) tem folga. */}
                 {!personalizado && (
                   <span className="num hidden whitespace-nowrap text-t3 @min-[1080px]:inline">
                     {rotuloIntervalo(atual.atual)}
                   </span>
                 )}
-                <ChevronDown className="size-3.5 shrink-0 text-t4" strokeWidth={1.75} aria-hidden />
+                <ChevronDown className="size-3 shrink-0 text-t3" strokeWidth={2} aria-hidden />
               </button>
             }
           >
@@ -697,8 +705,8 @@ export function BarraContexto({
               {...pop("comparar")}
               className="w-70 p-1"
               gatilho={
-                <button type="button" className={clsx(GATILHO, GATILHO_NEUTRO, "gap-1.5 text-t1")}>
-                  <span className="text-t3">vs.</span>
+                <button type="button" className={clsx(GATILHO, GATILHO_NEUTRO, "gap-1 text-t2 hover:text-ink")}>
+                  <span>vs.</span>
                   <span className="whitespace-nowrap">
                     {v.comparacao === "anterior" ? "período anterior" : "sem comparação"}
                   </span>
@@ -783,10 +791,10 @@ function AtualizarComDica({ ctx, fuso }: { ctx: Contexto; fuso: string }) {
         disabled={ctx.pendente}
         aria-busy={ctx.pendente}
         aria-label="Atualizar agora"
-        className="grid size-ctl-md shrink-0 place-items-center rounded-control text-t2 hover:bg-hover hover:text-ink disabled:cursor-wait disabled:opacity-45"
+        className="grid size-ctl-md shrink-0 place-items-center rounded-control border border-border bg-surface text-t2 hover:border-border-strong hover:text-ink disabled:cursor-wait disabled:opacity-45"
       >
         <RefreshCw
-          className={clsx("size-4", ctx.pendente && "animate-xc-spin")}
+          className={clsx("size-3.5", ctx.pendente && "animate-xc-spin")}
           strokeWidth={1.75}
           aria-hidden
         />
