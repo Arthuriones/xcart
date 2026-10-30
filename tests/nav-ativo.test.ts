@@ -62,6 +62,7 @@ describe("itemAtivo (todas as telas)", () => {
   it("cada tela acende o proprio item", () => {
     expect(itemAtivo("/financeiro")).toBe("lucro");
     expect(itemAtivo("/pedidos")).toBe("pedidos");
+    expect(itemAtivo("/regras")).toBe("regras");
     expect(itemAtivo("/financeiro/custos")).toBe("custos");
     expect(itemAtivo("/tracking")).toBe("saude");
     expect(itemAtivo("/tracking/eventos")).toBe("eventos");
@@ -107,7 +108,7 @@ describe("gruposNav (menu focado)", () => {
   it("menu completo: Financeiro, Rastreamento, Operacoes e Sistema; Roteamento so para quem tem rota", () => {
     expect(gruposNav(false).map((g) => g.id)).toEqual(["lucro", "rastreamento", "operacao", "configuracoes"]);
     expect(ids(false)).toEqual([
-      "lucro", "campanhas", "pedidos", "custos", "saude", "eventos", "alertas",
+      "lucro", "campanhas", "regras", "pedidos", "custos", "saude", "eventos", "alertas",
       "lojas", "importar", "atividade", "integracoes", "configuracoes", "assinatura",
     ]);
     expect(gruposNav(true).map((g) => g.id)).toEqual(["lucro", "rastreamento", "operacao", "roteamento", "configuracoes"]);
@@ -121,14 +122,17 @@ describe("gruposNav (menu focado)", () => {
     expect(gruposNav(false)[0].itens[0].href).toBe("/financeiro");
   });
 
-  it("Campanhas e Pedidos no grupo do financeiro", () => {
+  it("Campanhas, Regras e Pedidos no grupo do financeiro", () => {
     for (const temRota of [false, true]) {
       const financeiro = gruposNav(temRota)[0];
-      expect(financeiro.itens.map((i) => i.id)).toEqual(["lucro", "campanhas", "pedidos", "custos"]);
+      expect(financeiro.itens.map((i) => i.id)).toEqual(["lucro", "campanhas", "regras", "pedidos", "custos"]);
       expect(financeiro.itens[1].rotulo).toBe("Campanhas");
       expect(financeiro.itens[1].href).toBe("/campanhas");
-      expect(financeiro.itens[2].rotulo).toBe("Pedidos");
-      expect(financeiro.itens[2].href).toBe("/pedidos");
+      // Regras logo depois de Campanhas: e onde se otimiza o que se acabou de ver.
+      expect(financeiro.itens[2].rotulo).toBe("Regras");
+      expect(financeiro.itens[2].href).toBe("/regras");
+      expect(financeiro.itens[3].rotulo).toBe("Pedidos");
+      expect(financeiro.itens[3].href).toBe("/pedidos");
     }
   });
 
@@ -306,6 +310,7 @@ describe("contexto e titulo do topo", () => {
     expect(tituloDaRota("/clone/routed-checkout/map")).toBe("Rotas");
     expect(tituloDaRota("/configuracoes")).toBe("Configurações");
     expect(tituloDaRota("/pedidos")).toBe("Pedidos");
+    expect(tituloDaRota("/regras")).toBe("Regras automáticas");
     expect(tituloDaRota("/conectar")).toBe("Conectar operação");
     expect(tituloDaRota("/stores")).toBe("Lojas");
     expect(tituloDaRota("/nao-existe")).toBe("Panda Track");

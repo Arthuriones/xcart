@@ -7,6 +7,8 @@ import { derivar, somarLinhas, tomDoRoas, type MetricasCampanha, type SomasCampa
 import { vezes } from "../financeiro/lucro-dados";
 import type { LinhaCampanha, NivelGranularidade } from "./tipos";
 import { MAPA_COLUNAS, ROTULOS_CONTRA_ENTREGA } from "./colunas-config";
+import { BotaoEditarAnuncio } from "./edicao-anuncio";
+import { CelulaStatus } from "./status-campanha";
 
 interface TabelaCampanhasProps {
   linhas: LinhaCampanha[];
@@ -27,35 +29,6 @@ function formatarNumero(v: number): string {
 
 function formatarPorcentagem(v: number): string {
   return `${v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
-}
-
-/** effective_status do Meta (e o da conta) em palavras. */
-function rotuloStatus(status: string | null): { texto: string; ativa: boolean } {
-  switch ((status ?? "").toUpperCase()) {
-    case "":
-      return { texto: "—", ativa: false };
-    case "ACTIVE":
-      return { texto: "Ativa", ativa: true };
-    case "PAUSED":
-    case "CAMPAIGN_PAUSED":
-    case "ADSET_PAUSED":
-      return { texto: "Pausada", ativa: false };
-    case "ARCHIVED":
-      return { texto: "Arquivada", ativa: false };
-    case "DELETED":
-      return { texto: "Excluída", ativa: false };
-    case "DISAPPROVED":
-      return { texto: "Reprovada", ativa: false };
-    case "PENDING_REVIEW":
-    case "IN_PROCESS":
-      return { texto: "Em análise", ativa: false };
-    case "WITH_ISSUES":
-      return { texto: "Com problema", ativa: false };
-    case "CLOSED":
-      return { texto: "Fechada", ativa: false };
-    default:
-      return { texto: status ?? "—", ativa: false };
-  }
 }
 
 type Valores = SomasCampanha & MetricasCampanha;
@@ -262,7 +235,6 @@ export function TabelaCampanhas({
               </tr>
             ) : (
               linhas.map((linha) => {
-                const { texto: statusTexto, ativa } = rotuloStatus(linha.status);
                 return (
                   <tr
                     key={linha.id}
@@ -275,43 +247,33 @@ export function TabelaCampanhas({
                       />
                     </td>
 
-                    {/* Status Badge */}
+                    {/* Status: selo e, no Meta, o interruptor de ligar/pausar */}
                     <td className="px-3 py-3">
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                          ativa
-                            ? "bg-ok-bg text-ok border border-ok-border"
-                            : "bg-surface text-t3 border border-border"
-                        }`}
-                      >
-                        <span
-                          className={`h-1.5 w-1.5 rounded-full ${
-                            ativa ? "bg-ok" : "bg-t3"
-                          }`}
-                        />
-                        {statusTexto}
-                      </span>
+                      <CelulaStatus linha={linha} />
                     </td>
 
                     {/* Nome + Plataforma */}
                     <td className="px-3 py-3">
-                      <div className="flex flex-col min-w-0 max-w-[280px]">
-                        <span className="truncate font-medium text-ink group-hover:text-brand transition" title={linha.nome}>
-                          {linha.nome}
-                        </span>
-                        <div className="flex items-center gap-1.5 text-[10.5px] text-t3 truncate">
-                          <span className="uppercase font-mono font-semibold text-brand">
-                            {linha.plataforma}
+                      <div className="flex items-center gap-1.5">
+                        <div className="flex flex-col min-w-0 max-w-[280px]">
+                          <span className="truncate font-medium text-ink group-hover:text-brand transition" title={linha.nome}>
+                            {linha.nome}
                           </span>
-                          <span>·</span>
-                          <span className="truncate">
-                            {linha.nivel === "anuncio" && linha.grupoNome
-                              ? `${linha.contaNome} · ${linha.grupoNome}`
-                              : linha.nivel === "grupo" && linha.campanhaNome
-                                ? `${linha.contaNome} · ${linha.campanhaNome}`
-                                : linha.contaNome}
-                          </span>
+                          <div className="flex items-center gap-1.5 text-[10.5px] text-t3 truncate">
+                            <span className="uppercase font-mono font-semibold text-brand">
+                              {linha.plataforma}
+                            </span>
+                            <span>·</span>
+                            <span className="truncate">
+                              {linha.nivel === "anuncio" && linha.grupoNome
+                                ? `${linha.contaNome} · ${linha.grupoNome}`
+                                : linha.nivel === "grupo" && linha.campanhaNome
+                                  ? `${linha.contaNome} · ${linha.campanhaNome}`
+                                  : linha.contaNome}
+                            </span>
+                          </div>
                         </div>
+                        <BotaoEditarAnuncio linha={linha} />
                       </div>
                     </td>
 

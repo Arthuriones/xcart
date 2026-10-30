@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { ChevronDown, ChevronUp, LogOut, Plus, RefreshCw, UserCheck } from "lucide-react";
+import { ChevronDown, ChevronUp, LogOut, Pencil, Plus, RefreshCw, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -73,21 +73,24 @@ export function CardPerfilMeta({
     return () => window.removeEventListener("message", onMensagem);
   }, [router]);
 
-  function abrirPopupMeta() {
+  // `editar` pede ao Facebook tambem a permissao de editar campanhas
+  // (ads_management, montarUrlLoginMeta): mesmo popup, mesmo callback.
+  function abrirPopupMeta(editar = false) {
+    const url = editar ? "/api/auth/meta/login?editar=1" : "/api/auth/meta/login";
     const largura = 600;
     const altura = 720;
     const esquerda = window.screenX + (window.outerWidth - largura) / 2;
     const topo = window.screenY + (window.outerHeight - altura) / 2;
 
     const popup = window.open(
-      "/api/auth/meta/login",
+      url,
       "xcart_meta_oauth",
       `width=${largura},height=${altura},left=${esquerda},top=${topo},status=no,resizable=yes,scrollbars=yes`
     );
 
     if (!popup) {
       // Caso popup seja bloqueado pelo navegador, redireciona diretamente
-      window.location.href = "/api/auth/meta/login";
+      window.location.href = url;
     }
   }
 
@@ -159,28 +162,37 @@ export function CardPerfilMeta({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {temConexao ? (
+          <div className="flex flex-col items-end gap-1.5">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {temConexao ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  pending={buscando}
+                  disabled={pendente}
+                  onClick={buscarContasNovas}
+                >
+                  {buscando ? null : <RefreshCw className="size-4" aria-hidden />}
+                  Buscar contas novas
+                </Button>
+              ) : null}
+              <Button type="button" variant="secondary" disabled={pendente} onClick={() => abrirPopupMeta(true)}>
+                <Pencil className="size-4" aria-hidden />
+                Permitir editar campanhas
+              </Button>
               <Button
                 type="button"
-                variant="secondary"
-                pending={buscando}
+                onClick={() => setModalConectarAberto(true)}
                 disabled={pendente}
-                onClick={buscarContasNovas}
+                className="bg-[#1877F2] font-medium text-white hover:bg-[#166fe5] shadow-xs gap-2"
               >
-                {buscando ? null : <RefreshCw className="size-4" aria-hidden />}
-                Buscar contas novas
+                <IconeFacebook className="size-4" />
+                {temConexao ? "Conectar outro perfil" : "Adicionar perfil"}
               </Button>
-            ) : null}
-            <Button
-              type="button"
-              onClick={() => setModalConectarAberto(true)}
-              disabled={pendente}
-              className="bg-[#1877F2] font-medium text-white hover:bg-[#166fe5] shadow-xs gap-2"
-            >
-              <IconeFacebook className="size-4" />
-              {temConexao ? "Conectar outro perfil" : "Adicionar perfil"}
-            </Button>
+            </div>
+            <p className="max-w-sm text-right text-label text-t3">
+              Pede ao Facebook a permissão de editar orçamento, lance e status pelo Panda Track.
+            </p>
           </div>
         </div>
 
@@ -274,7 +286,7 @@ export function CardPerfilMeta({
       <ModalConectarMeta
         aberto={modalConectarAberto}
         aoFechar={() => setModalConectarAberto(false)}
-        aoContinuarNavegador={abrirPopupMeta}
+        aoContinuarNavegador={() => abrirPopupMeta()}
         aoConectadoComSucesso={(res) => {
           const nome = res.nome || "Perfil";
           toast.success(`Perfil ${nome} conectado!`, {

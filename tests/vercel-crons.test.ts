@@ -41,6 +41,8 @@ const POR_DIA: Record<string, number> = {
   "/api/jobs/financeiro/cambio": 4,
   "/api/jobs/alertas": 144,
   "/api/jobs/demonstracao": 96,
+  // Regras automaticas de anuncio: 5 min depois do sync do Meta.
+  "/api/jobs/ads/regras": 96,
 };
 
 describe("vercel.json: crons", () => {

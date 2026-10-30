@@ -17,6 +17,7 @@ import {
   Settings,
   Store,
   TrendingUp,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { ROTA_CONECTAR_OPERACAO } from "@/lib/conectar-operacao";
@@ -40,6 +41,7 @@ const t = textos("nav");
 export type IdItem =
   | "lucro"
   | "campanhas"
+  | "regras"
   | "pedidos"
   | "saude"
   | "eventos"
@@ -94,6 +96,16 @@ export const ITENS: Record<IdItem, ItemNav> = {
     icone: Megaphone,
     atalho: "k",
     busca: "anúncios campanhas tráfego pago conjuntos criativos cpa roas meta google tiktok",
+  },
+  // Regras automaticas do Meta (pausar/mudar orcamento sozinho) e o historico
+  // de toda alteracao feita pelo Panda Track. Logo depois de Campanhas: e
+  // onde o lojista otimiza o que acabou de ver.
+  regras: {
+    id: "regras",
+    href: "/regras",
+    rotulo: "Regras",
+    icone: Zap,
+    busca: "regras automáticas otimizar pausar anúncio orçamento custo por ic histórico alterações meta",
   },
   pedidos: {
     id: "pedidos",
@@ -202,12 +214,12 @@ export const ITENS: Record<IdItem, ItemNav> = {
  * abrir uma tela "em breve".
  */
 export function gruposNav(temRota: boolean): GrupoNav[] {
-  // Menu completo: o grupo lucro inclui Dashboard, Campanhas, Pedidos e Custos.
+  // Menu completo: o grupo lucro inclui Dashboard, Campanhas, Regras, Pedidos e Custos.
   const grupos: GrupoNav[] = [
     {
       id: "lucro",
       rotulo: t("finance"),
-      itens: [ITENS.lucro, ITENS.campanhas, ITENS.pedidos, ITENS.custos],
+      itens: [ITENS.lucro, ITENS.campanhas, ITENS.regras, ITENS.pedidos, ITENS.custos],
     },
     {
       id: "rastreamento",
@@ -330,6 +342,7 @@ export const SECOES_CONFIGURACOES: { id: string; titulo: string; links: LinkConf
 const TITULOS: Record<string, string> = {
   "/financeiro": t("profit"),
   "/campanhas": t("campaigns"),
+  "/regras": "Regras automáticas",
   "/financeiro/custos": t("costs"),
   "/financeiro/anuncios": t("adAccounts"),
   "/pedidos": t("orders"),
