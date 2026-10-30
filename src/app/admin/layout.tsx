@@ -10,7 +10,7 @@ import { linkDoApp } from "./navegacao-admin";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = { title: "xcart admin" };
+export const metadata: Metadata = { title: "Panda Track admin" };
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();

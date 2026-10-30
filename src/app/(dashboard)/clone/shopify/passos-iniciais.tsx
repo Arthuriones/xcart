@@ -91,7 +91,7 @@ export function PassoDestino({
             </Link>
           }
         >
-          A Shopify não está deixando o xcart entrar nela. A importação pode falhar até a loja ser reconectada.
+          A Shopify não está deixando o Panda Track entrar nela. A importação pode falhar até a loja ser reconectada.
         </Callout>
       ) : null}
     </div>

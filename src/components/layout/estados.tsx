@@ -96,7 +96,7 @@ export function TelaComErro({
       {/* h2: o h1 da tela e o da barra do topo, que continua ali. */}
       <h2 className="text-page font-semibold text-ink">Esta tela não abriu</h2>
       <p className="max-w-115 text-body text-t1">
-        O resto do xcart continua funcionando e nenhum dado foi perdido. Tente de novo; se
+        O resto do Panda Track continua funcionando e nenhum dado foi perdido. Tente de novo; se
         repetir, volte para o Dashboard.
       </p>
       <div className="flex flex-wrap justify-center gap-2">

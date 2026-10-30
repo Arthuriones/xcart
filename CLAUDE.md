@@ -4,6 +4,8 @@
 
 > **Full technical reference: [`ARCHITECTURE.md`](./ARCHITECTURE.md)** — read it for the complete picture. This file is the quick orientation.
 
+**O produto se chama Panda Track desde 29/10/2026** (design em `design novo/Panda Track - *.dc.html`, logo em `design novo/logo.png`). So a marca que a pessoa VE mudou: texto da tela, e-mail/Telegram/push, paginas legais, metadata e logo (`LogoPanda`, `public/logo-panda-{claro,escuro}.png`, `src/app/icon.png`). Continuam `xcart` de proposito: repo, banco, dominios (`user.xcart.app`), cookies, headers, `data-xcart-*`, os scripts no tema das lojas (`xcart-bridge.js`, `xcart-pixel.js`, `xcart-config.json`), o prefixo `xcart_mcp_`, o `serverInfo.name` do MCP, os payloads de teste (`xcart-teste`), o script do Google Ads ja colado e o nome do pixel personalizado ja instalado. Texto novo de tela diz "Panda Track", nunca "xcart". Visual: verde `#1f7a5a` e o acento (link, foco, lucro = `chart-1`), Instrument Sans, menu lateral escuro (classe `dark` no `<aside>`, fundo `--frame`); os apelidos do shadcn ficam em `:root, .dark` para valer dentro de bloco escuro.
+
 ## The core idea (most important thing to understand)
 
 xcart is a dropshipping tool built around a **two-store "routed checkout"** model:

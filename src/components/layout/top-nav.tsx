@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Search } from "lucide-react";
 import clsx from "clsx";
-import { LogoXcart } from "@/components/layout/logo";
+import { LogoPanda } from "@/components/layout/logo";
 import { APP_HOME } from "@/lib/app-home";
 import { contextoDaRota, tituloDaRota } from "./navegacao";
 import { PaletaComandos, abrirBusca } from "./paleta-comandos";
@@ -123,8 +123,8 @@ export function TopNav({
 function CabecalhoCelular({ titulo, children }: { titulo: string; children?: ReactNode }) {
   return (
     <div className="flex h-14 items-center gap-1 pl-4 pr-1">
-      <Link href={APP_HOME} aria-label="xcart, ir para o Dashboard" className="mr-1.5 flex h-ctl-lg shrink-0 items-center">
-        <LogoXcart altura={14} />
+      <Link href={APP_HOME} aria-label="Panda Track, ir para o Dashboard" className="mr-1.5 flex h-ctl-lg shrink-0 items-center">
+        <LogoPanda altura={20} />
       </Link>
       <h1 className="min-w-0 flex-1 truncate text-section text-ink">{titulo}</h1>
       {children}

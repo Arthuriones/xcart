@@ -605,7 +605,7 @@ export function estadoDoTema(
     case "instalado":
       return { tom: "ok", texto: "Lojas, divisão e produtos em dia no tema da vitrine." };
     case "sem_config_url":
-      return { tom: "ok", texto: "Script colado à mão: a vitrine consulta o xcart a cada compra." };
+      return { tom: "ok", texto: "Script colado à mão: a vitrine consulta o Panda Track a cada compra." };
     case "sem_script":
       return { tom: "warn", texto: "O tema publicado da vitrine não tem o script desta rota. Instale de novo." };
     case "script_de_outra_rota":

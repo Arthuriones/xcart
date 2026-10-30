@@ -238,7 +238,7 @@ export function TelaVisao({
 
       <Section
         titulo="Caminho do comprador"
-        descricao={`Da vitrine, o xcart leva o carrinho para uma loja de checkout pela divisão do rodízio. Carrinhos dos últimos ${DIAS_CARRINHOS} dias.`}
+        descricao={`Da vitrine, o Panda Track leva o carrinho para uma loja de checkout pela divisão do rodízio. Carrinhos dos últimos ${DIAS_CARRINHOS} dias.`}
         acoes={
           <Link
             href="/sales"
@@ -343,7 +343,7 @@ function NoVitrine({ rota, texto }: { rota: RotaDaLista; texto: string }) {
           <span className="font-mono text-label text-t2 wrap-anywhere">{rota.vitrine.dominio}</span>
         </>
       ) : (
-        <span className="text-dense text-t1">Loja removida do xcart</span>
+        <span className="text-dense text-t1">Loja removida do Panda Track</span>
       )}
       <span className="mt-1 text-label text-t2">{texto}</span>
     </div>
@@ -366,7 +366,7 @@ function NoRodizio({
     carrinhos !== null && destinos.every((d) => d.carrinhos !== null) ? Math.max(0, carrinhos - somaLojas) : 0;
   return (
     <div className="flex min-w-0 flex-col gap-1 rounded-card border border-dashed border-border-strong bg-surface p-3">
-      <Rotulo icone={Shuffle}>Rodízio do xcart</Rotulo>
+      <Rotulo icone={Shuffle}>Rodízio do Panda Track</Rotulo>
       <span className="text-dense font-semibold text-ink">
         {rota.ativa ? ROTULO_ESTRATEGIA[rota.estrategia] : "Pausado: ninguém é levado"}
       </span>

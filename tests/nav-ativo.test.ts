@@ -308,7 +308,7 @@ describe("contexto e titulo do topo", () => {
     expect(tituloDaRota("/pedidos")).toBe("Pedidos");
     expect(tituloDaRota("/conectar")).toBe("Conectar operação");
     expect(tituloDaRota("/stores")).toBe("Lojas");
-    expect(tituloDaRota("/nao-existe")).toBe("xcart");
+    expect(tituloDaRota("/nao-existe")).toBe("Panda Track");
   });
 });
 

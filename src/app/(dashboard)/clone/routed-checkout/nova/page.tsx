@@ -42,7 +42,7 @@ export default async function NovaRotaPage() {
       <div className="mb-6 flex flex-col gap-1">
         <h2 className="text-page font-semibold text-ink">Conectar vitrine à loja de checkout</h2>
         <p className="max-w-[62ch] text-body text-t2">
-          A vitrine recebe o anúncio; a loja de checkout cobra. O xcart monta ou liga os produtos das duas pelo
+          A vitrine recebe o anúncio; a loja de checkout cobra. O Panda Track monta ou liga os produtos das duas pelo
           SKU e ativa a rota.
         </p>
       </div>

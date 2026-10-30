@@ -15,7 +15,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import clsx from "clsx";
-import { LogoXcart } from "@/components/layout/logo";
+import { LogoPanda } from "@/components/layout/logo";
 import { Folha, Pop } from "@/components/layout/sobreposicao";
 import { SeletorTema } from "@/components/layout/tema";
 import { ITENS_ADMIN, itemAdminAtivo, tituloAdmin, type IdItemAdmin } from "./navegacao-admin";
@@ -84,10 +84,10 @@ export function CascaAdmin({
         <div className="flex h-14 shrink-0 items-center gap-2 pl-4 pr-3">
           <Link
             href="/admin"
-            aria-label="xcart admin, ir para a visão geral"
+            aria-label="Panda Track admin, ir para a visão geral"
             className="flex items-center gap-2 rounded-control focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
           >
-            <LogoXcart altura={18} prioridade />
+            <LogoPanda altura={26} prioridade />
             <SeloAdmin />
           </Link>
         </div>
@@ -170,10 +170,10 @@ export function CascaAdmin({
           <div className="flex h-14 items-center gap-2 px-4">
             <Link
               href="/admin"
-              aria-label="xcart admin, ir para a visão geral"
+              aria-label="Panda Track admin, ir para a visão geral"
               className="flex h-ctl-lg shrink-0 items-center gap-1.5"
             >
-              <LogoXcart altura={14} />
+              <LogoPanda altura={20} />
               <SeloAdmin />
             </Link>
             <h1 className="ml-1 min-w-0 flex-1 truncate text-section font-semibold text-ink">

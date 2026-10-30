@@ -47,7 +47,7 @@ export function AvisoAoSair({ ativo, aoSair }: { ativo: boolean; aoSair: () => v
         if (!v) setDestino(null);
       }}
       titulo="Sair no meio da criação?"
-      descricao="O que já foi criado na loja de checkout fica salvo, mas o resto para aqui e a rota não é ativada. Dá para continuar depois, que o xcart pula o que já existe."
+      descricao="O que já foi criado na loja de checkout fica salvo, mas o resto para aqui e a rota não é ativada. Dá para continuar depois, que o Panda Track pula o que já existe."
       confirmar="Sair mesmo assim"
       cancelar="Continuar aqui"
       onConfirmar={() => {

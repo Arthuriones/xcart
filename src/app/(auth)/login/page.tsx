@@ -7,7 +7,7 @@ import { caminhoInternoSeguro } from "@/lib/net/url-guard";
 import { modoInicial, origemDoSite } from "../acesso";
 import { FormularioAcesso } from "./formulario-acesso";
 
-export const metadata: Metadata = { title: "Entrar · xcart" };
+export const metadata: Metadata = { title: "Entrar · Panda Track" };
 
 /**
  * /login: entrar com senha, criar conta e receber um link de acesso por e-mail.
@@ -55,7 +55,7 @@ export default async function LoginPage({
       <Callout
         tom="warn"
         role="alert"
-        titulo="O login do xcart não respondeu agora."
+        titulo="O login do Panda Track não respondeu agora."
         acao={
           <a href={destino} className={buttonVariants({ variant: "secondary", size: "sm" })}>
             Tentar de novo

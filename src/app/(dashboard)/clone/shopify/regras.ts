@@ -625,7 +625,7 @@ export function erroNaTela(
     return { ...base, texto: "Nenhum produto encontrado nessa origem." };
   }
   if (/loja de destino nao encontrada/i.test(cru)) {
-    return { ...base, texto: "A loja de destino não foi encontrada. Ela pode ter sido removida do xcart." };
+    return { ...base, texto: "A loja de destino não foi encontrada. Ela pode ter sido removida do Panda Track." };
   }
   const padrao: Record<typeof contexto, string> = {
     ler: "Não deu para ler a origem agora. Tente de novo em instantes.",

@@ -45,7 +45,7 @@ export function LegalPage({ title, description, updatedAt, sections, atual }: Le
       <main id="conteudo" className="flex-1">
         <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 md:py-14">
           <header className="flex max-w-[68ch] flex-col gap-3 border-b border-border pb-8">
-            <p className="text-dense font-medium text-t2">Documentos do xcart</p>
+            <p className="text-dense font-medium text-t2">Documentos do Panda Track</p>
             <h1 className="text-page text-balance text-ink md:text-[26px] md:leading-8">{title}</h1>
             <p className="text-body leading-6 text-pretty text-t1">{description}</p>
             <p className="text-label text-t2">Última atualização: {updatedAt}</p>

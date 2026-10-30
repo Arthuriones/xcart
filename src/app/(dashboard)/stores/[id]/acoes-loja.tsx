@@ -55,7 +55,7 @@ export function AcoesLoja({ loja, sincronizando }: { loja: LojaAcoes; sincroniza
 const AVISO: Partial<Record<ChaveConexao, { tom: "err" | "warn"; titulo: string; texto: string }>> = {
   semPermissao: {
     tom: "err",
-    titulo: "A Shopify não deixa o xcart ler os pedidos desta loja",
+    titulo: "A Shopify não deixa o Panda Track ler os pedidos desta loja",
     texto: "Falta a permissão de pedidos. Reconecte e aprove o acesso na Shopify; até lá, nenhum pedido novo chega.",
   },
   tokenInvalido: {
@@ -66,12 +66,12 @@ const AVISO: Partial<Record<ChaveConexao, { tom: "err" | "warn"; titulo: string;
   pausada: {
     tom: "warn",
     titulo: "A loja está pausada ou sem plano na Shopify",
-    texto: "Enquanto isso, nenhum pedido novo chega. Se você não usa mais esta loja, remova do xcart.",
+    texto: "Enquanto isso, nenhum pedido novo chega. Se você não usa mais esta loja, remova do Panda Track.",
   },
   appDesinstalado: {
     tom: "warn",
     titulo: "O app foi desinstalado desta loja",
-    texto: "Nenhum pedido novo chega e o rastreamento parou. Reconecte para voltar a usar, ou remova do xcart.",
+    texto: "Nenhum pedido novo chega e o rastreamento parou. Reconecte para voltar a usar, ou remova do Panda Track.",
   },
   falhaSync: {
     tom: "warn",
@@ -106,7 +106,7 @@ export function AvisoConexao({ loja, erro }: { loja: LojaAcoes; erro: string | n
                 Reconectar
               </Button>
               <Button size="sm" variant="destructive" onClick={() => setRemover(true)}>
-                Remover do xcart
+                Remover do Panda Track
               </Button>
             </span>
           )

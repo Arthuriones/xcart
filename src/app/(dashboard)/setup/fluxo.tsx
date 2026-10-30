@@ -30,7 +30,7 @@ function Caixa({ titulo, detalhe, ponto }: { titulo: ReactNode; detalhe: string;
 function CaixaXcart({ detalhe }: { detalhe: string }) {
   return (
     <div className="rounded-card bg-solid px-3.5 py-3 text-on-solid">
-      <span className="block text-dense font-semibold">xcart</span>
+      <span className="block text-dense font-semibold">Panda Track</span>
       <span className="mt-0.5 block text-label">{detalhe}</span>
     </div>
   );

@@ -66,7 +66,7 @@ export function Faturamento({ g, periodo }: { g: FaturamentoAdmin; periodo: Peri
                 {g.deniedCount === 1
                   ? "1 loja não deu permissão para ler pedidos."
                   : `${inteiro(g.deniedCount)} lojas não deram permissão para ler pedidos.`}{" "}
-                Foram conectadas antes de o xcart pedir essa permissão e precisam ser reautorizadas pelo dono.
+                Foram conectadas antes de o Panda Track pedir essa permissão e precisam ser reautorizadas pelo dono.
               </li>
             ) : null}
             {g.failedCount > 0 ? (

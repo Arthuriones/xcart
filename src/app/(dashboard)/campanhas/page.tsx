@@ -12,7 +12,7 @@ import { CabecalhoCampanhas, EsqueletoCampanhas } from "./esqueleto";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Campanhas | xcart",
+  title: "Campanhas | Panda Track",
   description: "Dashboard analítico de campanhas, conjuntos e anúncios de tráfego pago.",
 };
 

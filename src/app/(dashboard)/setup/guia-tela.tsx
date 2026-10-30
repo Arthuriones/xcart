@@ -48,7 +48,7 @@ const ALVO = "h-ctl-lg sm:h-ctl-sm";
 const EXPLICA_CAMINHO: Record<CaminhoGuia, string> = {
   direto: "O anúncio leva o comprador direto à loja que cobra.",
   vitrine:
-    "O anúncio leva à vitrine, e o xcart manda o carrinho para uma loja de checkout pelo SKU.",
+    "O anúncio leva à vitrine, e o Panda Track manda o carrinho para uma loja de checkout pelo SKU.",
 };
 
 export function GuiaTela({

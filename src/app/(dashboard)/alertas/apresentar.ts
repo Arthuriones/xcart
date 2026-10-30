@@ -373,14 +373,14 @@ export function regrasNaTela(gastoMinimo: number): RegraNaTela[] {
       regra: "roteamento_loja_fora_do_ar",
       titulo: "Loja da rota fora do ar",
       explicacao:
-        "Uma loja da rota foi pausada pela Shopify, perdeu o acesso do xcart (app removido ou credencial revogada) ou fechou: o checkout não cobra, ou a rota para de ser consertada.",
+        "Uma loja da rota foi pausada pela Shopify, perdeu o acesso do Panda Track (app removido ou credencial revogada) ou fechou: o checkout não cobra, ou a rota para de ser consertada.",
       severidade: "critico",
       quando: "Na primeira checagem que acha a loja fora",
     },
     {
       regra: "roteamento_vitrine_com_senha",
       titulo: "Vitrine da rota com senha",
-      explicacao: "A vitrine está com senha: o comprador não entra e o xcart não lê os produtos.",
+      explicacao: "A vitrine está com senha: o comprador não entra e o Panda Track não lê os produtos.",
       severidade: "aviso",
       quando: "Na primeira checagem com senha (avisa uma vez)",
     },

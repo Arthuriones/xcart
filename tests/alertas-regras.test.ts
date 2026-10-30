@@ -147,7 +147,7 @@ describe("montarMensagem", () => {
     expect(m).not.toBeNull();
     expect(m!.silenciosa).toBe(false);
     const linhas = m!.texto.split("\n");
-    expect(linhas[0]).toBe("xcart — 1 alerta");
+    expect(linhas[0]).toBe("Panda Track — 1 alerta");
     expect(linhas[1]).toBe("[CRITICO] Gastou R$ 50,00 sem vender hoje — Lash Bestie · qkgknv-w3: confira");
     expect(linhas[2]).toBe("Resolvido: Fila de envio parada — Lash Bestie · qkgknv-w3");
   });
@@ -163,7 +163,7 @@ describe("montarMensagem", () => {
       nomeDaLoja,
     });
     const linhas = m!.texto.split("\n");
-    expect(linhas[0]).toBe("xcart — 2 alertas");
+    expect(linhas[0]).toBe("Panda Track — 2 alertas");
     expect(linhas[1].startsWith("[CRITICO] Fila parada")).toBe(true);
     expect(linhas[2]).toBe("[AVISO] Pedidos sem atualizar — Lash Bestie · qkgknv-w3");
   });
@@ -189,7 +189,7 @@ describe("montarMensagem", () => {
       nomeDaLoja,
     });
     expect(m!.silenciosa).toBe(true);
-    expect(m!.texto.split("\n")[0]).toBe("xcart — 1 resolvido");
+    expect(m!.texto.split("\n")[0]).toBe("Panda Track — 1 resolvido");
   });
 
   it("nada da null", () => {

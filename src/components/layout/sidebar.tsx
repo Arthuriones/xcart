@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronsUpDown, LogOut, Menu, PanelLeft, Search } from "lucide-react";
 import clsx from "clsx";
-import { LogoXcart } from "@/components/layout/logo";
+import { LogoPanda } from "@/components/layout/logo";
 import { APP_HOME } from "@/lib/app-home";
 import { textos } from "@/lib/textos";
 import { COOKIE_MENU, gravarCookie } from "./contexto";
@@ -222,11 +222,15 @@ export function Sidebar({ dados }: { dados: DadosMenu }) {
 
   return (
     <>
-      {/* ------- Desktop: menu lateral sobre o fundo quente, recolhivel ------- */}
+      {/* ------- Desktop: menu lateral escuro, recolhivel ------- */}
+      {/* "dark": o menu e escuro nos dois temas (design do Panda Track). A
+          classe troca a paleta so aqui dentro (globals.css), e o fundo e o
+          --frame da casca ((dashboard)/layout.tsx). text-ink: sem ele, o
+          texto sem cor propria herdava a tinta clara de fora. */}
       <aside
         aria-label={t("mainMenu")}
         className={clsx(
-          "sticky top-0 z-40 hidden h-dvh shrink-0 flex-col gap-1 p-2 transition-[width] duration-150 md:flex",
+          "dark sticky top-0 z-40 hidden h-dvh shrink-0 flex-col gap-1 p-2 text-ink transition-[width] duration-150 md:flex",
           c.largura
         )}
       >
@@ -238,8 +242,8 @@ export function Sidebar({ dados }: { dados: DadosMenu }) {
           )}
         >
           {!recolhido && (
-            <Link href={APP_HOME} aria-label="xcart, ir para o Dashboard" className="flex h-8 items-center">
-              <LogoXcart altura={17} />
+            <Link href={APP_HOME} aria-label="Panda Track, ir para o Dashboard" className="flex h-8 items-center">
+              <LogoPanda altura={24} />
             </Link>
           )}
           <button

@@ -1,7 +1,8 @@
 import { Activity, Bell, CircleDollarSign, type LucideIcon } from "lucide-react";
 
 // ============================================================================
-// O que o xcart faz, ao lado do formulario. Dinheiro e rastreamento primeiro;
+// O que o Panda Track faz, ao lado do formulario, num bloco escuro (classe
+// "dark": a paleta escura so aqui dentro, como no design do login). Dinheiro e rastreamento primeiro;
 // importacao e roteamento entram como modulos. Sem numero: quem ainda nao
 // entrou nao tem dado para mostrar, e exemplo inventado nao entra aqui.
 // No celular vem resumido embaixo do formulario (so os titulos).
@@ -29,7 +30,7 @@ export function PainelProduto() {
   return (
     <aside
       aria-labelledby="painel-produto-titulo"
-      className="border-t border-border bg-surface-2 px-4 py-8 sm:px-10 lg:flex lg:flex-col lg:justify-center lg:border-t-0 lg:border-l lg:px-16 lg:py-12"
+      className="dark border-t border-border bg-bg px-4 py-8 text-ink sm:px-10 lg:flex lg:flex-col lg:justify-center lg:border-t-0 lg:border-l lg:px-16 lg:py-12"
     >
       <div className="mx-auto w-full max-w-sm lg:max-w-md">
         <p className="text-label font-medium text-t2">Para quem opera várias lojas Shopify</p>

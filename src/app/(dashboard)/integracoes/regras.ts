@@ -99,7 +99,7 @@ export function situacaoDaConta(c: ContaParaSituacao, agoraMs: number, fuso: str
       grupo: "pausada",
       tom: "neutral",
       texto: "Pausada",
-      detalhe: meta ? "o xcart não lê o gasto dela" : "o envio do script é ignorado",
+      detalhe: meta ? "o Panda Track não lê o gasto dela" : "o envio do script é ignorado",
     };
   }
   if (c.ultimo_erro) return { grupo: "problema", tom: "err", texto: "Erro", detalhe: c.ultimo_erro };

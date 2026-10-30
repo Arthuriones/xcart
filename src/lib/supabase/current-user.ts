@@ -11,7 +11,7 @@ async function lerUsuario(): Promise<User | null> {
     error,
   } = await supabase.auth.getUser();
   if (error && (isAuthRetryableFetchError(error) || error.status === 429)) {
-    throw new Error("O login do xcart não respondeu agora.");
+    throw new Error("O login do Panda Track não respondeu agora.");
   }
   return user;
 }

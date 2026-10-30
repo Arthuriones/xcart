@@ -36,7 +36,7 @@ export function AbaInstalacao({
     <div className="flex flex-col gap-4">
       <Section
         titulo="Script na vitrine"
-        descricao={`O xcart escreve o script no tema de ${vitrine?.name || "sua vitrine"}. Depois disso, a divisão, as lojas e o mapa de produtos vão para o tema sozinhos sempre que mudam.`}
+        descricao={`O Panda Track escreve o script no tema de ${vitrine?.name || "sua vitrine"}. Depois disso, a divisão, as lojas e o mapa de produtos vão para o tema sozinhos sempre que mudam.`}
       >
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <StatusBadge tom={estado.tom} texto={estado.texto} tamanho="md" />

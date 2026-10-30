@@ -47,11 +47,11 @@ export async function sessaoDoApp(
   try {
     user = await getCurrentUser();
   } catch {
-    return { resposta: erroDoApp(503, "login_fora", "O login do xcart não respondeu agora. Tente de novo.") };
+    return { resposta: erroDoApp(503, "login_fora", "O login do Panda Track não respondeu agora. Tente de novo.") };
   }
   if (!user) return { resposta: erroDoApp(401, "sem_login", "Sua sessão expirou. Entre de novo.") };
   if (!opcoes.semAcesso && !(await userHasAccess(user.id))) {
-    return { resposta: erroDoApp(403, "sem_acesso", "Sua conta está sem acesso ao xcart agora.") };
+    return { resposta: erroDoApp(403, "sem_acesso", "Sua conta está sem acesso ao Panda Track agora.") };
   }
   return { user };
 }

@@ -17,7 +17,7 @@ export async function DELETE(request: Request) {
     user = await getCurrentUser();
   } catch {
     return NextResponse.json(
-      { ok: false, codigo: "login_fora", erro: "O login do xcart não respondeu agora. Tente de novo." },
+      { ok: false, codigo: "login_fora", erro: "O login do Panda Track não respondeu agora. Tente de novo." },
       { status: 503 }
     );
   }

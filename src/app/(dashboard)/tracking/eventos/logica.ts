@@ -275,7 +275,7 @@ export function explicarErro(
   const erro = (e.erro || "").trim();
   if (!erro) {
     return e.status === "falhou"
-      ? { resumo: `${nomePlataforma(e.plataforma)} não aceitou o evento e o xcart parou de tentar.`, mensagem: null }
+      ? { resumo: `${nomePlataforma(e.plataforma)} não aceitou o evento e o Panda Track parou de tentar.`, mensagem: null }
       : null;
   }
   const baixo = erro.toLowerCase();
@@ -298,7 +298,7 @@ export function explicarErro(
   const vezes = e.tentativas === 1 ? "1 tentativa" : `${e.tentativas} tentativas`;
   return e.status === "falhou"
     ? { resumo: `${nomePlataforma(e.plataforma)} recusou o evento depois de ${vezes}.`, mensagem: erro }
-    : { resumo: "A última tentativa não deu certo. O xcart tenta de novo sozinho.", mensagem: erro };
+    : { resumo: "A última tentativa não deu certo. O Panda Track tenta de novo sozinho.", mensagem: erro };
 }
 
 // ---------------------------------------------------------------------------

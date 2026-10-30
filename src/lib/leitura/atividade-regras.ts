@@ -333,7 +333,7 @@ function eventoLoja(l: LinhaLoja, ctx: Contexto): EventoAtividade {
     tom: "ok",
     selo: null,
     titulo: "Loja conectada",
-    descricao: `${dominioCurto(l.shop_domain) || nome} entrou no xcart.`,
+    descricao: `${dominioCurto(l.shop_domain) || nome} entrou no Panda Track.`,
     loja: nome,
     at: l.created_at,
     href: `/stores/${l.id}`,

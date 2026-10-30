@@ -83,7 +83,7 @@ export function AvisoRetorno({ instalado, erro }: { instalado: boolean; erro: st
       }
     >
       <p>
-        A Shopify autorizou o xcart. Os pedidos dos últimos 60 dias começam a chegar em alguns minutos. Próximos
+        A Shopify autorizou o Panda Track. Os pedidos dos últimos 60 dias começam a chegar em alguns minutos. Próximos
         passos:
       </p>
       <p className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">

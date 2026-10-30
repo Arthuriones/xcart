@@ -54,7 +54,7 @@ export const PROBLEMAS: Problema[] = [
 ];
 
 export const PROBLEMA_FECHO =
-  "O xcart junta as três pontas numa tela e entrega cada compra: pelo servidor no Meta e no TikTok, pela tag no Google.";
+  "O Panda Track junta as três pontas numa tela e entrega cada compra: pelo servidor no Meta e no TikTok, pela tag no Google.";
 
 export interface RecursoPrincipal {
   id: "lucro" | "rastreamento" | "alertas";
@@ -72,7 +72,7 @@ export const RECURSOS_PRINCIPAIS: RecursoPrincipal[] = [
     tela: "Lucro",
     titulo: "Lucro por loja, todo dia",
     resumo:
-      "O xcart lê os pedidos da Shopify, cruza com o gasto do Meta e do Google e mostra quanto cada loja lucrou hoje, ontem e no mês.",
+      "O Panda Track lê os pedidos da Shopify, cruza com o gasto do Meta e do Google e mostra quanto cada loja lucrou hoje, ontem e no mês.",
     pontos: [
       "Já descontados produto, frete do fornecedor, taxa de pagamento e anúncio.",
       "ROAS real ao lado do ROAS de equilíbrio, para saber se a campanha se paga.",
@@ -199,7 +199,7 @@ export const ROTEAMENTO: readonly string[] = [
   "Rodízio entre várias lojas de checkout: se uma conta de pagamento cair, as outras continuam vendendo.",
   "O sorteio só acontece entre lojas que cobrem o carrinho inteiro. Nenhum item fica para trás.",
   "A loja de checkout recebe o catálogo com texto e fotos sem marca, refeitos por IA.",
-  "O xcart confere as rotas sozinho e conserta o SKU que ficou sem par.",
+  "O Panda Track confere as rotas sozinho e conserta o SKU que ficou sem par.",
 ];
 
 export interface Pergunta {
@@ -226,7 +226,7 @@ export const PERGUNTAS: Pergunta[] = [
   {
     pergunta: "Como as compras chegam ao Meta, ao TikTok e ao Google?",
     resposta:
-      "No Meta e no TikTok, a compra sai do nosso servidor quando a Shopify cria o pedido. No Google, vai pela tag do Google, no pixel do checkout. Ver produto, carrinho e checkout vêm de um código que o xcart instala no tema da loja.",
+      "No Meta e no TikTok, a compra sai do nosso servidor quando a Shopify cria o pedido. No Google, vai pela tag do Google, no pixel do checkout. Ver produto, carrinho e checkout vêm de um código que o Panda Track instala no tema da loja.",
   },
   {
     pergunta: "O rastreamento funciona com roteamento?",

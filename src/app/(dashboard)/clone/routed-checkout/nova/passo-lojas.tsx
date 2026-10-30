@@ -303,7 +303,7 @@ export function PassoLojas({
         ) : null}
         {modo === "connect" ? (
           <p className="text-dense text-t1 text-pretty">
-            O xcart casa as variantes das duas lojas pelo SKU. Se sobrar produto da vitrine sem par, ele cria esse
+            O Panda Track casa as variantes das duas lojas pelo SKU. Se sobrar produto da vitrine sem par, ele cria esse
             produto na loja de checkout para a rota fechar.
           </p>
         ) : null}

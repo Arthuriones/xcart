@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
   if (!user) {
     return renderPopup({
       ok: false,
-      erro: "Sua sessão expirou. Faça login no xcart novamente.",
+      erro: "Sua sessão expirou. Faça login no Panda Track novamente.",
     });
   }
 

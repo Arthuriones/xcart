@@ -11,7 +11,7 @@ import { Spinner } from "@/components/ui/spinner"
  *   ghost    -- sem contorno, acao terciaria e botao de icone
  *   danger   -- vermelho solido, so na confirmacao de algo destrutivo
  *   destructive -- vermelho suave, para abrir a confirmacao ("Remover loja")
- *   link     -- texto terracota sublinhado
+ *   link     -- texto verde (--brand) sublinhado
  * "default" e "outline" continuam existindo porque as telas antigas usam:
  * default = primary, outline = secondary.
  *

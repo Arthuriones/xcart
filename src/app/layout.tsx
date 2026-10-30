@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { Public_Sans, IBM_Plex_Mono } from "next/font/google";
+import { Instrument_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 
-const publicSans = Public_Sans({
+// A fonte do design do Panda Track (29/10/2026); antes, Public Sans.
+const instrumentSans = Instrument_Sans({
   variable: "--font-sans",
   subsets: ["latin"],
 });
@@ -19,7 +20,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "xcart",
+  title: "Panda Track",
   description:
     "Lucro estimado de cada loja Shopify, já descontado o anúncio, e as compras enviadas ao Meta e ao TikTok pelo servidor e ao Google pela tag.",
 };
@@ -33,7 +34,7 @@ export default function RootLayout({
     <html
       lang="pt-BR"
       suppressHydrationWarning
-      className={`${publicSans.variable} ${plexMono.variable} h-full antialiased`}
+      className={`${instrumentSans.variable} ${plexMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-transparent" suppressHydrationWarning>
         {/* Segue o sistema ate o lojista escolher; a escolha (Claro, Escuro ou

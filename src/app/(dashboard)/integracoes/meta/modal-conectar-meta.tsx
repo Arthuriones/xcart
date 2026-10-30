@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { ExternalLink, Copy, Check, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { LogoXcart } from "@/components/layout/logo";
+import { LogoPanda } from "@/components/layout/logo";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -120,8 +120,8 @@ export function ModalConectarMeta({
       }}
     >
       <DialogContent size="sm">
-        {/* Topo: Logo xcart (o X e o do DialogContent) */}
-        <LogoXcart className="h-6 w-auto" />
+        {/* Topo: logo do Panda Track (o X e o do DialogContent) */}
+        <LogoPanda altura={24} />
 
         {/* Título Principal */}
         <DialogHeader className="items-center px-8 text-center">

@@ -318,7 +318,7 @@ export const SECOES_CONFIGURACOES: { id: string; titulo: string; links: LinkConf
       { rotulo: t("routing"), href: ITENS.rotas.href, dica: "Da vitrine à loja de checkout, pelo SKU" },
       { rotulo: ITENS.importar.rotulo, href: ITENS.importar.href, dica: "Produtos de outras lojas para as suas" },
       { rotulo: ITENS.atividade.rotulo, href: ITENS.atividade.href, dica: "O que aconteceu na conta" },
-      { rotulo: ITENS.claude.rotulo, href: ITENS.claude.href, dica: "Usar o xcart pelo Claude" },
+      { rotulo: ITENS.claude.rotulo, href: ITENS.claude.href, dica: "Usar o Panda Track pelo Claude" },
     ],
   },
 ];
@@ -357,7 +357,7 @@ const PREFIXOS_TITULO = Object.keys(TITULOS);
 
 export function tituloDaRota(pathname: string): string {
   const prefixo = hrefAtivo(pathname, PREFIXOS_TITULO);
-  return prefixo ? TITULOS[prefixo] : "xcart";
+  return prefixo ? TITULOS[prefixo] : "Panda Track";
 }
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<title>Panda Track · Entrar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&amp;display=swap">
+<style>html,body{margin:0;padding:0}*{box-sizing:border-box}body{-webkit-font-smoothing:antialiased}a{color:#1f7a5a;text-decoration:none}a:hover{color:#141414;text-decoration:underline}button,input{font:inherit;color:inherit}:focus-visible{outline:2px solid #1f7a5a;outline-offset:2px}</style>
+</helmet>
+<div style="min-height:100vh; display:grid; grid-template-columns:repeat(auto-fit, minmax(360px, 1fr)); font-family:'Instrument Sans', system-ui, sans-serif; font-size:14px; line-height:1.45; color:#141414; background:#f5f4f1;">
+  <section style="display:flex; flex-direction:column; justify-content:space-between; gap:40px; padding:40px 48px;">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span aria-hidden="true" style="position:relative; width:26px; height:26px;"><span style="position:absolute; left:1px; top:1px; width:9px; height:9px; border-radius:50%; background:#141414;"></span><span style="position:absolute; right:1px; top:1px; width:9px; height:9px; border-radius:50%; background:#141414;"></span><span style="position:absolute; left:2px; top:4px; width:22px; height:21px; border-radius:50%; background:#fff; box-shadow:0 0 0 1.5px #141414;"></span><span style="position:absolute; left:7px; top:12px; width:5px; height:6px; border-radius:50%; background:#141414; transform:rotate(-25deg);"></span><span style="position:absolute; right:7px; top:12px; width:5px; height:6px; border-radius:50%; background:#141414; transform:rotate(25deg);"></span></span>
+      <span style="font-size:16px; font-weight:600;">Panda<span style="font-weight:400; color:#56544f;"> Track</span></span>
+    </div>
+    <div style="width:100%; max-width:380px; margin:0 auto; display:flex; flex-direction:column; gap:20px;">
+      <div style="display:flex; flex-direction:column; gap:6px;"><h1 style="margin:0; font-size:28px; line-height:34px; font-weight:600; letter-spacing:-0.02em;">{{ titulo }}</h1><p style="margin:0; color:#56544f;">{{ sub }}</p></div>
+      <div role="tablist" style="display:flex; gap:2px; padding:3px; border-radius:9px; background:#ebe9e4;">
+        <sc-for list="{{ abas }}" as="a" hint-placeholder-count="2"><button type="button" role="tab" aria-selected="{{ a.on }}" onClick="{{ a.pick }}" style="flex:1; height:32px; border:0; border-radius:7px; background:{{ a.bg }}; box-shadow:{{ a.sombra }}; font-weight:500; color:{{ a.cor }}; cursor:pointer;">{{ a.l }}</button></sc-for>
+      </div>
+      <form onSubmit="{{ enviar }}" style="display:flex; flex-direction:column; gap:14px;">
+        <sc-if value="{{ cadastro }}" hint-placeholder-val="{{ false }}"><label style="display:flex; flex-direction:column; gap:6px;"><span style="font-weight:500;">Nome</span><input autocomplete="name" style="height:40px; padding:0 12px; border:1px solid #8c8a86; border-radius:9px; background:#fff;"></label></sc-if>
+        <label style="display:flex; flex-direction:column; gap:6px;"><span style="font-weight:500;">E-mail</span><input type="email" autocomplete="email" placeholder="voce@loja.com" style="height:40px; padding:0 12px; border:1px solid #8c8a86; border-radius:9px; background:#fff;"></label>
+        <label style="display:flex; flex-direction:column; gap:6px;"><span style="display:flex; justify-content:space-between;"><span style="font-weight:500;">Senha</span><sc-if value="{{ entrar }}" hint-placeholder-val="{{ true }}"><a href="#" style="font-size:13px;">Esqueci a senha</a></sc-if></span><span style="height:40px; display:flex; align-items:center; border:1px solid #8c8a86; border-radius:9px; background:#fff; padding:0 4px 0 12px;"><input type="{{ tipoSenha }}" autocomplete="current-password" style="flex:1; border:0; outline:0; background:transparent;"><button type="button" onClick="{{ verSenha }}" style="height:32px; padding:0 10px; border:0; border-radius:6px; background:transparent; color:#56544f; font-size:13px; cursor:pointer;">{{ verTxt }}</button></span><sc-if value="{{ cadastro }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px; color:#6b6964;">Pelo menos 8 caracteres, com um número.</span></sc-if></label>
+        <sc-if value="{{ cadastro }}" hint-placeholder-val="{{ false }}"><label style="display:flex; gap:8px; align-items:flex-start; font-size:13px; color:#3a3936;"><input type="checkbox" style="margin-top:3px; accent-color:#141414;">Li e aceito os <a href="#">Termos</a> e a <a href="#">Privacidade</a>.</label></sc-if>
+        <button type="submit" style="height:42px; border:0; border-radius:9px; background:#141414; color:#fff; font-weight:600; cursor:pointer;" style-hover="background:#333;">{{ cta }}</button>
+      </form>
+      <div style="display:flex; align-items:center; gap:10px; color:#6b6964; font-size:13px;"><span style="flex:1; height:1px; background:#e3e0da;"></span>ou<span style="flex:1; height:1px; background:#e3e0da;"></span></div>
+      <button type="button" style="height:42px; border:1px solid #cdc9c1; border-radius:9px; background:#fff; font-weight:500; cursor:pointer;">Receber link de acesso por e-mail</button>
+    </div>
+    <span style="font-size:12px; color:#6b6964;">© 2026 Panda Track · <a href="#" style="color:#6b6964;">Termos</a> · <a href="#" style="color:#6b6964;">Privacidade</a></span>
+  </section>
+  <section style="background:#121212; color:#f5f4f1; padding:48px; display:flex; flex-direction:column; justify-content:center; gap:28px;">
+    <h2 style="margin:0; max-width:460px; font-size:34px; line-height:40px; font-weight:600; letter-spacing:-0.02em; text-wrap:balance;">Quanto cada loja lucrou hoje, já descontado o anúncio.</h2>
+    <div style="max-width:460px; border:1px solid #2c2b29; border-radius:14px; background:#1a1a19; padding:20px 22px; display:flex; flex-direction:column; gap:14px;">
+      <span style="display:flex; justify-content:space-between; color:#a9a7a2; font-size:13px;"><span>Lucro estimado · hoje</span><span>parcial</span></span>
+      <span style="font-size:34px; font-weight:600; letter-spacing:-0.02em; font-variant-numeric:tabular-nums;">R$ 1.842,60</span>
+      <span style="display:flex; flex-direction:column; gap:8px; font-size:13px; font-variant-numeric:tabular-nums;">
+        <span style="display:flex; justify-content:space-between;"><span style="color:#a9a7a2;">Faturamento</span><span>R$ 7.410,20</span></span>
+        <span style="display:flex; justify-content:space-between;"><span style="color:#a9a7a2;">Anúncios</span><span>R$ 2.712,90</span></span>
+        <span style="display:flex; justify-content:space-between;"><span style="color:#a9a7a2;">Compras enviadas ao Meta e Google</span><span style="color:#7fd1ad;">97%</span></span>
+      </span>
+    </div>
+    <ul style="margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:10px; color:#d4d2cd; max-width:460px;">
+      <li>Lucro por loja, dia, produto e campanha</li>
+      <li>Compras enviadas pelo servidor ao Meta e ao Google</li>
+      <li>Aviso no Telegram quando algo para</li>
+    </ul>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { modo: 'entrar', ver: false };
+  renderVals() {
+    const m = this.state.modo, cad = m === 'cadastro';
+    const ab = (k, l) => ({ l, on: m === k, bg: m === k ? '#fff' : 'transparent', sombra: m === k ? '0 1px 2px rgba(20,20,20,.12)' : 'none', cor: m === k ? '#141414' : '#56544f', pick: () => this.setState({ modo: k }) });
+    return {
+      abas: [ab('entrar', 'Entrar'), ab('cadastro', 'Criar conta')], cadastro: cad, entrar: !cad,
+      titulo: cad ? 'Crie sua conta' : 'Bem-vindo de volta', sub: cad ? 'Conecte sua primeira loja em poucos minutos.' : 'Entre para ver o lucro das suas lojas.',
+      cta: cad ? 'Criar conta' : 'Entrar', tipoSenha: this.state.ver ? 'text' : 'password', verTxt: this.state.ver ? 'Ocultar' : 'Mostrar',
+      verSenha: () => this.setState(s => ({ ver: !s.ver })), enviar: e => e.preventDefault()
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -287,7 +287,7 @@ export function TelaVendas({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <Atualizar texto={`Shopify ao vivo · consultado às ${hora}`} />
         <Dica rotulo="Por que este número pode diferir do Lucro">
-          Esta tela pergunta à Shopify na hora, loja por loja. O Lucro lê os pedidos já sincronizados com o xcart a
+          Esta tela pergunta à Shopify na hora, loja por loja. O Lucro lê os pedidos já sincronizados com o Panda Track a
           cada 15 minutos. Por isso os dois podem diferir um pouco, principalmente nos pedidos mais recentes.
         </Dica>
       </div>
@@ -348,7 +348,7 @@ export function TelaVendas({
           }
         >
           {r.negadas.length === 1 ? "Ela foi conectada" : `${listaDeNomes(r.negadas.map((n) => n.name))} foram conectadas`}{" "}
-          antes de o xcart pedir a leitura de pedidos. Reconecte para o faturamento entrar na conta.
+          antes de o Panda Track pedir a leitura de pedidos. Reconecte para o faturamento entrar na conta.
         </Callout>
       ) : null}
 
@@ -432,7 +432,7 @@ export function TelaVendas({
             Pedido pago, já com reembolso. Pedido de teste e cancelado ficam de fora. Loja que não respondeu aparece
             como “—”, nunca como zero.
           </li>
-          <li>A Shopify libera no máximo os últimos {dados.maxDays} dias de pedidos com a permissão que o xcart pede.</li>
+          <li>A Shopify libera no máximo os últimos {dados.maxDays} dias de pedidos com a permissão que o Panda Track pede.</li>
           <li>
             Pedido que chega pela rota não leva a origem do anúncio para a loja de checkout: no rastreamento, ele aparece
             sem atribuição.

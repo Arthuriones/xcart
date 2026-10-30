@@ -51,13 +51,13 @@ export const TOOLS: Tool[] = [
   {
     name: "list_stores",
     description:
-      "Lista as lojas Shopify conectadas a esta conta xcart. Chame primeiro: " +
+      "Lista as lojas Shopify conectadas a esta conta Panda Track. Chame primeiro: " +
       "todas as outras ferramentas precisam de um storeId daqui.",
     schema: z.object({}),
     handler: async (_a, id) => {
       const stores = await listStores(id.userId);
       if (!stores.length) {
-        return { stores: [], aviso: "Nenhuma loja conectada. Conecte uma no painel do xcart antes." };
+        return { stores: [], aviso: "Nenhuma loja conectada. Conecte uma no painel do Panda Track antes." };
       }
       return {
         stores: stores.map((s) => ({
@@ -155,7 +155,7 @@ export const TOOLS: Tool[] = [
     name: "update_product",
     description:
       "Atualiza campos de texto de um produto (titulo, descricao HTML, SEO, marca, tipo, tags, status). " +
-      "NAO altera preco, variantes nem SKU — no xcart o SKU e a chave do checkout roteado e " +
+      "NAO altera preco, variantes nem SKU — no Panda Track o SKU e a chave do checkout roteado e " +
       "mexer nele quebra a rota. Textos passam por checagem de alegacao nao comprovavel.",
     schema: z.object({
       storeId,

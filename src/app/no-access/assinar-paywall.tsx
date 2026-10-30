@@ -84,7 +84,7 @@ export function AssinarNoPaywall({ temDocumento }: { temDocumento?: boolean }) {
             <CircleCheck className="size-5" strokeWidth={1.75} />
           </span>
           <p className="text-section text-ink">Acesso liberado</p>
-          <p className="text-dense text-t1">Abrindo o xcart…</p>
+          <p className="text-dense text-t1">Abrindo o Panda Track…</p>
         </div>
       ) : (
         <div role="status" className="flex min-h-60 flex-col items-center justify-center gap-3 text-center">

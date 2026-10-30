@@ -193,7 +193,7 @@ export function lerTodosEve(corpo: unknown, agora: Date, headers?: Headers): Lei
   if (corpo.versao !== VERSAO) {
     // Como veio (o "1" em texto aparece com aspas): e o Eve que precisa mudar.
     const veio = corpo.versao === undefined ? "ausente" : (JSON.stringify(corpo.versao) ?? "?").slice(0, 20);
-    return { ok: false, erro: `versao ${veio} do contrato; o xcart le a versao ${VERSAO}` };
+    return { ok: false, erro: `versao ${veio} do contrato; o Panda Track le a versao ${VERSAO}` };
   }
   const evento = typeof corpo.evento === "string" ? corpo.evento.trim().toLowerCase() : "";
   if (!evento) return { ok: false, erro: "evento ausente" };

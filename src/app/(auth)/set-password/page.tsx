@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { FormularioSenha } from "./formulario-senha";
 
-export const metadata: Metadata = { title: "Criar senha · xcart" };
+export const metadata: Metadata = { title: "Criar senha · Panda Track" };
 export const dynamic = "force-dynamic";
 
 /**

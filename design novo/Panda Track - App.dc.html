@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<title>Panda Track</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>html,body{margin:0;padding:0;background:#f5f4f1}*{box-sizing:border-box}body{-webkit-font-smoothing:antialiased}a{color:#1f7a5a;text-decoration:none}a:hover{color:#141414;text-decoration:underline;text-underline-offset:2px}button{font:inherit;color:inherit}:focus-visible{outline:2px solid #1f7a5a;outline-offset:2px}</style>
+</helmet>
+<div style="--bg:#f5f4f1; --surface:#ffffff; --surface-2:#faf9f7; --hover:#f1efeb; --track:#ebe9e4; --border:#e3e0da; --border-strong:#cdc9c1; --ink:#141414; --t1:#3a3936; --t2:#56544f; --t3:#6b6964; --ok:#1f7a5a; --ok-bg:#e7f3ed; --ok-border:#b7dbc8; --warn:#7f5a0f; --warn-bg:#fbf2df; --warn-border:#e9d3a2; --err:#b3261e; --err-bg:#fcebea; --err-border:#ecc3c0; --shadow:0 12px 32px rgba(20,20,20,.14), 0 2px 6px rgba(20,20,20,.06); --on-ink:#ffffff; --info:#2c5d8f; --info-bg:#ebf1f7; --info-border:#c3d4e6;">
+<div style="{{ rootVars }}">
+<div style="min-height:100vh; display:flex; background:var(--bg); color:var(--ink); font-family:'Instrument Sans', system-ui, sans-serif; font-size:13px; line-height:1.45;">
+
+<aside aria-label="Menu principal" style="width:236px; flex:none; position:sticky; top:0; height:100vh; display:flex; flex-direction:column; gap:6px; padding:12px 10px; background:var(--side-bg); color:var(--side-t);">
+  <div style="height:44px; display:flex; align-items:center; gap:10px; padding:0 8px;">
+    <span aria-hidden="true" style="position:relative; width:26px; height:26px; flex:none;">
+      <span style="position:absolute; left:1px; top:1px; width:9px; height:9px; border-radius:50%; background:var(--logo-ear);"></span>
+      <span style="position:absolute; right:1px; top:1px; width:9px; height:9px; border-radius:50%; background:var(--logo-ear);"></span>
+      <span style="position:absolute; left:2px; top:4px; width:22px; height:21px; border-radius:50%; background:var(--logo-face); box-shadow:0 0 0 1.5px var(--logo-ring);"></span>
+      <span style="position:absolute; left:7px; top:12px; width:5px; height:6px; border-radius:50%; background:var(--logo-ear); transform:rotate(-25deg);"></span>
+      <span style="position:absolute; right:7px; top:12px; width:5px; height:6px; border-radius:50%; background:var(--logo-ear); transform:rotate(25deg);"></span>
+    </span>
+    <span style="font-size:16px; font-weight:600; letter-spacing:-0.01em; color:var(--side-strong);">Panda<span style="font-weight:400; color:var(--side-t);"> Track</span></span>
+  </div>
+  <button type="button" aria-label="Buscar ou ir para (Ctrl K)" style="height:34px; display:flex; align-items:center; gap:8px; padding:0 8px 0 10px; border:1px solid var(--side-border); border-radius:8px; background:var(--side-input); color:var(--side-t); cursor:pointer; text-align:left;">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11a8 8 0 1 0 16 0a8 8 0 1 0-16 0 M21 21l-4.34-4.34"></path></svg>
+    <span style="flex:1;">Buscar ou ir para…</span>
+    <kbd style="font-family:'IBM Plex Mono', monospace; font-size:11px; padding:0 5px; border:1px solid var(--side-border); border-radius:4px;">⌘K</kbd>
+  </button>
+  <nav aria-label="Telas" style="flex:1; min-height:0; overflow-y:auto; scrollbar-width:none; display:flex; flex-direction:column; gap:2px; padding-top:6px;">
+    <sc-for list="{{ nav }}" as="g" hint-placeholder-count="5">
+      <div style="display:flex; flex-direction:column; gap:1px;">
+        <div style="padding:14px 10px 4px; font-size:12px; font-weight:500; color:var(--side-label);">{{ g.rotulo }}</div>
+        <sc-for list="{{ g.itens }}" as="m" hint-placeholder-count="3">
+          <a href="#" onClick="{{ m.ir }}" aria-current="{{ m.atual }}" style="display:flex; align-items:center; gap:10px; height:32px; padding:0 10px; border-radius:7px; background:{{ m.bg }}; color:{{ m.cor }}; font-weight:{{ m.peso }}; text-decoration:none;" style-hover="background:var(--side-hover); color:var(--side-strong); text-decoration:none;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;"><path d="{{ m.icone }}"></path></svg>
+            <span style="flex:1; white-space:nowrap;">{{ m.rotulo }}</span>
+            <sc-if value="{{ m.temContador }}" hint-placeholder-val="{{ false }}"><span style="min-width:20px; height:18px; padding:0 6px; border-radius:999px; background:var(--err); color:#fff; font-size:11px; line-height:18px; font-weight:600; text-align:center;">{{ m.contador }}</span></sc-if>
+          </a>
+        </sc-for>
+      </div>
+    </sc-for>
+    <div style="margin:14px 4px 0; padding:12px; border:1px dashed var(--side-border); border-radius:10px; display:flex; flex-direction:column; gap:6px;">
+      <span style="font-size:12px; font-weight:500; color:var(--side-strong);">Roteamento por SKU</span>
+      <span style="font-size:12px; color:var(--side-t); text-wrap:pretty;">Módulo opcional para quem usa loja vitrine.</span>
+      <a href="#" onClick="{{ irRotas }}" style="font-size:12px; font-weight:500; color:var(--side-link);">Ver como funciona</a>
+    </div>
+  </nav>
+  <div style="border-top:1px solid var(--side-border); padding-top:8px;">
+    <button type="button" style="display:flex; align-items:center; gap:10px; width:100%; height:44px; padding:0 8px; border:0; border-radius:8px; background:transparent; cursor:pointer; text-align:left;" style-hover="background:var(--side-hover);">
+      <span aria-hidden="true" style="width:28px; height:28px; flex:none; display:grid; place-items:center; border-radius:50%; background:var(--side-strong); color:var(--side-bg); font-size:11px; font-weight:600;">AF</span>
+      <span style="flex:1; display:flex; flex-direction:column;"><span style="font-weight:500; color:var(--side-strong);">Arthur Ferreira</span><span style="font-size:12px; color:var(--side-t);">Plano Completo · 6 lojas</span></span>
+    </button>
+  </div>
+</aside>
+
+<main id="conteudo" style="flex:1; min-width:0; display:flex; flex-direction:column;">
+  <header style="position:sticky; top:0; z-index:20; background:var(--bg); border-bottom:1px solid var(--border);">
+    <div style="max-width:1320px; margin:0 auto; padding:14px 32px; display:flex; align-items:center; gap:10px;">
+      <h1 style="margin:0 12px 0 0; font-size:20px; line-height:28px; font-weight:600; letter-spacing:-0.01em; white-space:nowrap;">{{ titulo }}</h1>
+      <sc-if value="{{ temContexto }}" hint-placeholder-val="{{ true }}"><div style="display:flex; gap:6px; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; flex:1; min-width:0; white-space:nowrap;">
+        <button type="button" style="height:32px; display:flex; align-items:center; gap:8px; padding:0 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); cursor:pointer;" style-hover="border-color:var(--border-strong);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--t3);"><path d="M3 9l1.5-5h15L21 9 M4 9v11h16V9 M9 20v-6h6v6 M3 9h18"></path></svg>
+          <span style="font-weight:500;">Todas as lojas</span><span style="color:var(--t3);">5 ativas</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="color:var(--t3);"><path d="M6 9l6 6 6-6"></path></svg>
+        </button>
+        <button type="button" style="height:32px; display:flex; align-items:center; gap:8px; padding:0 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); cursor:pointer;" style-hover="border-color:var(--border-strong);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--t3);"><path d="M8 2v4 M16 2v4 M3 5h18v16H3z M3 10h18"></path></svg>
+          <span style="font-weight:500;">Últimos 30 dias</span><span style="color:var(--t3); font-variant-numeric:tabular-nums;">25/09 – 24/10</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="color:var(--t3);"><path d="M6 9l6 6 6-6"></path></svg>
+        </button>
+        <button type="button" style="height:32px; display:flex; align-items:center; gap:6px; padding:0 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--t2); cursor:pointer;" style-hover="border-color:var(--border-strong);">vs. período anterior</button>
+        <div role="radiogroup" aria-label="Moeda" style="height:32px; display:flex; gap:2px; padding:2px; border-radius:8px; background:var(--track);">
+          <sc-for list="{{ moedas }}" as="c" hint-placeholder-count="3"><button type="button" role="radio" aria-checked="{{ c.on }}" onClick="{{ c.pick }}" style="padding:0 9px; border:0; border-radius:6px; background:{{ c.bg }}; box-shadow:{{ c.sombra }}; font-size:12px; font-weight:500; color:{{ c.cor }}; cursor:pointer;">{{ c.l }}</button></sc-for>
+        </div>
+      </div></sc-if><sc-if value="{{ semContexto }}" hint-placeholder-val="{{ false }}"><span style="flex:1; color:var(--t3);">{{ subtitulo }}</span></sc-if>
+      <span style="color:var(--t3); font-size:12px; font-variant-numeric:tabular-nums; white-space:nowrap; flex:none;">14:32</span>
+      <button type="button" onClick="{{ alternarTema }}" aria-label="{{ temaAria }}" style="width:32px; height:32px; flex:none; display:grid; place-items:center; border:1px solid var(--border); border-radius:8px; background:var(--surface); cursor:pointer;" style-hover="border-color:var(--border-strong);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ temaIcone }}"></path></svg></button>
+      <button type="button" aria-label="Atualizar agora" style="width:32px; height:32px; display:grid; place-items:center; border:1px solid var(--border); border-radius:8px; background:var(--surface); cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8 M21 3v5h-5"></path></svg></button>
+      <button type="button" aria-label="Alertas, 3 novos" style="position:relative; width:32px; height:32px; display:grid; place-items:center; border:1px solid var(--border); border-radius:8px; background:var(--surface); cursor:pointer;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.268 21a2 2 0 0 0 3.464 0 M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path></svg><span aria-hidden="true" style="position:absolute; top:5px; right:5px; width:7px; height:7px; border-radius:50%; background:var(--err); box-shadow:0 0 0 2px var(--surface);"></span></button>
+    </div>
+  </header>
+
+  <div style="max-width:1320px; width:100%; margin:0 auto; padding:24px 32px 64px; display:flex; flex-direction:column; gap:20px;">
+<sc-if value="{{ t.lucro }}" hint-placeholder-val="{{ true }}">
+    <sc-if value="{{ mostraAviso }}" hint-placeholder-val="{{ true }}">
+    <div role="status" style="display:flex; align-items:center; gap:12px; padding:10px 12px 10px 14px; border:1px solid var(--err-border); border-radius:10px; background:var(--err-bg); flex-wrap:wrap;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--err); flex:none;"><path d="M12 9v4 M12 17h.01 M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+      <span style="flex:1; min-width:240px; color:var(--ink); text-wrap:pretty;"><strong style="font-weight:600;">O lucro está inflado.</strong> 7,9% das vendas são de SKUs sem custo cadastrado em 2 lojas.</span>
+      <a href="#" style="font-size:12px; font-weight:500; color:var(--t2);">Mais 2 pendências</a>
+      <button type="button" style="height:30px; padding:0 12px; border:0; border-radius:7px; background:var(--ink); color:var(--on-ink); font-weight:500; cursor:pointer;" style-hover="opacity:.88;">Cadastrar custos</button>
+    </div>
+    </sc-if>
+
+    <section aria-label="Resumo" style="display:flex; flex-wrap:wrap; gap:20px; align-items:stretch;">
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; flex:3 1 560px; min-width:0;">
+        <div role="tablist" aria-label="Métrica" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(max(calc(25% - 1px), min(calc(50% - 1px), calc((800px - 100%) * 999))), 1fr)); border-bottom:1px solid var(--border); background:var(--surface-2);">
+          <sc-for list="{{ mTabs }}" as="t" hint-placeholder-count="4">
+            <button type="button" role="tab" aria-selected="{{ t.on }}" onClick="{{ t.pick }}" style="display:flex; flex-direction:column; gap:4px; padding:16px 20px 14px; border:0; background:{{ t.bg }}; box-shadow:inset 0 2px 0 {{ t.barra }}, 1px 0 0 var(--border), 0 1px 0 var(--border); text-align:left; min-width:0; cursor:pointer;" style-hover="background:var(--surface);">
+              <span style="display:flex; align-items:center; gap:6px; color:var(--t2); font-weight:500;">{{ t.l }}<sc-if value="{{ t.est }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px; padding:0 6px; border-radius:999px; border:1px solid var(--border); color:var(--t3);">estimado</span></sc-if></span>
+              <span style="font-size:24px; line-height:30px; font-weight:600; letter-spacing:-0.02em; color:{{ t.vCor }}; font-variant-numeric:tabular-nums; white-space:nowrap;">{{ t.v }}</span>
+              <span style="font-size:12px; font-weight:600; color:{{ t.dCor }}; font-variant-numeric:tabular-nums;">{{ t.d }} <span style="font-weight:400; color:var(--t3);">vs. anterior</span></span>
+            </button>
+          </sc-for>
+        </div>
+        <div style="padding:18px 20px 16px; display:flex; flex-direction:column; gap:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+            <span style="color:var(--t2); text-wrap:pretty;">{{ veredito }}</span>
+            <div role="radiogroup" aria-label="Agrupar por" style="display:flex; gap:2px; padding:2px; border-radius:8px; background:var(--track);">
+              <sc-for list="{{ grans }}" as="g" hint-placeholder-count="2"><button type="button" role="radio" aria-checked="{{ g.on }}" onClick="{{ g.pick }}" style="height:26px; padding:0 10px; border:0; border-radius:6px; background:{{ g.bg }}; box-shadow:{{ g.sombra }}; font-size:12px; font-weight:500; color:{{ g.cor }}; cursor:pointer;">{{ g.l }}</button></sc-for>
+            </div>
+          </div>
+          <div style="position:relative; height:240px; margin:14px 0 0 44px;">
+            <sc-for list="{{ ticks }}" as="k" hint-placeholder-count="4">
+              <div style="position:absolute; left:0; right:0; bottom:{{ k.pos }}; border-top:1px solid {{ k.cor }};"><span style="position:absolute; left:-44px; top:-8px; width:38px; white-space:nowrap; text-align:right; font-size:11px; color:var(--t3); font-variant-numeric:tabular-nums;">{{ k.l }}</span></div>
+            </sc-for>
+            <div onMouseLeave="{{ offHover }}" style="position:absolute; inset:0; display:flex; gap:{{ barGap }};">
+              <sc-for list="{{ barras }}" as="b" hint-placeholder-count="30">
+                <div onMouseEnter="{{ b.on }}" style="position:relative; flex:1; min-width:0; cursor:default;">
+                  <div style="position:absolute; left:0; right:0; bottom:{{ b.base }}; height:{{ b.h }}; border-radius:3px; background:{{ b.cor }}; border:{{ b.borda }}; opacity:{{ b.op }}; transition:opacity .15s;"></div>
+                  <sc-if value="{{ mostraComparacao }}" hint-placeholder-val="{{ true }}"><div style="position:absolute; left:-1px; right:-1px; bottom:{{ b.prevPos }}; height:2px; border-radius:1px; background:var(--ink); opacity:{{ b.prevOp }};"></div></sc-if>
+                  <sc-if value="{{ b.hov }}" hint-placeholder-val="{{ false }}">
+                    <div style="position:absolute; bottom:calc(100% + 8px); left:50%; transform:{{ b.tf }}; z-index:5; min-width:184px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface); box-shadow:var(--shadow); pointer-events:none; display:flex; flex-direction:column; gap:4px; font-variant-numeric:tabular-nums; white-space:nowrap;">
+                      <span style="font-size:12px; color:var(--t3);">{{ b.data }}</span>
+                      <span style="display:flex; justify-content:space-between; gap:12px;"><span>Atual</span><strong style="font-weight:600;">{{ b.v }}</strong></span>
+                      <span style="display:flex; justify-content:space-between; gap:12px; color:var(--t3);"><span>Período anterior</span><span>{{ b.p }}</span></span>
+                      <span style="display:flex; justify-content:space-between; gap:12px; color:var(--t3);"><span>Variação</span><span style="font-weight:600; color:{{ b.dCor }};">{{ b.dl }}</span></span>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="margin-left:44px; display:flex; gap:{{ barGap }}; font-size:11px; color:var(--t3); font-variant-numeric:tabular-nums;">
+            <sc-for list="{{ barras }}" as="b" hint-placeholder-count="30"><span style="flex:1; min-width:0; text-align:center; white-space:nowrap; overflow:visible;">{{ b.xl }}</span></sc-for>
+          </div>
+          <div style="display:flex; gap:18px; font-size:12px; color:var(--t2); flex-wrap:wrap; padding-top:4px;">
+            <span style="display:flex; align-items:center; gap:6px;"><span style="width:10px; height:10px; border-radius:2px; background:var(--accent);"></span>Período atual</span>
+            <sc-if value="{{ mostraComparacao }}" hint-placeholder-val="{{ true }}"><span style="display:flex; align-items:center; gap:6px;"><span style="width:12px; height:2px; background:var(--ink); opacity:.55;"></span>Mesmo dia do período anterior</span></sc-if>
+            <span style="display:flex; align-items:center; gap:6px;"><span style="width:10px; height:10px; border-radius:2px; border:1px solid var(--accent); background:repeating-linear-gradient(135deg, var(--accent) 0 2px, transparent 2px 4px);"></span>Parcial</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px 22px 18px; display:flex; flex-direction:column; gap:14px; flex:1 1 320px; min-width:0;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline;"><h2 style="margin:0; font-size:15px; font-weight:600;">Para onde foi o faturamento</h2><span style="font-size:12px; color:var(--t3);">% do total</span></div>
+        <div style="display:flex; flex-direction:column; gap:12px; flex:1;">
+          <sc-for list="{{ cascata }}" as="r" hint-placeholder-count="6">
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <div style="display:flex; align-items:baseline; gap:8px; font-variant-numeric:tabular-nums;">
+                <span style="flex:1; font-weight:{{ r.peso }}; color:{{ r.corTxt }};">{{ r.l }}</span>
+                <span style="font-weight:{{ r.peso }};">{{ r.v }}</span>
+                <span style="width:44px; text-align:right; font-size:12px; color:var(--t3);">{{ r.p }}</span>
+              </div>
+              <div style="position:relative; height:8px; border-radius:3px; background:var(--track);"><div style="position:absolute; top:0; bottom:0; left:{{ r.left }}; width:{{ r.w }}; border-radius:3px; background:{{ r.cor }};"></div></div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex; justify-content:space-between; gap:12px; padding-top:12px; border-top:1px solid var(--border); font-size:12px;"><span style="color:var(--t3);">Lucro estimado, não contábil.</span><a href="#">Como calculamos</a></div>
+      </div>
+    </section>
+
+    <section aria-label="Indicadores" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:0; background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden;">
+      <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="8">
+        <a href="#" style="display:flex; flex-direction:column; gap:6px; padding:16px 18px; background:var(--surface); color:var(--ink); text-decoration:none; box-shadow:1px 0 0 var(--border), 0 1px 0 var(--border);" style-hover="background:var(--surface-2); color:var(--ink); text-decoration:none;">
+          <span style="display:flex; justify-content:space-between; align-items:center; gap:8px;"><span style="color:var(--t2); font-weight:500;">{{ k.l }}</span><svg viewBox="0 0 80 24" width="72" height="22" preserveAspectRatio="none" aria-hidden="true"><path d="{{ k.spark }}" fill="none" stroke="{{ k.sparkCor }}" stroke-width="1.5" vector-effect="non-scaling-stroke"></path></svg></span>
+          <span style="font-size:24px; line-height:30px; font-weight:600; letter-spacing:-0.015em; font-variant-numeric:tabular-nums;">{{ k.v }}</span>
+          <span style="display:flex; gap:6px; align-items:center; font-size:12px; color:var(--t3); font-variant-numeric:tabular-nums;"><span style="font-weight:600; color:{{ k.dCor }};">{{ k.d }}</span>{{ k.sub }}</span>
+        </a>
+      </sc-for>
+    </section>
+
+    <section aria-label="Por loja" style="background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; padding:16px 20px; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:4px;">
+          <h2 style="margin:0 10px 0 0; font-size:15px; font-weight:600;">Detalhar por</h2>
+          <sc-for list="{{ abas }}" as="a" hint-placeholder-count="5"><button type="button" onClick="{{ a.pick }}" aria-pressed="{{ a.on }}" style="height:30px; padding:0 10px; border:0; border-radius:7px; background:{{ a.bg }}; color:{{ a.cor }}; font-weight:500; cursor:pointer;" style-hover="background:var(--hover);">{{ a.l }}</button></sc-for>
+        </div>
+        <button type="button" style="height:30px; display:flex; align-items:center; gap:6px; padding:0 10px; border:1px solid var(--border); border-radius:7px; background:var(--surface); cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3"></path></svg>Exportar CSV</button>
+      </div>
+      <div style="overflow-x:auto;">
+      <table style="width:100%; min-width:920px; border-collapse:collapse; font-variant-numeric:tabular-nums;">
+        <thead><tr style="background:var(--surface-2); border-top:1px solid var(--border); border-bottom:1px solid var(--border);">
+          <th scope="col" style="text-align:left; padding:9px 20px; font-size:12px; font-weight:500; color:var(--t3);">Loja</th>
+          <th scope="col" style="text-align:right; padding:9px 12px; font-size:12px; font-weight:500; color:var(--t3);">Pedidos</th>
+          <th scope="col" style="text-align:right; padding:9px 12px; font-size:12px; font-weight:500; color:var(--t3);">Faturamento</th>
+          <th scope="col" style="text-align:right; padding:9px 12px; font-size:12px; font-weight:500; color:var(--t3);">Gasto</th>
+          <th scope="col" style="text-align:right; padding:9px 12px; font-size:12px; font-weight:500; color:var(--t3);">ROAS / equilíbrio</th>
+          <th scope="col" style="text-align:right; padding:9px 12px; font-size:12px; font-weight:500; color:var(--t3);">Lucro</th>
+          <th scope="col" style="text-align:right; padding:9px 12px; font-size:12px; font-weight:500; color:var(--t3);">Margem</th>
+          <th scope="col" style="text-align:right; padding:9px 20px; font-size:12px; font-weight:500; color:var(--t3);">30 dias</th>
+        </tr></thead>
+        <tbody>
+          <sc-for list="{{ lojas }}" as="l" hint-placeholder-count="5">
+            <tr style="border-bottom:1px solid var(--border);" style-hover="background:var(--surface-2);">
+              <th scope="row" style="text-align:left; padding:12px 20px; font-weight:500;"><span style="display:flex; align-items:center; gap:10px;"><a href="#" style="color:var(--ink);">{{ l.nome }}</a><span style="display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:999px; border:1px solid {{ l.sBorda }}; background:{{ l.sBg }}; color:{{ l.sCor }}; font-size:11px; font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:{{ l.sCor }};"></span>{{ l.status }}</span></span></th>
+              <td style="text-align:right; padding:12px;">{{ l.pedidos }}</td>
+              <td style="text-align:right; padding:12px;">{{ l.fat }}</td>
+              <td style="text-align:right; padding:12px;">{{ l.gasto }}</td>
+              <td style="text-align:right; padding:12px;">{{ l.roas }} <span style="color:var(--t3);">/ {{ l.eq }}</span></td>
+              <td style="text-align:right; padding:12px; font-weight:600; color:{{ l.lCor }};">{{ l.lucro }}</td>
+              <td style="text-align:right; padding:12px;">{{ l.margem }}</td>
+              <td style="text-align:right; padding:8px 20px;"><svg viewBox="0 0 80 24" width="80" height="24" preserveAspectRatio="none" aria-hidden="true"><path d="{{ l.spark }}" fill="none" stroke="{{ l.lCor }}" stroke-width="1.5" vector-effect="non-scaling-stroke"></path></svg></td>
+            </tr>
+          </sc-for>
+          <tr style="background:var(--surface-2); font-weight:600;">
+            <th scope="row" style="text-align:left; padding:12px 20px; font-weight:600;">Total · 5 lojas</th>
+            <td style="text-align:right; padding:12px;">1.328</td>
+            <td style="text-align:right; padding:12px;">{{ tot.fat }}</td>
+            <td style="text-align:right; padding:12px;">{{ tot.gasto }}</td>
+            <td style="text-align:right; padding:12px;">2,70× <span style="color:var(--t3); font-weight:400;">/ 1,69×</span></td>
+            <td style="text-align:right; padding:12px; color:var(--ok);">{{ tot.lucro }}</td>
+            <td style="text-align:right; padding:12px;">22,3%</td>
+            <td style="padding:12px 20px;"></td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px; padding:12px 20px; border-top:1px solid var(--border); color:var(--t3); font-size:12px;">
+        <span style="display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:999px; border:1px solid var(--border); color:var(--t2); font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:var(--t3);"></span>Sem acesso</span>
+        <span style="flex:1;">Mira Studio e Pine Supply ficam fora do total até a Shopify liberar o acesso.</span>
+        <a href="#" style="font-weight:500;">Reconectar lojas</a>
+      </div>
+    </section>
+</sc-if>
+<sc-if value="{{ t.pedidos }}" hint-placeholder-val="{{ false }}">
+  <section aria-label="Resumo dos pedidos" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:0; background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden;">
+    <div style="padding:16px 18px; background:var(--surface); display:flex; flex-direction:column; gap:4px; box-shadow:1px 0 0 var(--border), 0 1px 0 var(--border);"><span style="color:var(--t2); font-weight:500;">Pedidos</span><span style="font-size:24px; font-weight:600; font-variant-numeric:tabular-nums;">1.328</span><span style="font-size:12px; color:var(--t3);"><b style="color:var(--ok);">↑ 9,1%</b> · 14 reenvios</span></div>
+    <div style="padding:16px 18px; background:var(--surface); display:flex; flex-direction:column; gap:4px; box-shadow:1px 0 0 var(--border), 0 1px 0 var(--border);"><span style="color:var(--t2); font-weight:500;">Faturamento</span><span style="font-size:24px; font-weight:600; font-variant-numeric:tabular-nums;">R$ 209.576,33</span><span style="font-size:12px; color:var(--t3);">inclui frete cobrado</span></div>
+    <div style="padding:16px 18px; background:var(--surface); display:flex; flex-direction:column; gap:4px; box-shadow:1px 0 0 var(--border), 0 1px 0 var(--border);"><span style="color:var(--t2); font-weight:500;">Reembolsos</span><span style="font-size:24px; font-weight:600; font-variant-numeric:tabular-nums;">R$ 3.912,40</span><span style="font-size:12px; color:var(--t3);">21 pedidos · 1,9% do faturamento</span></div>
+    <div style="padding:16px 18px; background:var(--surface); display:flex; flex-direction:column; gap:4px; box-shadow:1px 0 0 var(--border), 0 1px 0 var(--border);"><span style="color:var(--t2); font-weight:500;">Lucro por pedido</span><span style="font-size:24px; font-weight:600; font-variant-numeric:tabular-nums;">R$ 35,25</span><span style="font-size:12px; color:var(--t3);">estimado, após anúncios</span></div>
+  </section>
+  <section aria-label="Lista de pedidos" style="background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden;">
+    <div style="display:flex; align-items:center; gap:8px; padding:14px 16px; flex-wrap:wrap;">
+      <label style="flex:1; min-width:220px; max-width:360px; height:32px; display:flex; align-items:center; gap:8px; padding:0 10px; border:1px solid var(--border-strong); border-radius:8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true" style="color:var(--t3);"><path d="M3 11a8 8 0 1 0 16 0a8 8 0 1 0-16 0 M21 21l-4.34-4.34"></path></svg><input placeholder="Buscar pedido, SKU ou UTM" style="flex:1; border:0; outline:0; background:transparent; font-size:13px;"></label>
+      <button type="button" style="height:30px; padding:0 10px; border:1px dashed var(--border-strong); border-radius:999px; background:transparent; color:var(--t2); cursor:pointer;">+ Status</button>
+      <button type="button" style="height:30px; padding:0 10px; border:1px dashed var(--border-strong); border-radius:999px; background:transparent; color:var(--t2); cursor:pointer;">+ Origem</button>
+      <button type="button" style="height:30px; padding:0 6px 0 10px; display:flex; align-items:center; gap:6px; border:1px solid var(--ink); border-radius:999px; background:var(--surface); cursor:pointer;">Gateway: Shopify Payments <span aria-label="Remover filtro" style="width:18px; height:18px; display:grid; place-items:center; border-radius:50%; background:var(--track);">×</span></button>
+      <a href="#" style="font-size:12px; margin-left:4px;">Limpar filtros</a>
+      <span style="flex:1;"></span>
+      <button type="button" style="height:30px; padding:0 10px; border:1px solid var(--border); border-radius:7px; background:var(--surface); cursor:pointer;">Exportar CSV</button>
+    </div>
+    <div style="overflow-x:auto;">
+    <table style="width:100%; min-width:980px; border-collapse:collapse; font-variant-numeric:tabular-nums;">
+      <thead><tr style="background:var(--surface-2); border-top:1px solid var(--border); border-bottom:1px solid var(--border); font-size:12px; color:var(--t3);">
+        <th scope="col" style="text-align:left; padding:9px 16px; font-weight:500;">Pedido</th><th scope="col" style="text-align:left; padding:9px 12px; font-weight:500;">Data</th><th scope="col" style="text-align:left; padding:9px 12px; font-weight:500;">Loja</th><th scope="col" style="text-align:left; padding:9px 12px; font-weight:500;">Origem</th><th scope="col" style="text-align:right; padding:9px 12px; font-weight:500;">Itens</th><th scope="col" style="text-align:right; padding:9px 12px; font-weight:500;">Total</th><th scope="col" style="text-align:right; padding:9px 12px; font-weight:500;">Custos + taxa</th><th scope="col" style="text-align:right; padding:9px 12px; font-weight:500;">Lucro est.</th><th scope="col" style="text-align:left; padding:9px 16px; font-weight:500;">Status</th>
+      </tr></thead>
+      <tbody>
+        <sc-for list="{{ pedidos }}" as="o" hint-placeholder-count="8">
+          <tr style="border-bottom:1px solid var(--border);" style-hover="background:var(--surface-2);">
+            <th scope="row" style="text-align:left; padding:11px 16px; font-weight:600;"><a href="#" style="color:var(--ink);">{{ o.n }}</a></th>
+            <td style="padding:11px 12px; color:var(--t2); white-space:nowrap;">{{ o.data }}</td>
+            <td style="padding:11px 12px;">{{ o.loja }}</td>
+            <td style="padding:11px 12px; color:var(--t2); font-family:'IBM Plex Mono', monospace; font-size:12px;">{{ o.origem }}</td>
+            <td style="padding:11px 12px; text-align:right;">{{ o.itens }}</td>
+            <td style="padding:11px 12px; text-align:right;">{{ o.total }}</td>
+            <td style="padding:11px 12px; text-align:right; color:var(--t2);">{{ o.custo }}</td>
+            <td style="padding:11px 12px; text-align:right; font-weight:600; color:{{ o.lCor }};">{{ o.lucro }}</td>
+            <td style="padding:11px 16px;"><span style="display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:999px; border:1px solid {{ o.sBorda }}; background:{{ o.sBg }}; color:{{ o.sCor }}; font-size:11px; font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:{{ o.sCor }};"></span>{{ o.status }}</span></td>
+          </tr>
+        </sc-for>
+      </tbody>
+    </table>
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-top:1px solid var(--border); font-size:12px; color:var(--t3);"><span>Mostrando 1–14 de 1.328 · sem dado antes de 26/07</span><span style="display:flex; gap:6px;"><button type="button" disabled="" style="height:28px; padding:0 10px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--t3);">Anterior</button><button type="button" style="height:28px; padding:0 10px; border:1px solid var(--border-strong); border-radius:7px; background:var(--surface); cursor:pointer;">Próxima</button></span></div>
+  </section>
+</sc-if>
+
+<sc-if value="{{ t.custos }}" hint-placeholder-val="{{ false }}">
+  <section aria-label="Escolha a loja" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:10px;">
+    <sc-for list="{{ custoLojas }}" as="c" hint-placeholder-count="5">
+      <button type="button" onClick="{{ c.pick }}" aria-pressed="{{ c.on }}" style="display:flex; flex-direction:column; gap:8px; padding:14px 16px; border:1px solid {{ c.borda }}; border-radius:12px; background:var(--surface); text-align:left; cursor:pointer;" style-hover="border-color:var(--border-strong);">
+        <span style="font-weight:600;">{{ c.nome }}</span>
+        <span style="display:flex; justify-content:space-between; font-size:12px; color:var(--t2); font-variant-numeric:tabular-nums;"><span>SKUs com custo</span><b>{{ c.pct }}</b></span>
+        <span style="height:6px; border-radius:3px; background:var(--track); overflow:hidden;"><span style="display:block; height:100%; width:{{ c.w }}; background:{{ c.barCor }};"></span></span>
+        <span style="font-size:12px; color:{{ c.tCor }};">{{ c.taxa }}</span>
+      </button>
+    </sc-for>
+  </section>
+  <section aria-label="Taxas da loja" style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:20px; display:flex; flex-direction:column; gap:16px;">
+    <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap;"><h2 style="margin:0; font-size:15px; font-weight:600;">Taxas de {{ lojaSel }}</h2><span style="display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:999px; border:1px solid var(--ok-border); background:var(--ok-bg); color:var(--ok); font-size:11px; font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:var(--ok);"></span>Configurada</span></div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:14px;">
+      <label style="display:flex; flex-direction:column; gap:6px;"><span style="font-weight:500;">Taxa do gateway</span><span style="height:36px; display:flex; align-items:center; border:1px solid var(--border-strong); border-radius:8px; padding:0 10px;"><input defaultValue="4,5" style="flex:1; border:0; outline:0; background:transparent; font-size:13px; font-variant-numeric:tabular-nums;"><span style="color:var(--t3);">%</span></span><span style="font-size:12px; color:var(--t3);">Sobre o valor total do pedido</span></label>
+      <label style="display:flex; flex-direction:column; gap:6px;"><span style="font-weight:500;">Taxa fixa por pedido</span><span style="height:36px; display:flex; align-items:center; gap:6px; border:1px solid var(--border-strong); border-radius:8px; padding:0 10px;"><span style="color:var(--t3);">R$</span><input defaultValue="0,50" style="flex:1; border:0; outline:0; background:transparent; font-size:13px; font-variant-numeric:tabular-nums;"></span><span style="font-size:12px; color:var(--t3);">Cobrada por transação</span></label>
+      <label style="display:flex; flex-direction:column; gap:6px;"><span style="font-weight:500;">Custo padrão</span><span style="height:36px; display:flex; align-items:center; border:1px solid var(--border-strong); border-radius:8px; padding:0 10px;"><input defaultValue="35" style="flex:1; border:0; outline:0; background:transparent; font-size:13px; font-variant-numeric:tabular-nums;"><span style="color:var(--t3);">% do preço</span></span><span style="font-size:12px; color:var(--t3);">Usado em SKUs sem custo cadastrado</span></label>
+    </div>
+  </section>
+  <section aria-label="Custos por SKU" style="background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden;">
+    <div style="display:flex; align-items:center; gap:8px; padding:14px 16px; flex-wrap:wrap;">
+      <h2 style="margin:0 8px 0 0; font-size:15px; font-weight:600;">SKUs vendidos nos últimos 60 dias</h2>
+      <button type="button" style="height:30px; padding:0 10px; border:1px solid var(--ink); border-radius:999px; background:var(--surface); cursor:pointer;">Só sem custo · 2</button>
+      <span style="flex:1;"></span>
+      <button type="button" style="height:30px; padding:0 10px; border:1px solid var(--border); border-radius:7px; background:var(--surface); cursor:pointer;">Baixar modelo CSV</button>
+      <button type="button" style="height:30px; padding:0 10px; border:1px solid var(--border); border-radius:7px; background:var(--surface); cursor:pointer;">Importar CSV</button>
+    </div>
+    <div style="overflow-x:auto;">
+    <table style="width:100%; min-width:900px; border-collapse:collapse; font-variant-numeric:tabular-nums;">
+      <thead><tr style="background:var(--surface-2); border-top:1px solid var(--border); border-bottom:1px solid var(--border); font-size:12px; color:var(--t3);">
+        <th scope="col" style="text-align:left; padding:9px 16px; font-weight:500;">Produto</th><th scope="col" style="text-align:right; padding:9px 12px; font-weight:500;">Unidades</th><th scope="col" style="text-align:left; padding:9px 12px; font-weight:500;">Custo (USD)</th><th scope="col" style="text-align:left; padding:9px 12px; font-weight:500;">Frete / un. (USD)</th><th scope="col" style="text-align:left; padding:9px 12px; font-weight:500;">Vale desde</th><th scope="col" style="text-align:left; padding:9px 16px; font-weight:500;">Situação</th>
+      </tr></thead>
+      <tbody>
+        <sc-for list="{{ skus }}" as="k" hint-placeholder-count="6">
+          <tr style="border-bottom:1px solid var(--border);">
+            <th scope="row" style="text-align:left; padding:10px 16px; font-weight:400;"><span style="display:flex; align-items:center; gap:12px;"><span aria-hidden="true" style="width:36px; height:36px; flex:none; border-radius:6px; border:1px solid var(--border); background:repeating-linear-gradient(45deg, var(--surface-2) 0 4px, var(--track) 4px 5px);"></span><span style="display:flex; flex-direction:column;"><span style="font-weight:500;">{{ k.nome }}</span><span style="font-size:12px; color:var(--t3);">{{ k.varr }} · <span style="font-family:'IBM Plex Mono', monospace;">{{ k.sku }}</span></span></span></span></th>
+            <td style="padding:10px 12px; text-align:right;">{{ k.un }}</td>
+            <td style="padding:10px 12px;"><input value="{{ k.c }}" onChange="{{ k.onIn }}" placeholder="0,00" aria-label="Custo" style="width:96px; height:32px; padding:0 8px; border:1px solid {{ k.inBorda }}; border-radius:7px; background:{{ k.inBg }}; font-size:13px; font-variant-numeric:tabular-nums;"></td>
+            <td style="padding:10px 12px;"><input defaultValue="{{ k.f }}" placeholder="0,00" aria-label="Frete por unidade" style="width:96px; height:32px; padding:0 8px; border:1px solid var(--border-strong); border-radius:7px; background:var(--surface); font-size:13px;"></td>
+            <td style="padding:10px 12px; color:var(--t2);">{{ k.desde }}</td>
+            <td style="padding:10px 16px;"><span style="display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:999px; border:1px solid {{ k.sBorda }}; background:{{ k.sBg }}; color:{{ k.sCor }}; font-size:11px; font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:{{ k.sCor }};"></span>{{ k.sit }}</span></td>
+          </tr>
+        </sc-for>
+      </tbody>
+    </table>
+    </div>
+    <p style="margin:0; padding:12px 16px; border-top:1px solid var(--border); font-size:12px; color:var(--t3);">Mudar um custo cria uma versão nova a partir de hoje. Pedidos antigos mantêm o custo da época.</p>
+  </section>
+  <section aria-label="Em breve" style="border:1px dashed var(--border-strong); border-radius:14px; padding:18px 20px; display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
+    <span style="padding:2px 8px; border-radius:999px; background:var(--track); font-size:11px; font-weight:600; color:var(--t2);">Em breve</span>
+    <span style="flex:1; min-width:260px; color:var(--t2);">Custos fixos mensais (apps, equipe), taxas da Shopify por plano e importação do custo direto do AliExpress.</span>
+  </section>
+  <sc-if value="{{ temEdits }}" hint-placeholder-val="{{ false }}">
+    <div style="position:sticky; bottom:16px; z-index:10; align-self:center; display:flex; align-items:center; gap:12px; padding:8px 8px 8px 16px; border-radius:12px; background:var(--ink); color:var(--on-ink); box-shadow:var(--shadow);">
+      <span>{{ nEdits }}</span>
+      <button type="button" onClick="{{ descartar }}" style="height:30px; padding:0 12px; border:1px solid var(--t3); border-radius:7px; background:transparent; color:var(--on-ink); cursor:pointer;">Descartar</button>
+      <button type="button" onClick="{{ salvar }}" style="height:30px; padding:0 12px; border:0; border-radius:7px; background:var(--surface); color:var(--ink); font-weight:600; cursor:pointer;">Salvar custos</button>
+    </div>
+  </sc-if>
+</sc-if>
+
+<sc-if value="{{ t.pixels }}" hint-placeholder-val="{{ false }}">
+  <p style="margin:0; color:var(--t3); font-size:12px;">Últimos 7 dias · período fixo desta tela</p>
+  <section aria-label="Resumo do rastreamento" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:0; background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden;">
+    <div style="padding:16px 18px; background:var(--surface); display:flex; flex-direction:column; gap:4px; box-shadow:1px 0 0 var(--border), 0 1px 0 var(--border);"><span style="color:var(--t2); font-weight:500;">Lojas rastreando</span><span style="font-size:24px; font-weight:600; font-variant-numeric:tabular-nums;">3 <span style="font-size:15px; color:var(--t3); font-weight:500;">de 5</span></span></div>
+    <div style="padding:16px 18px; background:var(--surface); display:flex; flex-direction:column; gap:4px; box-shadow:1px 0 0 var(--border), 0 1px 0 var(--border);"><span style="color:var(--t2); font-weight:500;">Pedidos na Shopify</span><span style="font-size:24px; font-weight:600; font-variant-numeric:tabular-nums;">312</span></div>
+    <div style="padding:16px 18px; background:var(--surface); display:flex; flex-direction:column; gap:4px; box-shadow:1px 0 0 var(--border), 0 1px 0 var(--border);"><span style="color:var(--t2); font-weight:500;">Compras enviadas</span><span style="font-size:24px; font-weight:600; font-variant-numeric:tabular-nums;">88,4%</span><span style="font-size:12px; color:var(--t3);">média de Meta e Google</span></div>
+    <div style="padding:16px 18px; background:var(--surface); display:flex; flex-direction:column; gap:4px; box-shadow:1px 0 0 var(--border), 0 1px 0 var(--border);"><span style="color:var(--t2); font-weight:500;">Precisam de você</span><span style="font-size:24px; font-weight:600; color:var(--err); font-variant-numeric:tabular-nums;">2 lojas</span></div>
+  </section>
+  <section aria-label="Lojas" style="display:flex; flex-direction:column; gap:10px;">
+    <sc-for list="{{ pixLojas }}" as="p" hint-placeholder-count="5">
+      <article style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px 20px; display:grid; grid-template-columns:minmax(180px, 1fr) minmax(260px, 2fr) auto; gap:20px; align-items:center;">
+        <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start;"><span style="font-weight:600; font-size:14px;">{{ p.nome }}</span><span style="display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:999px; border:1px solid {{ p.sBorda }}; background:{{ p.sBg }}; color:{{ p.sCor }}; font-size:11px; font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:{{ p.sCor }};"></span>{{ p.estado }}</span></div>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <sc-for list="{{ p.destinos }}" as="d" hint-placeholder-count="2">
+            <div style="display:grid; grid-template-columns:56px minmax(0,1fr) 92px 40px; gap:10px; align-items:center; font-variant-numeric:tabular-nums;"><span style="font-weight:500;">{{ d.pl }}</span><span style="height:6px; border-radius:3px; background:var(--track); overflow:hidden;"><span style="display:block; height:100%; width:{{ d.w }}; background:{{ d.cor }};"></span></span><span style="font-size:12px; color:var(--t2); text-align:right;">{{ d.txt }}</span><span style="font-size:12px; font-weight:600; text-align:right;">{{ d.pct }}</span></div>
+          </sc-for>
+          <sc-if value="{{ p.temProb }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px; color:var(--t1); text-wrap:pretty;">{{ p.prob }}</span></sc-if>
+        </div>
+        <div style="display:flex; gap:8px; justify-content:flex-end;">
+          <sc-if value="{{ p.temProb }}" hint-placeholder-val="{{ false }}"><button type="button" style="height:32px; padding:0 12px; border:0; border-radius:8px; background:var(--ink); color:var(--on-ink); font-weight:500; cursor:pointer; white-space:nowrap;">{{ p.acao }}</button></sc-if>
+          <button type="button" style="height:32px; padding:0 12px; border:1px solid var(--border); border-radius:8px; background:var(--surface); cursor:pointer; white-space:nowrap;">Ver eventos</button>
+        </div>
+      </article>
+    </sc-for>
+  </section>
+  <details style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px 20px;"><summary style="cursor:pointer; font-weight:600;">Como funciona o rastreamento pelo servidor</summary><p style="margin:10px 0 0; color:var(--t2); max-width:720px; text-wrap:pretty;">Cada compra da Shopify é enviada direto ao Meta e ao Google, sem depender do navegador do cliente. "Enviada" significa que a plataforma recebeu; a contagem no gerenciador de anúncios pode levar até 24 h.</p></details>
+</sc-if>
+
+<sc-if value="{{ t.eventos }}" hint-placeholder-val="{{ false }}">
+  <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+    <button type="button" onClick="{{ alternarVivo }}" aria-pressed="{{ aoVivo }}" style="height:32px; display:flex; align-items:center; gap:8px; padding:0 12px; border:1px solid {{ vivoBorda }}; border-radius:999px; background:{{ vivoBg }}; color:{{ vivoCor }}; font-weight:600; cursor:pointer;"><span style="width:8px; height:8px; border-radius:50%; background:{{ vivoCor }};"></span>{{ vivoTxt }}</button>
+    <span style="color:var(--t3); font-size:12px;">atualiza a cada 3 s</span>
+    <span style="flex:1;"></span>
+    <span style="display:flex; gap:16px; font-variant-numeric:tabular-nums; font-size:12px; color:var(--t2);"><span><b style="color:var(--ok);">{{ evEnv }}</b> enviados</span><span><b style="color:var(--warn);">{{ evPend }}</b> pendentes</span><span><b style="color:var(--err);">{{ evFal }}</b> falhas</span><span style="color:var(--t3);">na última hora</span></span>
+  </div>
+  <section aria-label="Eventos" style="background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden;">
+    <div style="display:flex; align-items:center; gap:8px; padding:12px 16px; flex-wrap:wrap;">
+      <button type="button" style="height:30px; padding:0 10px; border:1px solid var(--ink); border-radius:999px; background:var(--ink); color:var(--on-ink); cursor:pointer;">Todos</button>
+      <button type="button" style="height:30px; padding:0 10px; border:1px solid var(--border); border-radius:999px; background:var(--surface); cursor:pointer;">Só falhas</button>
+      <button type="button" style="height:30px; padding:0 10px; border:1px solid var(--border); border-radius:999px; background:var(--surface); cursor:pointer;">Só compras</button>
+      <span style="width:1px; height:20px; background:var(--border); margin:0 4px;"></span>
+      <button type="button" style="height:30px; padding:0 10px; border:1px dashed var(--border-strong); border-radius:999px; background:transparent; color:var(--t2); cursor:pointer;">+ Evento</button>
+      <button type="button" style="height:30px; padding:0 10px; border:1px dashed var(--border-strong); border-radius:999px; background:transparent; color:var(--t2); cursor:pointer;">+ Destino</button>
+      <button type="button" style="height:30px; padding:0 10px; border:1px dashed var(--border-strong); border-radius:999px; background:transparent; color:var(--t2); cursor:pointer;">+ Campanha</button>
+    </div>
+    <div style="overflow-x:auto;">
+    <table style="width:100%; min-width:1040px; border-collapse:collapse; font-variant-numeric:tabular-nums;">
+      <thead><tr style="background:var(--surface-2); border-top:1px solid var(--border); border-bottom:1px solid var(--border); font-size:12px; color:var(--t3);">
+        <th scope="col" style="text-align:left; padding:9px 16px; font-weight:500;">Quando</th><th scope="col" style="text-align:left; padding:9px 12px; font-weight:500;">Loja</th><th scope="col" style="text-align:left; padding:9px 12px; font-weight:500;">Evento</th><th scope="col" style="text-align:left; padding:9px 12px; font-weight:500;">Fonte</th><th scope="col" style="text-align:left; padding:9px 12px; font-weight:500;">Destino</th><th scope="col" style="text-align:left; padding:9px 12px; font-weight:500;">Status</th><th scope="col" style="text-align:right; padding:9px 12px; font-weight:500;">Latência</th><th scope="col" style="text-align:left; padding:9px 12px; font-weight:500;">Clique</th><th scope="col" style="text-align:left; padding:9px 12px; font-weight:500;">Origem</th><th scope="col" style="text-align:left; padding:9px 16px; font-weight:500;">Pedido</th>
+      </tr></thead>
+      <tbody>
+        <sc-for list="{{ eventos }}" as="e" hint-placeholder-count="10">
+          <tr style="border-bottom:1px solid var(--border); background:{{ e.bg }}; transition:background 1.5s;" style-hover="background:var(--surface-2);">
+            <td style="padding:10px 16px; color:var(--t2); white-space:nowrap;">{{ e.hora }}</td>
+            <td style="padding:10px 12px;">{{ e.loja }}</td>
+            <td style="padding:10px 12px; font-weight:500;">{{ e.ev }}</td>
+            <td style="padding:10px 12px; color:var(--t2);">{{ e.fonte }}</td>
+            <td style="padding:10px 12px;">{{ e.dest }}</td>
+            <td style="padding:10px 12px;"><span style="display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:999px; border:1px solid {{ e.sBorda }}; background:{{ e.sBg }}; color:{{ e.sCor }}; font-size:11px; font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:{{ e.sCor }};"></span>{{ e.status }}</span></td>
+            <td style="padding:10px 12px; text-align:right; color:var(--t2);">{{ e.lat }}</td>
+            <td style="padding:10px 12px; color:var(--t2);">{{ e.clique }}</td>
+            <td style="padding:10px 12px; color:var(--t2); font-family:'IBM Plex Mono', monospace; font-size:12px;">{{ e.origem }}</td>
+            <td style="padding:10px 16px;"><a href="#">{{ e.pedido }}</a></td>
+          </tr>
+        </sc-for>
+      </tbody>
+    </table>
+    </div>
+  </section>
+</sc-if>
+
+<sc-if value="{{ t.alertas }}" hint-placeholder-val="{{ false }}">
+  <div role="tablist" aria-label="Alertas" style="align-self:flex-start; display:flex; gap:2px; padding:2px; border-radius:8px; background:var(--track);">
+    <sc-for list="{{ aleAbas }}" as="a" hint-placeholder-count="3"><button type="button" role="tab" aria-selected="{{ a.on }}" onClick="{{ a.pick }}" style="height:30px; padding:0 12px; border:0; border-radius:6px; background:{{ a.bg }}; box-shadow:{{ a.sombra }}; color:{{ a.cor }}; font-weight:500; cursor:pointer;">{{ a.l }}</button></sc-for>
+  </div>
+  <sc-if value="{{ aleA }}" hint-placeholder-val="{{ true }}">
+    <section aria-label="Alertas abertos" style="display:flex; flex-direction:column; gap:10px;">
+      <sc-for list="{{ abertos }}" as="a" hint-placeholder-count="3">
+        <article style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px 20px; display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;">
+          <span style="flex:none; margin-top:2px; display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:999px; border:1px solid {{ a.sBorda }}; background:{{ a.sBg }}; color:{{ a.sCor }}; font-size:11px; font-weight:600;"><span style="width:6px; height:6px; border-radius:50%; background:{{ a.sCor }};"></span>{{ a.sev }}</span>
+          <div style="flex:1; min-width:260px; display:flex; flex-direction:column; gap:4px;">
+            <span style="font-size:14px; font-weight:600;">{{ a.tit }} <span style="font-weight:400; color:var(--t3);">· {{ a.loja }}</span></span>
+            <span style="color:var(--t1); text-wrap:pretty;">{{ a.det }}</span>
+            <span style="font-size:12px; color:var(--t3);">{{ a.quando }}</span>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button type="button" style="height:32px; padding:0 12px; border:1px solid var(--border); border-radius:8px; background:var(--surface); cursor:pointer;">Silenciar</button>
+            <button type="button" onClick="{{ a.ir }}" style="height:32px; padding:0 12px; border:0; border-radius:8px; background:var(--ink); color:var(--on-ink); font-weight:500; cursor:pointer;">{{ a.acao }}</button>
+          </div>
+        </article>
+      </sc-for>
+    </section>
+  </sc-if>
+  <sc-if value="{{ aleR }}" hint-placeholder-val="{{ false }}">
+    <section aria-label="Resolvidos" style="background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden;">
+      <sc-for list="{{ resolvidos }}" as="r" hint-placeholder-count="3">
+        <div style="display:flex; align-items:center; gap:14px; padding:14px 20px; border-bottom:1px solid var(--border); flex-wrap:wrap;">
+          <span style="display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:999px; border:1px solid var(--border); color:var(--t2); font-size:11px; font-weight:500;">Resolvido</span>
+          <span style="flex:1; min-width:200px;"><b style="font-weight:600;">{{ r.tit }}</b> <span style="color:var(--t3);">· {{ r.loja }}</span></span>
+          <span style="color:var(--t2); font-size:12px;">{{ r.dur }}</span><span style="color:var(--t3); font-size:12px; width:110px; text-align:right;">{{ r.q }}</span>
+        </div>
+      </sc-for>
+      <p style="margin:0; padding:12px 20px; font-size:12px; color:var(--t3);">Mostrando os últimos 7 dias.</p>
+    </section>
+  </sc-if>
+  <sc-if value="{{ aleG }}" hint-placeholder-val="{{ false }}">
+    <section style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:20px; align-items:start;">
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden;">
+        <h2 style="margin:0; padding:16px 20px; font-size:15px; font-weight:600; border-bottom:1px solid var(--border);">Regras</h2>
+        <sc-for list="{{ regras }}" as="g" hint-placeholder-count="5">
+          <div style="display:flex; align-items:center; gap:14px; padding:12px 20px; border-bottom:1px solid var(--border);">
+            <span style="flex:1; display:flex; flex-direction:column;"><span style="font-weight:500;">{{ g.nome }} <sc-if value="{{ g.breve }}" hint-placeholder-val="{{ false }}"><span style="margin-left:6px; padding:1px 7px; border-radius:999px; background:var(--track); font-size:11px; font-weight:600; color:var(--t2);">Em breve</span></sc-if></span><span style="font-size:12px; color:var(--t3);">{{ g.cond }} <b style="color:var(--t1); font-weight:500;">{{ g.lim }}</b></span></span>
+            <span role="switch" aria-checked="{{ g.on }}" aria-label="{{ g.nome }}" style="position:relative; width:34px; height:20px; flex:none; border-radius:999px; background:{{ g.swBg }};"><span style="position:absolute; top:2px; left:{{ g.swX }}; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.2);"></span></span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden;">
+        <h2 style="margin:0; padding:16px 20px; font-size:15px; font-weight:600; border-bottom:1px solid var(--border);">Onde avisar</h2>
+        <div style="display:flex; align-items:center; gap:12px; padding:14px 20px; border-bottom:1px solid var(--border);"><span style="flex:1; display:flex; flex-direction:column;"><span style="font-weight:500;">Telegram</span><span style="font-size:12px; color:var(--t3);">Conectado como @arthurf</span></span><span style="display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:999px; border:1px solid var(--ok-border); background:var(--ok-bg); color:var(--ok); font-size:11px; font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:var(--ok);"></span>Ativo</span></div>
+        <div style="display:flex; align-items:center; gap:12px; padding:14px 20px; border-bottom:1px solid var(--border);"><span style="flex:1; display:flex; flex-direction:column;"><span style="font-weight:500;">E-mail</span><span style="font-size:12px; color:var(--t3);">Resumo diário às 8h e alertas críticos</span></span><span style="padding:1px 7px; border-radius:999px; background:var(--track); font-size:11px; font-weight:600; color:var(--t2);">Em breve</span></div>
+        <div style="display:flex; align-items:center; gap:12px; padding:14px 20px;"><span style="flex:1; display:flex; flex-direction:column;"><span style="font-weight:500;">Sino no app</span><span style="font-size:12px; color:var(--t3);">Sempre ligado</span></span><span style="display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:999px; border:1px solid var(--ok-border); background:var(--ok-bg); color:var(--ok); font-size:11px; font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:var(--ok);"></span>Ativo</span></div>
+      </div>
+    </section>
+  </sc-if>
+</sc-if>
+
+<sc-if value="{{ t.lojas }}" hint-placeholder-val="{{ false }}">
+  <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+    <label style="flex:1; min-width:220px; max-width:360px; height:32px; display:flex; align-items:center; gap:8px; padding:0 10px; border:1px solid var(--border-strong); border-radius:8px; background:var(--surface);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true" style="color:var(--t3);"><path d="M3 11a8 8 0 1 0 16 0a8 8 0 1 0-16 0 M21 21l-4.34-4.34"></path></svg><input placeholder="Buscar loja ou domínio" style="flex:1; border:0; outline:0; background:transparent; font-size:13px;"></label>
+    <span style="flex:1;"></span>
+    <button type="button" style="height:34px; padding:0 14px; border:0; border-radius:8px; background:var(--ink); color:var(--on-ink); font-weight:600; cursor:pointer;">Conectar loja</button>
+  </div>
+  <section aria-label="Lojas ativas" style="background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden;">
+    <h2 style="margin:0; padding:14px 20px; font-size:15px; font-weight:600;">Ativas <span style="color:var(--t3); font-weight:500;">· 5</span></h2>
+    <div style="overflow-x:auto;">
+    <table style="width:100%; min-width:900px; border-collapse:collapse; font-variant-numeric:tabular-nums;">
+      <thead><tr style="background:var(--surface-2); border-top:1px solid var(--border); border-bottom:1px solid var(--border); font-size:12px; color:var(--t3);">
+        <th scope="col" style="text-align:left; padding:9px 20px; font-weight:500;">Loja</th><th scope="col" style="text-align:left; padding:9px 12px; font-weight:500;">Conexão</th><th scope="col" style="text-align:left; padding:9px 12px; font-weight:500;">Moeda · idioma</th><th scope="col" style="text-align:right; padding:9px 12px; font-weight:500;">Faturamento 30 d</th><th scope="col" style="text-align:right; padding:9px 12px; font-weight:500;">Lucro 30 d</th><th scope="col" style="text-align:left; padding:9px 12px; font-weight:500;">Rastreamento</th><th scope="col" style="text-align:left; padding:9px 12px; font-weight:500;">Sincronizada</th><th scope="col" style="padding:9px 20px;"><span style="position:absolute; left:-9999px;">Ações</span></th>
+      </tr></thead>
+      <tbody>
+        <sc-for list="{{ lojasAtivas }}" as="l" hint-placeholder-count="5">
+          <tr style="border-bottom:1px solid var(--border);" style-hover="background:var(--surface-2);">
+            <th scope="row" style="text-align:left; padding:11px 20px; font-weight:400;"><span style="display:flex; flex-direction:column;"><a href="#" style="font-weight:600; color:var(--ink);">{{ l.nome }}</a><span style="font-size:12px; color:var(--t3);">{{ l.dom }}</span></span></th>
+            <td style="padding:11px 12px;"><span style="display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:999px; border:1px solid var(--ok-border); background:var(--ok-bg); color:var(--ok); font-size:11px; font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:var(--ok);"></span>Conectada</span></td>
+            <td style="padding:11px 12px; color:var(--t2);">{{ l.moeda }}</td>
+            <td style="padding:11px 12px; text-align:right;">{{ l.fat }}</td>
+            <td style="padding:11px 12px; text-align:right; font-weight:600; color:{{ l.lCor }};">{{ l.lucro }}</td>
+            <td style="padding:11px 12px;"><span style="display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:999px; border:1px solid {{ l.sBorda }}; background:{{ l.sBg }}; color:{{ l.sCor }}; font-size:11px; font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:{{ l.sCor }};"></span>{{ l.rast }}</span></td>
+            <td style="padding:11px 12px; color:var(--t2);">{{ l.sync }}</td>
+            <td style="padding:11px 20px; text-align:right;"><button type="button" aria-label="Ações da loja" style="width:30px; height:30px; border:1px solid var(--border); border-radius:7px; background:var(--surface); cursor:pointer;">⋯</button></td>
+          </tr>
+        </sc-for>
+      </tbody>
+    </table>
+    </div>
+  </section>
+  <section aria-label="Lojas sem acesso" style="background:var(--surface-2); border:1px solid var(--border); border-radius:14px; overflow:hidden;">
+    <div style="padding:14px 20px; display:flex; flex-direction:column; gap:2px;"><h2 style="margin:0; font-size:15px; font-weight:600;">Sem acesso <span style="color:var(--t3); font-weight:500;">· 2</span></h2><span style="font-size:12px; color:var(--t3);">Ficam fora do lucro, dos alertas e do seletor de loja.</span></div>
+    <sc-for list="{{ lojasInativas }}" as="l" hint-placeholder-count="2">
+      <div style="display:flex; align-items:center; gap:14px; padding:12px 20px; border-top:1px solid var(--border); flex-wrap:wrap;">
+        <span style="flex:1; min-width:200px; display:flex; flex-direction:column;"><span style="font-weight:600;">{{ l.nome }}</span><span style="font-size:12px; color:var(--t3);">{{ l.dom }}</span></span>
+        <span style="display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:999px; border:1px solid var(--border-strong); color:var(--t2); font-size:11px; font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:var(--t3);"></span>{{ l.motivo }}</span>
+        <span style="font-size:12px; color:var(--t3); width:110px;">última sync {{ l.sync }}</span>
+        <button type="button" style="height:30px; padding:0 12px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--err); cursor:pointer;">Remover</button>
+        <button type="button" style="height:30px; padding:0 12px; border:0; border-radius:7px; background:var(--ink); color:var(--on-ink); font-weight:500; cursor:pointer;">Reconectar</button>
+      </div>
+    </sc-for>
+  </section>
+</sc-if>
+
+<sc-if value="{{ t.importar }}" hint-placeholder-val="{{ false }}">
+  <section aria-label="De onde importar" style="display:flex; flex-direction:column; gap:12px;">
+    <h2 style="margin:0; font-size:15px; font-weight:600;">De onde vêm os produtos?</h2>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px;">
+      <sc-for list="{{ origens }}" as="o" hint-placeholder-count="4">
+        <button type="button" style="display:flex; flex-direction:column; gap:10px; padding:18px; border:1px solid var(--border); border-radius:14px; background:var(--surface); text-align:left; cursor:pointer;" style-hover="border-color:var(--ink);">
+          <span style="width:36px; height:36px; display:grid; place-items:center; border-radius:10px; background:var(--track);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ o.ic }}"></path></svg></span>
+          <span style="font-size:14px; font-weight:600;">{{ o.t }}</span>
+          <span style="color:var(--t2); text-wrap:pretty;">{{ o.d }}</span>
+        </button>
+      </sc-for>
+    </div>
+    <span style="font-size:12px; color:var(--t3);">Tradução e textos e imagens neutros por IA podem ser ligados no passo de opções. 1 crédito = 1 imagem refeita.</span>
+  </section>
+  <section aria-label="Fila e histórico" style="background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden;">
+    <h2 style="margin:0; padding:14px 20px; font-size:15px; font-weight:600;">Fila e histórico</h2>
+    <sc-for list="{{ fila }}" as="f" hint-placeholder-count="4">
+      <div style="display:grid; grid-template-columns:minmax(220px, 2fr) minmax(120px, 1fr) minmax(140px, 1fr) 100px 110px; gap:14px; align-items:center; padding:12px 20px; border-top:1px solid var(--border); font-variant-numeric:tabular-nums;">
+        <span style="display:flex; flex-direction:column;"><span style="font-weight:500;">{{ f.o }}</span><span style="font-size:12px; color:var(--t3);">para {{ f.dest }}</span></span>
+        <span style="color:var(--t2);">{{ f.prod }} produtos</span>
+        <span style="height:6px; border-radius:3px; background:var(--track); overflow:hidden;"><span style="display:block; height:100%; width:{{ f.w }}; background:{{ f.sCor }};"></span></span>
+        <span><span style="display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:999px; border:1px solid {{ f.sBorda }}; background:{{ f.sBg }}; color:{{ f.sCor }}; font-size:11px; font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:{{ f.sCor }};"></span>{{ f.st }}</span></span>
+        <span style="font-size:12px; color:var(--t3); text-align:right;">{{ f.q }}</span>
+      </div>
+    </sc-for>
+  </section>
+</sc-if>
+
+<sc-if value="{{ t.atividade }}" hint-placeholder-val="{{ false }}">
+  <sc-for list="{{ atividade }}" as="d" hint-placeholder-count="2">
+    <section style="display:flex; flex-direction:column; gap:8px;">
+      <h2 style="margin:0; font-size:13px; font-weight:600; color:var(--t2);">{{ d.dia }}</h2>
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden;">
+        <sc-for list="{{ d.ev }}" as="e" hint-placeholder-count="3">
+          <a href="#" style="display:flex; align-items:center; gap:14px; padding:13px 20px; border-bottom:1px solid var(--border); color:var(--ink); text-decoration:none;" style-hover="background:var(--surface-2); color:var(--ink); text-decoration:none;">
+            <span style="width:104px; flex:none;"><span style="display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:999px; border:1px solid {{ e.sBorda }}; background:{{ e.sBg }}; color:{{ e.sCor }}; font-size:11px; font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:{{ e.sCor }};"></span>{{ e.tipo }}</span></span>
+            <span style="flex:1; min-width:0; display:flex; flex-direction:column;"><span style="font-weight:500;">{{ e.tit }}</span><span style="font-size:12px; color:var(--t3);">{{ e.det }}</span></span>
+            <span style="font-size:12px; color:var(--t3); font-variant-numeric:tabular-nums;">{{ e.h }}</span>
+          </a>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</sc-if>
+
+<sc-if value="{{ t.rotas }}" hint-placeholder-val="{{ false }}">
+  <section style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:32px; display:flex; flex-direction:column; gap:28px;">
+    <div style="max-width:620px; display:flex; flex-direction:column; gap:8px;">
+      <h2 style="margin:0; font-size:22px; line-height:28px; font-weight:600; letter-spacing:-0.01em;">Uma loja recebe o tráfego, outras recebem o pagamento.</h2>
+      <p style="margin:0; color:var(--t2); text-wrap:pretty;">No checkout, o carrinho da loja vitrine vai para uma das lojas de checkout pelo SKU, em rodízio. O catálogo da loja de checkout fica com textos e imagens neutros.</p>
+    </div>
+    <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+      <div style="padding:14px 18px; border:1px solid var(--border-strong); border-radius:12px; display:flex; flex-direction:column; gap:2px;"><span style="font-size:12px; color:var(--t3);">Vitrine</span><span style="font-weight:600;">Recebe os anúncios</span></div>
+      <span aria-hidden="true" style="width:40px; border-top:1.5px dashed var(--border-strong);"></span>
+      <div style="padding:14px 18px; border-radius:12px; background:var(--ink); color:var(--on-ink); display:flex; flex-direction:column; gap:2px;"><span style="font-size:12px; color:var(--on-ink); opacity:.7;">Panda Track</span><span style="font-weight:600;">Escolhe pelo SKU</span></div>
+      <span aria-hidden="true" style="width:40px; border-top:1.5px dashed var(--border-strong);"></span>
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <div style="padding:8px 14px; border:1px solid var(--border-strong); border-radius:10px; display:flex; justify-content:space-between; gap:20px;"><span style="font-weight:500;">Checkout A</span><span style="color:var(--t3);">50%</span></div>
+        <div style="padding:8px 14px; border:1px solid var(--border-strong); border-radius:10px; display:flex; justify-content:space-between; gap:20px;"><span style="font-weight:500;">Checkout B</span><span style="color:var(--t3);">50%</span></div>
+      </div>
+    </div>
+    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding-top:20px; border-top:1px solid var(--border);">
+      <button type="button" style="height:36px; padding:0 16px; border:0; border-radius:8px; background:var(--ink); color:var(--on-ink); font-weight:600; cursor:pointer;">Ativar roteamento</button>
+      <span style="color:var(--t2);">Anuncia direto na loja de checkout? Você não precisa disto. O <a href="#">Lucro</a> e o rastreamento já funcionam.</span>
+    </div>
+  </section>
+</sc-if>
+
+<sc-if value="{{ t.integ }}" hint-placeholder-val="{{ false }}">
+  <div style="display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;">
+    <nav aria-label="Plataformas" style="width:200px; flex:none; display:flex; flex-direction:column; gap:2px;">
+      <sc-for list="{{ plats }}" as="p" hint-placeholder-count="5">
+        <button type="button" onClick="{{ p.pick }}" aria-current="{{ p.on }}" style="display:flex; flex-direction:column; align-items:flex-start; padding:8px 12px; border:1px solid {{ p.borda }}; border-radius:9px; background:{{ p.bg }}; text-align:left; cursor:pointer;" style-hover="background:var(--surface);"><span style="font-weight:600;">{{ p.l }}</span><span style="font-size:12px; color:var(--t3);">{{ p.s }}</span></button>
+      </sc-for>
+    </nav>
+    <div style="flex:1; min-width:320px; display:flex; flex-direction:column; gap:16px;">
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:12px;">
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px 20px; display:flex; flex-direction:column; gap:8px;">
+          <span style="display:flex; justify-content:space-between; align-items:center;"><span style="font-weight:600;">Ler o gasto</span><span style="display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:999px; border:1px solid var(--ok-border); background:var(--ok-bg); color:var(--ok); font-size:11px; font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:var(--ok);"></span>Conectado</span></span>
+          <span style="color:var(--t2); text-wrap:pretty;">Traz o gasto por conta e campanha para o Lucro, de hora em hora.</span>
+          <span style="font-size:12px; color:var(--t3);">Conectado com {{ plNome }} em 02/10/2026</span>
+        </div>
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px 20px; display:flex; flex-direction:column; gap:8px;">
+          <span style="display:flex; justify-content:space-between; align-items:center;"><span style="font-weight:600;">Enviar conversões</span><span style="display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:999px; border:1px solid var(--warn-border); background:var(--warn-bg); color:var(--warn); font-size:11px; font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:var(--warn);"></span>3 de 5 lojas</span></span>
+          <span style="color:var(--t2); text-wrap:pretty;">Manda cada compra pelo servidor. É outra permissão, separada do gasto.</span>
+          <a href="#" style="font-size:12px; font-weight:500;">Configurar nas outras lojas</a>
+        </div>
+      </div>
+      <sc-if value="{{ plMeta }}" hint-placeholder-val="{{ true }}">
+      <section aria-label="Contas de anúncio" style="background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden;">
+        <div style="display:flex; align-items:center; gap:10px; padding:14px 20px; flex-wrap:wrap;"><h2 style="margin:0; flex:1; font-size:15px; font-weight:600;">Contas de anúncio <span style="color:var(--t3); font-weight:500;">· 5</span></h2><button type="button" style="height:30px; padding:0 10px; border:1px solid var(--border); border-radius:7px; background:var(--surface); cursor:pointer;">Sincronizar agora</button></div>
+        <div style="overflow-x:auto;">
+        <table style="width:100%; min-width:820px; border-collapse:collapse; font-variant-numeric:tabular-nums;">
+          <thead><tr style="background:var(--surface-2); border-top:1px solid var(--border); border-bottom:1px solid var(--border); font-size:12px; color:var(--t3);">
+            <th scope="col" style="text-align:left; padding:9px 20px; font-weight:500;">Conta</th><th scope="col" style="text-align:left; padding:9px 12px; font-weight:500;">Loja ligada</th><th scope="col" style="text-align:right; padding:9px 12px; font-weight:500;">Gasto hoje</th><th scope="col" style="text-align:right; padding:9px 12px; font-weight:500;">Gasto 30 d</th><th scope="col" style="text-align:left; padding:9px 20px; font-weight:500;">Situação</th>
+          </tr></thead>
+          <tbody>
+            <sc-for list="{{ contas }}" as="c" hint-placeholder-count="5">
+              <tr style="border-bottom:1px solid var(--border);">
+                <th scope="row" style="text-align:left; padding:11px 20px; font-weight:400;"><span style="display:flex; flex-direction:column;"><span style="font-weight:600;">{{ c.nome }}</span><span style="font-size:12px; color:var(--t3);"><span style="font-family:'IBM Plex Mono', monospace;">{{ c.id }}</span> · {{ c.mf }}</span></span></th>
+                <td style="padding:11px 12px;"><sc-if value="{{ c.semLoja }}" hint-placeholder-val="{{ false }}"><button type="button" style="height:28px; padding:0 10px; border:1px dashed var(--warn); border-radius:7px; background:var(--warn-bg); color:var(--warn); font-weight:500; cursor:pointer;">Escolher loja</button></sc-if><sc-if value="{{ c.temLoja }}" hint-placeholder-val="{{ true }}"><span>{{ c.loja }}</span></sc-if></td>
+                <td style="padding:11px 12px; text-align:right;">{{ c.hoje }}</td>
+                <td style="padding:11px 12px; text-align:right;">{{ c.per }}</td>
+                <td style="padding:11px 20px;"><span style="display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:999px; border:1px solid {{ c.sBorda }}; background:{{ c.sBg }}; color:{{ c.sCor }}; font-size:11px; font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:{{ c.sCor }};"></span>{{ c.s }}</span></td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+        </div>
+      </section>
+      </sc-if>
+      <sc-if value="{{ plOutra }}" hint-placeholder-val="{{ false }}">
+        <section style="border:1px dashed var(--border-strong); border-radius:14px; padding:28px; display:flex; flex-direction:column; gap:6px; align-items:flex-start;"><span style="font-weight:600;">{{ plNome }}</span><span style="color:var(--t2);">Mesmo modelo: um bloco para ler dados, outro para enviar, e a lista de contas ligadas.</span></section>
+      </sc-if>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ t.plano }}" hint-placeholder-val="{{ false }}">
+  <section style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:16px;">
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px 24px; display:flex; flex-direction:column; gap:12px;">
+      <span style="display:flex; justify-content:space-between; align-items:center;"><span style="color:var(--t2); font-weight:500;">Plano</span><span style="display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:999px; border:1px solid var(--ok-border); background:var(--ok-bg); color:var(--ok); font-size:11px; font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:var(--ok);"></span>Ativo</span></span>
+      <span style="font-size:28px; font-weight:600; letter-spacing:-0.02em;">Completo <span style="font-size:15px; font-weight:500; color:var(--t3);">R$ 197,00 / mês</span></span>
+      <span style="color:var(--t2);">Renova em 24/11/2026 no cartão final 4421.</span>
+      <div style="display:flex; gap:8px; margin-top:4px;"><button type="button" style="height:32px; padding:0 12px; border:1px solid var(--border); border-radius:8px; background:var(--surface); cursor:pointer;">Trocar cartão</button><button type="button" style="height:32px; padding:0 12px; border:0; background:transparent; color:var(--err); cursor:pointer;">Cancelar assinatura</button></div>
+    </div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px 24px; display:flex; flex-direction:column; gap:12px;">
+      <span style="color:var(--t2); font-weight:500;">Créditos de IA</span>
+      <span style="font-size:28px; font-weight:600; letter-spacing:-0.02em; font-variant-numeric:tabular-nums;">184 <span style="font-size:15px; font-weight:500; color:var(--t3);">disponíveis</span></span>
+      <span style="height:6px; border-radius:3px; background:var(--track); overflow:hidden;"><span style="display:block; height:100%; width:38%; background:var(--accent);"></span></span>
+      <span style="font-size:12px; color:var(--t3);">116 usados em outubro · 1 crédito refaz 1 imagem</span>
+    </div>
+  </section>
+  <section aria-label="Comprar créditos" style="display:flex; flex-direction:column; gap:12px;">
+    <h2 style="margin:0; font-size:15px; font-weight:600;">Comprar créditos</h2>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px;">
+      <sc-for list="{{ pacotes }}" as="p" hint-placeholder-count="3">
+        <div style="position:relative; background:var(--surface); border:1px solid {{ p.borda }}; border-radius:14px; padding:20px; display:flex; flex-direction:column; gap:6px;">
+          <sc-if value="{{ p.melhor }}" hint-placeholder-val="{{ false }}"><span style="position:absolute; top:-10px; left:16px; padding:2px 8px; border-radius:999px; background:var(--ink); color:var(--on-ink); font-size:11px; font-weight:600;">Mais vantajoso</span></sc-if>
+          <span style="font-size:22px; font-weight:600; font-variant-numeric:tabular-nums;">{{ p.q }} créditos</span>
+          <span style="color:var(--t2);">{{ p.p }} · <span style="color:var(--t3);">{{ p.u }}</span></span>
+          <button type="button" style="margin-top:8px; height:34px; border:1px solid var(--border-strong); border-radius:8px; background:var(--surface); font-weight:500; cursor:pointer;" style-hover="background:var(--ink); color:var(--on-ink); border-color:var(--ink);">Pagar com Pix ou cartão</button>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+  <section aria-label="Histórico de pagamentos" style="background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden;">
+    <h2 style="margin:0; padding:14px 20px; font-size:15px; font-weight:600;">Pagamentos</h2>
+    <sc-for list="{{ historico }}" as="h" hint-placeholder-count="3">
+      <div style="display:grid; grid-template-columns:110px minmax(0,2fr) minmax(0,1fr) 110px 70px; gap:14px; align-items:center; padding:12px 20px; border-top:1px solid var(--border); font-variant-numeric:tabular-nums;"><span style="color:var(--t2);">{{ h.d }}</span><span style="font-weight:500;">{{ h.it }}</span><span style="color:var(--t3);">{{ h.m }}</span><span style="text-align:right;">{{ h.v }}</span><a href="#" style="text-align:right; font-size:12px;">Recibo</a></div>
+    </sc-for>
+  </section>
+</sc-if>
+
+<div data-fim-telas=""></div>
+  </div>
+</main>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;tema&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;claro&quot;,&quot;escuro&quot;],&quot;default&quot;:&quot;claro&quot;,&quot;tsType&quot;:&quot;'claro'|'escuro'&quot;},&quot;sidebar&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;escura&quot;,&quot;clara&quot;],&quot;default&quot;:&quot;escura&quot;,&quot;tsType&quot;:&quot;'escura'|'clara'&quot;},&quot;acento&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;options&quot;:[&quot;#1f7a5a&quot;,&quot;#2c5d8f&quot;,&quot;#b04a2f&quot;,&quot;#141414&quot;],&quot;default&quot;:&quot;#1f7a5a&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;comparacao&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;mostrarAviso&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { tela: 'lucro', metrica: 'lucro', moeda: 'BRL', aba: 'Loja', hover: null };
+
+  dados() {
+    if (this._d) return this._d;
+    let s = 7; const r = () => (s = (s * 9301 + 49297) % 233280) / 233280;
+    const n = 30, fat = [], gas = [], luc = [], pf = [], pg = [], pl = [];
+    for (let i = 0; i < n; i++) {
+      const w = 1 + 0.18 * Math.sin(i / 2.1) + (r() - 0.5) * 0.35;
+      const f = 6986 * w, g = 2583 * (1 + (r() - 0.5) * 0.3);
+      fat.push(f); gas.push(g); luc.push(f * 0.632 - g);
+      const w2 = 1 + 0.16 * Math.sin(i / 2.4 + 1) + (r() - 0.5) * 0.3;
+      const f2 = 6337 * w2, g2 = 2310 * (1 + (r() - 0.5) * 0.3);
+      pf.push(f2); pg.push(g2); pl.push(f2 * 0.632 - g2);
+    }
+    fat[n - 1] *= 0.42; gas[n - 1] *= 0.5; luc[n - 1] = fat[n - 1] * 0.632 - gas[n - 1];
+    const dias = [];
+    const ws = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+    for (let i = 0; i < n; i++) { const d = new Date(2026, 8, 25 + i); dias.push(`${ws[d.getDay()]}, ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`); }
+    return (this._d = { n, fat, gas, luc, pf, pg, pl, dias });
+  }
+
+  spark(arr, w = 80, h = 24) {
+    const mn = Math.min(...arr), mx = Math.max(...arr), sp = mx - mn || 1;
+    return arr.map((v, i) => `${i ? 'L' : 'M'}${(i / (arr.length - 1) * w).toFixed(1)},${(h - 2 - (v - mn) / sp * (h - 4)).toFixed(1)}`).join(' ');
+  }
+
+  tela(k) {
+    return ({ lucro: ['Lucro'], pedidos: ['Pedidos'], custos: ['Custos e taxas', 'Por loja · vale para todos os períodos'], pixels: ['Saúde dos pixels'], eventos: ['Eventos ao vivo'], alertas: ['Alertas', 'Vendas, gasto e rastreamento de todas as lojas'], lojas: ['Lojas'], importar: ['Importar produtos', 'Copie produtos para uma loja conectada'], atividade: ['Atividade'], integ: ['Integrações', 'Gasto, conversões e notificações por plataforma'], plano: ['Assinatura e créditos', 'Plano, saldo e pagamentos'], rotas: ['Roteamento por SKU', 'Módulo opcional'] })[k];
+  }
+
+  extra(brl, num) {
+    return Object.assign({}, ...['xPed', 'xCus', 'xPix', 'xEve', 'xAle', 'xLoj', 'xImp', 'xAti', 'xInt', 'xPla'].map(m => this[m] ? this[m](brl, num) : {}));
+  }
+
+  selo(tipo) {
+    const S = { ok: ['var(--ok)', 'var(--ok-bg)', 'var(--ok-border)'], warn: ['var(--warn)', 'var(--warn-bg)', 'var(--warn-border)'], err: ['var(--err)', 'var(--err-bg)', 'var(--err-border)'], neu: ['var(--t2)', 'var(--surface-2)', 'var(--border)'], info: ['var(--info)', 'var(--info-bg)', 'var(--info-border)'] }[tipo];
+    return { sCor: S[0], sBg: S[1], sBorda: S[2] };
+  }
+
+  xPed(brl, num) {
+    const lojas = ['Norah Outlet', 'Vellum Home', 'Kiro Fit', 'Lumen Pets', 'Atlas Gear'];
+    const origens = ['facebook · camp-outono', 'google · pmax-geral', 'facebook · retarget-7d', 'direto', 'google · busca-marca', 'instagram · reels-03'];
+    let s = 3; const r = () => (s = (s * 9301 + 49297) % 233280) / 233280;
+    const pedidos = [];
+    for (let i = 0; i < 14; i++) {
+      const tot = 80 + r() * 260, frete = r() > 0.5 ? 0 : 19.9, custo = tot * (0.3 + r() * 0.12), taxa = tot * 0.045 + 0.5;
+      const st = i === 3 ? 'Reembolsado' : i === 8 ? 'Parcial' : 'Pago';
+      const luc = st === 'Reembolsado' ? -taxa : tot - custo - taxa - tot * 0.36;
+      const hh = 14 - Math.floor(i * 1.7) % 14, mm = (i * 17) % 60;
+      pedidos.push({ n: `#${(48213 - i * 3)}`, data: i < 9 ? `Hoje, ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}` : `Ontem, ${String(22 - i).padStart(2, '0')}:${String(mm).padStart(2, '0')}`,
+        loja: lojas[i % 5], origem: origens[i % 6], itens: 1 + (i % 3), total: brl(tot), custo: brl(custo + taxa), lucro: brl(luc), lCor: luc < 0 ? 'var(--err)' : 'var(--ink)', status: st,
+        ...this.selo(st === 'Pago' ? 'ok' : st === 'Parcial' ? 'warn' : 'neu') });
+    }
+    return { pedidos };
+  }
+
+  componentDidMount() {
+    this._tick = setInterval(() => {
+      if (this.state.tela !== 'eventos' || this.state.pausado) return;
+      this.setState(s => ({ evN: (s.evN || 0) + 1, evNovo: Date.now() }));
+    }, 3500);
+  }
+  componentWillUnmount() { clearInterval(this._tick); }
+
+  xPix() {
+    const D = [
+      ['Norah Outlet', 'ok', 'Tudo certo', [['Meta', 511, 512], ['Google', 498, 512]], null, null],
+      ['Vellum Home', 'ok', 'Tudo certo', [['Meta', 340, 341], ['Google', 336, 341]], null, null],
+      ['Kiro Fit', 'warn', 'Precisa de atenção', [['Meta', 268, 268], ['Google', 201, 268]], '67 compras não chegaram ao Google. O rótulo de conversão está errado.', 'Corrigir rótulo'],
+      ['Lumen Pets', 'err', 'Parado', [['Meta', 0, 142], ['Google', 0, 142]], 'Os pedidos não estão chegando. Falta autorizar o aviso de pedidos na Shopify.', 'Autorizar na Shopify'],
+      ['Atlas Gear', 'neu', 'Desligado', [['Meta', 0, 0]], 'Nenhum destino ligado nesta loja.', 'Adicionar pixel']
+    ];
+    const pixLojas = D.map(([nome, tom, estado, ds, prob, acao]) => ({ nome, estado, ...this.selo(tom), temProb: !!prob, prob, acao,
+      destinos: ds.map(([pl, a, b]) => { const p = b ? a / b : 0; return { pl, txt: b ? `${a} de ${b}` : '—', pct: b ? `${Math.round(p * 100)}%` : '—', w: `${p * 100}%`, cor: p > 0.97 ? 'var(--ok)' : p > 0.5 ? 'var(--warn)' : 'var(--err)' }; }) }));
+    return { pixLojas };
+  }
+
+  xEve() {
+    const st = this.state, n = st.evN || 0;
+    const L = ['Norah Outlet', 'Vellum Home', 'Kiro Fit', 'Lumen Pets'], E = ['Compra', 'Checkout', 'Carrinho', 'Produto', 'Pagamento'], F = ['Webhook', 'Pixel', 'Tema', 'Tema', 'Pixel'];
+    const eventos = [];
+    for (let j = 0; j < 14; j++) {
+      const i = j + 1000 - n, e = E[i % 5], falha = i % 11 === 0, pend = i % 7 === 0 && !falha;
+      const segs = j * 23 + 4;
+      eventos.push({ hora: j === 0 ? 'agora' : segs < 60 ? `há ${segs} s` : `há ${Math.floor(segs / 60)} min`, loja: L[i % 4], ev: e, fonte: F[i % 5], dest: i % 2 ? 'Meta' : 'Google',
+        status: falha ? 'Falhou' : pend ? 'Pendente' : 'Enviado', ...this.selo(falha ? 'err' : pend ? 'warn' : 'ok'),
+        lat: falha ? '—' : `${120 + (i * 37) % 600} ms`, clique: i % 3 ? 'Sim' : 'Não', origem: ['facebook · camp-outono', 'google · pmax-geral', 'direto', 'instagram · reels-03'][i % 4],
+        pedido: e === 'Compra' ? `#${48213 + (i % 40)}` : '—', bg: j === 0 && n > 0 ? 'var(--ok-bg)' : 'transparent' });
+    }
+    return { eventos, aoVivo: !st.pausado, vivoTxt: st.pausado ? 'Pausado' : 'Ao vivo', vivoCor: st.pausado ? 'var(--t3)' : 'var(--ok)',
+      vivoBg: st.pausado ? 'var(--surface)' : 'var(--ok-bg)', vivoBorda: st.pausado ? 'var(--border-strong)' : 'var(--ok-border)',
+      alternarVivo: () => this.setState(s => ({ pausado: !s.pausado })), evEnv: 412 + n, evPend: 6, evFal: 3 };
+  }
+
+  xAle() {
+    const st = this.state, aba = st.aleAba || 'abertos';
+    const abertos = [
+      ['err', 'Crítico', 'Pedidos parados', 'Lumen Pets', 'Nenhum pedido chegou ao Meta e ao Google nas últimas 3 horas, com 9 vendas na Shopify.', 'aberto há 3 h · notificado 2 vezes', 'Abrir Saúde dos pixels', 'pixels'],
+      ['err', 'Crítico', 'Lucro de hoje abaixo de zero', 'Atlas Gear', 'R$ −312,40 até agora. Gasto do Meta subiu 48% sem aumento de pedidos.', 'aberto há 40 min', 'Ver Lucro da loja', 'lucro'],
+      ['warn', 'Aviso', 'Conta de anúncio sem loja', 'Meta · Conta 2219', 'O gasto desta conta não entra em nenhum lucro.', 'aberto há 1 dia', 'Ligar a uma loja', 'integ']
+    ].map(([tom, sev, tit, loja, det, quando, acao, ir]) => ({ ...this.selo(tom), sev, tit, loja, det, quando, acao, ir: () => this.setState({ tela: ir }) }));
+    const resolvidos = [['Script do Google mudo', 'Kiro Fit', 'durou 2 h 10 min', 'ontem, 09:12'], ['Sincronização falhou', 'Vellum Home', 'durou 25 min', '22/10, 18:40'], ['Taxa de pagamento ausente', 'Lumen Pets', 'durou 3 dias', '20/10, 11:02']].map(([tit, loja, dur, q]) => ({ tit, loja, dur, q }));
+    const regras = [['Pedidos parados', 'Sem compras enviadas por', '3 horas', true, false], ['Lucro do dia negativo', 'Lucro de hoje abaixo de', 'R$ 0,00', true, false], ['ROAS baixo', 'ROAS real abaixo de', '1,5×', false, true], ['Gasto sem pedidos', 'Gasto acima de R$ 200 sem pedido em', '2 horas', true, false], ['Sincronização falhou', 'Falha seguida por', '30 min', true, false]]
+      .map(([nome, cond, lim, on, breve]) => ({ nome, cond, lim, on, breve, swBg: on ? 'var(--ok)' : 'var(--border-strong)', swX: on ? '16px' : '2px' }));
+    const ab = (k, l) => ({ l, on: aba === k, bg: aba === k ? 'var(--surface)' : 'transparent', sombra: aba === k ? '0 1px 2px rgba(20,20,20,.12)' : 'none', cor: aba === k ? 'var(--ink)' : 'var(--t2)', pick: () => this.setState({ aleAba: k }) });
+    return { abertos, resolvidos, regras, aleAbas: [ab('abertos', 'Abertos · 3'), ab('resolvidos', 'Resolvidos'), ab('regras', 'Regras e canais')], aleA: aba === 'abertos', aleR: aba === 'resolvidos', aleG: aba === 'regras' };
+  }
+
+  xLoj(brl) {
+    const A = [['Norah Outlet', 'norah-outlet.com', 'USD · en', 81420.10, 21905.22, 'ok', 'Rastreando', 'há 4 min'], ['Vellum Home', 'vellumhome.com', 'USD · en', 55870.45, 14212.80, 'ok', 'Rastreando', 'há 4 min'], ['Kiro Fit', 'kirofit.eu', 'EUR · de', 39110.90, 8402.61, 'warn', 'Atenção', 'há 6 min'], ['Lumen Pets', 'lumenpets.co', 'USD · en', 21004.58, 2993.40, 'err', 'Parado', 'há 5 min'], ['Atlas Gear', 'atlasgear.store', 'EUR · fr', 12170.30, -704.88, 'neu', 'Desligado', 'há 9 min']];
+    const lojasAtivas = A.map(([nome, dom, moeda, f, l, tom, rast, sync]) => ({ nome, dom, moeda, fat: brl(f), lucro: brl(l), lCor: l < 0 ? 'var(--err)' : 'var(--ink)', rast, ...this.selo(tom), sync }));
+    const lojasInativas = [['Mira Studio', 'mirastudio.shop', 'App desinstalado', 'há 41 dias'], ['Pine Supply', 'pinesupply.com', 'Token vencido', 'há 18 dias']].map(([nome, dom, motivo, sync]) => ({ nome, dom, motivo, sync }));
+    return { lojasAtivas, lojasInativas };
+  }
+
+  xImp() {
+    const origens = [['Loja Shopify', 'Um produto, uma coleção ou a loja inteira. Também aceita Shoplazza.', 'M3 9l1.5-5h15L21 9 M4 9v11h16V9 M9 20v-6h6v6 M3 9h18'], ['AliExpress', 'Cole links de produtos. Fotos e variantes vêm junto.', 'M16.5 9.4 7.55 4.24 M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z M3.29 7 12 12l8.71-5 M12 22V12'],
+      ['Nuvemshop ou WooCommerce', 'Importa o catálogo pelo endereço da loja.', 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71 M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'], ['Qualquer site', 'Lemos a página do produto e montamos o cadastro.', 'M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20 M2 12h20 M12 2a15 15 0 0 1 0 20a15 15 0 0 1 0-20']]
+      .map(([t, d, ic]) => ({ t, d, ic }));
+    const fila = [['Loja Shopify · coleção "Inverno"', 'Norah Outlet', '48 de 120', 'Rodando', 'info', '40%', 'agora'], ['AliExpress · 12 links', 'Kiro Fit', '12', 'Concluído', 'ok', '100%', 'hoje, 11:20'], ['Qualquer site · 3 páginas', 'Vellum Home', '2 de 3', 'Falhou', 'err', '66%', 'ontem, 17:05'], ['Loja Shopify · 1 produto', 'Lumen Pets', '1', 'Concluído', 'ok', '100%', 'ontem, 09:48']]
+      .map(([o, dest, prod, st, tom, w, q]) => ({ o, dest, prod, st, w, q, ...this.selo(tom), rodando: st === 'Rodando' }));
+    return { origens, fila };
+  }
+
+  xAti() {
+    const dias = [['Hoje', [['Importação', 'info', 'Importação iniciada', '120 produtos da coleção "Inverno" para Norah Outlet', '14:02'], ['Alerta', 'err', 'Pedidos parados em Lumen Pets', 'Aberto automaticamente', '11:30'], ['Custos', 'neu', '3 custos atualizados', 'Vellum Home · valem a partir de hoje', '10:12']]],
+      ['Ontem', [['Rastreamento', 'ok', 'Pixel do Google ligado', 'Kiro Fit · rótulo de compra configurado', '18:44'], ['Créditos', 'neu', '200 créditos comprados', 'Pix · R$ 75,00', '16:20'], ['Loja', 'warn', 'Pine Supply perdeu o acesso', 'O token da Shopify venceu', '08:03']]]];
+    return { atividade: dias.map(([dia, ev]) => ({ dia, ev: ev.map(([tipo, tom, tit, det, h]) => ({ tipo, tit, det, h, ...this.selo(tom) })) })) };
+  }
+
+  xInt(brl) {
+    const st = this.state, pl = st.intPl || 'Meta';
+    const plats = [['Meta', 'Conectado'], ['Google', 'Conectado'], ['Shopify', '5 lojas'], ['Telegram', 'Conectado'], ['Avançado', 'Claude e API']].map(([l, s]) => ({ l, s, on: pl === l, bg: pl === l ? 'var(--surface)' : 'transparent', borda: pl === l ? 'var(--border)' : 'transparent', pick: () => this.setState({ intPl: l }) }));
+    const contas = [['Norah · Principal', 'act_1042…88', 'USD · America/New_York', 'Norah Outlet', 412.30, 27310.40, 'ok', 'Atualizada'], ['Vellum · BM2', 'act_3381…02', 'USD · America/New_York', 'Vellum Home', 288.10, 19880.12, 'ok', 'Atualizada'], ['Kiro · EU', 'act_5520…71', 'EUR · Europe/Berlin', 'Kiro Fit', 190.44, 15640.33, 'ok', 'Atualizada'],
+      ['Conta 2219', 'act_2219…40', 'USD · America/New_York', '—', 96.00, 2210.00, 'warn', 'Sem loja'], ['Lumen · Teste', 'act_7781…19', 'USD · America/Sao_Paulo', 'Lumen Pets', 0, 9120.77, 'err', 'Erro']]
+      .map(([nome, id, mf, loja, hoje, per, tom, s]) => ({ nome, id, mf, loja, hoje: brl(hoje), per: brl(per), s, ...this.selo(tom), semLoja: loja === '—', temLoja: loja !== '—' }));
+    return { plats, plNome: pl, contas, plMeta: pl === 'Meta', plOutra: pl !== 'Meta' };
+  }
+
+  xPla() {
+    const pacotes = [[50, 'R$ 25', '0,50'], [200, 'R$ 75', '0,38'], [500, 'R$ 150', '0,30']].map(([q, p, u], i) => ({ q, p, u: `R$ ${u} por crédito`, melhor: i === 2, borda: i === 2 ? 'var(--ink)' : 'var(--border)' }));
+    const historico = [['24/10/2026', 'Assinatura Pro · outubro', 'Cartão final 4421', 'R$ 197,00'], ['23/10/2026', '200 créditos', 'Pix', 'R$ 75,00'], ['24/09/2026', 'Assinatura Pro · setembro', 'Cartão final 4421', 'R$ 197,00']].map(([d, it, m, v]) => ({ d, it, m, v }));
+    return { pacotes, historico };
+  }
+
+  xCus(brl, num) {
+    const st = this.state;
+    const lojaSel = st.custoLoja ?? 'Norah Outlet';
+    const lc = [['Norah Outlet', 92, true], ['Vellum Home', 100, true], ['Kiro Fit', 74, true], ['Lumen Pets', 40, false], ['Atlas Gear', 100, true]];
+    const custoLojas = lc.map(([nome, pct, taxa]) => ({ nome, pct: `${pct}%`, w: `${pct}%`, taxa: taxa ? 'Taxa configurada' : 'Sem taxa', tCor: taxa ? 'var(--t3)' : 'var(--warn)',
+      barCor: pct === 100 ? 'var(--ok)' : pct < 60 ? 'var(--warn)' : 'var(--accent)', on: nome === lojaSel, borda: nome === lojaSel ? 'var(--ink)' : 'var(--border)', pick: () => this.setState({ custoLoja: nome }) }));
+    const P = [['Moletom Oversized Basic', 'Preto / M', 'NOR-MOL-PM', 142, '18,40', '6,20', true], ['Moletom Oversized Basic', 'Cinza / G', 'NOR-MOL-CG', 98, '18,40', '6,20', true], ['Calça Cargo Utility', 'Bege / 40', 'NOR-CAR-B40', 77, '', '', false],
+      ['Jaqueta Corta-vento', 'Verde / M', 'NOR-JAQ-VM', 64, '24,90', '8,00', true], ['Camiseta Heavy 240g', 'Branca / P', 'NOR-CAM-BP', 51, '', '', false], ['Boné Dad Hat', 'Único', 'NOR-BON-U', 38, '4,10', '2,50', true], ['Meia Cano Alto (3 pares)', 'Único', 'NOR-MEI-3', 29, '3,20', '1,80', true]];
+    const edits = st.custoEdits || {};
+    const skus = P.map(([nome, varr, sku, un, c, f, ok], i) => {
+      const ed = edits[sku] != null;
+      const sit = ed ? 'Editado' : ok ? 'Com custo' : 'Sem custo';
+      return { nome, varr, sku, un: num(un), c: ed ? edits[sku] : c, f, desde: ok ? '12/08/2026' : '—', sit, ...this.selo(ed ? 'info' : ok ? 'ok' : 'warn'),
+        inBorda: ok || ed ? 'var(--border-strong)' : 'var(--warn-border)', inBg: ok || ed ? 'var(--surface)' : 'var(--warn-bg)',
+        onIn: e => { const v = e.target.value; this.setState(s => ({ custoEdits: { ...(s.custoEdits || {}), [sku]: v } })); } };
+    });
+    const nEd = Object.keys(edits).length;
+    return { custoLojas, lojaSel, skus, temEdits: nEd > 0, nEdits: `${nEd} ${nEd === 1 ? 'alteração' : 'alterações'} não salvas`, descartar: () => this.setState({ custoEdits: {} }), salvar: () => this.setState({ custoEdits: {} }) };
+  }
+
+  renderVals() {
+    const p = this.props, st = this.state, D = this.dados();
+    const brl = v => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+    const num = v => new Intl.NumberFormat('pt-BR').format(v);
+    const acc = p.acento ?? '#1f7a5a';
+    const dark = (st.tema ?? p.tema ?? 'claro') === 'escuro';
+    const escura = dark || (p.sidebar ?? 'escura') === 'escura';
+    const side = escura
+      ? '--side-bg:#121212; --side-t:#a9a7a2; --side-strong:#f5f4f1; --side-label:#8d8b86; --side-border:#2c2b29; --side-input:#1c1c1b; --side-hover:#232321; --side-active:#2a2a28; --side-link:#7fd1ad; --logo-face:#f5f4f1; --logo-ear:#121212; --logo-ring:#f5f4f1;'
+      : '--side-bg:#efede9; --side-t:#56544f; --side-strong:#141414; --side-label:#6b6964; --side-border:#dcd9d2; --side-input:#ffffff; --side-hover:#e5e2dc; --side-active:#ffffff; --side-link:#1f7a5a; --logo-face:#ffffff; --logo-ear:#141414; --logo-ring:#141414;';
+    const darkVars = '--bg:#0e0e0d; --surface:#161615; --surface-2:#1b1b1a; --hover:#222220; --track:#262624; --border:#2b2a28; --border-strong:#3e3d3a; --ink:#f2f1ee; --on-ink:#141414; --t1:#d6d4cf; --t2:#b5b3ad; --t3:#97958f; --ok:#52c093; --ok-bg:#12271e; --ok-border:#24513d; --warn:#e2b45c; --warn-bg:#2a2112; --warn-border:#5b4720; --err:#f27d73; --err-bg:#2c1513; --err-border:#5e2b27; --info:#8cb8e6; --info-bg:#14212e; --info-border:#2b4560; --shadow:0 12px 32px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.4); --side-bg:#0a0a09; --side-border:#242422; --side-input:#151514; --side-hover:#1c1c1b; --side-active:#232321;';
+    const accV = !dark ? acc : ({ '#1f7a5a': '#3fae84', '#141414': '#e8e6e1', '#2c5d8f': '#5b93cc', '#b04a2f': '#d9714f' })[acc] || acc;
+    const rootVars = `--accent:${accV}; ${side} ${dark ? darkVars : ''} color-scheme:${dark ? 'dark' : 'light'};`;
+
+    const I = {
+      lucro: 'M22 7l-8.5 8.5-5-5L2 17 M16 7h6v6', pedidos: 'M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z M8 7h8 M8 11h8 M8 15h5',
+      custos: 'M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2 M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4',
+      pixel: 'M22 12h-4l-3 9L9 3l-3 9H2', eventos: 'M4.9 19.1C1 15.2 1 8.8 4.9 4.9 M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5 M12 12h.01 M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5 M19.1 4.9C23 8.8 23 15.1 19.1 19',
+      alertas: 'M10.268 21a2 2 0 0 0 3.464 0 M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326',
+      lojas: 'M3 9l1.5-5h15L21 9 M4 9v11h16V9 M9 20v-6h6v6 M3 9h18', importar: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3',
+      atividade: 'M12 6v6l4 2 M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0', integ: 'M12 22v-5 M9 8V2 M15 8V2 M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z', plano: 'M2 5h20v14H2z M2 10h20'
+    };
+    const it = (rotulo, icone, _a, contador) => { const key = KEYS[rotulo]; const atual = st.tela === key; return { rotulo, icone, ir: e => { e.preventDefault(); this.setState({ tela: key }); window.scrollTo(0, 0); }, atual: atual ? 'page' : undefined, temContador: !!contador, contador,
+      bg: atual ? 'var(--side-active)' : 'transparent', cor: atual ? 'var(--side-strong)' : 'var(--side-t)', peso: atual ? 600 : 400 }; };
+    const KEYS = { 'Lucro': 'lucro', 'Pedidos': 'pedidos', 'Custos e taxas': 'custos', 'Saúde dos pixels': 'pixels', 'Eventos ao vivo': 'eventos', 'Alertas': 'alertas', 'Lojas': 'lojas', 'Importar produtos': 'importar', 'Atividade': 'atividade', 'Integrações': 'integ', 'Assinatura e créditos': 'plano' };
+    const nav = [
+      { rotulo: 'Dinheiro', itens: [it('Lucro', I.lucro, true), it('Pedidos', I.pedidos), it('Custos e taxas', I.custos)] },
+      { rotulo: 'Rastreamento', itens: [it('Saúde dos pixels', I.pixel), it('Eventos ao vivo', I.eventos), it('Alertas', I.alertas, false, 3)] },
+      { rotulo: 'Operação', itens: [it('Lojas', I.lojas), it('Importar produtos', I.importar), it('Atividade', I.atividade)] },
+      { rotulo: 'Configurações', itens: [it('Integrações', I.integ), it('Assinatura e créditos', I.plano)] }
+    ];
+
+    const seg = (on) => ({ bg: on ? 'var(--surface)' : 'transparent', sombra: on ? '0 1px 2px rgba(20,20,20,.12)' : 'none', cor: on ? 'var(--ink)' : 'var(--t2)' });
+    const moedas = ['BRL', 'USD', 'EUR'].map(l => ({ l, on: st.moeda === l, pick: () => this.setState({ moeda: l }), ...seg(st.moeda === l) }));
+    const fmtR = v => `${v.toFixed(2).replace('.', ',')}×`;
+    const M = {
+      lucro: { l: 'Lucro', serie: D.luc, prev: D.pl, tot: 46809.15, ant: 42663.58, sobe: true, fmt: brl, est: true },
+      fat: { l: 'Faturamento', serie: D.fat, prev: D.pf, tot: 209576.33, ant: 190104.12, sobe: true, fmt: brl },
+      gasto: { l: 'Gasto em anúncios', serie: D.gas, prev: D.pg, tot: 77501.27, ant: 70178.90, sobe: false, fmt: brl },
+      roas: { l: 'ROAS real', serie: D.fat.map((f, i) => f / D.gas[i]), prev: D.pf.map((f, i) => f / D.pg[i]), tot: 2.70, ant: 2.71, sobe: true, fmt: fmtR, ratio: true }
+    };
+    const m = M[st.metrica] || M.lucro;
+    const pct = (a, b) => (a / b - 1) * 100;
+    const tomD = (d, sobe) => Math.abs(d) < 0.5 ? 'var(--t3)' : (d > 0) === sobe ? 'var(--ok)' : 'var(--err)';
+    const fmtD = d => `${d > 0 ? '↑' : '↓'} ${Math.abs(d).toFixed(1).replace('.', ',')}%`;
+    const mTabs = Object.keys(M).map(k => { const x = M[k], d = pct(x.tot, x.ant), on = st.metrica === k;
+      return { l: x.l, est: !!x.est, v: x.fmt(x.tot), d: fmtD(d), dCor: tomD(d, x.sobe), on, bg: on ? 'var(--surface)' : 'transparent', barra: on ? 'var(--accent)' : 'transparent', vCor: on ? 'var(--ink)' : 'var(--t1)', pick: () => this.setState({ metrica: k, hover: null }) }; });
+    const gran = st.gran || 'dia', n = D.n;
+    const curto = i => D.dias[i].split(', ')[1];
+    let serie, prev, labels, xl;
+    if (gran === 'dia') { serie = m.serie; prev = m.prev; labels = D.dias; xl = i => (i % 6 === 0 ? curto(i) : ''); }
+    else {
+      const g = []; for (let i = 0; i < n; i += 7) g.push([i, Math.min(i + 7, n)]);
+      const sum = (a, s, e) => a.slice(s, e).reduce((x, y) => x + y, 0);
+      serie = g.map(([s, e]) => m.ratio ? sum(D.fat, s, e) / sum(D.gas, s, e) : sum(m.serie, s, e));
+      prev = g.map(([s, e]) => m.ratio ? sum(D.pf, s, e) / sum(D.pg, s, e) : sum(m.prev, s, e));
+      labels = g.map(([s, e]) => `${curto(s)} – ${curto(e - 1)}`); xl = i => curto(g[i][0]);
+    }
+    const mx = Math.max(...serie, ...prev), mn = Math.min(0, ...serie, ...prev);
+    const raw = (mx - mn) / 3, pw = Math.pow(10, Math.floor(Math.log10(raw)));
+    const step = [1, 2, 2.5, 5, 10].map(c => c * pw).find(c => c >= raw);
+    const top = Math.ceil(mx / step) * step, bot = Math.floor(mn / step) * step, range = top - bot;
+    const pos = v => (v - bot) / range * 100, zero = pos(0);
+    const last = serie.length - 1;
+    const barras = serie.map((v, i) => {
+      const parc = i === last, hov = st.hover === i, neg = v < 0, c = neg ? 'var(--err)' : 'var(--accent)', d = pct(v, prev[i]);
+      return { base: `${neg ? pos(v) : zero}%`, h: `${Math.max(Math.abs(pos(v) - zero), 0.6)}%`,
+        cor: parc ? `repeating-linear-gradient(135deg, ${c} 0 2px, transparent 2px 5px)` : c, borda: parc ? `1px solid ${c}` : '0',
+        op: st.hover == null || hov ? 1 : 0.35, prevPos: `${pos(prev[i])}%`, prevOp: st.hover == null || hov ? 0.55 : 0.2, hov, on: () => this.setState({ hover: i }),
+        tf: i > serie.length * 0.65 ? 'translateX(calc(-100% + 10px))' : i < serie.length * 0.3 ? 'translateX(-10px)' : 'translateX(-50%)',
+        data: labels[i] + (parc ? (gran === 'dia' ? ' · hoje, parcial' : ' · em curso') : ''), v: m.fmt(v), p: m.fmt(prev[i]),
+        dl: `${d > 0 ? '+' : ''}${d.toFixed(1).replace('.', ',')}%`, dCor: tomD(d, m.sobe), xl: xl(i) };
+    });
+    const ticks = []; for (let v = bot; v <= top + 1e-9; v += step) ticks.push({ pos: `${pos(v)}%`, cor: Math.abs(v) < 1e-9 ? 'var(--border-strong)' : 'var(--track)',
+      l: m.ratio ? `${v.toFixed(1).replace('.', ',')}×` : Math.abs(v) >= 1000 ? `${(v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mil` : `${Math.round(v)}` });
+    const grans = [['dia', 'Dia'], ['semana', 'Semana']].map(([k, l]) => ({ l, on: gran === k, pick: () => this.setState({ gran: k, hover: null }), ...seg(gran === k) }));
+
+    const fat = 209576.33;
+    const linhas = [['Produto + frete', 75834.97, '#8a8780'], ['Taxas de pagamento', 9430.93, '#b5b1a9'], ['Meta Ads', 64522.59, '#3b6fa8'], ['Google Ads', 12978.68, '#c0661f']];
+    let rest = fat;
+    const cascata = [{ l: 'Faturamento', v: brl(fat), p: '100%', left: '0%', w: '100%', cor: 'var(--ink)', peso: 600, corTxt: 'var(--ink)' }];
+    linhas.forEach(([l, v, cor]) => { rest -= v; cascata.push({ l: `− ${l}`, v: brl(v), p: `${(v / fat * 100).toFixed(1).replace('.', ',')}%`, left: `${rest / fat * 100}%`, w: `${v / fat * 100}%`, cor, peso: 400, corTxt: 'var(--t1)' }); });
+    cascata.push({ l: '= Lucro estimado', v: brl(46809.15), p: '22,3%', left: '0%', w: `${46809.15 / fat * 100}%`, cor: 'var(--accent)', peso: 600, corTxt: 'var(--ink)' });
+
+    const up = 'var(--ok)', dn = 'var(--err)', neu = 'var(--t3)';
+    const k = (l, v, d, dCor, sub, serie, sparkCor) => ({ l, v, d, dCor, sub, spark: this.spark(serie), sparkCor: sparkCor || 'var(--t3)' });
+    const kpis = [
+      k('Margem', '22,3%', '−0,1 p.p.', neu, 'vs. 22,4%', D.luc.map((l, i) => l / D.fat[i])),
+      k('Pedidos', '1.328', '↑ 9,1%', up, 'vs. 1.217', D.fat),
+      k('Ticket médio', 'R$ 157,81', '↑ 1,0%', up, 'vs. R$ 156,22', D.fat.map((f, i) => f / (40 + (i % 5)))),
+      k('CPA', 'R$ 58,36', '↑ 1,2%', dn, 'vs. R$ 57,66', D.gas)
+    ];
+
+    const L = [['Norah Outlet', 512, 81420.10, 27310.40, 21905.22], ['Vellum Home', 341, 55870.45, 19880.12, 14212.80], ['Kiro Fit', 268, 39110.90, 15640.33, 8402.61], ['Lumen Pets', 142, 21004.58, 9120.77, 2993.40], ['Atlas Gear', 65, 12170.30, 5549.65, -704.88]];
+    const lojas = L.map(([nome, ped, f, g, l], j) => {
+      const mg = l / f, eq = f / (l + g);
+      const S = mg < 0 ? ['Prejuízo', 'var(--err)', 'var(--err-bg)', 'var(--err-border)'] : mg < 0.12 ? ['No limite', 'var(--warn)', 'var(--warn-bg)', 'var(--warn-border)'] : ['Lucro', 'var(--ok)', 'var(--ok-bg)', 'var(--ok-border)'];
+      return { nome, pedidos: num(ped), fat: brl(f), gasto: brl(g), roas: `${(f / g).toFixed(2).replace('.', ',')}×`, eq: `${eq.toFixed(2).replace('.', ',')}×`,
+        lucro: brl(l), margem: `${(mg * 100).toFixed(1).replace('.', ',')}%`, lCor: l < 0 ? 'var(--err)' : 'var(--ink)',
+        status: S[0], sCor: S[1], sBg: S[2], sBorda: S[3], spark: this.spark(D.luc.map((v, i) => v * (1 + Math.sin(i * (j + 1) * 0.7) * 0.3) + (l < 0 ? -1200 + i * 10 : 0))) };
+    });
+
+    const abas = ['Loja', 'Dia', 'Produto', 'Campanha', 'País'].map(l => ({ l, on: st.aba === l, pick: () => this.setState({ aba: l }), bg: st.aba === l ? 'var(--track)' : 'transparent', cor: st.aba === l ? 'var(--ink)' : 'var(--t2)' }));
+
+    const T = this.tela(st.tela);
+    const telas = {}; ['lucro','pedidos','custos','pixels','eventos','alertas','lojas','importar','atividade','integ','plano','rotas'].forEach(x => telas[x] = st.tela === x);
+    return {
+      ...this.extra(brl, num), t: telas, titulo: T[0], subtitulo: T[1], temContexto: !T[1], semContexto: !!T[1], irRotas: e => { e.preventDefault(); this.setState({ tela: 'rotas' }); },
+      alternarTema: () => this.setState({ tema: dark ? 'claro' : 'escuro' }), temaAria: dark ? 'Usar tema claro' : 'Usar tema escuro',
+      temaIcone: dark ? 'M12 3v2 M12 19v2 M5 5l1.4 1.4 M17.6 17.6 19 19 M3 12h2 M19 12h2 M5 19l1.4-1.4 M17.6 6.4 19 5 M8 12a4 4 0 1 0 8 0a4 4 0 1 0-8 0' : 'M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z',
+      rootVars, nav, moedas, mostraAviso: p.mostrarAviso ?? true, mostraComparacao: p.comparacao ?? true,
+      mTabs, grans, barras, ticks, barGap: gran === 'dia' ? '3px' : '16px',
+      veredito: `Lucro em ${lojas.filter(x => x.status === 'Lucro').length} de ${lojas.length} lojas. ROAS real 2,70× contra equilíbrio de 1,69×.`,
+      offHover: () => this.setState({ hover: null }),
+      cascata, kpis, lojas, abas,
+      tot: { fat: brl(209576.33), gasto: brl(77501.27), lucro: brl(46809.15) }
+    };
+  }
+}
+</script>
+</body>
+</html>

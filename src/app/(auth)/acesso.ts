@@ -93,6 +93,8 @@ const SENHAS_COMUNS = new Set([
   "mudar123",
   "xcart",
   "xcart123",
+  "pandatrack",
+  "pandatrack123",
   "shopify",
 ]);
 

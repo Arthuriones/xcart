@@ -286,11 +286,11 @@ describe("lerTodosEve: o estado inteiro do pedido vira o pedido do xcart", () =>
 
   it("versao diferente de 1: erro claro, antes de tudo (inclusive do teste)", () => {
     expect(VERSAO).toBe(1);
-    expect(erroDe({ ...aviso("pedido.pago"), versao: 2 })).toBe("versao 2 do contrato; o xcart le a versao 1");
-    expect(erroDe({ ...aviso("pedido.pago"), versao: "1" })).toBe('versao "1" do contrato; o xcart le a versao 1');
+    expect(erroDe({ ...aviso("pedido.pago"), versao: 2 })).toBe("versao 2 do contrato; o Panda Track le a versao 1");
+    expect(erroDe({ ...aviso("pedido.pago"), versao: "1" })).toBe('versao "1" do contrato; o Panda Track le a versao 1');
     const sem = aviso("pedido.pago");
     delete sem.versao;
-    expect(erroDe(sem)).toBe("versao ausente do contrato; o xcart le a versao 1");
+    expect(erroDe(sem)).toBe("versao ausente do contrato; o Panda Track le a versao 1");
     expect(erroDe({ ...aviso("pedido.pago"), versao: 2, teste: true })).toMatch(/versao 2/);
   });
 
@@ -855,7 +855,7 @@ describe("receberEvento (Eve): origem, idempotencia e ordem", () => {
     const m = memoria();
     const r = await receber(m, { ...aviso("pedido.pago"), versao: 2 });
     expect(r.status).toBe(400);
-    expect(m.marcas.at(-1)?.ultimo_erro).toBe("Evento recusado: versao 2 do contrato; o xcart le a versao 1");
+    expect(m.marcas.at(-1)?.ultimo_erro).toBe("Evento recusado: versao 2 do contrato; o Panda Track le a versao 1");
   });
 });
 

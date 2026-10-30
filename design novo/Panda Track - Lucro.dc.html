@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<title>Panda Track · Lucro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>html,body{margin:0;padding:0;background:#f5f4f1}*{box-sizing:border-box}body{-webkit-font-smoothing:antialiased}a{color:#1f7a5a;text-decoration:none}a:hover{color:#141414;text-decoration:underline;text-underline-offset:2px}button{font:inherit;color:inherit}:focus-visible{outline:2px solid #1f7a5a;outline-offset:2px}</style>
+</helmet>
+<div style="--bg:#f5f4f1; --surface:#ffffff; --surface-2:#faf9f7; --hover:#f1efeb; --track:#ebe9e4; --border:#e3e0da; --border-strong:#cdc9c1; --ink:#141414; --t1:#3a3936; --t2:#56544f; --t3:#6b6964; --ok:#1f7a5a; --ok-bg:#e7f3ed; --ok-border:#b7dbc8; --warn:#7f5a0f; --warn-bg:#fbf2df; --warn-border:#e9d3a2; --err:#b3261e; --err-bg:#fcebea; --err-border:#ecc3c0; --shadow:0 12px 32px rgba(20,20,20,.14), 0 2px 6px rgba(20,20,20,.06);">
+<div style="{{ rootVars }}">
+<div style="min-height:100vh; display:flex; background:var(--bg); color:var(--ink); font-family:'Instrument Sans', system-ui, sans-serif; font-size:13px; line-height:1.45;">
+
+<aside aria-label="Menu principal" style="width:236px; flex:none; position:sticky; top:0; height:100vh; display:flex; flex-direction:column; gap:6px; padding:12px 10px; background:var(--side-bg); color:var(--side-t);">
+  <div style="height:44px; display:flex; align-items:center; gap:10px; padding:0 8px;">
+    <span aria-hidden="true" style="position:relative; width:26px; height:26px; flex:none;">
+      <span style="position:absolute; left:1px; top:1px; width:9px; height:9px; border-radius:50%; background:var(--logo-ear);"></span>
+      <span style="position:absolute; right:1px; top:1px; width:9px; height:9px; border-radius:50%; background:var(--logo-ear);"></span>
+      <span style="position:absolute; left:2px; top:4px; width:22px; height:21px; border-radius:50%; background:var(--logo-face); box-shadow:0 0 0 1.5px var(--logo-ring);"></span>
+      <span style="position:absolute; left:7px; top:12px; width:5px; height:6px; border-radius:50%; background:var(--logo-ear); transform:rotate(-25deg);"></span>
+      <span style="position:absolute; right:7px; top:12px; width:5px; height:6px; border-radius:50%; background:var(--logo-ear); transform:rotate(25deg);"></span>
+    </span>
+    <span style="font-size:16px; font-weight:600; letter-spacing:-0.01em; color:var(--side-strong);">Panda<span style="font-weight:400; color:var(--side-t);"> Track</span></span>
+  </div>
+  <button type="button" aria-label="Buscar ou ir para (Ctrl K)" style="height:34px; display:flex; align-items:center; gap:8px; padding:0 8px 0 10px; border:1px solid var(--side-border); border-radius:8px; background:var(--side-input); color:var(--side-t); cursor:pointer; text-align:left;">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11a8 8 0 1 0 16 0a8 8 0 1 0-16 0 M21 21l-4.34-4.34"></path></svg>
+    <span style="flex:1;">Buscar ou ir para…</span>
+    <kbd style="font-family:'IBM Plex Mono', monospace; font-size:11px; padding:0 5px; border:1px solid var(--side-border); border-radius:4px;">⌘K</kbd>
+  </button>
+  <nav aria-label="Telas" style="flex:1; min-height:0; overflow-y:auto; scrollbar-width:none; display:flex; flex-direction:column; gap:2px; padding-top:6px;">
+    <sc-for list="{{ nav }}" as="g" hint-placeholder-count="5">
+      <div style="display:flex; flex-direction:column; gap:1px;">
+        <div style="padding:14px 10px 4px; font-size:12px; font-weight:500; color:var(--side-label);">{{ g.rotulo }}</div>
+        <sc-for list="{{ g.itens }}" as="m" hint-placeholder-count="3">
+          <a href="#" aria-current="{{ m.atual }}" style="display:flex; align-items:center; gap:10px; height:32px; padding:0 10px; border-radius:7px; background:{{ m.bg }}; color:{{ m.cor }}; font-weight:{{ m.peso }}; text-decoration:none;" style-hover="background:var(--side-hover); color:var(--side-strong); text-decoration:none;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;"><path d="{{ m.icone }}"></path></svg>
+            <span style="flex:1; white-space:nowrap;">{{ m.rotulo }}</span>
+            <sc-if value="{{ m.temContador }}" hint-placeholder-val="{{ false }}"><span style="min-width:20px; height:18px; padding:0 6px; border-radius:999px; background:var(--err); color:#fff; font-size:11px; line-height:18px; font-weight:600; text-align:center;">{{ m.contador }}</span></sc-if>
+          </a>
+        </sc-for>
+      </div>
+    </sc-for>
+    <div style="margin:14px 4px 0; padding:12px; border:1px dashed var(--side-border); border-radius:10px; display:flex; flex-direction:column; gap:6px;">
+      <span style="font-size:12px; font-weight:500; color:var(--side-strong);">Roteamento por SKU</span>
+      <span style="font-size:12px; color:var(--side-t); text-wrap:pretty;">Módulo opcional para quem usa loja vitrine.</span>
+      <a href="#" style="font-size:12px; font-weight:500; color:var(--side-link);">Ativar roteamento</a>
+    </div>
+  </nav>
+  <div style="border-top:1px solid var(--side-border); padding-top:8px;">
+    <button type="button" style="display:flex; align-items:center; gap:10px; width:100%; height:44px; padding:0 8px; border:0; border-radius:8px; background:transparent; cursor:pointer; text-align:left;" style-hover="background:var(--side-hover);">
+      <span aria-hidden="true" style="width:28px; height:28px; flex:none; display:grid; place-items:center; border-radius:50%; background:var(--side-strong); color:var(--side-bg); font-size:11px; font-weight:600;">AF</span>
+      <span style="flex:1; display:flex; flex-direction:column;"><span style="font-weight:500; color:var(--side-strong);">Arthur Ferreira</span><span style="font-size:12px; color:var(--side-t);">Plano Completo · 6 lojas</span></span>
+    </button>
+  </div>
+</aside>
+
+<main id="conteudo" style="flex:1; min-width:0; display:flex; flex-direction:column;">
+  <header style="position:sticky; top:0; z-index:20; background:var(--bg); border-bottom:1px solid var(--border);">
+    <div style="max-width:1320px; margin:0 auto; padding:14px 32px; display:flex; align-items:center; gap:10px;">
+      <h1 style="margin:0 12px 0 0; font-size:20px; line-height:28px; font-weight:600; letter-spacing:-0.01em;">Lucro</h1>
+      <div style="display:flex; gap:6px; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; flex:1; min-width:0; white-space:nowrap;">
+        <button type="button" style="height:32px; display:flex; align-items:center; gap:8px; padding:0 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); cursor:pointer;" style-hover="border-color:var(--border-strong);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--t3);"><path d="M3 9l1.5-5h15L21 9 M4 9v11h16V9 M9 20v-6h6v6 M3 9h18"></path></svg>
+          <span style="font-weight:500;">Todas as lojas</span><span style="color:var(--t3);">5 ativas</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="color:var(--t3);"><path d="M6 9l6 6 6-6"></path></svg>
+        </button>
+        <button type="button" style="height:32px; display:flex; align-items:center; gap:8px; padding:0 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); cursor:pointer;" style-hover="border-color:var(--border-strong);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--t3);"><path d="M8 2v4 M16 2v4 M3 5h18v16H3z M3 10h18"></path></svg>
+          <span style="font-weight:500;">Últimos 30 dias</span><span style="color:var(--t3); font-variant-numeric:tabular-nums;">25/09 – 24/10</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="color:var(--t3);"><path d="M6 9l6 6 6-6"></path></svg>
+        </button>
+        <button type="button" style="height:32px; display:flex; align-items:center; gap:6px; padding:0 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--t2); cursor:pointer;" style-hover="border-color:var(--border-strong);">vs. período anterior</button>
+        <div role="radiogroup" aria-label="Moeda" style="height:32px; display:flex; gap:2px; padding:2px; border-radius:8px; background:var(--track);">
+          <sc-for list="{{ moedas }}" as="c" hint-placeholder-count="3"><button type="button" role="radio" aria-checked="{{ c.on }}" onClick="{{ c.pick }}" style="padding:0 9px; border:0; border-radius:6px; background:{{ c.bg }}; box-shadow:{{ c.sombra }}; font-size:12px; font-weight:500; color:{{ c.cor }}; cursor:pointer;">{{ c.l }}</button></sc-for>
+        </div>
+      </div>
+      <span style="color:var(--t3); font-size:12px; font-variant-numeric:tabular-nums; white-space:nowrap; flex:none;">14:32</span>
+      <button type="button" aria-label="Atualizar agora" style="width:32px; height:32px; display:grid; place-items:center; border:1px solid var(--border); border-radius:8px; background:var(--surface); cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8 M21 3v5h-5"></path></svg></button>
+      <button type="button" aria-label="Alertas, 3 novos" style="position:relative; width:32px; height:32px; display:grid; place-items:center; border:1px solid var(--border); border-radius:8px; background:var(--surface); cursor:pointer;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.268 21a2 2 0 0 0 3.464 0 M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path></svg><span aria-hidden="true" style="position:absolute; top:5px; right:5px; width:7px; height:7px; border-radius:50%; background:var(--err); box-shadow:0 0 0 2px var(--surface);"></span></button>
+    </div>
+  </header>
+
+  <div style="max-width:1320px; width:100%; margin:0 auto; padding:24px 32px 64px; display:flex; flex-direction:column; gap:20px;">
+
+    <sc-if value="{{ mostraAviso }}" hint-placeholder-val="{{ true }}">
+    <div role="status" style="display:flex; align-items:center; gap:12px; padding:10px 12px 10px 14px; border:1px solid var(--err-border); border-radius:10px; background:var(--err-bg); flex-wrap:wrap;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--err); flex:none;"><path d="M12 9v4 M12 17h.01 M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+      <span style="flex:1; min-width:240px; color:var(--ink); text-wrap:pretty;"><strong style="font-weight:600;">O lucro está inflado.</strong> 7,9% das vendas são de SKUs sem custo cadastrado em 2 lojas.</span>
+      <a href="#" style="font-size:12px; font-weight:500; color:var(--t2);">Mais 2 pendências</a>
+      <button type="button" style="height:30px; padding:0 12px; border:0; border-radius:7px; background:var(--ink); color:#fff; font-weight:500; cursor:pointer;" style-hover="background:#333;">Cadastrar custos</button>
+    </div>
+    </sc-if>
+
+    <section aria-label="Resumo" style="display:flex; flex-wrap:wrap; gap:20px; align-items:stretch;">
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px 24px 18px; display:flex; flex-direction:column; gap:16px; flex:3 1 560px; min-width:0;">
+        <div style="display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; align-items:flex-start;">
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <span style="display:flex; align-items:center; gap:8px; font-weight:500; color:var(--t2);">{{ metricaRotulo }}<span style="font-size:11px; font-weight:500; padding:1px 7px; border-radius:999px; border:1px solid var(--border); color:var(--t3);">estimado</span></span>
+            <span style="font-size:44px; line-height:48px; font-weight:600; letter-spacing:-0.025em; font-variant-numeric:tabular-nums;">{{ metricaValor }}</span>
+            <span style="display:flex; align-items:center; gap:8px; color:var(--t3); font-variant-numeric:tabular-nums;"><span style="display:inline-flex; align-items:center; gap:3px; padding:1px 7px; border-radius:999px; background:{{ metricaDeltaBg }}; color:{{ metricaDeltaCor }}; font-weight:600;">{{ metricaDelta }}</span>vs. {{ metricaAnterior }} em 26/08 – 24/09</span>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:10px;">
+            <div role="radiogroup" aria-label="Métrica do gráfico" style="display:flex; gap:2px; padding:2px; border-radius:8px; background:var(--track);">
+              <sc-for list="{{ metricas }}" as="t" hint-placeholder-count="3"><button type="button" role="radio" aria-checked="{{ t.on }}" onClick="{{ t.pick }}" style="height:28px; padding:0 11px; border:0; border-radius:6px; background:{{ t.bg }}; box-shadow:{{ t.sombra }}; font-size:12px; font-weight:500; color:{{ t.cor }}; cursor:pointer;">{{ t.l }}</button></sc-for>
+            </div>
+            <span style="font-size:12px; color:var(--t3); text-align:right; max-width:260px; text-wrap:pretty;">{{ veredito }}</span>
+          </div>
+        </div>
+        <div style="position:relative; height:240px; margin-left:44px;">
+          <sc-for list="{{ ticks }}" as="k" hint-placeholder-count="4">
+            <div style="position:absolute; left:0; right:0; bottom:{{ k.pos }}; border-top:1px solid var(--track);"><span style="position:absolute; left:-44px; top:-8px; width:38px; white-space:nowrap; text-align:right; font-size:11px; color:var(--t3); font-variant-numeric:tabular-nums;">{{ k.l }}</span></div>
+          </sc-for>
+          <svg viewBox="0 0 1000 240" preserveAspectRatio="none" width="100%" height="240" aria-hidden="true" style="position:absolute; inset:0; overflow:visible;">
+            <path d="{{ areaPath }}" fill="var(--accent)" fill-opacity="0.08"></path>
+            <sc-if value="{{ mostraComparacao }}" hint-placeholder-val="{{ true }}"><path d="{{ prevPath }}" fill="none" stroke="var(--t3)" stroke-width="1.5" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"></path></sc-if>
+            <path d="{{ linePath }}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"></path>
+            <path d="{{ parcialPath }}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="2 4" vector-effect="non-scaling-stroke"></path>
+          </svg>
+          <div onMouseMove="{{ onHover }}" onMouseLeave="{{ offHover }}" style="position:absolute; inset:0; cursor:crosshair;">
+            <sc-if value="{{ temHover }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute; top:0; bottom:0; left:{{ hov.x }}; border-left:1px solid var(--border-strong); pointer-events:none;"></div>
+              <div style="position:absolute; left:{{ hov.x }}; bottom:{{ hov.y }}; width:10px; height:10px; margin:0 0 -5px -5px; border-radius:50%; background:var(--surface); border:2px solid var(--accent); pointer-events:none;"></div>
+              <div style="position:absolute; top:4px; left:{{ hov.x }}; transform:{{ hov.tf }}; min-width:176px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface); box-shadow:var(--shadow); pointer-events:none; display:flex; flex-direction:column; gap:4px; font-variant-numeric:tabular-nums;">
+                <span style="font-size:12px; color:var(--t3);">{{ hov.data }}</span>
+                <span style="display:flex; justify-content:space-between; gap:12px;"><span style="display:flex; align-items:center; gap:6px;"><span style="width:8px; height:2px; background:var(--accent);"></span>{{ metricaCurta }}</span><strong style="font-weight:600;">{{ hov.v }}</strong></span>
+                <span style="display:flex; justify-content:space-between; gap:12px; color:var(--t3);"><span>Período anterior</span><span>{{ hov.p }}</span></span>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+        <div style="margin-left:44px; display:flex; justify-content:space-between; font-size:11px; color:var(--t3); font-variant-numeric:tabular-nums;">
+          <sc-for list="{{ xLabels }}" as="x" hint-placeholder-count="6"><span>{{ x }}</span></sc-for>
+        </div>
+        <div style="display:flex; gap:18px; font-size:12px; color:var(--t2); flex-wrap:wrap;">
+          <span style="display:flex; align-items:center; gap:6px;"><span style="width:14px; height:2px; background:var(--accent);"></span>Últimos 30 dias</span>
+          <sc-if value="{{ mostraComparacao }}" hint-placeholder-val="{{ true }}"><span style="display:flex; align-items:center; gap:6px;"><span style="width:14px; border-top:1.5px dashed var(--t3);"></span>26/08 – 24/09</span></sc-if>
+          <span style="display:flex; align-items:center; gap:6px;"><span style="width:14px; border-top:2px dotted var(--accent);"></span>hoje · parcial</span>
+        </div>
+      </div>
+
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px 22px 18px; display:flex; flex-direction:column; gap:14px; flex:1 1 320px; min-width:0;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline;"><h2 style="margin:0; font-size:15px; font-weight:600;">Para onde foi o faturamento</h2><span style="font-size:12px; color:var(--t3);">% do total</span></div>
+        <div style="display:flex; flex-direction:column; gap:12px; flex:1;">
+          <sc-for list="{{ cascata }}" as="r" hint-placeholder-count="6">
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <div style="display:flex; align-items:baseline; gap:8px; font-variant-numeric:tabular-nums;">
+                <span style="flex:1; font-weight:{{ r.peso }}; color:{{ r.corTxt }};">{{ r.l }}</span>
+                <span style="font-weight:{{ r.peso }};">{{ r.v }}</span>
+                <span style="width:44px; text-align:right; font-size:12px; color:var(--t3);">{{ r.p }}</span>
+              </div>
+              <div style="position:relative; height:8px; border-radius:3px; background:var(--track);"><div style="position:absolute; top:0; bottom:0; left:{{ r.left }}; width:{{ r.w }}; border-radius:3px; background:{{ r.cor }};"></div></div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex; justify-content:space-between; gap:12px; padding-top:12px; border-top:1px solid var(--border); font-size:12px;"><span style="color:var(--t3);">Lucro estimado, não contábil.</span><a href="#">Como calculamos</a></div>
+      </div>
+    </section>
+
+    <section aria-label="Indicadores" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:14px; overflow:hidden;">
+      <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="8">
+        <a href="#" style="display:flex; flex-direction:column; gap:6px; padding:16px 18px; background:var(--surface); color:var(--ink); text-decoration:none;" style-hover="background:var(--surface-2); color:var(--ink); text-decoration:none;">
+          <span style="display:flex; justify-content:space-between; align-items:center; gap:8px;"><span style="color:var(--t2); font-weight:500;">{{ k.l }}</span><svg viewBox="0 0 80 24" width="72" height="22" preserveAspectRatio="none" aria-hidden="true"><path d="{{ k.spark }}" fill="none" stroke="{{ k.sparkCor }}" stroke-width="1.5" vector-effect="non-scaling-stroke"></path></svg></span>
+          <span style="font-size:24px; line-height:30px; font-weight:600; letter-spacing:-0.015em; font-variant-numeric:tabular-nums;">{{ k.v }}</span>
+          <span style="display:flex; gap:6px; align-items:center; font-size:12px; color:var(--t3); font-variant-numeric:tabular-nums;"><span style="font-weight:600; color:{{ k.dCor }};">{{ k.d }}</span>{{ k.sub }}</span>
+        </a>
+      </sc-for>
+    </section>
+
+    <section aria-label="Por loja" style="background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; padding:16px 20px; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:4px;">
+          <h2 style="margin:0 10px 0 0; font-size:15px; font-weight:600;">Detalhar por</h2>
+          <sc-for list="{{ abas }}" as="a" hint-placeholder-count="5"><button type="button" onClick="{{ a.pick }}" aria-pressed="{{ a.on }}" style="height:30px; padding:0 10px; border:0; border-radius:7px; background:{{ a.bg }}; color:{{ a.cor }}; font-weight:500; cursor:pointer;" style-hover="background:var(--hover);">{{ a.l }}</button></sc-for>
+        </div>
+        <button type="button" style="height:30px; display:flex; align-items:center; gap:6px; padding:0 10px; border:1px solid var(--border); border-radius:7px; background:var(--surface); cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3"></path></svg>Exportar CSV</button>
+      </div>
+      <div style="overflow-x:auto;">
+      <table style="width:100%; min-width:920px; border-collapse:collapse; font-variant-numeric:tabular-nums;">
+        <thead><tr style="background:var(--surface-2); border-top:1px solid var(--border); border-bottom:1px solid var(--border);">
+          <th scope="col" style="text-align:left; padding:9px 20px; font-size:12px; font-weight:500; color:var(--t3);">Loja</th>
+          <th scope="col" style="text-align:right; padding:9px 12px; font-size:12px; font-weight:500; color:var(--t3);">Pedidos</th>
+          <th scope="col" style="text-align:right; padding:9px 12px; font-size:12px; font-weight:500; color:var(--t3);">Faturamento</th>
+          <th scope="col" style="text-align:right; padding:9px 12px; font-size:12px; font-weight:500; color:var(--t3);">Gasto</th>
+          <th scope="col" style="text-align:right; padding:9px 12px; font-size:12px; font-weight:500; color:var(--t3);">ROAS / equilíbrio</th>
+          <th scope="col" style="text-align:right; padding:9px 12px; font-size:12px; font-weight:500; color:var(--t3);">Lucro</th>
+          <th scope="col" style="text-align:right; padding:9px 12px; font-size:12px; font-weight:500; color:var(--t3);">Margem</th>
+          <th scope="col" style="text-align:right; padding:9px 20px; font-size:12px; font-weight:500; color:var(--t3);">30 dias</th>
+        </tr></thead>
+        <tbody>
+          <sc-for list="{{ lojas }}" as="l" hint-placeholder-count="5">
+            <tr style="border-bottom:1px solid var(--border);" style-hover="background:var(--surface-2);">
+              <th scope="row" style="text-align:left; padding:12px 20px; font-weight:500;"><span style="display:flex; align-items:center; gap:10px;"><a href="#" style="color:var(--ink);">{{ l.nome }}</a><span style="display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:999px; border:1px solid {{ l.sBorda }}; background:{{ l.sBg }}; color:{{ l.sCor }}; font-size:11px; font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:{{ l.sCor }};"></span>{{ l.status }}</span></span></th>
+              <td style="text-align:right; padding:12px;">{{ l.pedidos }}</td>
+              <td style="text-align:right; padding:12px;">{{ l.fat }}</td>
+              <td style="text-align:right; padding:12px;">{{ l.gasto }}</td>
+              <td style="text-align:right; padding:12px;">{{ l.roas }} <span style="color:var(--t3);">/ {{ l.eq }}</span></td>
+              <td style="text-align:right; padding:12px; font-weight:600; color:{{ l.lCor }};">{{ l.lucro }}</td>
+              <td style="text-align:right; padding:12px;">{{ l.margem }}</td>
+              <td style="text-align:right; padding:8px 20px;"><svg viewBox="0 0 80 24" width="80" height="24" preserveAspectRatio="none" aria-hidden="true"><path d="{{ l.spark }}" fill="none" stroke="{{ l.lCor }}" stroke-width="1.5" vector-effect="non-scaling-stroke"></path></svg></td>
+            </tr>
+          </sc-for>
+          <tr style="background:var(--surface-2); font-weight:600;">
+            <th scope="row" style="text-align:left; padding:12px 20px; font-weight:600;">Total · 5 lojas</th>
+            <td style="text-align:right; padding:12px;">1.328</td>
+            <td style="text-align:right; padding:12px;">{{ tot.fat }}</td>
+            <td style="text-align:right; padding:12px;">{{ tot.gasto }}</td>
+            <td style="text-align:right; padding:12px;">2,70× <span style="color:var(--t3); font-weight:400;">/ 1,69×</span></td>
+            <td style="text-align:right; padding:12px; color:var(--ok);">{{ tot.lucro }}</td>
+            <td style="text-align:right; padding:12px;">22,3%</td>
+            <td style="padding:12px 20px;"></td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px; padding:12px 20px; border-top:1px solid var(--border); color:var(--t3); font-size:12px;">
+        <span style="display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:999px; border:1px solid var(--border); color:var(--t2); font-weight:500;"><span style="width:6px; height:6px; border-radius:50%; background:var(--t3);"></span>Sem acesso</span>
+        <span style="flex:1;">Mira Studio e Pine Supply ficam fora do total até a Shopify liberar o acesso.</span>
+        <a href="#" style="font-weight:500;">Reconectar lojas</a>
+      </div>
+    </section>
+
+  </div>
+</main>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;sidebar&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;escura&quot;,&quot;clara&quot;],&quot;default&quot;:&quot;escura&quot;,&quot;tsType&quot;:&quot;'escura'|'clara'&quot;},&quot;acento&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;options&quot;:[&quot;#1f7a5a&quot;,&quot;#2c5d8f&quot;,&quot;#b04a2f&quot;,&quot;#141414&quot;],&quot;default&quot;:&quot;#1f7a5a&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;comparacao&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;mostrarAviso&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { metrica: 'lucro', moeda: 'BRL', aba: 'Loja', hover: null };
+
+  dados() {
+    if (this._d) return this._d;
+    let s = 7; const r = () => (s = (s * 9301 + 49297) % 233280) / 233280;
+    const n = 30, fat = [], gas = [], luc = [], pf = [], pg = [], pl = [];
+    for (let i = 0; i < n; i++) {
+      const w = 1 + 0.18 * Math.sin(i / 2.1) + (r() - 0.5) * 0.35;
+      const f = 6986 * w, g = 2583 * (1 + (r() - 0.5) * 0.3);
+      fat.push(f); gas.push(g); luc.push(f * 0.632 - g);
+      const w2 = 1 + 0.16 * Math.sin(i / 2.4 + 1) + (r() - 0.5) * 0.3;
+      const f2 = 6337 * w2, g2 = 2310 * (1 + (r() - 0.5) * 0.3);
+      pf.push(f2); pg.push(g2); pl.push(f2 * 0.632 - g2);
+    }
+    fat[n - 1] *= 0.42; gas[n - 1] *= 0.5; luc[n - 1] = fat[n - 1] * 0.632 - gas[n - 1];
+    const dias = [];
+    const ws = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+    for (let i = 0; i < n; i++) { const d = new Date(2026, 8, 25 + i); dias.push(`${ws[d.getDay()]}, ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`); }
+    return (this._d = { n, fat, gas, luc, pf, pg, pl, dias });
+  }
+
+  spark(arr, w = 80, h = 24) {
+    const mn = Math.min(...arr), mx = Math.max(...arr), sp = mx - mn || 1;
+    return arr.map((v, i) => `${i ? 'L' : 'M'}${(i / (arr.length - 1) * w).toFixed(1)},${(h - 2 - (v - mn) / sp * (h - 4)).toFixed(1)}`).join(' ');
+  }
+
+  renderVals() {
+    const p = this.props, st = this.state, D = this.dados();
+    const brl = v => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+    const num = v => new Intl.NumberFormat('pt-BR').format(v);
+    const acc = p.acento ?? '#1f7a5a';
+    const escura = (p.sidebar ?? 'escura') === 'escura';
+    const side = escura
+      ? '--side-bg:#121212; --side-t:#a9a7a2; --side-strong:#f5f4f1; --side-label:#8d8b86; --side-border:#2c2b29; --side-input:#1c1c1b; --side-hover:#232321; --side-active:#2a2a28; --side-link:#7fd1ad; --logo-face:#f5f4f1; --logo-ear:#121212; --logo-ring:#f5f4f1;'
+      : '--side-bg:#efede9; --side-t:#56544f; --side-strong:#141414; --side-label:#6b6964; --side-border:#dcd9d2; --side-input:#ffffff; --side-hover:#e5e2dc; --side-active:#ffffff; --side-link:#1f7a5a; --logo-face:#ffffff; --logo-ear:#141414; --logo-ring:#141414;';
+    const rootVars = `--accent:${acc}; ${side}`;
+
+    const I = {
+      lucro: 'M22 7l-8.5 8.5-5-5L2 17 M16 7h6v6', pedidos: 'M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z M8 7h8 M8 11h8 M8 15h5',
+      custos: 'M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2 M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4',
+      pixel: 'M22 12h-4l-3 9L9 3l-3 9H2', eventos: 'M4.9 19.1C1 15.2 1 8.8 4.9 4.9 M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5 M12 12h.01 M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5 M19.1 4.9C23 8.8 23 15.1 19.1 19',
+      alertas: 'M10.268 21a2 2 0 0 0 3.464 0 M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326',
+      lojas: 'M3 9l1.5-5h15L21 9 M4 9v11h16V9 M9 20v-6h6v6 M3 9h18', importar: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3',
+      atividade: 'M12 6v6l4 2 M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0', integ: 'M12 22v-5 M9 8V2 M15 8V2 M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z', plano: 'M2 5h20v14H2z M2 10h20'
+    };
+    const it = (rotulo, icone, atual, contador) => ({ rotulo, icone, atual: atual ? 'page' : undefined, temContador: !!contador, contador,
+      bg: atual ? 'var(--side-active)' : 'transparent', cor: atual ? 'var(--side-strong)' : 'var(--side-t)', peso: atual ? 600 : 400 });
+    const nav = [
+      { rotulo: 'Dinheiro', itens: [it('Lucro', I.lucro, true), it('Pedidos', I.pedidos), it('Custos e taxas', I.custos)] },
+      { rotulo: 'Rastreamento', itens: [it('Saúde dos pixels', I.pixel), it('Eventos ao vivo', I.eventos), it('Alertas', I.alertas, false, 3)] },
+      { rotulo: 'Operação', itens: [it('Lojas', I.lojas), it('Importar produtos', I.importar), it('Atividade', I.atividade)] },
+      { rotulo: 'Configurações', itens: [it('Integrações', I.integ), it('Assinatura e créditos', I.plano)] }
+    ];
+
+    const seg = (on) => ({ bg: on ? 'var(--surface)' : 'transparent', sombra: on ? '0 1px 2px rgba(20,20,20,.12)' : 'none', cor: on ? 'var(--ink)' : 'var(--t2)' });
+    const moedas = ['BRL', 'USD', 'EUR'].map(l => ({ l, on: st.moeda === l, pick: () => this.setState({ moeda: l }), ...seg(st.moeda === l) }));
+    const M = {
+      lucro: { l: 'Lucro', rot: 'Lucro estimado', curta: 'Lucro', serie: D.luc, prev: D.pl, tot: 46809.15, ant: 42663.58, step: 1000 },
+      fat: { l: 'Faturamento', rot: 'Faturamento', curta: 'Faturamento', serie: D.fat, prev: D.pf, tot: 209576.33, ant: 190104.12, step: 3000 },
+      gasto: { l: 'Gasto', rot: 'Gasto em anúncios', curta: 'Gasto', serie: D.gas, prev: D.pg, tot: 77501.27, ant: 70178.90, step: 1000 }
+    };
+    const m = M[st.metrica];
+    const metricas = Object.keys(M).map(k => ({ l: M[k].l, on: st.metrica === k, pick: () => this.setState({ metrica: k }), ...seg(st.metrica === k) }));
+    const delta = (m.tot / m.ant - 1) * 100;
+    const bom = st.metrica === 'gasto' ? delta < 0 : delta > 0;
+
+    const all = m.serie.concat(m.prev);
+    const top = Math.ceil(Math.max(...all) / m.step) * m.step;
+    const W = 1000, H = 240, n = D.n;
+    const X = i => i / (n - 1) * W, Y = v => H - v / top * H;
+    const pts = arr => arr.map((v, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+    const linePath = pts(m.serie.slice(0, n - 1));
+    const parcialPath = `M${X(n - 2)},${Y(m.serie[n - 2])} L${X(n - 1)},${Y(m.serie[n - 1])}`;
+    const areaPath = `${pts(m.serie)} L${W},${H} L0,${H} Z`;
+    const ticks = []; for (let v = 0; v <= top; v += m.step) ticks.push({ pos: `${v / top * 100}%`, l: v >= 1000 ? `${(v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mil` : '0' });
+    const xLabels = [0, 6, 12, 18, 24, 29].map(i => D.dias[i].split(', ')[1]);
+
+    const h = st.hover;
+    const hov = h == null ? null : {
+      x: `${h / (n - 1) * 100}%`, y: `${m.serie[h] / top * 100}%`, tf: h > n * 0.6 ? 'translateX(calc(-100% - 12px))' : 'translateX(12px)',
+      data: D.dias[h] + (h === n - 1 ? ' · hoje, parcial' : ''), v: brl(m.serie[h]), p: brl(m.prev[h])
+    };
+
+    const fat = 209576.33;
+    const linhas = [['Produto + frete', 75834.97, '#8a8780'], ['Taxas de pagamento', 9430.93, '#b5b1a9'], ['Meta Ads', 64522.59, '#3b6fa8'], ['Google Ads', 12978.68, '#c0661f']];
+    let rest = fat;
+    const cascata = [{ l: 'Faturamento', v: brl(fat), p: '100%', left: '0%', w: '100%', cor: 'var(--ink)', peso: 600, corTxt: 'var(--ink)' }];
+    linhas.forEach(([l, v, cor]) => { rest -= v; cascata.push({ l: `− ${l}`, v: brl(v), p: `${(v / fat * 100).toFixed(1).replace('.', ',')}%`, left: `${rest / fat * 100}%`, w: `${v / fat * 100}%`, cor, peso: 400, corTxt: 'var(--t1)' }); });
+    cascata.push({ l: '= Lucro estimado', v: brl(46809.15), p: '22,3%', left: '0%', w: `${46809.15 / fat * 100}%`, cor: 'var(--accent)', peso: 600, corTxt: 'var(--ink)' });
+
+    const up = 'var(--ok)', dn = 'var(--err)', neu = 'var(--t3)';
+    const k = (l, v, d, dCor, sub, serie, sparkCor) => ({ l, v, d, dCor, sub, spark: this.spark(serie), sparkCor: sparkCor || 'var(--t3)' });
+    const kpis = [
+      k('Faturamento', 'R$ 209.576,33', '↑ 10,2%', up, 'vs. R$ 190,1 mil', D.fat),
+      k('Gasto em anúncios', 'R$ 77.501,27', '↑ 10,4%', dn, 'Meta 64,5 mil · Google 13 mil', D.gas),
+      k('ROAS real', '2,70×', '−0,2%', neu, 'equilíbrio 1,69×', D.fat.map((f, i) => f / D.gas[i])),
+      k('Margem', '22,3%', '−0,1 p.p.', neu, 'vs. 22,4%', D.luc.map((l, i) => l / D.fat[i])),
+      k('Pedidos', '1.328', '↑ 9,1%', up, 'vs. 1.217', D.fat),
+      k('Ticket médio', 'R$ 157,81', '↑ 1,0%', up, 'vs. R$ 156,22', D.fat.map((f, i) => f / (40 + (i % 5)))),
+      k('CPA', 'R$ 58,36', '↑ 1,2%', dn, 'vs. R$ 57,66', D.gas),
+      k('Custos totais', 'R$ 162.767,18', '↑ 10,4%', dn, 'vs. R$ 147,5 mil', D.fat.map((f, i) => f - D.luc[i]))
+    ];
+
+    const L = [['Norah Outlet', 512, 81420.10, 27310.40, 21905.22], ['Vellum Home', 341, 55870.45, 19880.12, 14212.80], ['Kiro Fit', 268, 39110.90, 15640.33, 8402.61], ['Lumen Pets', 142, 21004.58, 9120.77, 2993.40], ['Atlas Gear', 65, 12170.30, 5549.65, -704.88]];
+    const lojas = L.map(([nome, ped, f, g, l], j) => {
+      const mg = l / f, eq = f / (l + g);
+      const S = mg < 0 ? ['Prejuízo', 'var(--err)', 'var(--err-bg)', 'var(--err-border)'] : mg < 0.12 ? ['No limite', 'var(--warn)', 'var(--warn-bg)', 'var(--warn-border)'] : ['Lucro', 'var(--ok)', 'var(--ok-bg)', 'var(--ok-border)'];
+      return { nome, pedidos: num(ped), fat: brl(f), gasto: brl(g), roas: `${(f / g).toFixed(2).replace('.', ',')}×`, eq: `${eq.toFixed(2).replace('.', ',')}×`,
+        lucro: brl(l), margem: `${(mg * 100).toFixed(1).replace('.', ',')}%`, lCor: l < 0 ? 'var(--err)' : 'var(--ink)',
+        status: S[0], sCor: S[1], sBg: S[2], sBorda: S[3], spark: this.spark(D.luc.map((v, i) => v * (1 + Math.sin(i * (j + 1) * 0.7) * 0.3) + (l < 0 ? -1200 + i * 10 : 0))) };
+    });
+
+    const abas = ['Loja', 'Dia', 'Produto', 'Campanha', 'País'].map(l => ({ l, on: st.aba === l, pick: () => this.setState({ aba: l }), bg: st.aba === l ? 'var(--track)' : 'transparent', cor: st.aba === l ? 'var(--ink)' : 'var(--t2)' }));
+
+    return {
+      rootVars, nav, moedas, metricas, mostraAviso: p.mostrarAviso ?? true, mostraComparacao: p.comparacao ?? true,
+      metricaRotulo: m.rot, metricaCurta: m.curta, metricaValor: brl(m.tot), metricaAnterior: brl(m.ant),
+      metricaDelta: `${delta > 0 ? '↑' : '↓'} ${Math.abs(delta).toFixed(1).replace('.', ',')}%`,
+      metricaDeltaBg: bom ? 'var(--ok-bg)' : 'var(--err-bg)', metricaDeltaCor: bom ? 'var(--ok)' : 'var(--err)',
+      veredito: `Lucro em ${lojas.filter(x => x.status === 'Lucro').length} de ${lojas.length} lojas. ROAS real 2,70× contra equilíbrio de 1,69×.`,
+      linePath, parcialPath, areaPath, prevPath: pts(m.prev), ticks, xLabels,
+      temHover: h != null, hov: hov || {},
+      onHover: e => { const b = e.currentTarget.getBoundingClientRect(); const i = Math.round((e.clientX - b.left) / b.width * (n - 1)); const c = Math.max(0, Math.min(n - 1, i)); if (c !== st.hover) this.setState({ hover: c }); },
+      offHover: () => this.setState({ hover: null }),
+      cascata, kpis, lojas, abas,
+      tot: { fat: brl(209576.33), gasto: brl(77501.27), lucro: brl(46809.15) }
+    };
+  }
+}
+</script>
+</body>
+</html>

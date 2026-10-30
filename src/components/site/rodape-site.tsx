@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LogoXcart } from "@/components/layout/logo";
+import { LogoPanda } from "@/components/layout/logo";
 import { SeletorTema } from "@/components/layout/tema";
 import {
   CAIXA_DO_SITE,
@@ -34,8 +34,8 @@ export function RodapeSite({
         className={`mx-auto flex w-full flex-wrap items-center justify-between gap-6 py-9 ${CAIXA_DO_SITE[caixa]}`}
       >
         <div className="flex flex-col gap-2">
-          <LogoXcart altura={20} />
-          <p className="text-label text-t3">© {new Date().getFullYear()} xcart</p>
+          <LogoPanda altura={28} />
+          <p className="text-label text-t3">© {new Date().getFullYear()} Panda Track</p>
         </div>
 
         <nav aria-label="Documentos e acesso">

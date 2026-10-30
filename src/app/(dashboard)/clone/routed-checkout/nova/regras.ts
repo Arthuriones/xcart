@@ -20,7 +20,7 @@ export const MODOS: { valor: Modo; titulo: string; descricao: string }[] = [
   {
     valor: "connect",
     titulo: "Só conectar",
-    descricao: "As duas lojas já têm os produtos. O xcart casa as variantes pelo SKU e cria na loja de checkout o que sobrar sem par.",
+    descricao: "As duas lojas já têm os produtos. O Panda Track casa as variantes pelo SKU e cria na loja de checkout o que sobrar sem par.",
   },
 ];
 

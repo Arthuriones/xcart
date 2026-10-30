@@ -19,7 +19,7 @@ export const runtime = "nodejs";
 
 const RE_CHAT = /^-?[0-9]{1,20}$/;
 const RE_TOKEN = /^[0-9]+:[A-Za-z0-9_-]{30,64}$/;
-const TEXTO_TESTE = "xcart: teste de alerta. Se voce recebeu isto, os alertas vao chegar aqui.";
+const TEXTO_TESTE = "Panda Track: teste de alerta. Se voce recebeu isto, os alertas vao chegar aqui.";
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();

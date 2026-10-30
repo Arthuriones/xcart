@@ -287,7 +287,7 @@ export function TelaAlertas({
               )}
               {ativos.length > 0 && confirmadoTexto && (
                 <p className="text-label text-t2">
-                  Última confirmação {confirmadoTexto} · o xcart confere a cada{" "}
+                  Última confirmação {confirmadoTexto} · o Panda Track confere a cada{" "}
                   {INTERVALO_VERIFICACAO_MIN} minutos.
                 </p>
               )}
@@ -309,7 +309,7 @@ export function TelaAlertas({
                   descricao={
                     silenciados.length > 0
                       ? "Os alertas silenciados continuam abertos e aparecem logo abaixo."
-                      : `O xcart confere vendas, rastreamento e gasto a cada ${INTERVALO_VERIFICACAO_MIN} minutos. ${
+                      : `O Panda Track confere vendas, rastreamento e gasto a cada ${INTERVALO_VERIFICACAO_MIN} minutos. ${
                           telegramPronto
                             ? "Se algo parar, você recebe no Telegram."
                             : "Ligue o Telegram para receber o aviso quando algo parar."

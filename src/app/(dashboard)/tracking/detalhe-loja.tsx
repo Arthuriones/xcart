@@ -430,8 +430,8 @@ export function DetalheLoja({
         <div className="flex flex-col gap-2.5 px-4 py-3.5">
           <p className="text-label text-t1">
             {loja.pixelCheckoutDesatualizado
-              ? "Na Shopify: Configurações › Eventos do cliente › pixel “xcart” › troque o código pelo de baixo › Salvar."
-              : "Na Shopify: Configurações › Eventos do cliente › Adicionar pixel personalizado › nome “xcart” › cole o código abaixo › Salvar › Conectar."}
+              ? "Na Shopify: Configurações › Eventos do cliente › pixel “Panda Track” (ou “xcart”, se foi instalado antes) › troque o código pelo de baixo › Salvar."
+              : "Na Shopify: Configurações › Eventos do cliente › Adicionar pixel personalizado › nome “Panda Track” › cole o código abaixo › Salvar › Conectar."}
           </p>
           <CodigoDoPixel storeId={id} />
         </div>

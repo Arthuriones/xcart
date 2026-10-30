@@ -136,7 +136,7 @@ export function PassoAtivar({
       ) : null}
 
       {criadosNoConserto && (criadosNoConserto.produtos > 0 || criadosNoConserto.variantes > 0) ? (
-        <Callout tom="info" titulo="O xcart completou a loja de checkout">
+        <Callout tom="info" titulo="O Panda Track completou a loja de checkout">
           {plural(criadosNoConserto.produtos, "produto criado", "produtos criados")} e{" "}
           {plural(criadosNoConserto.variantes, "variante criada", "variantes criadas")} para os itens da vitrine que
           estavam sem par.
@@ -148,7 +148,7 @@ export function PassoAtivar({
           {diagnostico.stampedSkuCount > 0 ? (
             <p>
               {plural(diagnostico.stampedSkuCount, "variante estava", "variantes estavam")} sem SKU (produto criado à mão
-              na Shopify). O xcart gerou e gravou o SKU.
+              na Shopify). O Panda Track gerou e gravou o SKU.
             </p>
           ) : null}
           {diagnostico.dedupedSkuCount > 0 ? (
@@ -171,7 +171,7 @@ export function PassoAtivar({
 
       <Section
         titulo="Instalar na vitrine"
-        descricao="Sem o script no tema da vitrine, a rota não leva ninguém ao checkout. O xcart instala sozinho."
+        descricao="Sem o script no tema da vitrine, a rota não leva ninguém ao checkout. O Panda Track instala sozinho."
       >
         {pausada ? (
           // Instalar com a rota pausada trava o checkout da vitrine (o

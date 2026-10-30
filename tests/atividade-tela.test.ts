@@ -46,7 +46,7 @@ function ev(id: string, at: string, extra: Partial<EventoAtividade> = {}): Event
     tom: "ok",
     selo: null,
     titulo: "Loja conectada",
-    descricao: "x entrou no xcart.",
+    descricao: "x entrou no Panda Track.",
     loja: null,
     at,
     href: "/stores/x",
@@ -125,7 +125,7 @@ describe("linha do banco vira evento", () => {
     );
     expect(e.href).toBe("/stores/l1");
     expect(e.loja).toBe("Lash Bestie");
-    expect(e.descricao).toBe("qkgknv-w3 entrou no xcart.");
+    expect(e.descricao).toBe("qkgknv-w3 entrou no Panda Track.");
     expect(JSON.stringify(e)).not.toMatch(/stores\.id|routed_checkout|clone_runs|tech/);
   });
 

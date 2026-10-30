@@ -148,7 +148,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     return recusar(
       413,
       "corpo grande demais",
-      `Evento recusado: a entrega passou de ${limite / 1024} KB. Fale com o suporte do xcart antes de ${depois}.`,
+      `Evento recusado: a entrega passou de ${limite / 1024} KB. Fale com o suporte do Panda Track antes de ${depois}.`,
       bytes
     );
   }
@@ -204,7 +204,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 export async function GET(request: Request, { params }: { params: Promise<{ token: string }> }) {
   const query = new URL(request.url).searchParams;
   if (!ehPostback(query)) {
-    return new NextResponse("Webhook do xcart: use POST com JSON.", {
+    return new NextResponse("Webhook do Panda Track: use POST com JSON.", {
       status: 200,
       headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
     });

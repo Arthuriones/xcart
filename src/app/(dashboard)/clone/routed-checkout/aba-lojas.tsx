@@ -133,7 +133,7 @@ export function AbaLojas(props: Props) {
       {reenviar ? (
         <Callout tom="warn" titulo="Falta reenviar ao tema da vitrine">
           <p>
-            A mudança está salva, mas o xcart não conseguiu levar a configuração ao tema da vitrine sozinho. O
+            A mudança está salva, mas o Panda Track não conseguiu levar a configuração ao tema da vitrine sozinho. O
             comprador só vê a mudança depois que ela chega ao tema.
           </p>
           <div className="mt-2">
@@ -424,7 +424,7 @@ function EditorLojas({
             </p>
           ) : null}
           <p className="text-label text-t2">
-            Ao salvar, o xcart reenvia a nova divisão ao tema da vitrine.
+            Ao salvar, o Panda Track reenvia a nova divisão ao tema da vitrine.
           </p>
         </div>
       ) : null}
@@ -433,7 +433,7 @@ function EditorLojas({
         open={Boolean(tirar)}
         onOpenChange={(v) => !v && setTirar(null)}
         titulo={`Tirar ${tirar?.nome ?? "a loja"} da rota?`}
-        descricao="Os compradores deixam de ir para esta loja e o mapa de produtos dela nesta rota some. Os produtos continuam na Shopify; para voltar, adicione a loja de novo e o xcart casa os SKUs outra vez."
+        descricao="Os compradores deixam de ir para esta loja e o mapa de produtos dela nesta rota some. Os produtos continuam na Shopify; para voltar, adicione a loja de novo e o Panda Track casa os SKUs outra vez."
         confirmar="Tirar da rota"
         mensagemErro="Não deu para tirar a loja. Ela continua na rota; tente de novo."
         onConfirmar={confirmarTirar}
@@ -552,7 +552,7 @@ function AdicionarLojas({
   return (
     <Section
       titulo="Adicionar loja de checkout"
-      descricao="O xcart casa o catálogo de cada loja com a vitrine pelo SKU, uma de cada vez."
+      descricao="O Panda Track casa o catálogo de cada loja com a vitrine pelo SKU, uma de cada vez."
       acoes={<BotaoConectar variante="secondary">Conectar outra loja</BotaoConectar>}
     >
       {disponiveis.length === 0 ? (

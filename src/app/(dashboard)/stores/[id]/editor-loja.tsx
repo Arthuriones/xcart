@@ -79,7 +79,7 @@ export function EditorPerfil({
   }
 
   return (
-    <Section titulo="Perfil" descricao="Como a loja aparece no xcart e em que idioma a IA escreve.">
+    <Section titulo="Perfil" descricao="Como a loja aparece no Panda Track e em que idioma a IA escreve.">
       <form
         className="flex flex-col gap-4"
         onSubmit={(e) => {
@@ -409,7 +409,7 @@ function GradeArquivos({
       <h3 className="text-dense font-semibold text-ink">
         {titulo}{" "}
         <span className="font-normal text-t2">
-          · {salvos.length === 0 ? "vazio" : `${salvos.length} no xcart`}
+          · {salvos.length === 0 ? "vazio" : `${salvos.length} no Panda Track`}
         </span>
       </h3>
       <p className="text-label text-t2">{ajuda}</p>
@@ -501,11 +501,11 @@ export function ZonaDePerigo({ loja }: { loja: { id: string; nome: string; domin
     <Section titulo="Zona de perigo" className="border-err-border">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <p className="max-w-[52ch] text-dense text-t1 text-pretty">
-          Remover {loja.nome} do xcart apaga os produtos importados, os materiais de marca, as rotas, o
+          Remover {loja.nome} do Panda Track apaga os produtos importados, os materiais de marca, as rotas, o
           rastreamento e o histórico de pedidos desta loja. Nada muda na Shopify.
         </p>
         <Button variant="destructive" onClick={() => setAberto(true)}>
-          Remover do xcart…
+          Remover do Panda Track…
         </Button>
       </div>
       <RemoverLoja

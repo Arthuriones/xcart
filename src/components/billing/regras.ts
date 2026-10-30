@@ -236,7 +236,7 @@ export function situacaoDoPlano(p: PerfilAssinatura, agora: number): SituacaoPla
         ...base,
         titulo: "Acesso liberado",
         selo: { tom: "ok", texto: "Liberado" },
-        linha: "A equipe do xcart liberou o acesso completo desta conta, sem cobrança.",
+        linha: "A equipe do Panda Track liberou o acesso completo desta conta, sem cobrança.",
       };
     }
     if (forma === "cartao" && p.status === "incomplete") {
@@ -372,7 +372,7 @@ export function motivoDoBloqueio(
   p: (PerfilAssinatura & { usouClonagemGratis?: boolean }) | null,
   agora: number
 ): string | null {
-  const generico = "Para continuar usando o xcart, assine um plano.";
+  const generico = "Para continuar usando o Panda Track, assine um plano.";
   if (!p) return generico;
   const s = situacaoDoPlano(p, agora);
   if (s.pro || p.acessoLiberado) return null;

@@ -182,7 +182,7 @@ export function problemasDaRota(entrada: {
       id: "conserto",
       tom: "warn",
       titulo: "A conferência automática encontrou um problema",
-      detalhe: "O xcart confere o mapa de produtos sozinho e não conseguiu ligar tudo nesta rota.",
+      detalhe: "O Panda Track confere o mapa de produtos sozinho e não conseguiu ligar tudo nesta rota.",
       acao: { rotulo: "Ver a rota", href: hrefRota(rota.id, "diagnostico") },
       suporte: rota.ultimoConserto.mensagem,
     });

@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { ArrowRight, TriangleAlert } from "lucide-react";
 import { cn } from "@/components/ui/cn";
-import { LogoXcart } from "@/components/layout/logo";
+import { LogoPanda } from "@/components/layout/logo";
 import { StatusBadge, type TomStatus } from "@/components/ui/status-badge";
 
 // ============================================================================
@@ -106,7 +106,7 @@ export function PreviaDashboard() {
         <div className="flex min-h-105 md:min-h-130">
           <div className="hidden w-49 flex-none flex-col gap-0.5 px-2 py-3 min-[1100px]:flex">
             <div className="flex h-8 items-center px-2 pb-2">
-              <LogoXcart altura={13} />
+              <LogoPanda altura={18} />
             </div>
             {MENU_DA_JANELA.map((n, i) =>
               n.tipo === "grupo" ? (
@@ -428,7 +428,7 @@ export function DiagramaRota() {
         <Caixa titulo="Vitrine" texto="Recebe o tráfego do anúncio" />
         <Seta />
         <div className="rounded-card bg-solid px-3.5 py-3 text-on-solid">
-          <div className="text-dense font-semibold">xcart</div>
+          <div className="text-dense font-semibold">Panda Track</div>
           <div className="text-label opacity-85">Casa o carrinho pelo SKU</div>
         </div>
         <Seta />

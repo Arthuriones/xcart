@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LogoXcart } from "@/components/layout/logo";
+import { LogoPanda } from "@/components/layout/logo";
 import { buttonVariants } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import {
@@ -36,7 +36,7 @@ const PERGUNTAS: { p: string; r: string }[] = [
   },
   {
     p: "Quando o acesso libera?",
-    r: "Na hora em que o cartão é aprovado ou o Pix é confirmado. Você entra no xcart sem precisar fazer login de novo.",
+    r: "Na hora em que o cartão é aprovado ou o Pix é confirmado. Você entra no Panda Track sem precisar fazer login de novo.",
   },
   {
     p: "Posso cancelar quando quiser?",
@@ -68,15 +68,15 @@ export function TelaPaywall({
     <div className="min-h-dvh bg-bg px-4 py-8 text-ink md:py-14">
       <Toaster />
       <main className="mx-auto flex w-full max-w-240 flex-col gap-8">
-        <LogoXcart altura={22} prioridade />
+        <LogoPanda altura={30} prioridade />
 
         {motivo === null ? (
           // Tem acesso e chegou aqui pelo endereco: nada a assinar.
           <section className="flex max-w-120 flex-col gap-3">
             <h1 className="text-page text-ink">Seu acesso está liberado</h1>
-            <p className="text-body text-t1">Sua conta já pode usar o xcart. Não é preciso assinar de novo.</p>
+            <p className="text-body text-t1">Sua conta já pode usar o Panda Track. Não é preciso assinar de novo.</p>
             <Link href={APP_HOME} className={buttonVariants({ className: "self-start" })}>
-              Ir para o xcart
+              Ir para o Panda Track
             </Link>
           </section>
         ) : (

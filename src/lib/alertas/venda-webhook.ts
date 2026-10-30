@@ -173,7 +173,7 @@ export async function enviarNotificacaoDeVenda(url: string, v: Venda): Promise<R
 
 /** A venda de exemplo do botao Testar. */
 export const VENDA_DE_TESTE: Venda = {
-  loja: "Teste xcart",
+  loja: "Teste Panda Track",
   pedido: "#1001",
   valor: 69,
   moeda: "USD",

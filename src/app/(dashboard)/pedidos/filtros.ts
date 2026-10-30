@@ -201,7 +201,7 @@ export function jornadaDoPedido(p: PedidoTela, dinheiro: (v: number) => string):
     } else {
       j.push({
         titulo: "Compra na fila do Meta",
-        detalhe: `O xcart tenta de novo sozinho${sufixo}`,
+        detalhe: `O Panda Track tenta de novo sozinho${sufixo}`,
         hora: ev.hora,
         tom: "neutral",
         marca: "meta",

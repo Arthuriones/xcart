@@ -252,7 +252,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (aberto instanceof Response) return aberto;
   const { userId, checkout } = aberto;
   if (!rastreiaCompra(checkout.plataforma)) {
-    return json(400, { ok: false, erro: `A ${nomeDaPlataforma(checkout.plataforma)} não manda a compra pelo xcart.` });
+    return json(400, { ok: false, erro: `A ${nomeDaPlataforma(checkout.plataforma)} não manda a compra pelo Panda Track.` });
   }
 
   let corpo: CorpoDestino;
@@ -374,7 +374,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (aberto instanceof Response) return aberto;
   const { userId, checkout } = aberto;
   if (!rastreiaCompra(checkout.plataforma)) {
-    return json(400, { ok: false, erro: `A ${nomeDaPlataforma(checkout.plataforma)} não manda a compra pelo xcart.` });
+    return json(400, { ok: false, erro: `A ${nomeDaPlataforma(checkout.plataforma)} não manda a compra pelo Panda Track.` });
   }
 
   let corpo: CorpoPatch;

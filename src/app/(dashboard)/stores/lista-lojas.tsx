@@ -263,7 +263,7 @@ export function ListaLojas({ resumo }: { resumo: ResumoLojas }) {
                 ) : null}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem variant="destructive" onClick={() => abrirRemover(l.loja)}>
-                  Remover do xcart…
+                  Remover do Panda Track…
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -373,7 +373,7 @@ export function ListaLojas({ resumo }: { resumo: ResumoLojas }) {
                 variante="simples"
                 className="min-h-45"
                 titulo="Nenhuma loja sem acesso"
-                descricao="Todas as lojas conectadas deixam o xcart ler os pedidos."
+                descricao="Todas as lojas conectadas deixam o Panda Track ler os pedidos."
               />
             ) : (
               <EmptyState

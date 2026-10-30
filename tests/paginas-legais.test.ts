@@ -35,7 +35,7 @@ describe("exclusão de dados (Google Play e App Store pedem caminho direto)", ()
   const comoPedir = secao(p, "Como solicitar exclusão");
 
   it("dá o caminho no app e o caminho no site", () => {
-    expect(comoPedir).toContain("No app do xcart");
+    expect(comoPedir).toContain("No app do Panda Track");
     expect(comoPedir).toContain("Conta, toque em Excluir conta");
     expect(comoPedir).toContain("user.xcart.app");
     expect(comoPedir).toContain("Configurações e, na seção Conta, clique em Excluir conta");

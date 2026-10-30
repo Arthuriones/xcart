@@ -33,7 +33,7 @@ export default function Error({
     >
       <p className="text-[15px] font-semibold text-ink">Algo quebrou nesta tela</p>
       <p className="mt-1.5 max-w-[520px] text-[12.5px] text-t2">
-        O resto do xcart continua funcionando. Nada do que você fez foi perdido — esta
+        O resto do Panda Track continua funcionando. Nada do que você fez foi perdido — esta
         parte da página não conseguiu desenhar.
       </p>
       <p className="mt-2 font-mono text-[11px] text-t3">

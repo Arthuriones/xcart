@@ -232,7 +232,7 @@ export function FormPlanoCreditos({
             { valor: "pro", rotulo: "Pro" },
           ]}
         />
-        <p className="text-label text-t2">Mudar aqui não cobra nem cancela assinatura: só muda o plano no xcart.</p>
+        <p className="text-label text-t2">Mudar aqui não cobra nem cancela assinatura: só muda o plano no Panda Track.</p>
       </div>
 
       <div className="flex flex-col gap-1.5">

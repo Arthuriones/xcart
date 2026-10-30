@@ -17,9 +17,12 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ==========================================================================
-   xcart · design system do redesign (Fase 1)
+   Panda Track · design system
 
-   Fonte dos valores: "design novo/Fase 0/xcart-tokens.css" (aprovado).
+   Fonte dos valores: "design novo/Panda Track - App.dc.html" (29/10/2026;
+   antes, o xcart-tokens.css da Fase 0). Verde e o acento (link, foco,
+   lucro); o primario segue preto solido. O menu lateral e escuro nos dois
+   temas (classe "dark" no <aside>, fundo --frame).
    Duas camadas, como antes:
    1. a paleta propria (--bg, --surface, --ink, --t1..t4, --ok/--warn/--err/
       --info/--neutral/--run com fundo e borda, --chart-*), definida em :root
@@ -44,6 +47,7 @@
   --color-hover: var(--hover);
   --color-track: var(--track);
   --color-nav-active: var(--nav-active);
+  --color-frame: var(--frame);
 
   /* bordas, do mais leve ao contorno de controle (3:1) */
   --color-border: var(--border);
@@ -58,7 +62,7 @@
   --color-t3: var(--t3);
   --color-t4: var(--t4);
 
-  /* acao: primario e preto solido; terracota so em link e foco.
+  /* acao: primario e preto solido; verde so em link e foco.
      ATENCAO: por causa da cor "solid", border-solid / outline-solid /
      decoration-solid tambem pintam a cor de preto. O estilo solido ja e o
      padrao: nao escreva essas classes. Para o anel de foco use
@@ -176,16 +180,16 @@
 
   /* 3 raios. Os nomes do shadcn convergem para eles (sm fica 4px, para
      marcadores pequenos como o Kbd). */
-  --radius-control: 6px;
-  --radius-card: 8px;
-  --radius-overlay: 12px;
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-overlay: 14px;
   --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
-  --radius-2xl: 12px;
-  --radius-3xl: 12px;
-  --radius-4xl: 12px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-2xl: 14px;
+  --radius-3xl: 14px;
+  --radius-4xl: 14px;
 
   /* 3 alturas de controle: h-ctl-sm (tabela), h-ctl-md (padrao),
      h-ctl-lg (alvo de toque no celular). Tambem servem a size-* e w-*. */
@@ -211,72 +215,147 @@
 :root {
   color-scheme: light;
 
-  /* superficies */
-  --bg: #f7f6f5;
+  /* superficies; --frame e o fundo do menu lateral escuro */
+  --bg: #f5f4f1;
   --surface: #ffffff;
-  --surface-2: #fbfbfa;
-  --hover: #f3f2f0;
-  --track: #ecebe8;
-  --nav-active: #efeeec;
+  --surface-2: #faf9f7;
+  --hover: #f1efeb;
+  --track: #ebe9e4;
+  --nav-active: #efede9;
+  --frame: #121212;
 
   /* bordas */
-  --border: #e4e2df;
-  --border-subtle: #efeeec;
-  --border-strong: #cfccc8;
+  --border: #e3e0da;
+  --border-subtle: #efede9;
+  --border-strong: #cdc9c1;
   --control-border: #8c8a86;
 
   /* texto */
-  --ink: #1a1a1a;
-  --t1: #3f3e3c;
-  --t2: #575553;
-  --t3: #6e6c69;
-  --t4: #8c8a86;
+  --ink: #141414;
+  --t1: #3a3936;
+  --t2: #56544f;
+  --t3: #6b6964;
+  --t4: #8d8b86;
 
   /* acao */
-  --solid: #1a1a1a;
+  --solid: #141414;
   --solid-hover: #333333;
   --on-solid: #ffffff;
-  --brand: #b04a2f;
-  --focus: #b04a2f;
+  --brand: #1f7a5a;
+  --focus: #1f7a5a;
 
   /* status */
-  --ok: #276b43;
-  --ok-bg: #eaf3ee;
-  --ok-border: #bcd9c7;
-  --warn: #875c12;
-  --warn-bg: #fbf3e2;
-  --warn-border: #e8d3a6;
+  --ok: #1f7a5a;
+  --ok-bg: #e7f3ed;
+  --ok-border: #b7dbc8;
+  --warn: #7f5a0f;
+  --warn-bg: #fbf2df;
+  --warn-border: #e9d3a2;
   --err: #b3261e;
-  --err-bg: #fceceb;
-  --err-border: #ecc5c2;
+  --err-bg: #fcebea;
+  --err-border: #ecc3c0;
   --info: #2c5d8f;
   --info-bg: #ebf1f7;
   --info-border: #c3d4e6;
-  --neutral: #575553;
-  --neutral-bg: #f1f0ee;
-  --neutral-border: #dcdad6;
+  --neutral: #56544f;
+  --neutral-bg: #f1efeb;
+  --neutral-border: #dcd9d2;
   --run: #2c5d8f;
   --run-bg: #ebf1f7;
   --run-border: #c3d4e6;
 
-  /* graficos */
-  --chart-1: #1a1a1a;
+  /* graficos: o lucro e o acento verde */
+  --chart-1: #1f7a5a;
   --chart-2: #3b6fa8;
   --chart-3: #c0661f;
   --chart-4: #24877c;
   --chart-5: #7c5cad;
-  --chart-grid: #ecebe8;
+  --chart-grid: #ebe9e4;
 
   /* carregando, overlay, elevacao */
-  --skeleton: #ebe9e6;
-  --skeleton-hi: #f6f5f3;
-  --scrim: rgba(26, 26, 26, 0.32);
-  --shadow: 0 12px 32px rgba(26, 26, 26, 0.14), 0 2px 6px rgba(26, 26, 26, 0.06);
-  --shadow-panel: -12px 0 32px rgba(26, 26, 26, 0.1);
+  --skeleton: #ebe9e4;
+  --skeleton-hi: #f6f5f2;
+  --scrim: rgba(20, 20, 20, 0.32);
+  --shadow: 0 12px 32px rgba(20, 20, 20, 0.14), 0 2px 6px rgba(20, 20, 20, 0.06);
+  --shadow-panel: -12px 0 32px rgba(20, 20, 20, 0.1);
   --header-bg: rgba(255, 255, 255, 0.9);
 
   --radius: 0.5rem;
 
+  /* papel da loja no mapa de rotas: terracota entra o trafego, verde cobra.
+     Cor propria: o acento (--brand) virou verde e as duas iam se confundir. */
+  --vitrine: #b04a2f;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --bg: #0e0e0d;
+  --surface: #161615;
+  --surface-2: #1b1b1a;
+  --hover: #222220;
+  --track: #262624;
+  --nav-active: #232321;
+  --frame: #0a0a09;
+
+  --border: #2b2a28;
+  --border-subtle: #222220;
+  --border-strong: #3e3d3a;
+  --control-border: #74726e;
+
+  --ink: #f2f1ee;
+  --t1: #d6d4cf;
+  --t2: #b5b3ad;
+  --t3: #97958f;
+  --t4: #75736f;
+
+  --solid: #f2f1ee;
+  --solid-hover: #ffffff;
+  --on-solid: #141414;
+  --brand: #3fae84;
+  --focus: #3fae84;
+
+  --ok: #52c093;
+  --ok-bg: #12271e;
+  --ok-border: #24513d;
+  --warn: #e2b45c;
+  --warn-bg: #2a2112;
+  --warn-border: #5b4720;
+  --err: #f27d73;
+  --err-bg: #2c1513;
+  --err-border: #5e2b27;
+  --info: #8cb8e6;
+  --info-bg: #14212e;
+  --info-border: #2b4560;
+  --neutral: #b5b3ad;
+  --neutral-bg: #222220;
+  --neutral-border: #3e3d3a;
+  --run: #8cb8e6;
+  --run-bg: #14212e;
+  --run-border: #2b4560;
+
+  --chart-1: #3fae84;
+  --chart-2: #78a6dc;
+  --chart-3: #e8955a;
+  --chart-4: #5cc0b3;
+  --chart-5: #a98ddb;
+  --chart-grid: #2b2a28;
+  --vitrine: #d9784f;
+
+  --skeleton: #262625;
+  --skeleton-hi: #303030;
+  --scrim: rgba(0, 0, 0, 0.62);
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px #2b2a28;
+  --shadow-panel: -12px 0 32px rgba(0, 0, 0, 0.5);
+  --header-bg: rgba(23, 23, 23, 0.9);
+}
+
+/* Os nomes do shadcn e do design antigo apontam para a paleta. Valem em
+   :root E em .dark: variavel que aponta para outra e resolvida no elemento
+   que a declara, e o menu lateral e um bloco .dark dentro da pagina clara --
+   so no :root, la dentro --primary, --muted-foreground etc. seguiam claros. */
+:root,
+.dark {
   /* --- nomes do shadcn apontando para a paleta --- */
   --background: var(--bg);
   --foreground: var(--ink);
@@ -311,70 +390,7 @@
   --action-foreground: var(--on-solid);
   --danger: var(--err);
   --warning: var(--warn);
-  /* papel da loja no mapa de rotas: terracota entra o trafego, verde cobra */
-  --vitrine: var(--brand);
   --checkout: var(--ok);
-}
-
-.dark {
-  color-scheme: dark;
-
-  --bg: #0f0f0f;
-  --surface: #171717;
-  --surface-2: #1c1c1c;
-  --hover: #232322;
-  --track: #2a2a29;
-  --nav-active: #262625;
-
-  --border: #2c2c2b;
-  --border-subtle: #222221;
-  --border-strong: #3d3d3b;
-  --control-border: #74726e;
-
-  --ink: #f1f0ee;
-  --t1: #d4d2ce;
-  --t2: #b3b1ad;
-  --t3: #96948f;
-  --t4: #75736f;
-
-  --solid: #f1f0ee;
-  --solid-hover: #ffffff;
-  --on-solid: #141414;
-  --brand: #d9784f;
-  --focus: #d9784f;
-
-  --ok: #5cbf85;
-  --ok-bg: #13291b;
-  --ok-border: #24492f;
-  --warn: #e0ad52;
-  --warn-bg: #2e2410;
-  --warn-border: #4d3b17;
-  --err: #e8786a;
-  --err-bg: #331816;
-  --err-border: #5a2b25;
-  --info: #7fb0e0;
-  --info-bg: #142233;
-  --info-border: #26405c;
-  --neutral: #b3b1ad;
-  --neutral-bg: #232322;
-  --neutral-border: #3d3d3b;
-  --run: #7fb0e0;
-  --run-bg: #142233;
-  --run-border: #26405c;
-
-  --chart-1: #f1f0ee;
-  --chart-2: #78a6dc;
-  --chart-3: #e8955a;
-  --chart-4: #5cc0b3;
-  --chart-5: #a98ddb;
-  --chart-grid: #2c2c2b;
-
-  --skeleton: #262625;
-  --skeleton-hi: #303030;
-  --scrim: rgba(0, 0, 0, 0.62);
-  --shadow: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px #2c2c2b;
-  --shadow-panel: -12px 0 32px rgba(0, 0, 0, 0.5);
-  --header-bg: rgba(23, 23, 23, 0.9);
 }
 
 @keyframes xc-pulse {
@@ -459,7 +475,7 @@
     color: var(--t3);
   }
 
-  /* Link e terracota; o preto solido fica reservado para botao primario. */
+  /* Link e verde; o preto solido fica reservado para botao primario. */
   a {
     color: var(--brand);
     text-decoration: none;
@@ -473,7 +489,7 @@
     background: var(--info-bg);
   }
 
-  /* Foco: anel terracota de 2px, 3:1 nos dois temas. */
+  /* Foco: anel verde de 2px, 3:1 nos dois temas. */
   :focus-visible {
     outline: 2px solid var(--focus);
     outline-offset: 2px;

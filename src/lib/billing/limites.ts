@@ -238,7 +238,7 @@ export function mensagemDeLimite(
 
   const cobre = COBRE[tipo](n);
   if (limites.origem === "sem_plano") {
-    return `Sem assinatura, o xcart cobre ${cobre}. Para ${VERBO[tipo]}, assine o ${destino} em Assinatura.`;
+    return `Sem assinatura, o Panda Track cobre ${cobre}. Para ${VERBO[tipo]}, assine o ${destino} em Assinatura.`;
   }
   return `Seu plano cobre ${cobre}. Para ${VERBO[tipo]}, mude para o ${destino} em Assinatura.`;
 }

@@ -72,19 +72,19 @@ describe("getCurrentUser", () => {
 
   it("rede caiu ou prazo estourou (status 0): lanca", async () => {
     auth.resposta = semUsuario(new AuthRetryableFetchError("fetch failed", 0));
-    await expect(getCurrentUser()).rejects.toThrow("O login do xcart não respondeu agora.");
+    await expect(getCurrentUser()).rejects.toThrow("O login do Panda Track não respondeu agora.");
   });
 
   it("5xx do login: lanca", async () => {
     for (const status of [500, 502, 503, 504, 522]) {
       auth.resposta = semUsuario(new AuthRetryableFetchError("Service Unavailable", status));
-      await expect(getCurrentUser(), String(status)).rejects.toThrow("O login do xcart não respondeu agora.");
+      await expect(getCurrentUser(), String(status)).rejects.toThrow("O login do Panda Track não respondeu agora.");
     }
   });
 
   it("429 (limite de requisicoes do login): lanca", async () => {
     auth.resposta = semUsuario(new AuthApiError("Request rate limit reached", 429, "over_request_rate_limit"));
-    await expect(getCurrentUser()).rejects.toThrow("O login do xcart não respondeu agora.");
+    await expect(getCurrentUser()).rejects.toThrow("O login do Panda Track não respondeu agora.");
   });
 });
 

@@ -1,5 +1,5 @@
 import { ShieldAlert } from "lucide-react";
-import { LogoXcart } from "@/components/layout/logo";
+import { LogoPanda } from "@/components/layout/logo";
 import { Toaster } from "@/components/ui/sonner";
 import { AdminLogout } from "./logout";
 
@@ -11,7 +11,7 @@ export function AcessoRestrito({ email, linkApp }: { email: string; linkApp: str
   return (
     <main className="flex min-h-dvh items-center justify-center bg-bg px-4 py-12 font-sans text-ink">
       <div className="flex w-full max-w-md flex-col items-center gap-3 rounded-card border border-border bg-surface p-6 text-center">
-        <LogoXcart altura={18} prioridade />
+        <LogoPanda altura={26} prioridade />
         <span
           aria-hidden
           className="mt-2 grid size-11 place-items-center rounded-full border border-warn-border bg-warn-bg text-warn"

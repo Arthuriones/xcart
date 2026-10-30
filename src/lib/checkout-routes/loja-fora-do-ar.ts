@@ -66,9 +66,9 @@ export function mensagemForaDoAr(
         lado === "checkout" ? " Enquanto isso, o checkout dela não abre para o comprador." : ""
       }`;
     case "sem_app":
-      return `${loja} não dá mais acesso ao xcart (app removido ou credencial revogada). Reconecte a loja em Lojas.`;
+      return `${loja} não dá mais acesso ao Panda Track (app removido ou credencial revogada). Reconecte a loja em Lojas.`;
     case "vitrine_fechada":
-      return `${loja} está com senha: o xcart não consegue ler os produtos dela. Tire a senha em Loja virtual > Preferências.`;
+      return `${loja} está com senha: o Panda Track não consegue ler os produtos dela. Tire a senha em Loja virtual > Preferências.`;
     case "loja_fechada":
       return `${loja} não existe mais na Shopify. Tire a loja da rota ou aponte para outra.`;
   }

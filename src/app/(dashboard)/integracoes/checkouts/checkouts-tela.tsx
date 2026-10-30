@@ -234,7 +234,7 @@ function CampoSegredo({
       <p id={`${id}-segredo-ajuda`} className={erro ? "text-label text-err" : "text-label text-t2"}>
         {erro ??
           (temSegredo === false
-            ? `Sem o ${qual}, o xcart recusa os eventos da ${nome}.`
+            ? `Sem o ${qual}, o Panda Track recusa os eventos da ${nome}.`
             : temSegredo
               ? `${qual === "token" ? "Token salvo" : "Secret salvo"}. Ele confere cada evento que chega.`
               : "Ele confere cada evento que chega.")}
@@ -1210,7 +1210,7 @@ export function CheckoutsTela({
       <ConfirmDialog
         open={removendo !== null}
         onOpenChange={(v) => !v && setRemovendo(null)}
-        titulo={`Remover ${removendo?.nome ?? "checkout"} do xcart?`}
+        titulo={`Remover ${removendo?.nome ?? "checkout"} do Panda Track?`}
         descricao={
           removendo && modeloDaPlataforma(removendo.plataforma) === "venda"
             ? `Os pedidos e as vendas dele saem do Dashboard. A conta de anúncio ligada fica sem checkout. Na ${nomeCurto(removendo.plataforma)}, apague o webhook também.`

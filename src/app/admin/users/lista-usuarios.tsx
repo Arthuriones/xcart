@@ -327,7 +327,7 @@ export function ListaUsuarios({
         </Callout>
       ) : null}
 
-      <section aria-label="Usuários do xcart" className="min-w-0 rounded-card border border-border bg-surface">
+      <section aria-label="Usuários do Panda Track" className="min-w-0 rounded-card border border-border bg-surface">
         <div className="flex flex-wrap items-center gap-3 border-b border-border-subtle px-4 py-3">
           <Segmented<FiltroAcesso>
             rotulo="Filtrar por acesso"

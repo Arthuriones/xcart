@@ -278,7 +278,7 @@ export function AdicionarPixel({
 
           {modo === "novo" && plat === "meta" && (
             <>
-              {campo("nome", "Nome", "ex.: Loja principal", "Só aparece no xcart.", { opc: true })}
+              {campo("nome", "Nome", "ex.: Loja principal", "Só aparece no Panda Track.", { opc: true })}
               {campo("pid", "ID do pixel", "ex.: 482917350021", "No Gerenciador de Eventos, abaixo do nome do pixel.", {
                 mono: true,
                 erroTxt: "Cole o ID do pixel.",
@@ -307,7 +307,7 @@ export function AdicionarPixel({
 
           {modo === "novo" && plat === "tiktok" && (
             <>
-              {campo("nome", "Nome", "ex.: Loja principal", "Só aparece no xcart.", { opc: true })}
+              {campo("nome", "Nome", "ex.: Loja principal", "Só aparece no Panda Track.", { opc: true })}
               {campo(
                 "pid",
                 "Pixel ID",
@@ -338,7 +338,7 @@ export function AdicionarPixel({
 
           {modo === "novo" && plat === "google" && (
             <>
-              {campo("nome", "Nome", "ex.: Pesquisa", "Só aparece no xcart.", { opc: true })}
+              {campo("nome", "Nome", "ex.: Pesquisa", "Só aparece no Panda Track.", { opc: true })}
               {campo("aw", "ID de conversão", "ex.: AW-1128430917", "No Google Ads: Metas › Conversões › Tag.", {
                 mono: true,
                 erroTxt: "Cole o ID que começa com AW-.",

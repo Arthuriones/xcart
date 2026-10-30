@@ -550,7 +550,7 @@ export function SecaoSkus({
                   <span className="num">
                     {fmtInteiro(pag.de)}–{fmtInteiro(pag.ate)}
                   </span>{" "}
-                  de {plural(pag.total, "produto", "produtos")}. O xcart converte cada moeda pela cotação do dia do
+                  de {plural(pag.total, "produto", "produtos")}. O Panda Track converte cada moeda pela cotação do dia do
                   pedido.
                   {shopify.falhou ? " Os nomes e as fotos não vieram da Shopify agora; a tabela mostra o SKU." : ""}
                 </p>

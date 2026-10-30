@@ -4,7 +4,7 @@ import { Input as InputPrimitive } from "@base-ui/react/input"
 import { cn } from "@/components/ui/cn"
 
 /*
- * Campo de texto. Contorno control-border (3:1), foco terracota, erro por
+ * Campo de texto. Contorno control-border (3:1), foco verde, erro por
  * aria-invalid (ligue a mensagem com aria-describedby, abaixo do campo).
  * Numero: inputMode="decimal" e className="num text-right".
  * Tamanho: 32px (h-ctl-md); use className="h-ctl-sm" na tabela ou "h-ctl-lg" no celular.

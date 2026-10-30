@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal/legal-page";
 
 export const metadata: Metadata = {
-  title: "Termos de Uso | xcart",
+  title: "Termos de Uso | Panda Track",
   description:
-    "Termos de uso do xcart (site, painel e app de celular) para importação de produtos, IA, Shopify e checkout roteado.",
+    "Termos de uso do Panda Track (site, painel e app de celular) para importação de produtos, IA, Shopify e checkout roteado.",
 };
 
 export default function TermsPage() {
@@ -12,13 +12,13 @@ export default function TermsPage() {
     <LegalPage
       atual="terms"
       title="Termos de Uso"
-      description="Estes termos definem as condições de uso do xcart, no site, no painel e no app de celular, e de seus recursos de importação, automação, IA, Shopify e checkout roteado."
+      description="Estes termos definem as condições de uso do Panda Track, no site, no painel e no app de celular, e de seus recursos de importação, automação, IA, Shopify e checkout roteado."
       updatedAt="29 de outubro de 2026"
       sections={[
         {
           title: "1. Aceitação dos termos",
           body: [
-            "Ao acessar ou usar o xcart, o usuário concorda com estes termos e com a Política de Privacidade.",
+            "Ao acessar ou usar o Panda Track, o usuário concorda com estes termos e com a Política de Privacidade.",
             "Se o usuário não concordar com estes termos, deve interromper o uso da plataforma.",
           ],
         },
@@ -68,7 +68,7 @@ export default function TermsPage() {
         {
           title: "8. App de celular",
           body: [
-            "O app do xcart para iPhone e Android faz parte da plataforma: usa a mesma conta e o mesmo login do site, e estes termos valem para ele.",
+            "O app do Panda Track para iPhone e Android faz parte da plataforma: usa a mesma conta e o mesmo login do site, e estes termos valem para ele.",
             "O app serve para acompanhar os números da conta e receber avisos de venda. Não há compra dentro do app.",
             "As notificações podem ser desligadas nos ajustes do celular, e a conta pode ser excluída pelo próprio app, em Conta > Excluir conta.",
           ],

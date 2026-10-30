@@ -3,9 +3,9 @@ import { LegalPage } from "@/components/legal/legal-page";
 import { RETENCAO } from "@/lib/tracking/retencao";
 
 export const metadata: Metadata = {
-  title: "Política de Privacidade | xcart",
+  title: "Política de Privacidade | Panda Track",
   description:
-    "Política de privacidade do xcart: conta, lojas e integrações conectadas, rastreamento de conversões, cobrança e o app de celular.",
+    "Política de privacidade do Panda Track: conta, lojas e integrações conectadas, rastreamento de conversões, cobrança e o app de celular.",
 };
 
 // Os prazos da fila e do historico saem do arquivo que o expurgo segue: a
@@ -17,14 +17,14 @@ export default function PrivacyPage() {
     <LegalPage
       atual="privacy"
       title="Política de Privacidade"
-      description="Esta política explica quais dados o xcart coleta, como usa, com quem compartilha, por quanto tempo guarda e quais controles o usuário tem, no site, no painel e no app de celular."
+      description="Esta política explica quais dados o Panda Track coleta, como usa, com quem compartilha, por quanto tempo guarda e quais controles o usuário tem, no site, no painel e no app de celular."
       updatedAt="29 de outubro de 2026"
       sections={[
         {
           title: "1. Quem somos",
           body: [
-            "xcart é uma plataforma para lojistas: mede lucro, vendas e campanhas, envia conversões às plataformas de anúncio pelo servidor, conecta lojas Shopify e checkouts externos, importa e otimiza produtos com IA e roteia o checkout entre lojas.",
-            "Esta política se aplica ao site, ao painel (user.xcart.app), ao app de celular do xcart para iPhone e Android e às integrações oferecidas pela plataforma.",
+            "Panda Track é uma plataforma para lojistas: mede lucro, vendas e campanhas, envia conversões às plataformas de anúncio pelo servidor, conecta lojas Shopify e checkouts externos, importa e otimiza produtos com IA e roteia o checkout entre lojas.",
+            "Esta política se aplica ao site, ao painel (user.xcart.app), ao app de celular do Panda Track para iPhone e Android e às integrações oferecidas pela plataforma.",
           ],
         },
         {
@@ -43,18 +43,18 @@ export default function PrivacyPage() {
         {
           title: "3. Rastreamento de conversões",
           body: [
-            "Quando o lojista instala o rastreamento do xcart na loja, no checkout ou numa página de venda, o xcart recebe dados da navegação dos visitantes: páginas, produtos, carrinho e início de checkout, um identificador do visitante (cookie da própria loja), endereço IP, navegador (user agent), identificadores de clique de anúncio (como fbclid, gclid e ttclid), cookies das plataformas de anúncio (_fbp, _fbc, _ttp) e parâmetros UTM.",
+            "Quando o lojista instala o rastreamento do Panda Track na loja, no checkout ou numa página de venda, o Panda Track recebe dados da navegação dos visitantes: páginas, produtos, carrinho e início de checkout, um identificador do visitante (cookie da própria loja), endereço IP, navegador (user agent), identificadores de clique de anúncio (como fbclid, gclid e ttclid), cookies das plataformas de anúncio (_fbp, _fbc, _ttp) e parâmetros UTM.",
             "Esses dados servem para enviar as conversões às contas de anúncio do próprio lojista (Meta, Google Ads e TikTok) e para mostrar no painel a origem de cada venda. Os dados do comprador que acompanham a compra, como e-mail e telefone, só são enviados em hash (SHA-256), nunca em texto legível; IP e navegador vão no formato que as plataformas exigem.",
             `A fila de envio é curta: a maior parte dos eventos de navegação sai em ${funilDias} dias, o que não foi entregue em ${naoSaiuDias}, e as compras e os eventos de checkout ficam ${compraDias} dias (o da compra com o conteúdo reduzido ao mínimo depois de ${resumoDaCompraDias} dias). Os dados de identificação do visitante expiram em 90 dias (30 nas páginas de venda ligadas a checkouts externos).`,
             `Para relatórios, guardamos por ${historicoMeses} meses um histórico sem dado pessoal: tipo de evento, data, campanha, valor da compra e os identificadores do evento e do visitante transformados em hash.`,
-            "Nesses casos o xcart trata os dados em nome do lojista, que decide instalar o rastreamento e deve informá-lo na política de privacidade da própria loja.",
+            "Nesses casos o Panda Track trata os dados em nome do lojista, que decide instalar o rastreamento e deve informá-lo na política de privacidade da própria loja.",
           ],
         },
         {
           title: "4. App de celular",
           body: [
-            "O app do xcart para iPhone e Android mostra os números da conta, como lucro, vendas e campanhas, e avisa cada venda por notificação. O login é o mesmo do site: mesma conta, mesmos dados e as mesmas regras desta política.",
-            "Para mandar o aviso de venda, guardamos o token de notificação do aparelho, o sistema (iOS ou Android) e a data e o resultado do último envio. Esse token é apagado quando o usuário sai da conta no app ou exclui a conta. Para parar os avisos sem sair, basta desligar as notificações do xcart nos ajustes do celular.",
+            "O app do Panda Track para iPhone e Android mostra os números da conta, como lucro, vendas e campanhas, e avisa cada venda por notificação. O login é o mesmo do site: mesma conta, mesmos dados e as mesmas regras desta política.",
+            "Para mandar o aviso de venda, guardamos o token de notificação do aparelho, o sistema (iOS ou Android) e a data e o resultado do último envio. Esse token é apagado quando o usuário sai da conta no app ou exclui a conta. Para parar os avisos sem sair, basta desligar as notificações do Panda Track nos ajustes do celular.",
             "O aviso passa pelo serviço de notificações da Expo e pelos serviços da Apple e do Google, que o entregam ao aparelho.",
             "O app não tem rastreamento de terceiros nem anúncios, e os dados dele não são usados para publicidade.",
           ],
@@ -71,15 +71,15 @@ export default function PrivacyPage() {
           title: "6. Compartilhamento com terceiros",
           body: [
             "Compartilhamos dados apenas quando necessário para operar o serviço: Supabase (banco de dados, autenticação e armazenamento) e Vercel (hospedagem do site e do painel); Shopify, para ler pedidos e gerenciar lojas e produtos; Meta, Google e TikTok, para enviar conversões às contas de anúncio do próprio lojista e, no Meta e no Google, ler gasto e campanhas; Sphere, Cakto e Hubla, quando o usuário conecta esses checkouts; Google Gemini, para os recursos de IA quando acionados.",
-            "Cobrança: AbacatePay e, em assinaturas mais antigas, Pagou ou Stripe. O número do cartão é digitado na página ou no formulário do processador de pagamento e não chega ao xcart.",
-            "Avisos: Expo, Apple e Google, para entregar as notificações do app; o Telegram e os endereços de notificação que o próprio usuário cadastra, para alertas e avisos de venda; e assistentes de IA que o próprio usuário conecta à conta (como o Claude, pelo token de acesso criado no xcart).",
+            "Cobrança: AbacatePay e, em assinaturas mais antigas, Pagou ou Stripe. O número do cartão é digitado na página ou no formulário do processador de pagamento e não chega ao Panda Track.",
+            "Avisos: Expo, Apple e Google, para entregar as notificações do app; o Telegram e os endereços de notificação que o próprio usuário cadastra, para alertas e avisos de venda; e assistentes de IA que o próprio usuário conecta à conta (como o Claude, pelo token de acesso criado no Panda Track).",
             "Cada serviço de terceiro processa dados de acordo com seus próprios termos e políticas.",
           ],
         },
         {
           title: "7. Tokens e credenciais",
           body: [
-            "Tokens, chaves e credenciais conectadas são usados para executar ações autorizadas pelo usuário. Esses dados são armazenados para manter integrações funcionando até que o usuário remova a conexão ou exclua a conta, e ficam protegidos por regras de acesso do banco: só o servidor do xcart e a própria conta do usuário conseguem lê-los, nunca outras contas.",
+            "Tokens, chaves e credenciais conectadas são usados para executar ações autorizadas pelo usuário. Esses dados são armazenados para manter integrações funcionando até que o usuário remova a conexão ou exclua a conta, e ficam protegidos por regras de acesso do banco: só o servidor do Panda Track e a própria conta do usuário conseguem lê-los, nunca outras contas.",
             "Recomendamos que o usuário conecte apenas contas e lojas que possui ou está autorizado a administrar.",
           ],
         },
@@ -87,7 +87,7 @@ export default function PrivacyPage() {
           title: "8. Retenção e exclusão",
           body: [
             "Mantemos os dados da conta enquanto ela estiver ativa ou enquanto forem necessários para fornecer o serviço, cumprir obrigações técnicas, prevenir abuso ou manter histórico operacional solicitado pelo usuário. Os prazos do rastreamento estão na seção 3.",
-            "Remover uma loja apaga a loja e os dados dela no xcart. A conta pode ser excluída pelo próprio usuário, no app (Conta > Excluir conta) ou no site (Configurações, seção Conta).",
+            "Remover uma loja apaga a loja e os dados dela no Panda Track. A conta pode ser excluída pelo próprio usuário, no app (Conta > Excluir conta) ou no site (Configurações, seção Conta).",
             "O que é apagado, o que pode ficar e como revogar o acesso nas integrações estão na página de exclusão de dados, em /data-deletion.",
           ],
         },
@@ -101,7 +101,7 @@ export default function PrivacyPage() {
         {
           title: "10. Contato",
           body: [
-            "Para dúvidas sobre privacidade, exclusão ou uso de dados, entre em contato pelo canal informado no painel do xcart ou pelo e-mail de suporte configurado no aplicativo da Meta.",
+            "Para dúvidas sobre privacidade, exclusão ou uso de dados, entre em contato pelo canal informado no painel do Panda Track ou pelo e-mail de suporte configurado no aplicativo da Meta.",
           ],
         },
       ]}

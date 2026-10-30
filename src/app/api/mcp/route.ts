@@ -72,9 +72,9 @@ export async function POST(req: Request) {
     return ok(id, {
       protocolVersion: PROTOCOL,
       capabilities: { tools: { listChanged: false } },
-      serverInfo: { name: "xcart", title: "xcart — sua loja Shopify", version: "1.0.0" },
+      serverInfo: { name: "xcart", title: "Panda Track — sua loja Shopify", version: "1.0.0" },
       instructions:
-        "Ferramentas para ler e editar as lojas Shopify conectadas na conta xcart do usuario. " +
+        "Ferramentas para ler e editar as lojas Shopify conectadas na conta Panda Track do usuario. " +
         "Chame list_stores primeiro para descobrir os storeId. " +
         "Depois de qualquer escrita, confirme com verify_page: a Shopify serve por CDN e " +
         "resposta de API dizendo 'ok' nao prova que a pagina renderizou.",
@@ -92,10 +92,10 @@ export async function POST(req: Request) {
   if (!auth.ok) {
     const MOTIVO = {
       invalid:
-        "Token ausente ou invalido. Gere um em xcart > Canais > Claude (MCP) e mande no " +
+        "Token ausente ou invalido. Gere um em Panda Track > Canais > Claude (MCP) e mande no " +
         "header Authorization: Bearer xcart_mcp_...",
-      revoked: "Este token foi revogado. Gere um novo em xcart > Canais > Claude (MCP).",
-      expired: "Este token expirou. Gere um novo em xcart > Canais > Claude (MCP).",
+      revoked: "Este token foi revogado. Gere um novo em Panda Track > Canais > Claude (MCP).",
+      expired: "Este token expirou. Gere um novo em Panda Track > Canais > Claude (MCP).",
       rate_limited:
         `Limite de chamadas atingido. Tente de novo em ${auth.retryAfter}s. ` +
         "O teto existe para uma automacao em loop nao esgotar o limite da API da sua loja na Shopify.",

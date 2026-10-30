@@ -151,7 +151,7 @@ export async function getOrCreateCustomer(
     const criado = await api<PagouCustomer>("/v2/customers", {
       method: "POST",
       body: {
-        name: name || email?.split("@")[0] || "Cliente xcart",
+        name: name || email?.split("@")[0] || "Cliente Panda Track",
         email: email || `${userId}@sem-email.xcart`,
         externalRef: userId,
         ...(document ? { document } : {}),

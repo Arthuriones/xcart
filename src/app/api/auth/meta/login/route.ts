@@ -17,7 +17,7 @@ function renderErroTicket(mensagem: string) {
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <title>Link Expirado - xcart</title>
+  <title>Link Expirado - Panda Track</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; background: #0f1115; color: #f1f3f5; display: grid; place-items: center; height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
@@ -30,7 +30,7 @@ function renderErroTicket(mensagem: string) {
   <div class="box">
     <h2>Link Expirado ou Inválido</h2>
     <p>${mensagem}</p>
-    <p>Por segurança, gere um novo link no painel do xcart clicando em "Adicionar perfil" &rarr; "Copiar link para navegador multilogin".</p>
+    <p>Por segurança, gere um novo link no painel do Panda Track clicando em "Adicionar perfil" &rarr; "Copiar link para navegador multilogin".</p>
   </div>
 </body>
 </html>`;

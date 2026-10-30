@@ -161,7 +161,7 @@ export function Visao({ d, lidoEm, faturamento }: { d: VisaoAdmin; lidoEm: numbe
               cadastros.length > 1 ? `Mês passado: ${plural(cadastros.at(-2) ?? 0, "cadastro", "cadastros")}` : undefined
             }
             serie={cadastros}
-            definicao="Contas criadas no xcart. A linha mostra os cadastros por mês nos últimos 6 meses."
+            definicao="Contas criadas no Panda Track. A linha mostra os cadastros por mês nos últimos 6 meses."
             href="/admin/users"
           />
           <KpiCard

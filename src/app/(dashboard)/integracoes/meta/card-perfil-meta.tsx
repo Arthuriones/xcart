@@ -128,7 +128,7 @@ export function CardPerfilMeta({
       });
     } else if (erros.length === 0) {
       toast("Nenhuma conta nova", {
-        description: "O xcart já tem todas as contas que os perfis conectados enxergam.",
+        description: "O Panda Track já tem todas as contas que os perfis conectados enxergam.",
       });
     }
     if (erros.length > 0) {

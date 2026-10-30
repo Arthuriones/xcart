@@ -246,7 +246,7 @@ function TextoDaPagina({ daPagina, temPixel }: { daPagina: RastreamentoDoCheckou
   }
   const v = visitas === 1 ? "1 visita" : `${visitas} visitas`;
   const i = inicios === 1 ? "1 clique no botão" : `${inicios} cliques no botão`;
-  return <p className="text-label text-t2">Últimas 24 h: {v} e {i} chegaram ao xcart.</p>;
+  return <p className="text-label text-t2">Últimas 24 h: {v} e {i} chegaram ao Panda Track.</p>;
 }
 
 export function RastreamentoCheckout({ checkout, aoFechar }: { checkout: CheckoutResumo; aoFechar: () => void }) {
@@ -294,7 +294,7 @@ export function RastreamentoCheckout({ checkout, aoFechar }: { checkout: Checkou
         <DialogHeader>
           <DialogTitle>Rastreamento · {checkout.nome}</DialogTitle>
           <DialogDescription>
-            O xcart manda a compra da {plataforma} ao Meta e ao TikTok pelo servidor, com e-mail e telefone do comprador
+            O Panda Track manda a compra da {plataforma} ao Meta e ao TikTok pelo servidor, com e-mail e telefone do comprador
             criptografados.
           </DialogDescription>
         </DialogHeader>
@@ -318,7 +318,7 @@ export function RastreamentoCheckout({ checkout, aoFechar }: { checkout: Checkou
                 <>
                   A página que usa a Eve (como a da panela) já manda o próprio pixel e a API de Conversões. Ligue um
                   pixel aqui só se tirar o de lá: com os dois mandando, a compra conta em dobro. Sem pixel ligado, o
-                  xcart não manda nada.
+                  Panda Track não manda nada.
                 </>
               ) : checkout.plataforma === "hubla" ? (
                 <>

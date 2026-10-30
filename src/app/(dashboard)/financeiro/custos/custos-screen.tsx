@@ -144,7 +144,7 @@ export function CustosScreen({
       {conexao?.semAcesso ? (
         <Callout
           tom="warn"
-          titulo="A Shopify não deixa o xcart ler os pedidos desta loja"
+          titulo="A Shopify não deixa o Panda Track ler os pedidos desta loja"
           acao={
             <Link
               href={`/stores/${loja.id}`}

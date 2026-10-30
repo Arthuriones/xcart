@@ -73,7 +73,7 @@ function Dialogo({
     });
     if (!res.ok || res.redirected) throw new Error(String(res.status));
     aoRemover(loja.id);
-    toast.success(`${loja.nome} removida do xcart`, {
+    toast.success(`${loja.nome} removida do Panda Track`, {
       description: "A lista já foi atualizada. Nada mudou na Shopify.",
     });
   }
@@ -84,14 +84,14 @@ function Dialogo({
     <ConfirmDialog
       open
       onOpenChange={aoMudar}
-      titulo={`Remover ${loja.nome} do xcart?`}
-      confirmar="Remover do xcart"
+      titulo={`Remover ${loja.nome} do Panda Track?`}
+      confirmar="Remover do Panda Track"
       mensagemErro="Não deu para remover a loja agora. Nada foi apagado; tente de novo."
       onConfirmar={remover}
       descricao={
         <span className="flex flex-col gap-2">
           <span className="font-mono text-label text-t2">{loja.dominio}</span>
-          <span>Isto apaga do xcart, sem volta:</span>
+          <span>Isto apaga do Panda Track, sem volta:</span>
           {estado.tipo === "carregando" ? (
             <span aria-busy="true" aria-label="Contando o que sai" className="flex flex-col gap-1.5 py-0.5">
               {/* .skeleton em span: o Skeleton da fundacao e <div>, invalido dentro do <p>. */}
@@ -102,7 +102,7 @@ function Dialogo({
           ) : itens && itens.apaga.length > 0 ? (
             <Lista itens={itens.apaga} />
           ) : itens ? (
-            <span className="text-ink">Só o cadastro da loja: ela não tem produtos, rotas, rastreamento nem pedidos no xcart.</span>
+            <span className="text-ink">Só o cadastro da loja: ela não tem produtos, rotas, rastreamento nem pedidos no Panda Track.</span>
           ) : (
             <span className="text-ink">
               Os produtos importados, os materiais de marca, as rotas, o rastreamento e o histórico de pedidos

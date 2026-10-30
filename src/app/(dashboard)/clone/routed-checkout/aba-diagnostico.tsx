@@ -260,7 +260,7 @@ export function AbaDiagnostico({
 
       <Section
         titulo="Checagem automática"
-        descricao="O xcart confere a rota sozinho e liga os produtos novos da vitrine."
+        descricao="O Panda Track confere a rota sozinho e liga os produtos novos da vitrine."
       >
         {ultimaChecagem ? (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">

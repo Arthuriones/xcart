@@ -359,7 +359,7 @@ describe("mensagens", () => {
       /até 12 lojas no roteamento\. Para usar mais lojas, mude para o Ilimitado/
     );
     expect(mensagemDeLimite("rastreamento", limitesDoPerfil({ plan: "free" }))).toMatch(
-      /^Sem assinatura, o xcart cobre 1 operação com rastreamento \(loja ou checkout\)\. Para ligar mais, assine o Completo/
+      /^Sem assinatura, o Panda Track cobre 1 operação com rastreamento \(loja ou checkout\)\. Para ligar mais, assine o Completo/
     );
   });
 

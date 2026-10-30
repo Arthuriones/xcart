@@ -173,8 +173,8 @@ export function montarMensagem(p: {
 
   const cabecalho =
     alertas.length > 0
-      ? `xcart — ${alertas.length} ${alertas.length === 1 ? "alerta" : "alertas"}`
-      : `xcart — ${p.resolvidos.length} ${p.resolvidos.length === 1 ? "resolvido" : "resolvidos"}`;
+      ? `Panda Track — ${alertas.length} ${alertas.length === 1 ? "alerta" : "alertas"}`
+      : `Panda Track — ${p.resolvidos.length} ${p.resolvidos.length === 1 ? "resolvido" : "resolvidos"}`;
 
   const linhas = [
     ...alertas.map((a) => linhaDeAlerta(a, p.nomeDaLoja)),

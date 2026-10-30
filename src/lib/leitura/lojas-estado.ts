@@ -177,7 +177,7 @@ export const ORDEM_CONEXAO: Record<ChaveConexao, number> = {
 
 export const ROTULO_SUGESTAO: Record<Exclude<SugestaoLoja, null>, string> = {
   reconectar: "Reconectar",
-  remover: "Remover do xcart",
+  remover: "Remover do Panda Track",
   sincronizar: "Tentar de novo",
 };
 
@@ -373,7 +373,7 @@ export function itensInventario(inv: InventarioLoja): { apaga: string[]; fica: s
   const fica: string[] = [];
   if (inv.contasAnuncio > 0) {
     fica.push(
-      `${plural(inv.contasAnuncio, "conta de anúncio continua", "contas de anúncio continuam")} no xcart, sem loja ligada — o gasto sai do lucro até você ligar outra loja`
+      `${plural(inv.contasAnuncio, "conta de anúncio continua", "contas de anúncio continuam")} no Panda Track, sem loja ligada — o gasto sai do lucro até você ligar outra loja`
     );
   }
   return { apaga, fica };

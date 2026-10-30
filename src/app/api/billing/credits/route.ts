@@ -52,7 +52,7 @@ function itemDe(packId: string, planoId: unknown) {
       aVenda: plano.aVenda,
       credits: PRO_INCLUDED_CREDITS,
       amountCents: plano.precoCentavos,
-      nome: `xcart ${plano.nome} — 30 dias`,
+      nome: `Panda Track ${plano.nome} — 30 dias`,
     };
   }
   const pack = getCreditPack(packId);
@@ -64,7 +64,7 @@ function itemDe(packId: string, planoId: unknown) {
     aVenda: true,
     credits: pack.credits,
     amountCents: pack.amountCents,
-    nome: `xcart — ${pack.label}`,
+    nome: `Panda Track — ${pack.label}`,
   };
 }
 
@@ -195,7 +195,7 @@ export async function POST(request: NextRequest) {
       externalRef,
       buyer: {
         id: customerId,
-        name: user.email?.split("@")[0] || "Cliente xcart",
+        name: user.email?.split("@")[0] || "Cliente Panda Track",
         email: user.email || `${user.id}@sem-email.xcart`,
         document: doc,
       },

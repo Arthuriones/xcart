@@ -103,7 +103,7 @@ function aparenciaDoTema(): {
   const style: Record<string, string | Record<string, string>> = {
     base: so({
       color: v("--ink"),
-      fontFamily: "'Public Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
+      fontFamily: "'Instrument Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
       // 16px: abaixo disso o iPhone da zoom ao focar o campo.
       fontSize: "16px",
       letterSpacing: "0",

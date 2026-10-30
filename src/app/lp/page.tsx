@@ -63,7 +63,7 @@ import { GARANTIA, NOTA_DO_PRECO, PLANOS, PRECO_A_PARTIR, type PlanoNaTela } fro
  * hero ganha a composicao em 900px e o menu lateral em 1100px.
  */
 
-const TITULO = "xcart · lucro, rastreamento e alertas para lojas Shopify";
+const TITULO = "Panda Track · lucro, rastreamento e alertas para lojas Shopify";
 const DESCRICAO =
   "Veja o lucro estimado de cada loja Shopify, já descontado o anúncio. Entregue as compras ao Meta, ao TikTok e ao Google e receba alertas quando algo quebra.";
 
@@ -79,7 +79,7 @@ export const metadata: Metadata = {
     title: TITULO,
     description: DESCRICAO,
     url: "/",
-    siteName: "xcart",
+    siteName: "Panda Track",
     locale: "pt_BR",
     type: "website",
   },
@@ -223,9 +223,9 @@ function Marca({ sim }: { sim: boolean }) {
 
 /**
  * Cartao de um plano, dentro da faixa escura. O em destaque ganha o brilho e
- * a borda terracota, o selo no topo e o botao cheio. O terracota do botao e do
- * selo e o da marca no tema CLARO (#b04a2f): o --brand do escuro e claro demais
- * para levar texto branco.
+ * a borda verde, o selo no topo e o botao cheio. O verde do botao e do selo e
+ * o da marca no tema CLARO (#1f7a5a): o --brand do escuro e claro demais para
+ * levar texto branco.
  */
 function CartaoPlano({ plano }: { plano: PlanoNaTela }) {
   const destaque = Boolean(plano.destaque);
@@ -234,12 +234,12 @@ function CartaoPlano({ plano }: { plano: PlanoNaTela }) {
       className={cn(
         "relative flex flex-col rounded-[16px] border bg-surface px-5.5 pt-7 pb-5.5",
         destaque
-          ? "border-brand/60 bg-[radial-gradient(120%_55%_at_50%_0%,rgba(176,74,47,.24),rgba(176,74,47,0)_70%)]"
+          ? "border-brand/60 bg-[radial-gradient(120%_55%_at_50%_0%,rgba(31,122,90,.24),rgba(31,122,90,0)_70%)]"
           : "border-border"
       )}
     >
       {plano.selo ? (
-        <span className="absolute -top-2.75 left-1/2 h-5.5 -translate-x-1/2 rounded-full bg-[#b04a2f] px-3 text-[11px] leading-5.5 font-bold tracking-[.08em] whitespace-nowrap text-white uppercase">
+        <span className="absolute -top-2.75 left-1/2 h-5.5 -translate-x-1/2 rounded-full bg-[#1f7a5a] px-3 text-[11px] leading-5.5 font-bold tracking-[.08em] whitespace-nowrap text-white uppercase">
           {plano.selo}
         </span>
       ) : null}
@@ -273,7 +273,7 @@ function CartaoPlano({ plano }: { plano: PlanoNaTela }) {
               aria-hidden="true"
               className={cn(
                 "grid size-5 flex-none place-items-center rounded-full",
-                destaque ? "bg-brand/16 text-[#e39a78]" : "bg-hover text-t2"
+                destaque ? "bg-brand/16 text-[#7fd1ad]" : "bg-hover text-t2"
               )}
             >
               <Check className="size-2.75" strokeWidth={3} />
@@ -288,7 +288,7 @@ function CartaoPlano({ plano }: { plano: PlanoNaTela }) {
         className={cn(
           "mt-auto flex h-11 items-center justify-center gap-2 rounded-full border text-body font-semibold",
           destaque
-            ? "border-[#b04a2f] bg-[#b04a2f] text-white hover:bg-[#9c3f27] hover:text-white"
+            ? "border-[#1f7a5a] bg-[#1f7a5a] text-white hover:bg-[#18614a] hover:text-white"
             : "border-border-strong text-ink hover:bg-hover hover:text-ink"
         )}
       >
@@ -332,7 +332,7 @@ export default function Landing() {
               <span className="block text-t3">Já descontado o anúncio.</span>
             </h1>
             <p className="max-w-[52ch] text-[clamp(16px,1.6vw,19px)] leading-[1.6] text-pretty text-t1">
-              O xcart cruza os pedidos da Shopify com o gasto do Meta e do Google, entrega cada
+              O Panda Track cruza os pedidos da Shopify com o gasto do Meta e do Google, entrega cada
               compra ao Meta, ao TikTok e ao Google e avisa no Telegram quando algo quebra.
             </p>
             <div className="flex w-full max-w-100 flex-wrap justify-center gap-2">
@@ -373,7 +373,7 @@ export default function Landing() {
             <div className="flex flex-col gap-4">
               <Cabecalho
                 id="por-que"
-                sobretitulo="Por que o xcart existe"
+                sobretitulo="Por que o Panda Track existe"
                 titulo="Cada painel mostra um pedaço da conta"
                 descricao="A Shopify sabe o que vendeu. O Meta e o Google sabem o que gastaram. Nenhum deles junta as duas pontas com o custo do produto, e o pixel do navegador ainda deixa compras pelo caminho."
               />
@@ -406,7 +406,7 @@ export default function Landing() {
             id="recursos"
             sobretitulo="Dinheiro e rastreamento no centro"
             titulo="As três telas que você abre todo dia"
-            descricao="Lucro, Rastreamento e Alertas. O resto do xcart existe para elas ficarem certas."
+            descricao="Lucro, Rastreamento e Alertas. O resto do Panda Track existe para elas ficarem certas."
             className="max-w-180"
           />
 
@@ -443,7 +443,7 @@ export default function Landing() {
 
           <div className="mt-16 flex flex-col gap-5 md:mt-26">
             <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-              <h3 className="text-page tracking-[-0.015em] text-ink">Também no xcart</h3>
+              <h3 className="text-page tracking-[-0.015em] text-ink">Também no Panda Track</h3>
               <p className="text-body text-t2">Incluído no plano.</p>
             </div>
             <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-px overflow-hidden rounded-overlay border border-border bg-border">
@@ -473,11 +473,11 @@ export default function Landing() {
               id="comparar"
               sobretitulo="Mais que um painel"
               titulo="Mostrar o lucro é o começo"
-              descricao="Um painel diz quanto você ganhou. O xcart também garante que a compra chegou à plataforma de anúncio e avisa quando alguma coisa para."
+              descricao="Um painel diz quanto você ganhou. O Panda Track também garante que a compra chegou à plataforma de anúncio e avisa quando alguma coisa para."
             />
             <div className="overflow-hidden rounded-overlay border border-border">
               <table className="w-full text-body">
-                <caption className="sr-only">Um painel de lucro comum comparado ao xcart</caption>
+                <caption className="sr-only">Um painel de lucro comum comparado ao Panda Track</caption>
                 <thead className="border-b border-border bg-surface-2">
                   <tr>
                     <th scope="col" className="px-5 py-3.5 text-left text-label font-medium text-t3">
@@ -487,7 +487,7 @@ export default function Landing() {
                       Painel de lucro
                     </th>
                     <th scope="col" className="w-22 px-1 py-3.5 text-center text-label font-semibold text-ink">
-                      xcart
+                      Panda Track
                     </th>
                   </tr>
                 </thead>

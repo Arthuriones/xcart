@@ -284,7 +284,7 @@ export function ClaudeMcp() {
       <Section titulo="3. Teste" nivel={3}>
         <p className="text-dense text-t1">No Claude, peça:</p>
         <pre className="rounded-control border border-border bg-surface-2 p-3 font-mono text-label text-ink">
-          liste minhas lojas do xcart
+          liste minhas lojas do Panda Track
         </pre>
         <p className="text-dense text-t1 text-pretty">
           Ele deve responder com as lojas conectadas nesta conta. A partir daí é conversa normal: pedir para

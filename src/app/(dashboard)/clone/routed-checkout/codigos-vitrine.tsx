@@ -298,7 +298,7 @@ function ItemRastreamento({ vitrineId }: { vitrineId: string }) {
     <ItemCodigo
       titulo={titulo}
       para={para}
-      nota="Pelo xcart: no Rastreamento da vitrine, em Script no tema, clique em Instalar."
+      nota="Pelo Panda Track: no Rastreamento da vitrine, em Script no tema, clique em Instalar."
       selo={selo}
       recolhido={dado.instalado === true}
       codigo={dado.codigo}

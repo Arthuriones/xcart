@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LogoXcart } from "@/components/layout/logo";
+import { LogoPanda } from "@/components/layout/logo";
 import { MenuCelular } from "./menu-celular";
 import {
   CAIXA_DO_SITE,
@@ -36,10 +36,10 @@ export function CabecalhoSite({
         <Link
           href="/"
           prefetch={false}
-          aria-label="xcart, início"
+          aria-label="Panda Track, início"
           className="mr-5 flex h-ctl-lg shrink-0 items-center rounded-control"
         >
-          <LogoXcart altura={20} />
+          <LogoPanda altura={28} />
         </Link>
 
         <nav aria-label="Seções do site" className="hidden md:block">

@@ -1210,7 +1210,7 @@ async function executarConserto(
 
   if (bloqueadasPorMistura > 0) {
     warnings.push(
-      `${bloqueadasPorMistura === 1 ? "1 variante" : `${bloqueadasPorMistura} variantes`} de ${handlesBloqueados.slice(0, 4).join(", ")} ${bloqueadasPorMistura === 1 ? "ficou" : "ficaram"} sem par: o produto da loja de checkout onde ${bloqueadasPorMistura === 1 ? "ela entraria" : "elas entrariam"} mistura produtos da vitrine, e o xcart não acrescenta nada nele até ser separado.`
+      `${bloqueadasPorMistura === 1 ? "1 variante" : `${bloqueadasPorMistura} variantes`} de ${handlesBloqueados.slice(0, 4).join(", ")} ${bloqueadasPorMistura === 1 ? "ficou" : "ficaram"} sem par: o produto da loja de checkout onde ${bloqueadasPorMistura === 1 ? "ela entraria" : "elas entrariam"} mistura produtos da vitrine, e o Panda Track não acrescenta nada nele até ser separado.`
     );
   }
 

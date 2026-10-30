@@ -67,7 +67,7 @@ export function ConteudoShopify({ lojas, agoraMs }: { lojas: LojaConexao[]; agor
       {lojas.length === 0 ? (
         <EmptyState
           titulo="Nenhuma loja conectada"
-          descricao="Conecte uma loja Shopify para o xcart ler os pedidos e calcular o lucro."
+          descricao="Conecte uma loja Shopify para o Panda Track ler os pedidos e calcular o lucro."
           acao={
             <Link href="/stores?conectar=1" className={buttonVariants()}>
               Conectar loja
@@ -94,7 +94,7 @@ export function ConteudoShopify({ lojas, agoraMs }: { lojas: LojaConexao[]; agor
               detalhe={
                 fora.length > 0
                   ? "A Shopify não deixa ler os pedidos delas. Reconecte ou remova em Lojas."
-                  : "Todas as lojas deixam o xcart ler os pedidos."
+                  : "Todas as lojas deixam o Panda Track ler os pedidos."
               }
             />
           </div>

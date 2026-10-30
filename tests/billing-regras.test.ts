@@ -209,7 +209,7 @@ describe("motivoDoBloqueio (paywall)", () => {
     expect(motivoDoBloqueio({ ...PIX, fimPeriodo: "2026-09-30T12:00:00Z" }, AGORA)).toContain("30/09/2026");
   });
   it("sem perfil: frase generica, sem inventar motivo", () => {
-    expect(motivoDoBloqueio(null, AGORA)).toBe("Para continuar usando o xcart, assine um plano.");
+    expect(motivoDoBloqueio(null, AGORA)).toBe("Para continuar usando o Panda Track, assine um plano.");
   });
   it("quem tem acesso nao ve motivo (null)", () => {
     expect(motivoDoBloqueio(CARTAO, AGORA)).toBeNull();

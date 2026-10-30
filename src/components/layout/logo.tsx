@@ -1,53 +1,47 @@
 import Image from "next/image";
 
 /**
- * A logo do xcart.
+ * A logo do Panda Track (cabeca do panda + "PandaTrack").
  *
- * Nenhum arquivo serve para os dois temas: logo-claro tem o texto escuro
- * (some no fundo escuro) e a versao de texto branco some no claro. Em vez de
- * escolher em JavaScript -- que precisaria saber o tema antes de pintar e
- * piscaria na primeira renderizacao --, as duas vao para o HTML e o CSS
- * esconde a errada. Sem estado, sem efeito, sem pisca.
+ * Duas versoes, porque nenhum arquivo serve aos dois fundos: a original
+ * ("design novo/logo.png") tem o texto creme e some no claro; a clara tem o
+ * texto escuro e um contorno no rosto, que e creme e sumia no fundo claro.
+ * As duas vao para o HTML e o CSS esconde a errada: sem estado, sem efeito,
+ * sem pisca. `dark:` tambem vale dentro de um bloco escuro (o menu lateral
+ * tem a classe `dark` no tema claro), entao a versao certa aparece la.
  *
- * logo-dark.png e o logo.png original com a borda transparente cortada. Sem
- * esse corte os dois arquivos tinham proporcoes diferentes (5,03 contra 2,60)
- * e a logo aparecia visivelmente menor no tema escuro, com a mesma altura.
- * logo-claro.png e o logo-cropped.png com o fundo branco transparente: o
- * menu fica sobre o fundo quente (--bg), e o branco opaco virava um retangulo.
+ * Os arquivos tem o mesmo tamanho (510x96, gerados com o sharp; a escura tem
+ * a folga do contorno para a proporcao bater) -- trocar o tema nao mexe na
+ * largura. width/height sao o tamanho EXIBIDO, para o srcset sair pequeno.
  *
- * Os arquivos servidos sao os -256 (256px de largura, gerados com o sharp a
- * partir dos dois acima): a logo nunca passa de ~111px na tela, e o 2x do
- * srcset e 256w. width/height sao o tamanho EXIBIDO, para o srcset sair em
- * 96-128w/256w; com a largura do arquivo (891) ele saia em 1080w/1920w.
- *
- * Sem preload nem loading eager: com eles as DUAS imagens baixavam, inclusive
- * a que o CSS esconde (e a do menu lateral no celular, onde ela nem aparece).
- * Lazy, so a visivel baixa; `prioridade` vira fetchPriority="high", como a
- * doc do next/image manda para imagem por tema.
+ * Sem preload nem loading eager: com eles as DUAS imagens baixavam,
+ * inclusive a que o CSS esconde. `prioridade` vira fetchPriority="high".
  */
-export function LogoXcart({
-  altura = 20,
+const PROPORCAO = 510 / 96;
+
+export function LogoPanda({
+  altura = 26,
   prioridade,
   className,
 }: {
-  /** Altura em px. A largura sai da proporcao (~5,03x). */
+  /** Altura em px (a cabeca do panda). A largura sai da proporcao (~5,3x). */
   altura?: number;
   /** Liga quando a logo aparece na primeira dobra. */
   prioridade?: boolean;
   className?: string;
 }) {
   const comum = {
-    alt: "xcart",
+    alt: "Panda Track",
     fetchPriority: prioridade ? ("high" as const) : undefined,
-    width: Math.round(altura * 5.03),
+    width: Math.round(altura * PROPORCAO),
     height: altura,
     style: { height: altura, width: "auto" as const },
   };
 
   return (
     <span className={className}>
-      <Image {...comum} src="/logo-claro-256.png" className="block dark:hidden" />
-      <Image {...comum} src="/logo-dark-256.png" className="hidden dark:block" />
+      <Image {...comum} src="/logo-panda-claro.png" className="block dark:hidden" />
+      <Image {...comum} src="/logo-panda-escuro.png" className="hidden dark:block" />
     </span>
   );
 }

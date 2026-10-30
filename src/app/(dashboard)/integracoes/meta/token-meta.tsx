@@ -27,7 +27,7 @@ const PASSOS: { titulo: string; texto: string }[] = [
     texto: "No Gerenciador de Negócios do Meta, vá em Configurações › Usuários › Usuários do sistema.",
   },
   {
-    titulo: "Crie o usuário “xcart leitura”",
+    titulo: "Crie o usuário “Panda Track leitura”",
     texto:
       "Função de funcionário, sem acesso de administrador. No nível Limited, o portfólio permite um usuário comum e um administrador.",
   },
@@ -39,7 +39,7 @@ const PASSOS: { titulo: string; texto: string }[] = [
   {
     titulo: "Gere o token e cole aqui",
     texto:
-      "Em Gerar novo token: escolha o app, validade “Nunca” e só a permissão de leitura de anúncios (ads_read). O xcart confere sozinho quais contas o token enxerga.",
+      "Em Gerar novo token: escolha o app, validade “Nunca” e só a permissão de leitura de anúncios (ads_read). O Panda Track confere sozinho quais contas o token enxerga.",
   },
 ];
 
@@ -127,7 +127,7 @@ export function AssistenteMeta() {
           Ligue o Meta em 4 passos
         </h3>
         <p className="text-dense text-t1 text-pretty">
-          O xcart lê o gasto com um token de leitura do Gerenciador de Negócios. Ele só lê desempenho: não gasta
+          O Panda Track lê o gasto com um token de leitura do Gerenciador de Negócios. Ele só lê desempenho: não gasta
           nem edita campanha.
         </p>
       </div>

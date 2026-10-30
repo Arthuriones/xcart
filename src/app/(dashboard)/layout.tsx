@@ -13,8 +13,9 @@ import { textos } from "@/lib/textos";
 export const dynamic = "force-dynamic";
 
 /**
- * A casca do painel: menu lateral sobre o fundo quente (barra de baixo no
- * celular) e, ao lado, o conteudo num painel com borda. A barra do topo
+ * A casca do painel: menu lateral escuro sobre o --frame (barra de baixo no
+ * celular) e, ao lado, o conteudo num painel com borda -- o painel claro fica
+ * emoldurado pelo escuro, como no design do Panda Track. A barra do topo
  * (titulo da tela, contexto, "Atualizado as" e sino) mora dentro do painel.
  *
  * No desktop o painel rola por dentro (painel.tsx) e a janela fica parada; no
@@ -41,7 +42,7 @@ export default async function DashboardLayout({
   const t = textos("nav");
 
   return (
-    <div className="flex min-h-dvh bg-bg font-sans text-ink">
+    <div className="flex min-h-dvh bg-bg font-sans text-ink md:bg-frame">
       <a
         href="#conteudo"
         className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-100 focus:rounded-control focus:bg-solid focus:px-3 focus:py-2 focus:text-dense focus:text-on-solid"

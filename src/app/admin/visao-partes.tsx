@@ -8,7 +8,7 @@ export function CabecalhoVisao() {
   return (
     <PageHeader
       title="Visão geral"
-      description="Quanto o xcart fatura e gasta com IA no mês, a base de clientes e quanto os clientes vendem."
+      description="Quanto o Panda Track fatura e gasta com IA no mês, a base de clientes e quanto os clientes vendem."
     />
   );
 }

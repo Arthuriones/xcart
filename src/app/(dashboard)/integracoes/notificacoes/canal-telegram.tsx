@@ -153,7 +153,7 @@ function Formulario({ config, temToken, tokenDaEnv }: { config: Config; temToken
           />
           <p id={`${id}-token-ajuda`} className="text-label text-t2">
             {tokenDaEnv
-              ? "Usando o bot padrão do xcart. Cole um token para usar o seu."
+              ? "Usando o bot padrão do Panda Track. Cole um token para usar o seu."
               : temToken
                 ? "Token salvo. Ele não volta para a tela."
                 : "Fica guardado só no servidor e nunca volta para a tela."}

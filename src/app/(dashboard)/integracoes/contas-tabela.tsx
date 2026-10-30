@@ -284,12 +284,12 @@ export function ContasTabela({
         ? {
             titulo: `${nome} ativa de novo`,
             texto: meta
-              ? "O xcart volta a ler o gasto dela na próxima leitura."
-              : "O xcart volta a aceitar o que o script dela envia.",
+              ? "O Panda Track volta a ler o gasto dela na próxima leitura."
+              : "O Panda Track volta a aceitar o que o script dela envia.",
           }
         : {
-            titulo: `${nome} pausada no xcart`,
-            texto: `O xcart para de ${meta ? "ler o gasto dela" : "aceitar o envio do script"}. O que já foi lido continua no lucro. Nada muda no ${nomePlataforma}.`,
+            titulo: `${nome} pausada no Panda Track`,
+            texto: `O Panda Track para de ${meta ? "ler o gasto dela" : "aceitar o envio do script"}. O que já foi lido continua no lucro. Nada muda no ${nomePlataforma}.`,
           }
     );
   }
@@ -335,7 +335,7 @@ export function ContasTabela({
         setErroAcao(r.erro);
         throw new Error(r.erro);
       }
-      toast.success(`${nome} removida do xcart`);
+      toast.success(`${nome} removida do Panda Track`);
       atualizar();
       return;
     }
@@ -483,7 +483,7 @@ export function ContasTabela({
               <DropdownMenuItem onClick={() => pedir("script", l.conta)}>Gerar novo script</DropdownMenuItem>
             ) : null}
             <DropdownMenuItem variant="destructive" onClick={() => pedir("remover", l.conta)}>
-              Remover do xcart
+              Remover do Panda Track
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -618,7 +618,7 @@ export function ContasTabela({
         titulo={
           acao?.tipo === "script"
             ? `Gerar um novo script para ${acao.nome}?`
-            : `Remover ${acao?.nome ?? "a conta"} do xcart?`
+            : `Remover ${acao?.nome ?? "a conta"} do Panda Track?`
         }
         descricao={
           acao?.tipo === "script"

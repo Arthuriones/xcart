@@ -22,13 +22,13 @@ export default function GlobalError({
           alignItems: "center",
           justifyContent: "center",
           fontFamily: "system-ui, sans-serif",
-          background: "#f7f6f5",
-          color: "#1a1a1a",
+          background: "#f5f4f1",
+          color: "#141414",
         }}
       >
         <div style={{ maxWidth: 460, padding: 24, textAlign: "center" }}>
           <p style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>
-            O xcart não conseguiu carregar
+            O Panda Track não conseguiu carregar
           </p>
           <p style={{ fontSize: 12.5, color: "#6b6b6b", marginTop: 6 }}>
             Recarregue a página. Se continuar, o código do erro abaixo ajuda a achar o
@@ -46,7 +46,7 @@ export default function GlobalError({
               padding: "0 13px",
               border: 0,
               borderRadius: 6,
-              background: "#1a1a1a",
+              background: "#141414",
               color: "#fff",
               fontSize: 12.5,
               fontWeight: 600,

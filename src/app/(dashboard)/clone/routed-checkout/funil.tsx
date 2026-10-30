@@ -38,7 +38,7 @@ export function FunilDaRotaView({ funil, erro }: { funil: FunilDaRota | null; er
       </dl>
 
       {semAviso.length > 0 ? (
-        <Callout tom="warn" titulo="A Shopify não está avisando o xcart">
+        <Callout tom="warn" titulo="A Shopify não está avisando o Panda Track">
           <ul className="flex flex-col gap-0.5">
             {semAviso.map((l) => (
               <li key={`${l.nome}|${l.motivo}`}>
@@ -48,8 +48,8 @@ export function FunilDaRotaView({ funil, erro }: { funil: FunilDaRota | null; er
           </ul>
           <p className="mt-1">
             {faltaPermissao
-              ? "Sem esse aviso não dá para contar pedidos nem carrinhos que caem na vitrine. Marque read_orders no app do xcart da loja e clique em Testar agora, no Diagnóstico."
-              : "Sem esse aviso não dá para contar pedidos nem carrinhos que caem na vitrine. O xcart confere de novo em até 24 h."}
+              ? "Sem esse aviso não dá para contar pedidos nem carrinhos que caem na vitrine. Marque read_orders no app do Panda Track da loja e clique em Testar agora, no Diagnóstico."
+              : "Sem esse aviso não dá para contar pedidos nem carrinhos que caem na vitrine. O Panda Track confere de novo em até 24 h."}
           </p>
         </Callout>
       ) : null}
