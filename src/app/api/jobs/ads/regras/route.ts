@@ -13,8 +13,8 @@ export const maxDuration = 300;
 //
 // Pega as regras ativas vencidas (proxima_execucao_em <= agora), as mais
 // atrasadas primeiro. Cada uma e REIVINDICADA antes de rodar: o update so
-// passa se proxima_execucao_em ainda e a lida -- duas execucoes sobrepostas
-// nao rodam a mesma regra. Dono sem plano: a regra nao roda (fica para o
+// passa se proxima_execucao_em ainda e a lida e a regra segue ligada -- duas
+// execucoes sobrepostas nao rodam a mesma regra, e a desligada no meio fica. Dono sem plano: a regra nao roda (fica para o
 // proximo intervalo, sem ser desligada).
 // ============================================================================
 
@@ -78,6 +78,7 @@ export async function GET(request: NextRequest) {
       .from("ad_regras")
       .update({ proxima_execucao_em: proximaExecucao(agora, linha.intervalo_minutos) })
       .eq("id", linha.id)
+      .eq("ativa", true)
       .eq("proxima_execucao_em", linha.proxima_execucao_em)
       .select("id");
     if (!levou || levou.length === 0) continue;

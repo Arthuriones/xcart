@@ -54,7 +54,7 @@ export function textoDoErroDeEdicao(e: unknown): string {
     if (tipo === "token") return "O Meta recusou o token desta conta. Reconecte o perfil do Facebook em Integrações.";
     if (tipo === "permissao") return ERRO_SEM_EDICAO;
     if (tipo === "limite") return "Limite de alterações do Meta atingido. Tente de novo em alguns minutos.";
-    return `O Meta recusou: ${e.message}`.slice(0, 300);
+    return `O Meta recusou: ${e.detalhe ?? e.message}`.slice(0, 300);
   }
   if (e instanceof Error && /falha de rede|resposta invalida/.test(e.message)) {
     return "Não conseguimos falar com o Meta agora. Tente de novo.";

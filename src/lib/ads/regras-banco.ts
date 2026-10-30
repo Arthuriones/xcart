@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { diaNoFuso, paraNumero, somarDias } from "@/lib/financeiro/tipos";
 import { lojasDeDemonstracao } from "@/lib/demonstracao";
+import { gastoComImposto } from "@/lib/financeiro/calculo";
 import { aplicarAlteracao, lerAoVivo, textoDoErroDeEdicao, tokenDaConta, type ContaGerenciavel } from "@/lib/ads/gerenciar";
 import {
   DIAS_DA_JANELA,
@@ -31,15 +32,17 @@ import type {
 // De onde vem cada numero da janela (hoje / 3 / 7 dias, no fuso da conta):
 // - gasto, impressoes, cliques e IC: ad_insights_granular (o sync do Meta de
 //   15 em 15 min). O IC do Meta ja soma pixel + o nosso servidor (CAPI).
-// - compras: fin_order_origem da loja da conta (pedido com o id do objeto).
+// - compras: fin_order_origem da loja da conta (pedido com o id do objeto),
+//   so quando ao menos 80% dos pedidos do Meta trazem o id do nivel.
 //   Conta sem loja (checkout externo ou solta) = sem como contar: a regra de
 //   custo por compra nao age nela.
 // - status e orcamento: o retrato do dia mais recente; antes de agir, o
 //   objeto e relido AO VIVO no Meta (aplicarAlteracao).
 //
-// Seguranca: so conta do dono da regra, do Meta, ativa, com o sync em dia
-// (dado velho nunca dispara acao), fora da loja de demonstracao, e no maximo
-// MAX_ACOES_POR_PASSADA acoes por passada.
+// Seguranca: so conta do dono da regra, do Meta, ativa, com o gasto E o
+// detalhe em dia (dado velho nunca dispara acao), fora da loja de
+// demonstracao, no maximo MAX_ACOES_POR_PASSADA acoes por passada da regra, e
+// uma mudanca de orcamento por objeto por dia.
 // ============================================================================
 
 type Db = SupabaseClient;
@@ -235,22 +238,35 @@ interface LinhaGranular {
   impressoes: number | string | null;
   cliques: number | string | null;
   ic: number | string | null;
+  sincronizado_em: string | null;
 }
 
-/** O que cada objeto do nivel fez na janela, numa conta. */
+/** Abaixo disso de pedidos do Meta com o id do nivel, o custo por compra nao e contado. */
+export const COBERTURA_MINIMA_DE_IDS = 0.8;
+
+/** O motivo de a conta ficar de fora da passada (vira aviso, nunca acao). */
+export class ContaForaDaPassada extends Error {}
+
+/**
+ * O que cada objeto do nivel fez na janela, numa conta. LANCA ContaForaDaPassada
+ * quando o detalhe de hoje esta velho: o ultimo_sync_ok_em da conta marca o
+ * GASTO, e o detalhe (ad_insights_granular) pode ter ficado para tras (cota do
+ * Meta, lista grande demais) -- gasto congelado com compras frescas daria um
+ * custo por compra falso.
+ */
 export async function objetosNaJanela(
   db: Db,
   conta: ContaGerenciavel,
   regra: RegraAnuncio,
   agoraMs: number
-): Promise<ObjetoNaJanela[]> {
+): Promise<{ objetos: ObjetoNaJanela[]; aviso: string | null }> {
   const hoje = diaNoFuso(new Date(agoraMs), conta.fuso);
   const desde = somarDias(hoje, -(DIAS_DA_JANELA[regra.janela] - 1));
   const linhas: LinhaGranular[] = [];
   for (let de = 0; ; de += 1000) {
     const { data, error } = await db
       .from("ad_insights_granular")
-      .select("data, objeto_id, objeto_nome, objeto_status, orcamento, gasto, impressoes, cliques, ic")
+      .select("data, objeto_id, objeto_nome, objeto_status, orcamento, gasto, impressoes, cliques, ic, sincronizado_em")
       .eq("ad_account_id", conta.id)
       .eq("nivel", NIVEL_GRANULAR[regra.nivel])
       .gte("data", desde)
@@ -262,10 +278,18 @@ export async function objetosNaJanela(
     if ((data ?? []).length < 1000) break;
   }
 
+  // O sync regrava a linha de HOJE de todo objeto ativo em toda passada boa:
+  // a mais nova delas diz se o detalhe esta em dia.
+  const ultimaDeHoje = linhas
+    .filter((l) => l.data === hoje && l.sincronizado_em)
+    .reduce((m, l) => Math.max(m, Date.parse(l.sincronizado_em as string) || 0), 0);
+  if (!ultimaDeHoje || agoraMs - ultimaDeHoje > SYNC_VELHO_MS) {
+    throw new ContaForaDaPassada("detalhe de campanhas do Meta desatualizado; a conta ficou de fora.");
+  }
+
   const porObjeto = new Map<string, ObjetoNaJanela & { dia: string }>();
   for (const l of linhas) {
-    const atual = porObjeto.get(l.objeto_id);
-    const base = atual ?? {
+    const base = porObjeto.get(l.objeto_id) ?? {
       contaId: conta.id,
       objetoId: l.objeto_id,
       nome: l.objeto_nome ?? l.objeto_id,
@@ -279,7 +303,9 @@ export async function objetosNaJanela(
       orcamentoDiario: 0,
       dia: "",
     };
-    base.gasto += paraNumero(l.gasto);
+    // Com o imposto do Meta no Brasil, como na aba Campanhas: o custo por IC
+    // que a regra julga e o mesmo que o lojista ve na tela.
+    base.gasto += gastoComImposto(paraNumero(l.gasto), "meta", conta.moeda);
     base.impressoes += paraNumero(l.impressoes);
     base.cliques += paraNumero(l.cliques);
     base.ic += paraNumero(l.ic);
@@ -292,20 +318,26 @@ export async function objetosNaJanela(
     }
     porObjeto.set(l.objeto_id, base);
   }
+  // Sem a linha de hoje o objeto nao esta ativo agora (o sync a cria para todo ativo).
+  for (const o of porObjeto.values()) if (o.dia !== hoje) o.status = "";
 
-  // Compras do Panda Track: so com a loja da conta.
+  // Compras do Panda Track: so com a loja da conta, e so se os pedidos do Meta
+  // trazem o id do nivel. Pedido sem o id contaria como "zero compras" e a
+  // regra pausaria quem vendeu.
+  let aviso: string | null = null;
   if (conta.store_id && porObjeto.size > 0) {
     const inicio = new Date(inicioDoDiaNoFuso(desde, conta.fuso)).toISOString();
     const coluna = COLUNA_ORIGEM[regra.nivel];
     const contagem = new Map<string, number>();
     let lido = true;
+    let doMeta = 0;
+    let comId = 0;
     for (let de = 0; ; de += 1000) {
       const { data, error } = await db
         .from("fin_order_origem")
-        .select(coluna)
+        .select(`plataforma, clique, ${coluna}`)
         .eq("store_id", conta.store_id)
         .gte("pedido_em", inicio)
-        .not(coluna, "is", null)
         .range(de, de + 999);
       if (error) {
         lido = false;
@@ -313,23 +345,59 @@ export async function objetosNaJanela(
       }
       for (const r of (data ?? []) as unknown as Record<string, string | null>[]) {
         const id = r[coluna];
+        if (r.plataforma === "meta" || r.clique === "meta") {
+          doMeta += 1;
+          if (id) comId += 1;
+        }
         if (id) contagem.set(id, (contagem.get(id) ?? 0) + 1);
       }
       if ((data ?? []).length < 1000) break;
     }
-    if (lido) for (const o of porObjeto.values()) o.compras = contagem.get(o.objetoId) ?? 0;
+    if (lido && doMeta > 0 && comId / doMeta < COBERTURA_MINIMA_DE_IDS) {
+      aviso = `só ${comId} de ${doMeta} pedidos do Meta trazem o id do anúncio; o custo por compra não foi contado.`;
+    } else if (lido) {
+      for (const o of porObjeto.values()) o.compras = contagem.get(o.objetoId) ?? 0;
+    }
   }
 
-  return [...porObjeto.values()].map((o) => {
+  const objetos = [...porObjeto.values()].map((o) => {
     const { dia, ...resto } = o;
     void dia;
     return resto;
   });
+  return { objetos, aviso };
+}
+
+/** Esta regra ja mudou o orcamento deste objeto hoje (no fuso da conta)? Na duvida, sim. */
+async function orcamentoJaMudouHoje(
+  db: Db,
+  regraId: string,
+  conta: ContaGerenciavel,
+  objetoId: string,
+  agoraMs: number
+): Promise<boolean> {
+  const inicio = new Date(inicioDoDiaNoFuso(diaNoFuso(new Date(agoraMs), conta.fuso), conta.fuso)).toISOString();
+  const { count, error } = await db
+    .from("ad_alteracoes")
+    .select("id", { count: "exact", head: true })
+    .eq("regra_id", regraId)
+    .eq("ad_account_id", conta.id)
+    .eq("objeto_id", objetoId)
+    .eq("campo", "orcamento_diario")
+    .eq("ok", true)
+    .gte("criado_em", inicio);
+  if (error) return true;
+  return (count ?? 0) > 0;
 }
 
 /**
  * Uma passada da regra. `simular` = so diz o que faria (nada no Meta, nada
  * gravado). A regra precisa ser do `userId` (o cron passa o dono dela).
+ *
+ * Os objetos de TODAS as contas do escopo sao julgados juntos: o teto de
+ * acoes por passada e a ordem "quem mais gastou primeiro" valem para a regra
+ * inteira, nao para cada conta. Mudanca de orcamento: no maximo uma por
+ * objeto por dia por regra (senao "aumentar 20%" de hora em hora se acumula).
  */
 export async function rodarRegra(
   db: Db,
@@ -359,6 +427,9 @@ export async function rodarRegra(
   }
   const demo = await lojasDeDemonstracao(db, contas.map((c) => c.store_id ?? "")).catch(() => new Set<string>());
 
+  // 1. O que cada conta fez na janela.
+  const contaPorId = new Map<string, ContaLida>();
+  const todos: ObjetoNaJanela[] = [];
   for (const conta of contas) {
     const rotulo = conta.nome || conta.external_id;
     if (conta.store_id && demo.has(conta.store_id)) continue;
@@ -367,95 +438,114 @@ export async function rodarRegra(
       resultado.avisos.push(`${rotulo}: dados do Meta desatualizados (sync parado); a conta ficou de fora.`);
       continue;
     }
-
-    let objetos: ObjetoNaJanela[];
     try {
-      objetos = await objetosNaJanela(db, conta, regra, opcoes.agoraMs);
+      const lido = await objetosNaJanela(db, conta, regra, opcoes.agoraMs);
+      if (lido.aviso && regra.metrica === "custo_por_compra") resultado.avisos.push(`${rotulo}: ${lido.aviso}`);
+      if (regra.metrica === "custo_por_compra" && !conta.store_id) {
+        resultado.avisos.push(`${rotulo}: sem loja ligada, o custo por compra não é contado.`);
+      }
+      contaPorId.set(conta.id, conta);
+      todos.push(...lido.objetos);
     } catch (e) {
       resultado.avisos.push(`${rotulo}: ${e instanceof Error ? e.message : "falha ao ler as métricas"}`);
+    }
+  }
+
+  // 2. Uma avaliacao so, para a regra inteira.
+  const r = avaliarRegra(regra, todos);
+  resultado.julgados = r.julgados;
+  resultado.ignorados.push(...r.ignorados);
+  resultado.cortados = r.cortados;
+
+  // 3. As acoes, conta a conta (cada uma com o seu token).
+  const tokens = new Map<string, string | null>();
+  for (const d of r.decisoes) {
+    const conta = contaPorId.get(d.objeto.contaId);
+    if (!conta) continue;
+    const rotulo = conta.nome || conta.external_id;
+    const deOrcamento = d.acao === "diminuir_orcamento" || d.acao === "aumentar_orcamento";
+    const acao: AcaoPassada = {
+      contaNome: rotulo,
+      objetoId: d.objeto.objetoId,
+      nome: d.objeto.nome,
+      valorMetrica: d.valorMetrica,
+      acao: d.acao,
+      orcamentoAtual: deOrcamento ? d.objeto.orcamentoDiario : null,
+      orcamentoNovo: d.orcamentoNovo,
+    };
+    if (opcoes.simular || d.acao === "avisar") {
+      if (!opcoes.simular) acao.ok = true;
+      resultado.acoes.push(acao);
       continue;
     }
-    if (regra.metrica === "custo_por_compra" && !conta.store_id) {
-      resultado.avisos.push(`${rotulo}: sem loja ligada, o custo por compra não é contado.`);
+    if (!tokens.has(conta.id)) tokens.set(conta.id, await tokenDaConta(db, conta.id).catch(() => null));
+    const token = tokens.get(conta.id) ?? null;
+    if (!token) {
+      resultado.acoes.push({ ...acao, ok: false, erro: "sem token do Meta" });
+      continue;
     }
-
-    const r = avaliarRegra(regra, objetos);
-    resultado.julgados += r.julgados;
-    resultado.ignorados.push(...r.ignorados);
-    resultado.cortados += r.cortados;
-    if (r.decisoes.length === 0) continue;
-
-    const token = opcoes.simular ? null : await tokenDaConta(db, conta.id).catch(() => null);
-    if (!opcoes.simular && !token && r.decisoes.some((d) => d.acao !== "avisar")) {
-      resultado.avisos.push(`${rotulo}: sem token do Meta; nada foi alterado.`);
-    }
-
-    for (const d of r.decisoes) {
-      const acao: AcaoPassada = {
-        contaNome: rotulo,
+    try {
+      if (d.acao === "pausar") {
+        const a = await aplicarAlteracao({
+          db,
+          conta,
+          token,
+          nivel: regra.nivel,
+          objetoId: d.objeto.objetoId,
+          campo: "status",
+          valor: "PAUSED",
+          origem: "regra",
+          regraId: linha.id,
+        });
+        resultado.acoes.push({ ...acao, ok: a.ok, erro: a.ok ? null : a.erro });
+        continue;
+      }
+      if (await orcamentoJaMudouHoje(db, linha.id, conta, d.objeto.objetoId, opcoes.agoraMs)) {
+        resultado.ignorados.push({
+          objetoId: d.objeto.objetoId,
+          nome: d.objeto.nome,
+          motivo: "esta regra já mudou o orçamento dele hoje",
+        });
+        continue;
+      }
+      // O orcamento novo sai do valor AO VIVO, nao do retrato do sync; e so
+      // de objeto que esta rodando agora no Meta.
+      const vivo = await lerAoVivo(conta, token, regra.nivel, d.objeto.objetoId);
+      if (!vivo || vivo.efetivo !== "ACTIVE") {
+        resultado.ignorados.push({
+          objetoId: d.objeto.objetoId,
+          nome: d.objeto.nome,
+          motivo: !vivo ? "não encontrado no Meta" : "não está rodando no Meta agora",
+        });
+        continue;
+      }
+      const atual = vivo.diario ?? 0;
+      const conta2 = orcamentoDaAcao(regra, atual);
+      if ("motivo" in conta2) {
+        resultado.ignorados.push({ objetoId: d.objeto.objetoId, nome: d.objeto.nome, motivo: conta2.motivo });
+        continue;
+      }
+      const a = await aplicarAlteracao({
+        db,
+        conta,
+        token,
+        nivel: regra.nivel,
         objetoId: d.objeto.objetoId,
-        nome: d.objeto.nome,
-        valorMetrica: d.valorMetrica,
-        acao: d.acao,
-        orcamentoAtual: d.acao === "diminuir_orcamento" || d.acao === "aumentar_orcamento" ? d.objeto.orcamentoDiario : null,
-        orcamentoNovo: d.orcamentoNovo,
-      };
-      if (opcoes.simular || d.acao === "avisar") {
-        if (!opcoes.simular) acao.ok = true;
-        resultado.acoes.push(acao);
-        continue;
-      }
-      if (!token) {
-        resultado.acoes.push({ ...acao, ok: false, erro: "sem token do Meta" });
-        continue;
-      }
-      try {
-        if (d.acao === "pausar") {
-          const a = await aplicarAlteracao({
-            db,
-            conta,
-            token,
-            nivel: regra.nivel,
-            objetoId: d.objeto.objetoId,
-            campo: "status",
-            valor: "PAUSED",
-            origem: "regra",
-            regraId: linha.id,
-          });
-          resultado.acoes.push({ ...acao, ok: a.ok, erro: a.ok ? null : a.erro });
-        } else {
-          // O orcamento novo sai do valor AO VIVO, nao do retrato do sync.
-          const vivo = await lerAoVivo(conta, token, regra.nivel, d.objeto.objetoId);
-          const atual = vivo?.diario ?? 0;
-          const conta2 = orcamentoDaAcao(regra, atual);
-          if (!vivo || "motivo" in conta2) {
-            const motivo = !vivo ? "não encontrado no Meta" : "motivo" in conta2 ? conta2.motivo : "";
-            resultado.ignorados.push({ objetoId: d.objeto.objetoId, nome: d.objeto.nome, motivo });
-            continue;
-          }
-          const a = await aplicarAlteracao({
-            db,
-            conta,
-            token,
-            nivel: regra.nivel,
-            objetoId: d.objeto.objetoId,
-            campo: "orcamento_diario",
-            valor: conta2.novo,
-            esperado: String(atual),
-            origem: "regra",
-            regraId: linha.id,
-          });
-          resultado.acoes.push({
-            ...acao,
-            orcamentoAtual: atual,
-            orcamentoNovo: conta2.novo,
-            ok: a.ok,
-            erro: a.ok ? null : a.erro,
-          });
-        }
-      } catch (e) {
-        resultado.acoes.push({ ...acao, ok: false, erro: textoDoErroDeEdicao(e) });
-      }
+        campo: "orcamento_diario",
+        valor: conta2.novo,
+        esperado: String(atual),
+        origem: "regra",
+        regraId: linha.id,
+      });
+      resultado.acoes.push({
+        ...acao,
+        orcamentoAtual: atual,
+        orcamentoNovo: conta2.novo,
+        ok: a.ok,
+        erro: a.ok ? null : a.erro,
+      });
+    } catch (e) {
+      resultado.acoes.push({ ...acao, ok: false, erro: textoDoErroDeEdicao(e) });
     }
   }
   return resultado;

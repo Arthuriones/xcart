@@ -79,6 +79,8 @@ export function montarUrlLoginMeta({
   // Meta nao aprova o Acesso Avancado, so quem tem papel no app recebe a
   // permissao -- pedir para todo mundo arriscaria o login de leitura.
   url.searchParams.set("scope", editar ? "public_profile,ads_read,ads_management" : "public_profile,ads_read");
+  // Sem isto, quem recusou a permissao uma vez nunca mais e perguntado.
+  if (editar) url.searchParams.set("auth_type", "rerequest");
 
   return url.toString();
 }

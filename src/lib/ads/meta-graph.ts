@@ -24,11 +24,14 @@ const TIMEOUT_MS = 25_000;
 export class ErroGraph extends Error {
   codigo: number | null;
   subcodigo: number | null;
-  constructor(mensagem: string, codigo: number | null, subcodigo: number | null) {
+  /** error_user_title + error_user_msg: o motivo que a Marketing API explica (orcamento minimo...). */
+  detalhe: string | null;
+  constructor(mensagem: string, codigo: number | null, subcodigo: number | null, detalhe: string | null = null) {
     super(mensagem);
     this.name = "ErroGraph";
     this.codigo = codigo;
     this.subcodigo = subcodigo;
+    this.detalhe = detalhe;
   }
 }
 
@@ -76,10 +79,14 @@ async function pedir(url: string, token: string | null, corpo?: URLSearchParams)
 
   const erro = json?.error as Record<string, unknown> | undefined;
   if (erro && typeof erro === "object") {
+    const titulo = typeof erro.error_user_title === "string" ? erro.error_user_title.trim() : "";
+    const explicacao = typeof erro.error_user_msg === "string" ? erro.error_user_msg.trim() : "";
+    const detalhe = [titulo, explicacao].filter(Boolean).join(": ");
     throw new ErroGraph(
       limparMensagem(String(erro.message ?? "erro do Meta"), token),
       numeroOuNulo(erro.code),
-      numeroOuNulo(erro.error_subcode)
+      numeroOuNulo(erro.error_subcode),
+      detalhe ? limparMensagem(detalhe, token) : null
     );
   }
   if (!resposta.ok) {

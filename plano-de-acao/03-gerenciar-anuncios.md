@@ -126,6 +126,27 @@ Hoje só quem tem papel no app da Meta (você) recebe a permissão de edição. 
 - **TikTok:** a Marketing API do TikTok tem edição de status e orçamento no mesmo molde.
 - **App do celular:** usa as mesmas rotas (ver o Plano 1, Fase 3).
 
+## Revisão adversarial (30/10/2026)
+
+Uma revisão com agentes tentando quebrar o backend achou 10 problemas. Os de dinheiro e segurança já foram corrigidos:
+
+- **Teto de ações:** as 25 ações por passada valem para a regra inteira. Antes valiam por conta: uma loja com 3 contas pausava até 75.
+- **Dado velho:**
+  - a regra confere a hora do detalhe das campanhas de hoje, não só a do gasto: o detalhe pode atrasar sozinho;
+  - objeto sem a linha de hoje não conta como ativo.
+- **Orçamento:**
+  - no máximo 1 mudança por objeto, por dia, por regra (antes "aumentar 20%" de hora em hora se acumulava);
+  - só muda o orçamento de objeto que está rodando no Meta naquela hora.
+- **Custo por compra:** se menos de 80% dos pedidos do Meta trazem o id do anúncio, a regra não julga. Pedido sem id contava como "zero compras" e pausava quem vendeu.
+- **Imposto do Meta (conta em BRL):** o gasto julgado leva o imposto de 12,15%, igual à aba Campanhas.
+- **Regra desligada durante a passada:** não roda mais.
+- **Erro do Meta:** a tela mostra o motivo real (ex.: orçamento mínimo), não "Invalid parameter".
+- **Permissão recusada:** o "Permitir editar campanhas" pergunta de novo (`auth_type=rerequest`).
+
+**Falta (pequeno):**
+- o link de navegador multilogin (Dolphin, AdsPower) ainda não pede a permissão de edição. Quem conecta por ele precisa conectar pelo navegador normal para editar;
+- o retorno do Facebook não confere se a permissão veio: se não vier, o erro só aparece na primeira edição.
+
 ## O que a documentação do Meta confirmou (30/10/2026)
 
 - **Permissão:**
