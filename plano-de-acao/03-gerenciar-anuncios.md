@@ -9,8 +9,8 @@
 | Backend da edição (status, orçamento, lance) | **Feito** (commit 400153e) |
 | Backend das regras + cron de 15 em 15 min | **Feito** (commit 400153e) |
 | Banco (migration 087: regras e histórico) | **Aplicada** em produção |
-| Tela: editar na aba Campanhas | Em andamento nesta noite |
-| Tela: página Regras + histórico | Em andamento nesta noite |
+| Tela: editar na aba Campanhas | **Feito** (commit b6da458) |
+| Tela: página Regras + histórico | **Feito** (commit b6da458) |
 | Permissão de edição no Meta (`ads_management`) | **Falta você** reconectar o Facebook com "Permitir editar campanhas" |
 | Liberar para clientes (App Review do Meta) | Falta (ver Fase 4) |
 
@@ -93,7 +93,7 @@ Exemplo do pedido: *"nesta operação, se o custo por IC do anúncio passar de U
 - Login do Meta com `?editar=1` pede também a permissão `ads_management`. O login normal continua só leitura, para não arriscar o login de quem não tem papel no app.
 - Testes: `tests/ads-gerenciar-regras.test.ts` (23 casos).
 
-### Fase 2 — Telas (esta noite, ver o fim do arquivo)
+### Fase 2 — Telas ✅ feito em 30/10
 
 - Aba Campanhas: interruptor de status e botão "Editar" (orçamento e lance) nas linhas do Meta.
 - Página **Regras** no menu, logo depois de Campanhas: lista, criar/editar, ligar/desligar, simular, apagar e o histórico de alterações.
@@ -125,6 +125,26 @@ Hoje só quem tem papel no app da Meta (você) recebe a permissão de edição. 
 - **Google Ads:** precisa da API (a listagem pelo login do Google usa versão que saiu do ar), então vem depois do Meta.
 - **TikTok:** a Marketing API do TikTok tem edição de status e orçamento no mesmo molde.
 - **App do celular:** usa as mesmas rotas (ver o Plano 1, Fase 3).
+
+## O que a documentação do Meta confirmou (30/10/2026)
+
+- **Permissão:**
+  - `ads_management` lê e gerencia;
+  - no App Review, ela depende de `pages_read_engagement` e `pages_show_list`, que entram no mesmo pedido;
+  - sem o Acesso Avançado (hoje chamado "Full"), só quem tem papel no app recebe a permissão;
+  - para manter o Full, a Meta pede 500 chamadas em 15 dias, com menos de 15% de erro.
+- **Limites de edição:**
+  - orçamento do conjunto: no máximo 4 trocas por hora;
+  - cada objeto: no máximo 1 edição a cada 30 s;
+  - pausar, mudar orçamento ou mudar lance contam como "edição significativa" e podem reiniciar o aprendizado.
+- **Orçamento:**
+  - vai na menor unidade da moeda (centavos), e o Panda Track já converte;
+  - nas 11 moedas sem centavo (CLP, COP, JPY etc.), vai na unidade cheia;
+  - orçamento total só baixa até 10% acima do que já foi gasto.
+- **Lance:**
+  - `bid_amount` só no conjunto, e só com limite de lance ou de custo;
+  - ROAS mínimo em `bid_constraints.roas_average_floor` × 10.000 (1,5 = 15000).
+- **Regras nativas do Meta** (`adrules_library`): existem, mas só aceitam métricas do próprio Meta. Por isso as regras do Panda Track rodam no nosso cron: usam as compras do Panda Track, que o Meta não tem.
 
 ## Arquivos
 

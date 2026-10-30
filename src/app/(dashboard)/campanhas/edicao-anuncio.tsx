@@ -139,6 +139,16 @@ export function pedirAlteracao(corpo: {
   return pedirApi("/api/ads/meta/alterar", { method: "POST", body: JSON.stringify(corpo) });
 }
 
+/** Varias mudancas do mesmo objeto, num POST so (tudo ou nada). */
+function pedirAlteracoes(corpo: {
+  conta: string;
+  nivel: NivelEdicao;
+  id: string;
+  mudancas: { campo: CampoEdicao; valor: string | number; esperado: string | null }[];
+}): Promise<RespostaApi> {
+  return pedirApi("/api/ads/meta/alterar", { method: "POST", body: JSON.stringify(corpo) });
+}
+
 function lerObjeto(conta: string, nivel: NivelEdicao, id: string): Promise<RespostaApi> {
   const q = new URLSearchParams({ conta, nivel, id });
   return pedirApi(`/api/ads/meta/objeto?${q.toString()}`);
@@ -488,42 +498,27 @@ function PainelEdicao({
     setSalvando(true);
     aoPrender(true);
 
-    // Um POST por campo, em sequencia: o que falhar para ali e o que ja foi
-    // fica dito. O esperado sai do objeto de DEPOIS do passo anterior.
-    let atual = o;
-    const feitos: string[] = [];
-    for (const m of mudancas) {
-      const r = await pedirAlteracao({
-        conta: linha.contaId,
-        nivel,
-        id: linha.objetoId,
-        campo: m.campo,
-        valor: m.valor,
-        esperado: esperadoDe(atual, m.campo),
-      });
-      if (!r.ok) {
-        if (r.status === 409 && r.objeto) {
-          // Mudou no Meta desde que o painel abriu: mostra o de agora e nada mais vai.
-          setCarga({ fase: "pronto", objeto: r.objeto });
-          setForm(formularioDe(r.objeto));
-          setMudouNoMeta(true);
-          setTentouSalvar(false);
-        } else {
-          if (feitos.length > 0) {
-            setCarga({ fase: "pronto", objeto: atual });
-          }
-          setErro(`${m.rotulo}: ${r.erro}`);
-        }
-        if (feitos.length > 0) {
-          setErro((e) => `${e ? `${e} ` : ""}Já salvo no Meta: ${feitos.join(", ")}.`);
-          startTransition(() => router.refresh());
-        }
-        setSalvando(false);
-        aoPrender(false);
-        return;
+    // Tudo num POST so: o Meta aceita uma edicao por objeto a cada 30 s, e o
+    // segundo campo em outra chamada tomaria o erro. Tudo ou nada.
+    const r = await pedirAlteracoes({
+      conta: linha.contaId,
+      nivel,
+      id: linha.objetoId,
+      mudancas: mudancas.map((m) => ({ campo: m.campo, valor: m.valor, esperado: esperadoDe(o, m.campo) })),
+    });
+    if (!r.ok) {
+      if (r.status === 409 && r.objeto) {
+        // Mudou no Meta desde que o painel abriu: mostra o de agora e nada vai.
+        setCarga({ fase: "pronto", objeto: r.objeto });
+        setForm(formularioDe(r.objeto));
+        setMudouNoMeta(true);
+        setTentouSalvar(false);
+      } else {
+        setErro(r.erro);
       }
-      atual = r.objeto;
-      feitos.push(m.rotulo.toLowerCase());
+      setSalvando(false);
+      aoPrender(false);
+      return;
     }
 
     setSalvando(false);

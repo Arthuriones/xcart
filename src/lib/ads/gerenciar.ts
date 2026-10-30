@@ -211,6 +211,14 @@ async function corrigirRetrato(db: Db, conta: ContaGerenciavel, obj: ObjetoAoViv
   if (error) console.error("[gerenciar] falha ao corrigir o retrato", error.message);
 }
 
+export interface MudancaPedida {
+  campo: CampoEdicao;
+  valor: unknown;
+  /** O valor que a tela viu; diferente do de agora = conflito, nada e gravado. */
+  esperado?: string | null;
+}
+
+/** Uma mudanca so (o interruptor, as regras). */
 export async function aplicarAlteracao(p: {
   db: Db;
   conta: ContaGerenciavel;
@@ -219,12 +227,34 @@ export async function aplicarAlteracao(p: {
   objetoId: string;
   campo: CampoEdicao;
   valor: unknown;
-  /** O valor que a tela viu; diferente do de agora = conflito, nada e gravado. */
   esperado?: string | null;
   origem: "manual" | "regra";
   regraId?: string | null;
 }): Promise<ResultadoAlteracao> {
-  const { db, conta, token, nivel, objetoId, campo } = p;
+  return aplicarAlteracoes({ ...p, mudancas: [{ campo: p.campo, valor: p.valor, esperado: p.esperado }] });
+}
+
+/**
+ * Varias mudancas do MESMO objeto num POST so: o Meta aceita uma edicao por
+ * objeto a cada 30 s (613/4841018), e o painel que muda orcamento e lance
+ * juntos tomaria o erro na segunda chamada. Tudo ou nada: uma mudanca
+ * invalida ou um esperado que nao bate barra o pedido inteiro.
+ */
+export async function aplicarAlteracoes(p: {
+  db: Db;
+  conta: ContaGerenciavel;
+  token: string;
+  nivel: NivelEdicao;
+  objetoId: string;
+  mudancas: MudancaPedida[];
+  origem: "manual" | "regra";
+  regraId?: string | null;
+}): Promise<ResultadoAlteracao> {
+  const { db, conta, token, nivel, objetoId, mudancas } = p;
+  if (mudancas.length === 0) return { ok: false, erro: "Nada para mudar.", status: 400 };
+  if (new Set(mudancas.map((m) => m.campo)).size !== mudancas.length) {
+    return { ok: false, erro: "Campo repetido no pedido.", status: 400 };
+  }
 
   let obj: ObjetoAoVivo | null;
   try {
@@ -234,9 +264,8 @@ export async function aplicarAlteracao(p: {
   }
   if (!obj) return { ok: false, erro: "Objeto não encontrado nesta conta do Meta.", status: 404 };
 
-  if (p.esperado !== undefined && p.esperado !== null) {
-    const agora = valorDoCampo(obj, campo);
-    if (agora !== p.esperado) {
+  for (const m of mudancas) {
+    if (m.esperado !== undefined && m.esperado !== null && valorDoCampo(obj, m.campo) !== m.esperado) {
       return {
         ok: false,
         erro: "O valor mudou no Meta desde que a tela abriu. Confira o valor atual e tente de novo.",
@@ -246,8 +275,14 @@ export async function aplicarAlteracao(p: {
     }
   }
 
-  const v = validarAlteracao(obj, campo, p.valor);
-  if (!v.ok) return { ok: false, erro: v.erro, status: 400 };
+  const validas: { campo: CampoEdicao; antes: string; depois: string }[] = [];
+  const campos: Record<string, string> = {};
+  for (const m of mudancas) {
+    const v = validarAlteracao(obj, m.campo, m.valor);
+    if (!v.ok) return { ok: false, erro: v.erro, status: 400 };
+    Object.assign(campos, v.campos);
+    validas.push({ campo: m.campo, antes: v.antes, depois: v.depois });
+  }
 
   const base = {
     user_id: conta.user_id,
@@ -255,25 +290,23 @@ export async function aplicarAlteracao(p: {
     nivel,
     objeto_id: obj.id,
     objeto_nome: obj.nome,
-    campo,
-    antes: v.antes,
-    depois: v.depois,
     origem: p.origem,
     regra_id: p.regraId ?? null,
   };
 
   try {
-    await alterarObjetoMeta(obj.id, v.campos, token);
+    await alterarObjetoMeta(obj.id, campos, token);
   } catch (e) {
     const erro = textoDoErroDeEdicao(e);
-    await registrar(db, { ...base, ok: false, erro });
+    for (const v of validas) await registrar(db, { ...base, ...v, ok: false, erro });
     return { ok: false, erro, status: 502 };
   }
-  await registrar(db, { ...base, ok: true, erro: null });
+  for (const v of validas) await registrar(db, { ...base, ...v, ok: true, erro: null });
 
   // O estado de depois (status efetivo, orcamento), relido no Meta. Se a
   // releitura falhar, a alteracao ja valeu: monta o de depois pelo pedido.
-  const pedido = depoisPeloPedido(obj, campo, v.depois);
+  let pedido: ObjetoAoVivo = obj;
+  for (const v of validas) pedido = depoisPeloPedido(pedido, v.campo, v.depois);
   let depois: ObjetoAoVivo = pedido;
   try {
     depois = (await lerAoVivo(conta, token, nivel, obj.id)) ?? pedido;
@@ -281,5 +314,10 @@ export async function aplicarAlteracao(p: {
     depois = pedido;
   }
   await corrigirRetrato(db, conta, depois);
-  return { ok: true, objeto: depois, antes: v.antes, depois: v.depois };
+  return {
+    ok: true,
+    objeto: depois,
+    antes: validas.map((v) => v.antes).join(", "),
+    depois: validas.map((v) => v.depois).join(", "),
+  };
 }
