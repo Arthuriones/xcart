@@ -20,6 +20,9 @@
     },
     "src/app/api/jobs/tracking/drain/route.ts": {
       "maxDuration": 120
+    },
+    "src/app/api/jobs/ads/regras/route.ts": {
+      "maxDuration": 300
     }
   },
   "crons": [
@@ -42,6 +45,10 @@
     {
       "path": "/api/jobs/ads/meta",
       "schedule": "5,20,35,50 * * * *"
+    },
+    {
+      "path": "/api/jobs/ads/regras",
+      "schedule": "10,25,40,55 * * * *"
     },
     {
       "path": "/api/jobs/financeiro/cambio",

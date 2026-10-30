@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
   const state = serializarEstadoMeta({ nonce, userId: user.id });
   const redirectUri = obterRedirectUriMeta(request.nextUrl.origin);
 
-  const authUrl = montarUrlLoginMeta({ redirectUri, state });
+  const authUrl = montarUrlLoginMeta({ redirectUri, state, editar: searchParams.get("editar") === "1" });
 
   const response = NextResponse.redirect(authUrl);
   response.cookies.set(COOKIE_META_STATE, state, opcoesCookieMetaState());

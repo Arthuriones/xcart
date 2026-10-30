@@ -49,12 +49,15 @@ function limparMensagem(msg: string, token: string | null): string {
   return m.slice(0, 500);
 }
 
-async function pedir(url: string, token: string | null): Promise<RespostaGraph> {
+async function pedir(url: string, token: string | null, corpo?: URLSearchParams): Promise<RespostaGraph> {
   let resposta: Response;
   try {
     resposta = await safeFetch(url, {
-      method: "GET",
-      headers: { accept: "application/json" },
+      method: corpo ? "POST" : "GET",
+      headers: corpo
+        ? { accept: "application/json", "content-type": "application/x-www-form-urlencoded" }
+        : { accept: "application/json" },
+      ...(corpo ? { body: corpo.toString() } : {}),
       timeoutMs: TIMEOUT_MS,
     });
   } catch {
@@ -319,4 +322,32 @@ export async function buscarInsights(
   nivel: NivelInsightMeta
 ): Promise<InsightMeta[]> {
   return (await buscarInsightsDetalhado(contaId, token, desde, ate, nivel)).rows;
+}
+
+/**
+ * Estado AO VIVO de uma campanha, conjunto ou anuncio (gerenciar anuncios):
+ * a edicao confere o valor de agora, nunca o do sync de 15 min.
+ */
+export async function lerObjetoMeta(
+  objetoId: string,
+  campos: string,
+  token: string
+): Promise<Record<string, unknown>> {
+  const r = await graphGet(objetoId.replace(/\D/g, ""), { fields: campos }, token);
+  return r.json;
+}
+
+/**
+ * Escrita (ads_management): POST /{id} com os campos. O token vai no CORPO,
+ * nao na URL. O Meta responde { success: true }; qualquer outra coisa e erro.
+ */
+export async function alterarObjetoMeta(
+  objetoId: string,
+  campos: Record<string, string>,
+  token: string
+): Promise<void> {
+  const corpo = new URLSearchParams(campos);
+  corpo.set("access_token", token);
+  const r = await pedir(`${BASE}/${objetoId.replace(/\D/g, "")}`, token, corpo);
+  if (r.json.success !== true) throw new ErroGraph("o Meta não confirmou a alteração", null, null);
 }

@@ -59,9 +59,12 @@ export function obterRedirectUriMeta(origem?: string | null): string {
 export function montarUrlLoginMeta({
   redirectUri,
   state,
+  editar = false,
 }: {
   redirectUri: string;
   state: string;
+  /** Pede tambem ads_management (editar campanhas). So quem marca "Permitir editar campanhas". */
+  editar?: boolean;
 }): string {
   const { appId } = obterCredenciaisMeta();
   const url = new URL(DIALOG_BASE);
@@ -72,7 +75,10 @@ export function montarUrlLoginMeta({
   url.searchParams.set("state", state);
   // Permissoes para perfil (public_profile) e leitura de contas/campanhas (ads_read).
   // Nao exige email nem read_insights (depreciado) para funcionar direto no Facebook Login for Business.
-  url.searchParams.set("scope", "public_profile,ads_read");
+  // ads_management (gerenciar anuncios, plano-de-acao/03) so a pedido: enquanto o
+  // Meta nao aprova o Acesso Avancado, so quem tem papel no app recebe a
+  // permissao -- pedir para todo mundo arriscaria o login de leitura.
+  url.searchParams.set("scope", editar ? "public_profile,ads_read,ads_management" : "public_profile,ads_read");
 
   return url.toString();
 }
