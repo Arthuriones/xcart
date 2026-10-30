@@ -6,7 +6,7 @@
 |---|---|
 | 0. Contas e aprovações | **Falta** (com você) |
 | 1. Backend do app | **Feita** em 29/10 (commit f8348fa, migration 084 aplicada) |
-| 2. Edição dos anúncios na web | Falta |
+| 2. Edição dos anúncios na web | **Feita** em 30/10 (Plano 3: commits 400153e, b6da458, cd478af) |
 | 3. App em Expo | Falta |
 | 4. Publicação | Falta |
 
