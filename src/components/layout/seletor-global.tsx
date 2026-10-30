@@ -159,8 +159,8 @@ export type Contexto = ReturnType<typeof useContexto>;
 // ---------------------------------------------------------------------------
 
 // Sem cor de fundo, de texto nem de borda aqui: quem usa escolhe. clsx nao
-// resolve conflito (bg-surface + bg-info-bg ficariam os dois, e vence a ordem
-// do CSS).
+// resolve conflito (duas cores de fundo ficariam as duas, e vence a ordem do
+// CSS).
 const GATILHO = "flex h-ctl-md items-center gap-2 rounded-control border px-2.5 text-dense";
 /** O gatilho comum (fora o da loja filtrada): borda leve, que firma no hover. */
 const GATILHO_NEUTRO = "border-border bg-surface hover:border-border-strong";
@@ -521,7 +521,15 @@ export function BarraContexto({
       aria-busy={ctx.pendente}
       className={clsx("flex min-w-0 items-center gap-1.5", ctx.pendente && "opacity-70")}
     >
-      <div className="flex min-w-0 items-center">
+      {/* Filtrada, o gatilho e o "x" formam uma pilula so, no mesmo desenho dos
+          outros gatilhos: borda um tom mais firme, o icone no verde do acento
+          e uma divisoria fina antes do "x". */}
+      <div
+        className={clsx(
+          "flex min-w-0 items-center",
+          filtrada && "h-ctl-md rounded-control border border-border-strong bg-surface"
+        )}
+      >
         <Pop
           rotulo="Escolher loja"
           {...pop("loja")}
@@ -530,19 +538,16 @@ export function BarraContexto({
             <button
               type="button"
               className={clsx(
-                GATILHO,
                 "min-w-0 max-w-55 text-ink",
-                // Filtrada (azul de filtro ativo), o gatilho e o "x" formam
-                // uma pilula so: o lado direito dele e a divisoria do "x".
                 filtrada
-                  ? "rounded-r-none border-r-0 border-info-border bg-info-bg hover:border-info"
-                  : GATILHO_NEUTRO
+                  ? "flex h-full items-center gap-2 rounded-l-[7px] pr-2 pl-2.5 text-dense hover:bg-hover"
+                  : [GATILHO, GATILHO_NEUTRO]
               )}
             >
               {filtrada && prefixoDa(dados.lojas, v.lojaId) === "Checkout" ? (
-                <CreditCard className="size-3.5 shrink-0 text-info" strokeWidth={1.75} aria-hidden />
+                <CreditCard className="size-3.5 shrink-0 text-brand" strokeWidth={1.75} aria-hidden />
               ) : (
-                <Store className={clsx("size-3.5 shrink-0", filtrada ? "text-info" : "text-t3")} strokeWidth={1.75} aria-hidden />
+                <Store className={clsx("size-3.5 shrink-0", filtrada ? "text-brand" : "text-t3")} strokeWidth={1.75} aria-hidden />
               )}
               <span className="truncate font-medium">
                 {filtrada ? (
@@ -602,15 +607,18 @@ export function BarraContexto({
           </div>
         </Pop>
         {filtrada && (
-          <button
-            type="button"
-            onClick={() => ctx.gravar({ lojaId: TODAS })}
-            aria-label="Voltar para todas as lojas"
-            title="Ver todas as lojas"
-            className="grid h-ctl-md w-7 shrink-0 place-items-center rounded-control rounded-l-none border border-info-border bg-info-bg text-info hover:text-ink"
-          >
-            <X className="size-3.5" strokeWidth={2.25} aria-hidden />
-          </button>
+          <>
+            <span aria-hidden className="h-4 w-px shrink-0 bg-border" />
+            <button
+              type="button"
+              onClick={() => ctx.gravar({ lojaId: TODAS })}
+              aria-label="Voltar para todas as lojas"
+              title="Ver todas as lojas"
+              className="grid h-full w-7 shrink-0 place-items-center rounded-r-[7px] text-t3 hover:bg-hover hover:text-ink"
+            >
+              <X className="size-3.5" strokeWidth={2} aria-hidden />
+            </button>
+          </>
         )}
       </div>
 
@@ -885,11 +893,13 @@ export function ContextoCelular({
         className={clsx(
           "flex items-center gap-2 rounded-control border text-left text-dense text-ink",
           compacto ? "h-ctl-md min-w-0 max-w-full px-2.5" : "min-h-ctl-lg w-full px-3",
-          nomeLoja ? "border-info-border bg-info-bg" : "border-border bg-surface hover:border-border-strong"
+          // Loja escolhida: borda mais firme e o icone no verde do acento,
+          // como o gatilho da loja no desktop.
+          nomeLoja ? "border-border-strong bg-surface" : "border-border bg-surface hover:border-border-strong"
         )}
       >
         <SlidersHorizontal
-          className={clsx("shrink-0 text-t2", compacto ? "size-3.75" : "size-4")}
+          className={clsx("shrink-0", nomeLoja ? "text-brand" : "text-t2", compacto ? "size-3.75" : "size-4")}
           strokeWidth={1.75}
           aria-hidden
         />
