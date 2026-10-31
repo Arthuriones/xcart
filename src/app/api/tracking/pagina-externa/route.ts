@@ -19,8 +19,9 @@ export const runtime = "nodejs";
 // Tudo no DOMINIO PERMANENTE (xxx.myshopify.com), nunca no dominio proprio:
 // lojista troca de dominio toda hora, e a Shopify redireciona o permanente
 // para o atual preservando a query (medido: /cart/1:1?attributes[...] chega
-// inteiro do outro lado). A tag lista os dois, para link escrito a mao com o
-// dominio proprio tambem ser reescrito.
+// inteiro do outro lado). A tag lista o permanente e TODOS os dominios
+// conectados (o principal e os secundarios, como checkout.<marca>.shop), para
+// link escrito a mao com qualquer um deles tambem ser reescrito.
 //
 // Lista leve de proposito: id, titulo e variantes. Nao e o getProducts (que
 // traz descricao, imagens e metafields) -- aqui so se escolhe o que vender.
@@ -33,7 +34,7 @@ export const runtime = "nodejs";
 
 const QUERY = `
   query paginaExterna($after: String) {
-    shop { primaryDomain { host } }
+    shop { primaryDomain { host } domains { host } }
     products(first: 100, after: $after, query: "status:active", sortKey: TITLE) {
       pageInfo { hasNextPage endCursor }
       nodes {
@@ -46,7 +47,7 @@ const QUERY = `
 `;
 
 interface Resposta {
-  shop?: { primaryDomain?: { host?: string | null } | null } | null;
+  shop?: { primaryDomain?: { host?: string | null } | null; domains?: { host?: string | null }[] | null } | null;
   products?: {
     pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
     nodes?: {
@@ -190,7 +191,10 @@ export async function GET(request: NextRequest) {
   };
 
   const produtos: { id: string; titulo: string; variantes: { id: string; titulo: string; preco: string }[] }[] = [];
-  let dominioProprio: string | null = null;
+  // Todos os dominios conectados a loja, o principal primeiro: o botao da
+  // pagina pode apontar para um secundario (checkout.<marca>.shop), e host
+  // fora da lista nao ganha o _xc_vid nem dispara o InitiateCheckout.
+  const dominiosProprios: string[] = [];
   let after: string | null = null;
   // Em paralelo com a Shopify: so o banco.
   const vitrines = vitrinesDaLoja(supabase, loja.id);
@@ -198,7 +202,12 @@ export async function GET(request: NextRequest) {
     // Ate 3 paginas (300 produtos): quem tem mais escolhe pela busca da tela.
     for (let pagina = 0; pagina < 3; pagina++) {
       const r = (await shopifyGraphQL(creds, QUERY, { after })) as Resposta;
-      dominioProprio = dominioProprio || r.shop?.primaryDomain?.host || null;
+      if (pagina === 0) {
+        for (const d of [r.shop?.primaryDomain, ...(r.shop?.domains ?? [])]) {
+          const host = d?.host?.trim().toLowerCase();
+          if (host) dominiosProprios.push(host);
+        }
+      }
       for (const p of r.products?.nodes || []) {
         const variantes = (p.variants?.nodes || [])
           .map((v) => ({ id: numero(v.id) || "", titulo: v.title || "", preco: v.price || "" }))
@@ -214,9 +223,7 @@ export async function GET(request: NextRequest) {
   }
 
   const permanente = loja.shop_domain;
-  const destinos = [permanente, dominioProprio]
-    .filter((d): d is string => !!d)
-    .filter((d, i, a) => a.indexOf(d) === i);
+  const destinos = [permanente, ...dominiosProprios].filter((d, i, a) => a.indexOf(d) === i);
 
   return NextResponse.json({
     ok: true,
