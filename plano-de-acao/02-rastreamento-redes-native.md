@@ -87,6 +87,59 @@ O que muda junto:
 - **Snippet do tema, ponte e Web Pixel** leem a lista de click ids do catálogo (o teste que trava as listas continua).
 - **Plataforma do pedido:** `plataformaDe` e `niveisDoAnuncio` reconhecem as redes novas pelo click id e pela `utm_source`. O clique da Taboola deixa de ser "outra".
 
+### Fase H — Hotmart pelo servidor (~2 a 3 dias). Não depende da Fase 0, pode entrar antes de tudo.
+
+Pedida em 31/10/2026. O molde é o da Cakto e da Hubla, que já existem: a venda chega por webhook e o Panda Track manda a Purchase ao Meta e ao TikTok pelo servidor. Fonte: documentação oficial da Hotmart (developers.hotmart.com e a central de ajuda), conferida por um segundo agente.
+
+**Produtor: rastreamento completo.**
+- **Webhook 2.0:**
+  - eventos: compra aprovada, boleto gerado ("aguardando pagamento"), cancelada, reembolso pedido, reembolsada, chargeback, expirada e assinatura atrasada;
+  - autenticação: header `X-HOTMART-HOTTOK`, um token fixo por conta (não é HMAC). O lojista copia em Ferramentas › Webhook › Autenticação, como já faz com o token da Hubla;
+  - a Hotmart reenvia até 5 vezes quando dá erro; tem "Reenviar" manual e histórico de 60 dias.
+- **O que vem no pedido:**
+  - transação (`HP...`), valor da oferta (`price`) e total pago (`full_price`), moeda;
+  - comissão de cada papel (produtor, coprodutor, afiliado), com a conversão de moeda quando há;
+  - forma de pagamento;
+  - order bump (cada bump é uma transação, ligada à principal);
+  - recorrência;
+  - comprador: e-mail, telefone, nome, documento, cidade, CEP, estado e país;
+  - origem: `sck`, `src` e `xcod` (desde 25/04/2024).
+- **O que NÃO vem:** user agent, fbp, fbc, fbclid, ttclid e UTMs (a própria Hotmart diz que UTM não vai no webhook). O IP do comprador (`buyer_ip`) entrou em 2022, mas não aparece mais na documentação atual: conferir na primeira venda.
+- **Como completar o que falta:** a ponte já sabe pôr o visitante no `sck` (`data-xcart-param-vid="sck"`). Na VSL ou presell, ela leva `sck=xc.<visitante>` ao link do `pay.hotmart.com`. O webhook devolve o `sck`, e o Panda Track completa a compra com o IP, o user agent, o `_fbp`, o `_fbc` e o clique do anúncio desse visitante. Isso liga a venda à campanha.
+- **Lucro:** receita = comissão do produtor; Pix e boleto ficam em "A receber" até pagar. Igual à Cakto.
+- **Purchase:** uma por cobrança (a principal soma os bumps); renovação de assinatura não manda.
+
+**Coprodutor:** recebe o comprador (sem endereço e sem a origem). A Purchase sai com e-mail e telefone, mas sem ligação com a campanha.
+
+**Afiliado: parcial.**
+- O webhook do afiliado chega sem a origem, sem o valor pago e sem o comprador. O comprador só vem se o produtor liberar.
+- O caminho seria a API de vendas da Hotmart com a credencial do próprio afiliado, que traz o rastreio (`source`, `source_sck`, `external_code`). A documentação não confirma que ele vem preenchido para afiliado: testar numa conta de afiliado antes de prometer.
+
+**O que fazer no código:**
+1. **Migration:** `hotmart` no CHECK de plataforma de `checkouts_externos` (como a 072, a 075 e a 076).
+2. **Adaptador:** `src/lib/checkouts-externos/plataformas/hotmart.ts`, no molde do da Hubla, com:
+   - o token no header (aceitando também no corpo, que a documentação antiga cita);
+   - dedupe pelo `id` do evento;
+   - o grupo da cobrança pela transação principal;
+   - o "Enviar teste" da Hotmart reconhecido como teste: ele chega com o token real e com o payload de exemplo.
+3. **Ponte e coletor:**
+   - `pay.hotmart.com` e `go.hotmart.com` em `HOST_DO_CHECKOUT`;
+   - a tag gerada para a Hotmart já sai com `data-xcart-param-vid="sck"`.
+4. **Tela:**
+   - Hotmart em Checkouts, com o passo a passo (URL do webhook, token, eventos a marcar);
+   - o aviso "um emissor por pixel".
+5. **Testes:** `tests/checkout-externo-hotmart*.test.ts`.
+
+**Cuidados:**
+- **Compra dobrada no Meta:** a Hotmart tem pixel próprio com API de Conversões, por produto. O produtor precisa desmarcar "Vendas realizadas" no pixel da Hotmart, senão a compra conta duas vezes.
+- **Utmify:** ela também reescreve o `sck`. Quem usa as duas ao mesmo tempo tem conflito; a tela avisa.
+- **Formato do `sck`:** até 30 caracteres e sem `_` (o nosso tem cerca de 20 e não usa `_`).
+- **Desativação:** a Hotmart pode desativar o webhook se a URL der erro. A documentação não diz se é só no cadastro ou depois de falhas. Responder rápido e com 2xx sempre que a venda for gravada.
+- **A conferir na primeira venda real:**
+  - qual evento o Pix gerado dispara (o status dele é `WAITING_PAYMENT`, diferente do boleto);
+  - se ainda vem o `buyer_ip`;
+  - se o ponto do `xc.` passa no `sck`.
+
 ### Fase 1 — Taboola (~1 semana). Paridade com a Ratoeira na maior native.
 
 - **Clique:** a Taboola põe `tblci={click_id}` sozinha em toda URL. O Panda Track lê o `tblci`, e o modelo de URL acrescenta `utm_campaign={campaign_id}`, `utm_content={campaign_item_id}` e o site (`{site}`).
@@ -148,7 +201,7 @@ O que muda junto:
 ### Fase 5 — Postback universal e evento de Lead (~1 semana). As "100+ plataformas".
 
 - **Postback genérico:** uma URL por integração (GET ou POST) e um modelo por plataforma, que diz onde vêm o id do pedido, o valor, a moeda, o status (aprovada, reembolso, chargeback) e o id da visita.
-  - **Modelos prontos primeiro para:** Kiwify, Hotmart, Eduzz, Monetizze, Braip, Perfect Pay, Ticto, Appmax, Yampi, Cartpanda, Logzz, Coinzz, ClickBank, Digistore24, BuyGoods, MaxWeb, DrCash.
+  - **Modelos prontos primeiro para** (a Hotmart tem adaptador próprio na Fase H): Kiwify, Eduzz, Monetizze, Braip, Perfect Pay, Ticto, Appmax, Yampi, Cartpanda, Logzz, Coinzz, ClickBank, Digistore24, BuyGoods, MaxWeb, DrCash.
   - **Modelo "Outra":** o lojista mapeia os campos.
   - Entra no Dashboard como os checkouts externos de hoje: comissão ou venda, conforme a plataforma.
 - **Id da visita:** a ponte já põe `callback=xc.<vid>` no link da Cakto. Isso passa a valer em qualquer plataforma, com o nome do parâmetro que ela devolve (`sck`, `src`, `aff_sub`, `tid`, `subid`...).
@@ -185,6 +238,7 @@ O que muda junto:
 
 | Fase | O quê | Prazo (código) | Depende de você |
 |---|---|---|---|
+| H | Hotmart pelo servidor (produtor completo, afiliado parcial) | ~2 a 3 dias | o token (hottok) da conta Hotmart e uma venda de teste |
 | 0 | Catálogo de redes | ~3 dias | — |
 | 1 | Taboola | ~1 semana | credencial da Backstage API (página API Keys ou gerente de conta) |
 | 2 | Kwai | ~1 semana | pixel de Event API + token; acesso à Marketing API |
