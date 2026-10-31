@@ -5,6 +5,7 @@ import { MAX_TENTATIVAS, proximaTentativaEm } from "@/lib/tracking/fila";
 import { validarEscritaNoPixel } from "@/lib/tracking/meta-capi";
 import { validarEscritaNoTiktok } from "@/lib/tracking/tiktok-api";
 import type { IdentidadeGuardada } from "@/lib/tracking/purchase";
+import { limparUtm } from "@/lib/tracking/origem-pedido";
 import { JANELA_COMPRA_MS, type DestinoDoCheckout, type EnvioGravado, type EnvioNovo, type EnvioParaEntregar, type RastreioCheckout } from "./compra";
 import type { RepositorioDoColetor } from "./coletor";
 import { semMigration069, tabelaAusente, type PlataformaRastreio } from "./tipos";
@@ -69,13 +70,14 @@ async function tokensDe(admin: Admin, ids: string[]): Promise<Map<string, string
 async function identidadeDe(admin: Admin, checkoutId: string, visitorId: string): Promise<IdentidadeGuardada | null> {
   const { data, error } = await admin
     .from("checkout_externo_identidades")
-    .select("visitor_id, fbp, fbc, fbclid, ttclid, ttp, gclid, client_ip_address, client_user_agent, utm_em, expires_at")
+    .select("visitor_id, fbp, fbc, fbclid, ttclid, ttp, gclid, client_ip_address, client_user_agent, utm, utm_em, expires_at")
     .eq("checkout_id", checkoutId)
     .eq("visitor_id", visitorId)
     .gt("expires_at", new Date().toISOString())
     .maybeSingle();
   if (error || !data) return null;
-  const l = data as Record<string, string | null>;
+  const { utm, ...resto } = data as Record<string, unknown>;
+  const l = resto as Record<string, string | null>;
   return {
     visitorId: l.visitor_id,
     fbp: l.fbp,
@@ -88,6 +90,8 @@ async function identidadeDe(admin: Admin, checkoutId: string, visitorId: string)
     userAgent: l.client_user_agent,
     // A hora do clique: o fbc montado do fbclid leva ela (compra.ts).
     utmEm: l.utm_em,
+    // A campanha do clique: o pedido sem UTM no webhook (Hotmart) a herda (receber.ts).
+    utm: utm ? limparUtm(utm as Record<string, unknown>) : null,
   };
 }
 

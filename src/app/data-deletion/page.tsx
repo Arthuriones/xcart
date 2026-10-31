@@ -63,7 +63,7 @@ export default function DataDeletionPage() {
         {
           title: "7. Outras integrações",
           body: [
-            "Tokens e segredos informados no Panda Track (TikTok, Cakto, Hubla, bot do Telegram) são apagados junto com a conta. Para invalidá-los também na origem, gere um novo no painel de cada plataforma.",
+            "Tokens e segredos informados no Panda Track (TikTok, Cakto, Hubla, Hotmart, bot do Telegram) são apagados junto com a conta. Para invalidá-los também na origem, gere um novo no painel de cada plataforma.",
           ],
         },
         {

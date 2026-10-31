@@ -53,8 +53,9 @@ import { RastreamentoCheckout } from "./rastreamento-checkout";
 // rotas /api/checkouts (a sessao confere o dono; quem grava e o servidor).
 // O teste NUNCA entra nos numeros: o endpoint reconhece e nao grava pedido.
 //
-// Cakto e Hubla (venda): a Cakto gera o secret quando o webhook e criado la, e
-// a Hubla mostra o token na aba Autenticacao, entao o campo fica no painel da
+// Cakto, Hubla e Hotmart (venda): a Cakto gera o secret quando o webhook e criado
+// la, a Hubla mostra o token na aba Autenticacao e a Hotmart o hottok na tela do
+// webhook, entao o campo fica no painel da
 // URL (e no Editar, para trocar). Ele vai so para o servidor: a tela so sabe
 // SE ha um salvo (GET /url). O Eve (so na conta do Arthur) gera o secret no
 // painel dele, depois de colar a URL.
@@ -137,6 +138,31 @@ const PASSOS_HUBLA = [
   </>,
 ];
 
+// O hottok vem PRIMEIRO: a Hotmart desativa o webhook cuja URL da erro, e sem
+// o token colado todo evento volta 401.
+const PASSOS_HOTMART = [
+  <>
+    Na Hotmart, abra <Forte>Ferramentas › Webhook</Forte>, aba <Forte>Autenticação</Forte>, copie o{" "}
+    <Forte>Hottok</Forte> e cole aqui embaixo antes de tudo.
+  </>,
+  <>
+    Na aba <Forte>Minhas configurações</Forte>, crie uma configuração com a URL acima, a versão{" "}
+    <Forte>2.0.0</Forte> e todos os seus produtos.
+  </>,
+  <>
+    Marque os eventos de compra: aguardando pagamento, compra aprovada, completa, cancelada, expirada, pedido de
+    reembolso, reembolsada e chargeback. Salve.
+  </>,
+  <>
+    Na lista de <Forte>Minhas configurações</Forte>, clique em <Forte>Enviar teste</Forte>. O teste não entra nos
+    números.
+  </>,
+  <>
+    Entram as vendas em que você é produtor ou coprodutor (com a sua comissão); as de afiliado chegam e ficam de
+    fora. Se a Hotmart desativar a configuração (ela faz isso quando a URL dá erro), reative na mesma lista.
+  </>,
+];
+
 const PASSOS_EVE = [
   <>
     No painel da Eve, abra <Forte>Configurações › xcart</Forte> e cole a URL acima.
@@ -154,14 +180,16 @@ function passosDe(plataforma: string) {
     ? PASSOS_CAKTO
     : plataforma === "hubla"
       ? PASSOS_HUBLA
-      : plataforma === "eve"
-        ? PASSOS_EVE
-        : PASSOS_SPHERE;
+      : plataforma === "hotmart"
+        ? PASSOS_HOTMART
+        : plataforma === "eve"
+          ? PASSOS_EVE
+          : PASSOS_SPHERE;
 }
 
 /** O botao de teste no painel da plataforma. */
 function botaoDeTeste(plataforma: string): string {
-  return plataforma === "hubla" ? "Testar configuração" : plataforma === "eve" ? "Enviar teste" : "Testar";
+  return plataforma === "hubla" ? "Testar configuração" : plataforma === "eve" || plataforma === "hotmart" ? "Enviar teste" : "Testar";
 }
 
 
@@ -468,6 +496,7 @@ const TEXTO_DADOS: Record<IdPlataformaCheckout, string> = {
   cakto: "Venda própria: entra no Dashboard com faturamento, taxa e líquido.",
   hubla: "Venda própria: entra no Dashboard com faturamento, taxa e líquido.",
   eve: "Venda própria no Pix: entra no Dashboard com o faturamento de cada Pix. A taxa do gateway não vem da Eve.",
+  hotmart: "Venda própria (produtor): entra no Dashboard com faturamento, taxa e líquido.",
 };
 
 const EXEMPLO_NOME: Record<IdPlataformaCheckout, string> = {
@@ -475,6 +504,7 @@ const EXEMPLO_NOME: Record<IdPlataformaCheckout, string> = {
   cakto: "Ex.: Cakto Curso X",
   hubla: "Ex.: Hubla Mentoria X",
   eve: "Ex.: Eve Panela Mônaco",
+  hotmart: "Ex.: Hotmart Curso X",
 };
 
 /** Onde a plataforma mostra o secret (ou o token): a ajuda do campo no cadastro. */
@@ -482,6 +512,7 @@ const ONDE_SEGREDO: Partial<Record<IdPlataformaCheckout, string>> = {
   cakto: "A Cakto mostra o secret ao criar o webhook. Dá para colar no próximo passo.",
   hubla: "A Hubla mostra o token na aba Autenticação do webhook. Dá para colar no próximo passo.",
   eve: "A Eve gera o secret em Configurações › xcart, depois de colar a URL. Dá para colar no próximo passo.",
+  hotmart: "A Hotmart mostra o Hottok em Ferramentas › Webhook, aba Autenticação. Dá para colar no próximo passo.",
 };
 
 function Adicionar({
@@ -746,7 +777,7 @@ function Editar({
   checkout: CheckoutResumo;
   aoFechar: () => void;
   aoSalvar: () => void;
-  /** Venda (Cakto, Hubla): abre o Rastreamento (Meta e TikTok) do checkout. */
+  /** Venda (Cakto, Hubla, Hotmart): abre o Rastreamento (Meta e TikTok) do checkout. */
   aoRastrear: () => void;
 }) {
   const id = useId();
@@ -1024,7 +1055,7 @@ export function CheckoutsTela({
       {checkouts.length === 0 ? (
         <EmptyState
           titulo="Nenhum checkout"
-          descricao="Ligue a Cakto, a Hubla ou a Sphere Affiliates para ver as vendas e o lucro no Dashboard."
+          descricao="Ligue a Cakto, a Hubla, a Hotmart ou a Sphere Affiliates para ver as vendas e o lucro no Dashboard."
           acao={
             semMigration ? undefined : (
               <Button onClick={() => setAdicionando(true)}>

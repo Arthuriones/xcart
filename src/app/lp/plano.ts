@@ -94,7 +94,7 @@ const RECURSOS_SEM_RASTREAMENTO = [
 const RECURSOS_COM_RASTREAMENTO = [
   "Compras no Meta, TikTok e Google",
   "Lucro por loja e aba Campanhas",
-  "Checkouts externos (Cakto, Hubla e Sphere)",
+  "Checkouts externos (Cakto, Hubla, Hotmart e Sphere)",
 ] as const;
 
 /**

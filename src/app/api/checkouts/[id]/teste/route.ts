@@ -50,7 +50,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     if (!plataforma || !token) return json(409, { ok: false, erro: "Este checkout está sem URL. Use “Trocar URL”." });
     url = urlPublica(token);
     const agora = new Date();
-    // Plataforma que confere a origem (Cakto, Hubla): o teste vai com o secret
+    // Plataforma que confere a origem (Cakto, Hubla, Hotmart): o teste vai com o secret
     // ou o token salvo, pelo mesmo autenticar de uma entrega real.
     const segredo = plataforma.autenticar ? await segredoDaPlataforma(admin, checkout.id) : null;
     if (plataforma.autenticar && !segredo) {

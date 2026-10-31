@@ -10,6 +10,8 @@
 | 3. App em Expo | **Código feito** em 31/10 (pasta `mobile/`); falta gerar o build e testar no celular |
 | 4. Publicação | Falta |
 
+> **Pausado em 31/10/2026** a pedido do Arthur, para fazer a Hotmart (Plano 2, Fase H). O código fica na pasta `mobile/` como está; retomar pelo build do EAS (abaixo).
+
 ### Fase 3 em 31/10/2026
 
 - **Código:** pasta `mobile/` (Expo SDK 58, Expo Router), fora do build e do typecheck do site. Como rodar e gerar: [`mobile/LEIA-ME.md`](../mobile/LEIA-ME.md).

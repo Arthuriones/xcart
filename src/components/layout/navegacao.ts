@@ -311,7 +311,7 @@ export const SECOES_CONFIGURACOES: { id: string; titulo: string; links: LinkConf
       { rotulo: "Google", href: "/integracoes/google", dica: "Gasto e envio das compras" },
       { rotulo: "Shopify", href: "/integracoes/shopify", dica: "Acesso de cada loja" },
       { rotulo: ITENS.lojas.rotulo, href: ITENS.lojas.href, dica: "Conectar, ver e remover lojas" },
-      { rotulo: "Checkouts", href: "/integracoes/checkouts", dica: "Cakto, Hubla, Sphere e outros checkouts externos" },
+      { rotulo: "Checkouts", href: "/integracoes/checkouts", dica: "Cakto, Hubla, Hotmart, Sphere e outros checkouts externos" },
     ],
   },
   {

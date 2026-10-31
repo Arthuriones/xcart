@@ -28,7 +28,7 @@ import { chamar } from "../api";
 import { haQuantoTempo, quando } from "../regras";
 
 // ============================================================================
-// Rastreamento do checkout (Cakto, Hubla e Eve, 073): o xcart manda a compra ao
+// Rastreamento do checkout (Cakto, Hubla, Eve e Hotmart, 073): o xcart manda a compra ao
 // Meta e ao TikTok pelo servidor. Um pixel por rede, "Mandar a compra" (gerada
 // ou so aprovada), o aviso de tirar o pixel nativo da plataforma, o uso do limite do
 // plano, a tag da ponte para a pagina de vendas (Fase D: PageView e
@@ -319,6 +319,13 @@ export function RastreamentoCheckout({ checkout, aoFechar }: { checkout: Checkou
                   A página que usa a Eve (como a da panela) já manda o próprio pixel e a API de Conversões. Ligue um
                   pixel aqui só se tirar o de lá: com os dois mandando, a compra conta em dobro. Sem pixel ligado, o
                   Panda Track não manda nada.
+                </>
+              ) : checkout.plataforma === "hotmart" ? (
+                <>
+                  Na Hotmart, tire o pixel do Meta e do TikTok (e o token da API de Conversões) de cada produto. Com
+                  os dois mandando, a compra e o início do checkout contam em dobro. O Google Ads continua na Hotmart.
+                  Se a página usa a Utmify, ela também escreve no <span className="font-mono">sck</span>: as duas
+                  brigam pelo mesmo campo.
                 </>
               ) : checkout.plataforma === "hubla" ? (
                 <>

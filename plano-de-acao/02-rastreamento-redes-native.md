@@ -89,6 +89,16 @@ O que muda junto:
 
 ### Fase H — Hotmart pelo servidor (~2 a 3 dias). Não depende da Fase 0, pode entrar antes de tudo.
 
+> **Feita em 31/10/2026** (código na main, migration 088 aplicada). O que mudou em relação ao plano abaixo:
+> - **A situação sai só do evento:** a Hotmart não manda a data de cada status, e o status de agora num aviso atrasado poria a data errada no reembolso.
+> - **O pedido herda a campanha do clique:** o webhook não traz UTM. Quando o `sck` traz o visitante da ponte, a venda pega a UTM que a identidade dele guardou (7 dias antes do pedido). Isso vale para qualquer checkout de venda sem UTM no webhook.
+> - **Tudo que não é erro de verdade responde 200**, porque a Hotmart desativa o webhook cuja URL dá erro. Entra aqui a transação de mais de 400 dias.
+> - **O teste é o payload de exemplo da doc**, com o hottok real (changelog de 2022 e 2023).
+> - **O IP é `purchase.buyer_ip`** (changelog de 11/2022).
+> - **Venda em outra moeda** vai na moeda do `currency_conversion` do produtor.
+> - **Fica só o `pay.hotmart.com`** como host da ponte: o `go.hotmart.com` leva à página de vendas, que é onde a ponte fica.
+> - **A conferir na 1ª venda real**, que fica guardada em `ultimo_formato`: o evento do Pix gerado, a unidade do `order_date` e se o `xc.` passa no `sck`.
+
 Pedida em 31/10/2026. O molde é o da Cakto e da Hubla, que já existem: a venda chega por webhook e o Panda Track manda a Purchase ao Meta e ao TikTok pelo servidor. Fonte: documentação oficial da Hotmart (developers.hotmart.com e a central de ajuda), conferida por um segundo agente.
 
 **Produtor: rastreamento completo.**
@@ -238,7 +248,7 @@ Pedida em 31/10/2026. O molde é o da Cakto e da Hubla, que já existem: a venda
 
 | Fase | O quê | Prazo (código) | Depende de você |
 |---|---|---|---|
-| H | Hotmart pelo servidor (produtor completo, afiliado parcial) | ~2 a 3 dias | o token (hottok) da conta Hotmart e uma venda de teste |
+| H | Hotmart pelo servidor (produtor completo, afiliado parcial) | **feita em 31/10** | o token (hottok) da conta Hotmart e uma venda de teste |
 | 0 | Catálogo de redes | ~3 dias | — |
 | 1 | Taboola | ~1 semana | credencial da Backstage API (página API Keys ou gerente de conta) |
 | 2 | Kwai | ~1 semana | pixel de Event API + token; acesso à Marketing API |

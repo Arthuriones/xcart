@@ -65,6 +65,7 @@ const URL_DO_CHECKOUT: Record<string, string> = {
   cakto: "https://pay.cakto.com.br/",
   hubla: "https://pay.hub.la/",
   eve: "https://checkouteve.shop/",
+  hotmart: "https://pay.hotmart.com/",
 };
 
 // O vid da ponte ("xc.<vid>" no `callback`): o formato mora em comum.ts, que
@@ -86,7 +87,7 @@ export function idDaCompra(plataforma: string, grupo: string): string {
  */
 export function ehEventoDeCompra(ev: EventoNormalizado, quando: CompraQuando, eventoDeVenda: string): boolean {
   // O historico (semAviso) e venda velha: a pagina ja mandou o pixel dela.
-  if (ev.teste || ev.venda?.recorrencia || ev.semAviso) return false;
+  if (ev.teste || ev.venda?.recorrencia || ev.venda?.semCompra || ev.semAviso) return false;
   const s = ev.receita.situacao;
   if (ev.evento === eventoDeVenda) return s === "pago";
   const gerada = ev.venda?.cobrancaGerada ?? COBRANCA_GERADA.test(ev.evento);

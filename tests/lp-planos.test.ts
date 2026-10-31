@@ -33,7 +33,7 @@ describe("cartões de preço da landing", () => {
     expect(p.recursos).toEqual([
       "Compras no Meta, TikTok e Google",
       "Lucro por loja e aba Campanhas",
-      "Checkouts externos (Cakto, Hubla e Sphere)",
+      "Checkouts externos (Cakto, Hubla, Hotmart e Sphere)",
     ]);
   });
 
@@ -114,7 +114,7 @@ describe("regras do cartão, com limites que nenhum plano tem hoje", () => {
     expect(recursosDoCartao(sozinho, [sozinho])).toEqual([
       "Compras no Meta, TikTok e Google",
       "Lucro por loja e aba Campanhas",
-      "Checkouts externos (Cakto, Hubla e Sphere)",
+      "Checkouts externos (Cakto, Hubla, Hotmart e Sphere)",
     ]);
   });
 
@@ -142,7 +142,7 @@ describe("regras do cartão, com limites que nenhum plano tem hoje", () => {
     expect(recursosDoCartao(com, [sem, com])).toEqual([
       "Compras no Meta, TikTok e Google",
       "Lucro por loja e aba Campanhas",
-      "Checkouts externos (Cakto, Hubla e Sphere)",
+      "Checkouts externos (Cakto, Hubla, Hotmart e Sphere)",
     ]);
   });
 });

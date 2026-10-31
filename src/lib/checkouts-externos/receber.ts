@@ -1,4 +1,6 @@
-import { comprasDaEntrega, enfileirarCompras, type EnvioParaEntregar, type RastreioCheckout } from "./compra";
+import { limparUtm, naJanela } from "@/lib/tracking/origem-pedido";
+import type { IdentidadeGuardada } from "@/lib/tracking/purchase";
+import { comprasDaEntrega, enfileirarCompras, vidDoRastreio, type EnvioParaEntregar, type RastreioCheckout } from "./compra";
 import { aplicarEvento, eventoJaRefletido, type EstadoPedido } from "./estado";
 import type { EventoNormalizado, LeituraVarios, PlataformaCheckout } from "./plataformas/tipos";
 import { compraQuandoDe, nomeDaPlataforma } from "./tipos";
@@ -46,6 +48,14 @@ import { compraQuandoDe, nomeDaPlataforma } from "./tipos";
 // as travas dos itens da compra saem e a resposta e a da falha nossa: a
 // retentativa refaz (o pedido ja esta igual) e o indice unico da fila impede
 // a dobra. A Venda no celular desses itens fica para a retentativa.
+//
+// A CAMPANHA PELA PONTE (Fase D): venda sem UTM no webhook (a Hotmart nunca
+// manda; a Cakto, quando a pagina nao passou) e com o visitante da ponte no
+// sck/callback herda a UTM do clique que a identidade dele guardou -- so
+// dentro dos 7 dias antes do pedido (naJanela, a regra das lojas) e nunca
+// depois dele (o remarketing de quem gerou o boleto e paga dias depois nao e
+// a origem da venda). Leitura que falha = o pedido sai sem campanha. A identidade e lida uma vez
+// por entrega: a compra pelo servidor reaproveita.
 // ============================================================================
 
 export interface CheckoutParaReceber {
@@ -191,6 +201,42 @@ export function marcaFalhaSemSegurar(plataforma: Pick<PlataformaCheckout, "auten
   return Boolean(plataforma.autenticar) && plataforma.reenvio === "status";
 }
 
+/** O rastreio com a identidade lida uma vez por visitante (a UTM do pedido e a compra leem a mesma). */
+function comIdentidadeUmaVez(rastreio: RastreioCheckout | undefined): RastreioCheckout | undefined {
+  const ler = rastreio?.identidade;
+  if (!rastreio || !ler) return rastreio;
+  const lidas = new Map<string, Promise<IdentidadeGuardada | null>>();
+  return {
+    ...rastreio,
+    identidade: (checkoutId, vid) => {
+      const chave = `${checkoutId}\u0000${vid}`;
+      let p = lidas.get(chave);
+      if (!p) {
+        p = ler.call(rastreio, checkoutId, vid).catch(() => null);
+        lidas.set(chave, p);
+      }
+      return p;
+    },
+  };
+}
+
+/** Folga entre o relogio da plataforma e o nosso: o clique pode parecer ate 10 min depois do pedido. */
+const FOLGA_DO_CLIQUE_MS = 10 * 60_000;
+
+/** A venda sem UTM e com o visitante da ponte: a UTM do clique dele, se for dos 7 dias antes do pedido. */
+async function comCampanhaDaPonte(ev: EventoNormalizado, checkoutId: string, rastreio: RastreioCheckout | undefined): Promise<EventoNormalizado> {
+  const r = ev.rastreio;
+  if (!ev.venda || !r || !rastreio?.identidade || Object.values(r.utm).some(Boolean)) return ev;
+  const vid = vidDoRastreio(r);
+  if (!vid) return ev;
+  const id = await rastreio.identidade(checkoutId, vid).catch(() => null);
+  const utm = limparUtm(id?.utm);
+  const pedidoMs = Date.parse(ev.pedido.criadoEm);
+  const cliqueMs = Date.parse(id?.utmEm ?? "");
+  if (Object.keys(utm).length === 0 || !naJanela(id?.utmEm, pedidoMs) || !(cliqueMs <= pedidoMs + FOLGA_DO_CLIQUE_MS)) return ev;
+  return { ...ev, rastreio: { ...r, utm } };
+}
+
 /** Uma ou varias: o adaptador de varios (Cakto, Hubla) ou o de um so (Sphere). */
 function lerEntrega(plataforma: PlataformaCheckout, corpo: unknown, agora: Date, headers?: Headers): LeituraVarios {
   if (plataforma.lerTodos) return plataforma.lerTodos(corpo, agora, headers);
@@ -333,7 +379,7 @@ export async function receberEvento(
   // A moeda fica gravada no pedido (a Sphere nao manda a da comissao; a Cakto
   // pode nao mandar a da venda): trocar a moeda do checkout depois nao
   // reescreve o passado.
-  const eventos: EventoNormalizado[] = leitura.eventos.map((e) => {
+  const lidos: EventoNormalizado[] = leitura.eventos.map((e) => {
     const moeda = e.receita.moeda || checkout.moeda_receita;
     return {
       ...e,
@@ -342,14 +388,14 @@ export async function receberEvento(
     };
   });
 
-  if (eventos.some((e) => e.teste)) {
+  if (lidos.some((e) => e.teste)) {
     // So marca "teste recebido" enquanto nao chegou evento real: num checkout
     // que ja recebe, o teste apagaria o "ultimo evento ha X" e o relogio do
     // aviso de webhook parado. Quem confere o teste le a resposta.
     if (!checkout.ultimo_evento_em || checkout.ultimo_evento_teste) {
       await repo.marcarCheckout(checkout.id, {
         ultimo_evento_em: agoraIso,
-        ultimo_evento: eventos[0].evento,
+        ultimo_evento: lidos[0].evento,
         ultimo_evento_teste: true,
         ultimo_erro: null,
         ultimo_erro_em: null,
@@ -359,6 +405,8 @@ export async function receberEvento(
   }
 
   const venda = plataforma.modelo === "venda";
+  const rastreioDaEntrega = comIdentidadeUmaVez(rastreio);
+  const eventos = venda ? await Promise.all(lidos.map((e) => comCampanhaDaPonte(e, checkout.id, rastreioDaEntrega))) : lidos;
   const aplicados: Aplicado[] = [];
   let pausados = 0;
   let duplicados = 0;
@@ -432,10 +480,10 @@ export async function receberEvento(
   // evento de venda que venceu. Grava antes de responder; a rota entrega.
   let entregar: EnvioParaEntregar[] = [];
   let avisados = aplicados;
-  if (venda && checkout.ativo && rastreio && aplicados.length > 0) {
+  if (venda && checkout.ativo && rastreioDaEntrega && aplicados.length > 0) {
     const compras = comprasDaEntrega(aplicados, compraQuandoDe(checkout.compra_quando), plataforma.eventoDeVenda);
     try {
-      entregar = await enfileirarCompras(rastreio, checkout, compras, agora.getTime());
+      entregar = await enfileirarCompras(rastreioDaEntrega, checkout, compras, agora.getTime());
     } catch (e) {
       console.error("[checkout/webhook] falha ao enfileirar a compra", e instanceof Error ? e.message : e);
       // Sem a trava, a retentativa refaz o item (o pedido ja esta igual) e

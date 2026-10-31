@@ -35,7 +35,7 @@ const RASTREAMENTO = [
   "Rastreamento: as compras chegam ao Meta e ao TikTok pelo servidor, e ao Google pela tag",
   "Lucro por loja, já descontados produto, frete, taxas e anúncio",
   "Aba Campanhas: venda e lucro por campanha, conjunto e anúncio do Meta",
-  "Checkouts externos (Cakto, Hubla e Sphere) no mesmo painel",
+  "Checkouts externos (Cakto, Hubla, Hotmart e Sphere) no mesmo painel",
 ] as const;
 
 const CREDITOS = `${PRO_INCLUDED_CREDITS} fotos com IA por mês (tira a marca das fotos dos produtos)`;

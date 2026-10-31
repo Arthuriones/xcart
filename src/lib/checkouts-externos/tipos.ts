@@ -7,8 +7,8 @@
 // "Checkout" na tela; checkouts_externos no banco. O nome foge de "loja de
 // checkout" (roteamento, src/lib/checkout-routes) e de tracking_checkouts.
 //
-// Dois modelos (072): comissao (Sphere, afiliado) e venda (Cakto, Hubla e Eve,
-// o lojista e o produtor). Ver MODELO_PLATAFORMA e src/lib/checkouts-externos/venda.ts.
+// Dois modelos (072): comissao (Sphere, afiliado) e venda (Cakto, Hubla, Eve e
+// Hotmart, o lojista e o produtor). Ver MODELO_PLATAFORMA e src/lib/checkouts-externos/venda.ts.
 //
 // O Eve (076) e o checkout Pix proprio do Arthur: SO a conta dele ve e
 // cadastra. Ele NAO esta em PLATAFORMAS_CHECKOUT (a lista publica: /conectar,
@@ -16,18 +16,18 @@
 // so no servidor.
 // ============================================================================
 
-export type IdPlataformaCheckout = "sphere" | "cakto" | "hubla" | "eve";
+export type IdPlataformaCheckout = "sphere" | "cakto" | "hubla" | "eve" | "hotmart";
 
 /**
  * comissao = afiliado (Sphere): a receita e a comissao, com Previsto pela taxa
- * de aprovacao. venda = o lojista e o produtor (Cakto, Hubla): faturamento,
+ * de aprovacao. venda = o lojista e o produtor (Cakto, Hubla, Hotmart): faturamento,
  * taxa e liquido, como uma loja online (src/lib/checkouts-externos/venda.ts).
  */
 export type ModeloCheckout = "comissao" | "venda";
 
 /**
- * O que a tela oferece em "Conectar checkout". Cakto, Hubla e Sphere recebem
- * hoje. A plataforma restrita a algumas contas (o Eve) fica FORA daqui: a
+ * O que a tela oferece em "Conectar checkout". Cakto, Hubla, Hotmart e Sphere
+ * recebem hoje. A plataforma restrita a algumas contas (o Eve) fica FORA daqui: a
  * lista da conta e plataformasDaConta (liberadas.ts, so no servidor).
  */
 export const PLATAFORMAS_CHECKOUT: {
@@ -38,6 +38,7 @@ export const PLATAFORMAS_CHECKOUT: {
 }[] = [
   { id: "cakto", nome: "Cakto", descricao: "Venda própria: faturamento, taxa e líquido.", ativa: true },
   { id: "hubla", nome: "Hubla", descricao: "Venda própria: faturamento, taxa e líquido.", ativa: true },
+  { id: "hotmart", nome: "Hotmart", descricao: "Venda própria (produtor): faturamento, taxa e líquido.", ativa: true },
   { id: "sphere", nome: "Sphere Affiliates", descricao: "Afiliado COD na Europa: comissão por pedido.", ativa: true },
   { id: "yampi", nome: "Yampi", descricao: "Em breve", ativa: false },
   { id: "cartpanda", nome: "CartPanda", descricao: "Em breve", ativa: false },
@@ -70,6 +71,7 @@ export const NOME_PLATAFORMA: Record<IdPlataformaCheckout, string> = {
   cakto: "Cakto",
   hubla: "Hubla",
   eve: "Eve",
+  hotmart: "Hotmart",
 };
 
 export function nomeDaPlataforma(id: string | null | undefined): string {
@@ -81,6 +83,7 @@ export const MODELO_PLATAFORMA: Record<IdPlataformaCheckout, ModeloCheckout> = {
   cakto: "venda",
   hubla: "venda",
   eve: "venda",
+  hotmart: "venda",
 };
 
 /** Plataforma desconhecida fica no modelo da 069 (comissao): nada muda para ela. */
@@ -88,12 +91,13 @@ export function modeloDaPlataforma(id: string | null | undefined): ModeloCheckou
   return (id && MODELO_PLATAFORMA[id as IdPlataformaCheckout]) || "comissao";
 }
 
-/** A moeda que o cadastro sugere: a Sphere fala em euro, a Cakto, a Hubla e o Eve em real. */
+/** A moeda que o cadastro sugere: a Sphere fala em euro, a Cakto, a Hubla, o Eve e a Hotmart em real. */
 export const MOEDA_PADRAO: Record<IdPlataformaCheckout, string> = {
   sphere: "EUR",
   cakto: "BRL",
   hubla: "BRL",
   eve: "BRL",
+  hotmart: "BRL",
 };
 
 export function moedaPadraoDe(id: string | null | undefined): string {
@@ -175,17 +179,33 @@ export const GATILHOS_HUBLA = [
 export const GATILHOS_EVE = ["pix.gerado", "pedido.pago", "pix.expirado", "pedido.cancelado", "pedido.reembolsado"] as const;
 
 /**
+ * Os eventos de compra a marcar no webhook da Hotmart (Ferramentas >
+ * Webhook, versao 2.0.0). Abandono, assinatura e Members Area chegam e o
+ * Panda Track responde 200 sem gravar (hotmart.ts).
+ */
+export const GATILHOS_HOTMART = [
+  "PURCHASE_BILLET_PRINTED",
+  "PURCHASE_APPROVED",
+  "PURCHASE_COMPLETE",
+  "PURCHASE_CANCELED",
+  "PURCHASE_EXPIRED",
+  "PURCHASE_PROTEST",
+  "PURCHASE_REFUNDED",
+  "PURCHASE_CHARGEBACK",
+] as const;
+
+/**
  * A plataforma prova a entrega com um secret que o lojista cola no xcart (o
  * adaptador tem `autenticar`): o HMAC da Cakto e do Eve, o x-hubla-token da
- * Hubla. Aqui para a tela, que nao importa adaptador.
+ * Hubla, o hottok da Hotmart. Aqui para a tela, que nao importa adaptador.
  */
 export function usaSegredo(id: string | null | undefined): boolean {
-  return id === "cakto" || id === "hubla" || id === "eve";
+  return id === "cakto" || id === "hubla" || id === "eve" || id === "hotmart";
 }
 
-/** Como a plataforma chama o que o lojista cola: o token da Hubla, o secret da Cakto. */
+/** Como a plataforma chama o que o lojista cola: o token da Hubla e da Hotmart (hottok), o secret da Cakto. */
 export function nomeDoSegredo(id: string | null | undefined): "token" | "secret" {
-  return id === "hubla" ? "token" : "secret";
+  return id === "hubla" || id === "hotmart" ? "token" : "secret";
 }
 
 /** "Token inválido: ..." / "Secret inválido: ...": a mesma frase na tela e nas rotas. */
@@ -193,7 +213,7 @@ export function erroDoSegredo(id: string | null | undefined): string {
   return `${nomeDoSegredo(id) === "token" ? "Token" : "Secret"} inválido: de 8 a 200 caracteres, sem espaço.`;
 }
 
-/** O secret da Cakto ou o token da Hubla: 8 a 200 caracteres visiveis, sem espaco (CHECK da 072). */
+/** O secret da Cakto ou o token da Hubla e da Hotmart: 8 a 200 caracteres visiveis, sem espaco (CHECK da 072). */
 export const RE_SEGREDO_PLATAFORMA = /^[!-~]{8,200}$/;
 
 export function segredoValido(v: unknown): string | null {
@@ -229,6 +249,14 @@ export const ROTULO_EVENTO: Record<string, string> = {
   "pix.expirado": "Pix expirado",
   "pedido.cancelado": "Pedido cancelado",
   "pedido.reembolsado": "Reembolso",
+  PURCHASE_BILLET_PRINTED: "Aguardando pagamento",
+  PURCHASE_APPROVED: "Compra aprovada",
+  PURCHASE_COMPLETE: "Compra completa",
+  PURCHASE_CANCELED: "Compra cancelada",
+  PURCHASE_EXPIRED: "Compra expirada",
+  PURCHASE_PROTEST: "Reembolso pedido",
+  PURCHASE_REFUNDED: "Reembolso",
+  PURCHASE_CHARGEBACK: "Chargeback",
 };
 
 export function rotuloDoEvento(evento: string | null | undefined): string {
@@ -274,7 +302,7 @@ export function compraQuandoDe(v: unknown): CompraQuando {
 
 /**
  * O xcart manda a compra deste checkout ao Meta e ao TikTok? So no modelo
- * venda (Cakto, Hubla, Eve): a Sphere nao manda dado do comprador nem click
+ * venda (Cakto, Hubla, Eve, Hotmart): a Sphere nao manda dado do comprador nem click
  * id. No Eve nada sai por padrao: so com um pixel ligado no checkout.
  */
 export function rastreiaCompra(plataforma: string | null | undefined): boolean {
@@ -357,20 +385,35 @@ export interface RastreamentoDoCheckout {
 
 /**
  * O host do checkout de cada plataforma que rastreia: o `data-xcart-destinos`
- * da ponte na pagina de vendas (VSL). Sem curinga, como a ponte exige.
+ * da ponte na pagina de vendas (VSL). Sem curinga, como a ponte exige. Na
+ * Hotmart, o pay.hotmart.com: o go.hotmart.com (o hotlink) leva a pagina de
+ * vendas, nao ao checkout -- e la que a ponte fica.
  */
-export const HOST_DO_CHECKOUT: Partial<Record<IdPlataformaCheckout, string>> = { cakto: "pay.cakto.com.br", hubla: "pay.hub.la" };
+export const HOST_DO_CHECKOUT: Partial<Record<IdPlataformaCheckout, string>> = {
+  cakto: "pay.cakto.com.br",
+  hubla: "pay.hub.la",
+  hotmart: "pay.hotmart.com",
+};
+
+/**
+ * O parametro do link que leva o visitante, quando nao e o `callback`: a
+ * Hotmart so devolve no webhook o `sck`, o `src` e o `xcod` (purchase.origin).
+ * O "xc.<vid>" (uns 20 caracteres) cabe nos 30 do sck dela.
+ */
+export const PARAM_VID_DO_CHECKOUT: Partial<Record<IdPlataformaCheckout, "sck">> = { hotmart: "sck" };
 
 /**
  * A tag da ponte (xcart-bridge.js) para a pagina de vendas que leva a este
- * checkout: reescreve o link do botao (callback=xc.<vid>, UTMs, click ids) e
- * avisa o coletor da visita e do clique. null = a plataforma nao rastreia.
- * `base` = o host publico do app (getPublicAppUrl).
+ * checkout: reescreve o link do botao (callback=xc.<vid> -- sck na Hotmart --,
+ * UTMs, click ids) e avisa o coletor da visita e do clique. null = a
+ * plataforma nao rastreia. `base` = o host publico do app (getPublicAppUrl).
  */
 export function scriptDaPonteDoCheckout(base: string, checkoutId: string, plataforma: string | null | undefined): string | null {
   const host = HOST_DO_CHECKOUT[plataforma as IdPlataformaCheckout];
   if (!host || !rastreiaCompra(plataforma)) return null;
-  return `<script src="${base.replace(/\/+$/, "")}/xcart-bridge.js" data-xcart-destinos="${host}" data-xcart-checkout="${checkoutId}" defer></script>`;
+  const param = PARAM_VID_DO_CHECKOUT[plataforma as IdPlataformaCheckout];
+  const vid = param ? ` data-xcart-param-vid="${param}"` : "";
+  return `<script src="${base.replace(/\/+$/, "")}/xcart-bridge.js" data-xcart-destinos="${host}" data-xcart-checkout="${checkoutId}"${vid} defer></script>`;
 }
 
 export const ROTULO_STATUS_ENVIO: Record<StatusDoEnvio, string> = {

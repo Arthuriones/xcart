@@ -484,7 +484,7 @@ describe("trava de conta do Eve", () => {
   });
 
   it("a escolha de plataforma: o Eve so aparece para o Arthur; fora dele, a lista publica de sempre", () => {
-    expect(plataformasDaConta(ARTHUR).map((p) => p.id)).toEqual(["cakto", "hubla", "sphere", "eve", "yampi", "cartpanda", "kiwify"]);
+    expect(plataformasDaConta(ARTHUR).map((p) => p.id)).toEqual(["cakto", "hubla", "hotmart", "sphere", "eve", "yampi", "cartpanda", "kiwify"]);
     expect(plataformasDaConta(ARTHUR).find((p) => p.id === "eve")?.ativa).toBe(true);
     for (const conta of [OUTRA_CONTA, null, undefined]) {
       expect(plataformasDaConta(conta).map((p) => p.id)).toEqual(PLATAFORMAS_CHECKOUT.map((p) => p.id));

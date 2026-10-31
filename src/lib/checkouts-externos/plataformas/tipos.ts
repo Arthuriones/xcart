@@ -41,6 +41,12 @@ export interface VendaNormalizada {
    * Meta/TikTok -- nao tem clique de anuncio.
    */
   recorrencia?: boolean;
+  /**
+   * O item entra no lucro e na cobranca, mas nao manda a compra ao Meta/TikTok
+   * sozinho: o order bump da Hotmart chega em aviso proprio, e a compra sai
+   * com a principal (o bump que chegasse antes levaria o valor dele).
+   */
+  semCompra?: boolean;
 }
 
 /**
