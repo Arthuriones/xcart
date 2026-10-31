@@ -40,5 +40,5 @@
   //
   // Eles CONTINUAM sendo checados, por tsconfig.scripts.json / npm run
   // typecheck:scripts. So nao no caminho critico do deploy.
-  "exclude": ["node_modules", "scripts"]
+  "exclude": ["node_modules", "scripts", "mobile"]
 }

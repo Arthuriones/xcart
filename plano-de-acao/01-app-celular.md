@@ -1,14 +1,40 @@
 # Plano 1 — App do celular (iPhone e Android)
 
-> Plano passado em 29/10/2026, quando o produto ainda se chamava xcart. Atualizado em 30/10/2026 com o que já foi feito.
+> Plano passado em 29/10/2026, quando o produto ainda se chamava xcart. Atualizado em 31/10/2026 com o que já foi feito.
 
-| Fase | Situação em 30/10/2026 |
+| Fase | Situação em 31/10/2026 |
 |---|---|
 | 0. Contas e aprovações | **Falta** (com você) |
 | 1. Backend do app | **Feita** em 29/10 (commit f8348fa, migration 084 aplicada) |
 | 2. Edição dos anúncios na web | **Feita** em 30/10 (Plano 3: commits 400153e, b6da458, cd478af) |
-| 3. App em Expo | Falta |
+| 3. App em Expo | **Código feito** em 31/10 (pasta `mobile/`); falta gerar o build e testar no celular |
 | 4. Publicação | Falta |
+
+### Fase 3 em 31/10/2026
+
+- **Código:** pasta `mobile/` (Expo SDK 58, Expo Router), fora do build e do typecheck do site. Como rodar e gerar: [`mobile/LEIA-ME.md`](../mobile/LEIA-ME.md).
+- **Telas:**
+  - **Login:** a mesma conta do site.
+  - **Dashboard:** destaque do lucro, gráfico por dia, cartões, pendências e lucro por loja, com o seletor de loja, período, moeda e comparação.
+  - **Campanhas:** campanha, conjunto e anúncio, com ligar/pausar e Editar (orçamento, lance, ROAS mínimo) do Meta.
+  - **Ajustes:** aviso de venda, este celular, sair e excluir conta.
+  - **Plano vencido:** tela neutra, sem preço, onde ainda dá para desligar o aviso e excluir a conta.
+- **Push:**
+  - registra o celular a cada abertura e tira ao sair;
+  - também tira quando a sessão cai sozinha;
+  - tocar no aviso abre o Dashboard.
+- **Conferido:**
+  - typecheck limpo e `expo-doctor` com 20/20;
+  - as três abas e o login vistos no navegador, tema claro e escuro, com dados de exemplo;
+  - uma revisão adversarial achou 12 problemas, já corrigidos.
+- **Não conferido:** num celular de verdade, nem o push. Isso pede o build do EAS (abaixo).
+
+**Para testar no celular (você, ~30 min):**
+1. Criar uma conta grátis em expo.dev e rodar, dentro de `mobile/`: `eas login`, depois `eas init`.
+2. Cadastrar as duas variáveis públicas do Supabase com `eas env:create` (os comandos estão no LEIA-ME).
+3. `eas build --profile development --platform android` e instalar o APK no seu Android.
+4. Para o push no Android: a chave do Firebase (FCM V1) com `eas credentials`.
+5. iPhone: só depois da conta da Apple (Fase 0).
 
 O Expo gera iPhone e Android com o mesmo código. O app tem três funções:
 - ver o dashboard;

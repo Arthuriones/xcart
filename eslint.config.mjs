@@ -21,6 +21,8 @@ const eslintConfig = defineConfig([
     "public/Combo bot/**",
     "failed_html.html",
     "herocart.html",
+    // O app do celular (Expo) tem lint proprio (npx expo lint dentro de mobile/).
+    "mobile/**",
   ]),
 ]);
 
